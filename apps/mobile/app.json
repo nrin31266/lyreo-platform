@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Lyreo",
+    "slug": "lyreo",
+    "scheme": "lyreo",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "newArchEnabled": true,
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.lyreo.mobile",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.lyreo.mobile"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

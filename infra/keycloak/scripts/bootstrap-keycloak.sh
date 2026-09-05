@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DIR=$(cd "$(dirname "$0")" && pwd)
+# shellcheck source=_common.sh
+source "$DIR/_common.sh"
+
+"$DIR/wait-for-keycloak.sh"
+login_admin
+
+# Realm import already creates these objects. We verify/create roles idempotently so a partially
+# initialized local realm can be repaired without clicking around the Keycloak UI.
+for role in ADMIN LEARNER; do
+  if ! kcadm get "roles/$role" -r "$REALM" >/dev/null 2>&1; then
+    kcadm create roles -r "$REALM" -s "name=$role" >/dev/null
+  fi
+done
+
+# The realm JSON contains topology. The real local confidential secret comes from env and is
+# synchronized with Core Service by scripts/init-dev-env.sh.
+CLIENT_UUID=$(
+  kcadm get clients -r "$REALM" -q clientId=lyreo-core-service --fields id --format csv --noquotes \
+    | head -n1 || true
+)
+if [[ -n "$CLIENT_UUID" && -n "${LYREO_CORE_CLIENT_SECRET:-}" ]]; then
+  kcadm update "clients/$CLIENT_UUID" -r "$REALM" -s "secret=$LYREO_CORE_CLIENT_SECRET" >/dev/null
+fi
+
+echo "Lyreo Keycloak topology verified: realm=$REALM roles=ADMIN,LEARNER"

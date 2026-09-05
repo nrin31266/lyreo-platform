@@ -1,0 +1,16 @@
+# Optional override: run Lyreo AI Service with the CUDA/Qwen image.
+# Usage: docker compose -f compose.prod.yml -f compose.gpu.yml up -d --build
+services:
+  ai-service:
+    build:
+      context: .
+      dockerfile: services/ai-service/Dockerfile.gpu
+    environment:
+      AI_RUNTIME_MODE: local
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

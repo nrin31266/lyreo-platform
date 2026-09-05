@@ -1,0 +1,7 @@
+[tools]
+java = "25"
+node = "24.20.0"
+python = "3.12"
+
+[env]
+_.file = ".env.local"
