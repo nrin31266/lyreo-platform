@@ -127,7 +127,7 @@ case "$DATA_URL" in
       fi
       # The shared Drive object must be one archive file, not a Drive folder. gdown handles the
       # confirmation flow that large Drive files often require and remains an ephemeral tool here.
-      uvx --from gdown gdown --fuzzy "$DATA_URL" -O "$ARCHIVE"
+      uvx --from 'gdown==6.2.0' gdown "$DATA_URL" -O "$ARCHIVE"
     else
       if ! command -v curl >/dev/null 2>&1; then
         echo "curl is required to download DAUTOEIC_DATA_URL" >&2

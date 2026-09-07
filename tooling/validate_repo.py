@@ -10,15 +10,80 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-import yaml
-
 ROOT = Path(__file__).resolve().parents[1]
 errors: list[str] = []
 warnings: list[str] = []
+
+# Directories produced by build/install/runtime tools. These must not be
+# Git-tracked, but they ARE expected to exist locally after `make deps`.
+GENERATED_DIR_NAMES = {
+    ".pytest_cache",
+    "__pycache__",
+    "node_modules",
+    "target",
+    ".expo",
+    "dist",
+    ".vite",
+    ".venv",
+    ".data",
+    ".turbo",
+}
+
+
+def is_generated_path(path: Path) -> bool:
+    """Return True if any component of the repo-relative path is a generated directory."""
+    try:
+        parts = path.relative_to(ROOT).parts
+    except ValueError:
+        parts = path.parts
+    return any(part in GENERATED_DIR_NAMES for part in parts)
+
+
+def repo_files(base: Path, pattern: str):
+    """Yield source files under *base* matching *pattern*, skipping generated dirs."""
+    if not base.exists():
+        return
+    for path in base.rglob(pattern):
+        if path.is_file() and not is_generated_path(path):
+            yield path
+
+
+# ── Repository cleanliness (git-tracked check) ──────────────────────────────
+# Local dependency/cache directories are expected after `make deps`.
+# They are a repository problem only if Git is tracking their contents.
+git_result = subprocess.run(
+    ["git", "ls-files", "-z"],
+    cwd=ROOT,
+    capture_output=True,
+    text=True,
+)
+
+if git_result.returncode == 0:
+    tracked_files = {item for item in git_result.stdout.split("\0") if item}
+
+    for rel in sorted(tracked_files):
+        path = Path(rel)
+
+        if any(part in GENERATED_DIR_NAMES for part in path.parts):
+            errors.append(f"generated/cache file must not be tracked: {rel}")
+
+        if path.suffix == ".pyc":
+            errors.append(f"generated Python bytecode must not be tracked: {rel}")
+
+        if path.name.endswith(".log"):
+            errors.append(f"generated log file must not be tracked: {rel}")
+
+        if path.name == ".env":
+            errors.append(f"real .env file must not be committed: {rel}")
+else:
+    warnings.append(
+        "Git metadata unavailable; tracked generated/cache-file and .env checks skipped"
+    )
 
 REQUIRED = [
     "README.md",
@@ -89,11 +154,6 @@ gitignore = ROOT / ".gitignore"
 if gitignore.exists() and ".data/" not in gitignore.read_text(encoding="utf-8"):
     errors.append(".gitignore must exclude repo-local .data/ datasets/artifacts")
 
-
-# Real secret env files must never be present in an artifact/commit.
-for path in ROOT.rglob(".env"):
-    errors.append(f"real .env file must not be committed: {path.relative_to(ROOT)}")
-
 # TESTING_NOTES is an artifact handoff only. The repository must remain valid after team deletes it.
 testing_notes = ROOT / "TESTING_NOTES.md"
 if testing_notes.exists():
@@ -102,33 +162,30 @@ if testing_notes.exists():
         errors.append("TESTING_NOTES.md must clearly identify itself as temporary handoff material")
 
 # Manifests/config syntax -------------------------------------------------------
-for path in ROOT.rglob("pom.xml"):
+for path in repo_files(ROOT, "pom.xml"):
     try:
         ET.parse(path)
     except Exception as exc:
         errors.append(f"bad XML {path.relative_to(ROOT)}: {exc}")
 
-for path in ROOT.rglob("*.json"):
-    if any(part in {"node_modules", "target", ".expo"} for part in path.parts):
-        continue
+for path in repo_files(ROOT, "*.json"):
     try:
         json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         errors.append(f"bad JSON {path.relative_to(ROOT)}: {exc}")
 
+# Lightweight structural check only. Full YAML parse/resolution is done by
+# `make dev-config` / `make prod-config` via `docker compose ... config`.
 for rel in ("compose.dev.yml", "compose.prod.yml", "compose.gpu.yml"):
     path = ROOT / rel
     if not path.exists():
         continue
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict) or "services" not in data:
-            errors.append(f"compose file has no services map: {rel}")
-    except Exception as exc:
-        errors.append(f"bad YAML {rel}: {exc}")
+    text = path.read_text(encoding="utf-8")
+    if not re.search(r"(?m)^services:\s*$", text):
+        errors.append(f"compose file has no top-level services map: {rel}")
 
 # Hard technology decisions ---------------------------------------------------
-for path in {ROOT / "pom.xml", *ROOT.glob("**/pom.xml")}:
+for path in repo_files(ROOT, "pom.xml"):
     text = path.read_text(encoding="utf-8").lower()
     forbidden = {
         "spring-kafka": "Kafka",
@@ -142,7 +199,7 @@ for path in {ROOT / "pom.xml", *ROOT.glob("**/pom.xml")}:
             errors.append(f"forbidden {label} dependency in {path.relative_to(ROOT)}")
 
 # FastAPI is an AI execution boundary, not a shadow business backend.
-for path in (ROOT / "services/ai-service").rglob("*.py"):
+for path in repo_files(ROOT / "services/ai-service", "*.py"):
     text = path.read_text(encoding="utf-8").lower()
     for forbidden in (
         "curriculum_progress",
@@ -206,7 +263,7 @@ for module_name, package_name in MODULE_PACKAGE.items():
         errors.append(f"missing business module directory: modules/{module_name}")
         continue
 
-    for path in module_root.rglob("*.java"):
+    for path in repo_files(module_root, "*.java"):
         text = path.read_text(encoding="utf-8")
         relative = path.relative_to(ROOT)
         relative_parts = set(path.relative_to(module_root).parts)
@@ -252,7 +309,7 @@ if ai_pyproject.exists():
             errors.append(f"FastAPI must not own business persistence dependency: {token}")
 
 # Business package names must not masquerade as infrastructure in platform.
-for path in (ROOT / "platform").rglob("*.java"):
+for path in repo_files(ROOT / "platform", "*.java"):
     text = path.read_text(encoding="utf-8")
     for package_name in PACKAGE_TO_MODULE:
         if f"import com.lyreo.{package_name}." in text:
@@ -261,9 +318,7 @@ for path in (ROOT / "platform").rglob("*.java"):
 # Spring proxy footgun: method-level @Transactional on a concrete final class cannot be
 # subclass-proxied when the bean has no transactional interface proxy. Keep application services
 # non-final unless transaction semantics are provided elsewhere explicitly.
-for path in ROOT.rglob("*.java"):
-    if any(part == "target" for part in path.parts):
-        continue
+for path in repo_files(ROOT, "*.java"):
     text = path.read_text(encoding="utf-8")
     if "@Transactional" in text and re.search(r"public\s+final\s+class\s+", text):
         # Infrastructure adapters implementing interfaces may still receive JDK proxies, but
@@ -299,9 +354,7 @@ if versions and versions != sorted(versions):
     errors.append("Flyway migrations are not sorted")
 
 # Common security footguns -----------------------------------------------------
-for path in ROOT.rglob("*.java"):
-    if any(part in {"target"} for part in path.parts):
-        continue
+for path in repo_files(ROOT, "*.java"):
     text = path.read_text(encoding="utf-8")
     lowered = text.lower()
     if any(token in lowered for token in (
@@ -326,19 +379,6 @@ for rel in ("compose.dev.yml", "compose.prod.yml", "compose.gpu.yml"):
         if re.search(r"(^|\n)\s*(redis|kafka|zookeeper):", lowered):
             errors.append(f"forbidden broker/cache service in {rel}")
 
-# Artifact cleanliness -----------------------------------------------------------
-GENERATED_DIR_NAMES = {
-    ".pytest_cache", "__pycache__", "node_modules", "target", ".expo", "dist", ".vite",
-    ".venv", ".data", ".turbo",
-}
-for path in ROOT.rglob("*"):
-    if path.is_dir() and path.name in GENERATED_DIR_NAMES:
-        errors.append(f"generated/cache directory must not be shipped: {path.relative_to(ROOT)}")
-    elif path.is_file() and path.suffix == ".pyc":
-        errors.append(f"generated Python bytecode must not be shipped: {path.relative_to(ROOT)}")
-    elif path.is_file() and path.name.endswith(".log"):
-        errors.append(f"generated log file must not be shipped: {path.relative_to(ROOT)}")
-
 # Frontend foundation guardrails ------------------------------------------------
 # Feature UI must consume semantic variables/classes instead of reintroducing raw colors.
 RAW_COLOR_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b|rgba?\(")
@@ -347,6 +387,8 @@ for base in (ROOT / "apps/admin-web/src", ROOT / "apps/mobile/app", ROOT / "apps
         continue
     for path in base.rglob("*"):
         if not path.is_file() or path.suffix not in {".ts", ".tsx", ".css"}:
+            continue
+        if is_generated_path(path):
             continue
         if RAW_COLOR_RE.search(path.read_text(encoding="utf-8")):
             errors.append(f"raw frontend color literal outside design system: {path.relative_to(ROOT)}")
@@ -357,7 +399,7 @@ for base in (ROOT / "apps/admin-web/src", ROOT / "apps/mobile/app", ROOT / "apps
 for base in (ROOT / "apps/admin-web/src/ui", ROOT / "apps/mobile/app"):
     if not base.exists():
         continue
-    for path in base.rglob("*.tsx"):
+    for path in repo_files(base, "*.tsx"):
         if RAW_COLOR_RE.search(path.read_text(encoding="utf-8")):
             errors.append(f"raw color literal forbidden in frontend screen: {path.relative_to(ROOT)}")
 
@@ -366,16 +408,15 @@ for base in (ROOT / "apps/admin-web/src/ui", ROOT / "apps/mobile/app"):
 for base in (ROOT / "apps/admin-web/src", ROOT / "apps/mobile/app", ROOT / "apps/mobile/src"):
     if not base.exists():
         continue
-    for path in (*base.rglob("*.ts"), *base.rglob("*.tsx")):
+    for path in (*repo_files(base, "*.ts"), *repo_files(base, "*.tsx")):
         if "primitiveColors" in path.read_text(encoding="utf-8"):
             errors.append(f"frontend code must not consume primitiveColors directly: {path.relative_to(ROOT)}")
 
 # SecureStore is reserved for authentication/session credentials.
-for path in (ROOT / "apps/mobile").rglob("*.ts*"):
-    if not path.is_file():
-        continue
-    if "SecureStore" in path.read_text(encoding="utf-8") and path.relative_to(ROOT).as_posix() != "apps/mobile/src/session.ts":
-        errors.append(f"SecureStore usage outside auth/session storage: {path.relative_to(ROOT)}")
+for pattern in ("*.ts", "*.tsx"):
+    for path in repo_files(ROOT / "apps/mobile", pattern):
+        if "SecureStore" in path.read_text(encoding="utf-8") and path.relative_to(ROOT).as_posix() != "apps/mobile/src/session.ts":
+            errors.append(f"SecureStore usage outside auth/session storage: {path.relative_to(ROOT)}")
 
 # Shared frontend contracts must stay wired to both platform adapters. ---------------------------
 def flatten_translation_keys(value: object, prefix: str = "") -> set[str]:
@@ -410,7 +451,7 @@ for app, default_namespace in (("apps/admin-web", "admin"), ("apps/mobile", "mob
     base = ROOT / app
     if not base.exists():
         continue
-    for path in base.rglob("*.tsx"):
+    for path in repo_files(base, "*.tsx"):
         if "components/ui" in path.as_posix():
             continue
         text = path.read_text(encoding="utf-8")
@@ -515,13 +556,13 @@ if admin_styles.exists() and mobile_provider.exists() and mobile_tailwind.exists
 
         # Mobile vars() must expose every role from the matching ThemeColors property.
         if not re.search(
-            rf"['\"]--{re.escape(css_name)}['\"]\s*:\s*colors\.{re.escape(role)}\b",
+            rf"""['""]--{re.escape(css_name)}['"]\s*:\s*colors\.{re.escape(role)}\b""",
             mobile_provider_text,
         ):
             errors.append(f"Mobile theme provider miswired/missing semantic role: {role}")
 
         if not re.search(
-            rf"['\"]?{re.escape(class_name)}['\"]?\s*:\s*['\"]var\(--{re.escape(css_name)}\)",
+            rf"""['""]?{re.escape(class_name)}['""]?\s*:\s*['""]var\(--{re.escape(css_name)}\)""",
             mobile_tailwind_text,
         ):
             errors.append(f"Mobile Tailwind adapter miswired/missing semantic role: {role}")
@@ -704,7 +745,7 @@ for rel, scopes in ENV_OWNER_SCOPES.items():
         for candidate in candidates:
             if not candidate.is_file() or candidate.name == ".env.example":
                 continue
-            if any(part in GENERATED_DIR_NAMES for part in candidate.parts):
+            if is_generated_path(candidate):
                 continue
             try:
                 owner_texts.append(candidate.read_text(encoding="utf-8"))
@@ -757,7 +798,11 @@ for app in ("apps/admin-web", "apps/mobile"):
     ui_dir = ROOT / app / "src/components/ui"
     if not ui_dir.exists():
         continue
-    app_tsx = [path for path in (ROOT / app).rglob("*.tsx") if ui_dir not in path.parents]
+    app_tsx = [
+        path
+        for path in repo_files(ROOT / app, "*.tsx")
+        if ui_dir not in path.parents
+    ]
     combined = "\n".join(path.read_text(encoding="utf-8") for path in app_tsx)
     for component_file in ui_dir.glob("*.tsx"):
         if f"components/ui/{component_file.stem}" not in combined:
@@ -788,10 +833,14 @@ if errors:
         print("\n".join(f"- {item}" for item in warnings))
     sys.exit(1)
 
-java = len(list(ROOT.rglob("*.java")))
-py = len(list(ROOT.rglob("*.py")))
-ts = len(list(ROOT.rglob("*.ts"))) + len(list(ROOT.rglob("*.tsx")))
-sql = len(list(ROOT.rglob("*.sql")))
+# File counts reflect Lyreo source only — generated dirs are excluded via repo_files().
+java = sum(1 for _ in repo_files(ROOT, "*.java"))
+py = sum(1 for _ in repo_files(ROOT, "*.py"))
+ts = (
+    sum(1 for _ in repo_files(ROOT, "*.ts"))
+    + sum(1 for _ in repo_files(ROOT, "*.tsx"))
+)
+sql = sum(1 for _ in repo_files(ROOT, "*.sql"))
 print(f"VALIDATION OK | Java={java} Python={py} TS/TSX={ts} SQL={sql}")
 for warning in warnings:
     print(f"WARNING: {warning}")

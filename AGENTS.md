@@ -68,8 +68,27 @@ Do not add infrastructure only because it makes the architecture look more “en
 There must be a measured or operational need.
 
 ---
+## 3. Third-party Agent Skills
 
-## 3. Dependency rule
+Project-local skills under `.agents/skills/` provide procedural guidance
+for supported coding agents.
+
+Precedence:
+
+1. `AGENTS.md`
+2. Canonical Lyreo documentation
+3. Existing architecture and technology decisions
+4. Third-party `SKILL.md` guidance
+
+Third-party skills must not change Lyreo architecture merely to match
+their preferred stack.
+
+In particular, skills must not introduce or migrate to Kafka, Redis,
+Expo API Routes, NativeWind v5, Next.js server architecture,
+cross-platform shared UI implementations, or business orchestration
+inside FastAPI unless the corresponding Lyreo architecture decision
+is explicitly changed first.
+## 4. Dependency rule
 
 ```text
 api / adapters-in
@@ -96,7 +115,7 @@ Infrastructure may depend inward to implement ports.
 
 ---
 
-## 4. Module communication
+## 5. Module communication
 
 Cross-module interaction is allowed only through:
 
@@ -114,7 +133,7 @@ Architecture tests/validators must protect these boundaries.
 
 ---
 
-## 5. Domain ownership
+## 6. Domain ownership
 
 - `identity`: app-user mapping/JIT provisioning around Keycloak subject.
 - `learner`: onboarding/profile/persistent learner preferences.
@@ -143,7 +162,7 @@ Do not create a God `progress` module.
 
 ---
 
-## 6. Hard prohibitions
+## 7. Hard prohibitions
 
 Without a new approved architecture decision, **DO NOT**:
 
@@ -171,7 +190,7 @@ Without a new approved architecture decision, **DO NOT**:
 
 ---
 
-## 7. Background jobs
+## 8. Background jobs
 
 PostgreSQL is the authoritative workflow state.
 
@@ -193,7 +212,7 @@ the output and discard the result if the job is no longer allowed to continue.
 
 ---
 
-## 8. AI boundary
+## 9. AI boundary
 
 Java/Core owns:
 
@@ -220,7 +239,7 @@ External provider credentials always remain server-side.
 
 ---
 
-## 9. Python project environment
+## 10. Python project environment
 
 `uv` is the standard tool for Lyreo Python subprojects.
 
@@ -254,7 +273,7 @@ If the supported Python policy changes:
 
 ---
 
-## 10. Database and persistence
+## 11. Database and persistence
 
 Flyway owns schema evolution.
 
@@ -271,7 +290,7 @@ code just to make an adapter easier.
 
 ---
 
-## 11. Configuration
+## 12. Configuration
 
 Configuration layers, precedence, persistence, and override semantics are owned by
 `docs/CONFIGURATION.md` §1–6.
@@ -292,7 +311,7 @@ Do not create a root `.env` containing all service secrets.
 
 ---
 
-## 12. Development topology constraint
+## 13. Development topology constraint
 
 The default development model is:
 
@@ -315,7 +334,7 @@ Admin Web and Mobile own their platform-specific component implementations.
 
 ---
 
-## 13. Comments and documentation ownership
+## 14. Comments and documentation ownership
 
 Comments should explain:
 
@@ -348,7 +367,7 @@ architecture decision. README should point to that source rather than maintainin
 
 ---
 
-## 14. Security authority
+## 15. Security authority
 
 - Keycloak roles: `ADMIN` / `LEARNER`.
 - Mobile/Admin: OIDC Authorization Code + PKCE.
@@ -362,7 +381,7 @@ architecture decision. README should point to that source rather than maintainin
 
 ---
 
-## 15. Testing and completion
+## 16. Testing and completion
 
 Before completing a task, run **the checks applicable to the changed area**:
 
@@ -389,7 +408,7 @@ issue tracker/CI.
 
 ---
 
-## 16. Definition of an acceptable change
+## 17. Definition of an acceptable change
 
 A change preserves the foundation when:
 

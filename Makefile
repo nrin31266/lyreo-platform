@@ -36,9 +36,9 @@ data-check:
 	./scripts/fetch-data.sh --check
 
 deps:
-	cd services/ai-service && uv sync --extra dev
-	cd tools/data-import && uv sync --extra dev
-	pnpm install --no-frozen-lockfile
+	cd services/ai-service && uv sync --locked --extra dev
+	cd tools/data-import && uv sync --locked --extra dev
+	pnpm install --frozen-lockfile
 
 setup:
 	$(MAKE) doctor
@@ -83,10 +83,10 @@ test-java:
 	./mvnw -B test
 
 test-ai:
-	cd services/ai-service && uv run --extra dev pytest
+	cd services/ai-service && uv run --locked --extra dev pytest
 
 test-importers:
-	cd tools/data-import && uv run --extra dev pytest
+	cd tools/data-import && uv run --locked --extra dev pytest
 
 typecheck:
 	pnpm typecheck
@@ -96,7 +96,14 @@ build-frontend:
 
 validate:
 	@tmp=$$(mktemp -d); \
-	  PYTHONPYCACHEPREFIX="$$tmp" python3 -m compileall -q services/ai-service/app services/ai-service/tests tools/data-import; \
+	  PYTHONPYCACHEPREFIX="$$tmp" python3 -m compileall -q \
+	    services/ai-service/app \
+	    services/ai-service/tests \
+	    tools/data-import/import_grammar.py \
+	    tools/data-import/import_toeic.py \
+	    tools/data-import/import_lexicon.py \
+	    tools/data-import/common.py \
+	    tools/data-import/tests; \
 	  status=$$?; rm -rf "$$tmp"; exit $$status
 	bash -n scripts/*.sh infra/keycloak/scripts/*.sh infra/postgres/init/*.sh
 	python3 tooling/validate_repo.py
