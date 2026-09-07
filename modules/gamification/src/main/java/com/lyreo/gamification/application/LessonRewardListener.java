@@ -8,7 +8,7 @@ import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 
 @Component
-public final class LessonRewardListener {
+public class LessonRewardListener {
     private final DiamondLedger ledger;
     private final RewardPolicy policy;
 

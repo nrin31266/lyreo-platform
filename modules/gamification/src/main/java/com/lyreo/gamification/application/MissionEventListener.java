@@ -8,7 +8,7 @@ import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 
 @Component
-public final class MissionEventListener {
+public class MissionEventListener {
     private final MissionProgressService missions;
 
     public MissionEventListener(MissionProgressService missions) {

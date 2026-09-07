@@ -1,6 +1,6 @@
 package com.lyreo.speechassessment.application;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.lyreo.ai.application.AiInvocationService;
 import com.lyreo.ai.domain.AiCapability;
 import com.lyreo.platform.storage.ObjectStoragePort;

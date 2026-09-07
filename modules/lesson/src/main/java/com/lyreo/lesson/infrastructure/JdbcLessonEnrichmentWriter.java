@@ -1,7 +1,7 @@
 package com.lyreo.lesson.infrastructure;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.lyreo.lesson.application.LessonEnrichmentWriter;
 import com.lyreo.lesson.domain.LessonSentence;
 import java.util.ArrayList;

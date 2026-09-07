@@ -1,7 +1,7 @@
 package com.lyreo.lesson.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.lyreo.contracts.lesson.LessonActivityCompletedEvent;
 import com.lyreo.contracts.lesson.LessonCompletedEvent;
 import java.time.Instant;
@@ -106,7 +106,7 @@ public class LessonPracticeService {
     private String json(Object value) {
         try {
             return mapper.writeValueAsString(value);
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Unable to serialize attempt detail", exception);
         }
     }

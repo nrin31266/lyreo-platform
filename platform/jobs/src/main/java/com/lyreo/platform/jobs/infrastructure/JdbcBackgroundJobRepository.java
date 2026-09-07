@@ -5,6 +5,7 @@ import com.lyreo.platform.jobs.domain.BackgroundJob;
 import com.lyreo.platform.jobs.domain.BackgroundJobStatus;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -190,7 +191,7 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
             """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("workerId", workerId)
-                .addValue("nextRetryAt", nextRetryAt)
+                .addValue("nextRetryAt", nextRetryAt != null ? Timestamp.from(nextRetryAt) : null)
                 .addValue("code", code)
                 .addValue("message", message)) == 1;
     }
@@ -214,7 +215,7 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
              WHERE status IN ('RUNNING','CANCEL_REQUESTED')
                AND lease_until < :now
             RETURNING *
-            """, Map.of("now", now), this::map);
+            """, Map.of("now", Timestamp.from(now)), this::map);
     }
 
     private BackgroundJob map(ResultSet rs, int rowNum) throws SQLException {

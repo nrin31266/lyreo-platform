@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 
 /** Projects cross-module learning facts into analytics read models. */
 @Component
-public final class LearningAnalyticsListener {
+public class LearningAnalyticsListener {
     private final AnalyticsProjectionRepository projections;
 
     public LearningAnalyticsListener(AnalyticsProjectionRepository projections) {

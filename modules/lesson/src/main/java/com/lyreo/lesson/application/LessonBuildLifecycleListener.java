@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 
 /** Keeps the user-visible Lesson lifecycle consistent with the durable background job. */
 @Component
-public final class LessonBuildLifecycleListener {
+public class LessonBuildLifecycleListener {
     private final LessonBuildStateRepository state;
     private final LessonRepository lessons;
 

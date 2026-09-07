@@ -11,14 +11,4 @@ public class NotificationConfiguration {
     InMemoryJobProgressFeed inMemoryJobProgressFeed() {
         return new InMemoryJobProgressFeed();
     }
-
-    @Bean
-    JobProgressFeed jobProgressFeed(InMemoryJobProgressFeed feed) {
-        return feed;
-    }
-
-    @Bean
-    RealtimeNotificationPort realtimeNotificationPort(InMemoryJobProgressFeed feed) {
-        return feed;
-    }
 }

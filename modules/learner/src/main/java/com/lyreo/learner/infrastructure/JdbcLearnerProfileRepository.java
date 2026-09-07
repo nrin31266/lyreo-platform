@@ -1,6 +1,6 @@
 package com.lyreo.learner.infrastructure;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.lyreo.learner.application.LearnerProfileRepository;
 import com.lyreo.learner.domain.LearnerPreferences;
 import com.lyreo.learner.domain.LearnerProfile;

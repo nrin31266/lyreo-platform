@@ -1,7 +1,7 @@
 package com.lyreo.platform.config.application;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.lyreo.platform.config.domain.RuntimeConfigDocument;
 import java.time.Instant;
 import java.util.UUID;

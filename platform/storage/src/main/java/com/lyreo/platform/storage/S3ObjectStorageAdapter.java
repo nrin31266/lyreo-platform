@@ -48,6 +48,6 @@ public final class S3ObjectStorageAdapter implements ObjectStoragePort {
         var get = GetObjectRequest.builder().bucket(bucket).key(objectKey).build();
         var request = GetObjectPresignRequest.builder()
             .signatureDuration(ttl).getObjectRequest(get).build();
-        return presigner.presignGetObject(request).url().toURI();
+        return URI.create(presigner.presignGetObject(request).url().toString());
     }
 }

@@ -1,6 +1,6 @@
 package com.lyreo.lesson.infrastructure;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.lyreo.ai.application.AiInvocationService;
 import com.lyreo.ai.application.AiRoutingSnapshotService;
 import com.lyreo.lesson.application.CreateLessonBuildService;

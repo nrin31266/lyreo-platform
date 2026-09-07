@@ -8,7 +8,7 @@ import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 
 @Component
-public final class CurriculumCompletionListener {
+public class CurriculumCompletionListener {
     private final CurriculumProgressRepository repository;
 
     public CurriculumCompletionListener(CurriculumProgressRepository repository) {

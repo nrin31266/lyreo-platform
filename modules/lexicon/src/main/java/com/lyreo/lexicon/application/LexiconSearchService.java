@@ -4,7 +4,7 @@ import com.lyreo.lexicon.domain.LexiconEntry;
 import java.util.List;
 import org.springframework.cache.annotation.Cacheable;
 
-public final class LexiconSearchService {
+public class LexiconSearchService {
     private final LexiconRepository repository;
 
     public LexiconSearchService(LexiconRepository repository) {

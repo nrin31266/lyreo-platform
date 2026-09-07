@@ -1,6 +1,6 @@
 package com.lyreo.lesson.application;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.lyreo.ai.application.AiRoutingSnapshotService;
 import com.lyreo.ai.domain.AiCapability;
 import com.lyreo.lesson.domain.Lesson;

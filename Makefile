@@ -1,4 +1,4 @@
-.PHONY: help init-env doctor setup deps data-fetch data-check dev-infra dev-config keycloak-seed down core ai admin mobile \
+.PHONY: help init-env doctor setup deps deps-java data-fetch data-check dev-infra dev-config keycloak-seed down core ai admin mobile \
         test-java test-ai test-importers typecheck build-frontend validate check prod-config verify-prod-env
 
 help:
@@ -10,6 +10,7 @@ help:
 	  '  make data-fetch      Download/install Grammar+TOEIC dataset when missing' \
 	  '  make data-check      Validate the importer-facing Grammar+TOEIC dataset structure' \
 	  '  make deps            Sync Python dependencies and install pnpm workspace dependencies' \
+	  '  make deps-java       Compile and install internal Java artifacts required by Core into local Maven cache' \
 	  '  make dev-infra       Start PostgreSQL + Keycloak only' \
 	  '  make keycloak-seed   Verify realm/client/roles and seed dev users' \
 	  '  make core            Run Spring Boot locally' \
@@ -35,7 +36,10 @@ data-fetch:
 data-check:
 	./scripts/fetch-data.sh --check
 
-deps:
+deps-java:
+	./mvnw -B -pl apps/core-service -am -DskipTests install
+
+deps: deps-java
 	cd services/ai-service && uv sync --locked --extra dev
 	cd tools/data-import && uv sync --locked --extra dev
 	pnpm install --frozen-lockfile
@@ -67,7 +71,10 @@ keycloak-seed:
 down:
 	docker compose --env-file infra/docker/.env -f compose.dev.yml down
 
-core:
+down-v:
+	docker compose --env-file infra/docker/.env -f compose.dev.yml down -v
+	
+core: deps-java
 	cd apps/core-service && set -a && . ./.env && set +a && ../../mvnw spring-boot:run
 
 ai:

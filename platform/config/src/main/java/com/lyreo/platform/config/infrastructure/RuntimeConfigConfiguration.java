@@ -1,6 +1,6 @@
 package com.lyreo.platform.config.infrastructure;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.lyreo.platform.config.application.RuntimeConfigRepository;
 import com.lyreo.platform.config.application.RuntimeConfigService;
 import org.springframework.context.annotation.Bean;

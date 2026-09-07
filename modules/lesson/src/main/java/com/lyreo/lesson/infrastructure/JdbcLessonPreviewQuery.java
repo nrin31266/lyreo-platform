@@ -1,6 +1,6 @@
 package com.lyreo.lesson.infrastructure;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.lyreo.lesson.application.LessonPreviewQuery;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

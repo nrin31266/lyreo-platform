@@ -1,6 +1,6 @@
 package com.lyreo.lesson.infrastructure;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.lyreo.lesson.application.LessonBuildStateRepository;
 import com.lyreo.lesson.domain.LessonBuildPlan;
 import com.lyreo.lesson.domain.LessonBuildStep;
