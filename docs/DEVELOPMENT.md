@@ -1,95 +1,55 @@
 # Lyreo Development Guide
 
-Mục tiêu của dev topology: **dependency chạy container, source code chạy local** để debugger/hot reload nhanh. Không ép developer rebuild cả stack sau mỗi thay đổi Java/Python/TypeScript.
+The development topology is intentionally optimized for **containerized dependencies with local
+application source** so Java/Python/TypeScript debugging and hot reload stay fast.
 
 ## 1. Toolchain
 
-Baseline tại thời điểm khóa kiến trúc:
+Use the repository-declared toolchain and run `./scripts/doctor.sh` before first setup or when a
+machine changes. Exact version baselines and upgrade rationale are owned by
+`TECH_CHOICES.md`; local setup commands are owned by `../README.md`.
 
-- Java 25;
-- Maven Wrapper của repo;
-- Python 3.12 + `uv`;
-- Node 24 LTS + pnpm 12;
-- Docker + Docker Compose;
-- Android Studio / Xcode khi chạy native mobile;
-- Expo Development Build, không phụ thuộc Expo Go-only.
-
-Repo có `.java-version`, `.nvmrc`, `mise.toml` để team đồng bộ.
+The repository includes `.java-version`, `.nvmrc`, and `mise.toml` to help the team align tools.
+Python subprojects use `uv`-managed project environments rather than relying on the host's default
+Python interpreter.
 
 ## 2. First run
 
-```bash
-git clone <repo>
-cd lyreo-platform
+The first-run workflow is:
 
-./scripts/init-dev-env.sh
-make dev-infra
-```
+1. initialize service-specific environment files;
+2. fetch/validate the shared Grammar/TOEIC dataset unless intentionally skipped;
+3. sync Python/frontend dependencies;
+4. start PostgreSQL + Keycloak development infrastructure;
+5. bootstrap the Lyreo realm/clients/roles/dev users;
+6. start application processes locally.
 
-Docker dev chỉ chạy:
-
-```text
-PostgreSQL
-Keycloak
-```
-
-Sau khi Keycloak healthy:
-
-```bash
-make keycloak-seed
-```
-
-Dev users/password nằm trong `infra/keycloak/.env`.
+Use the exact commands in `../README.md` §5–11. Dev users/passwords are sourced from
+`infra/keycloak/.env` and must not be copied into documentation.
 
 ## 3. Start executable apps
 
-Mở terminal riêng cho từng process.
+Run each executable as a separate local process so it can be restarted/debugged independently.
+The exact commands, default addresses, and initial dependency-installation steps are owned by
+`../README.md` §8–12.
 
 ### Core Service
 
-```bash
-make core
-```
-
-hoặc:
-
-```bash
-cd apps/core-service
-set -a; source .env; set +a
-../../mvnw spring-boot:run
-```
+Core can boot before AI Service, but AI-backed lesson work will fail/circuit-break until AI Service
+is available.
 
 ### AI Service
 
-```bash
-cd services/ai-service
-uv sync --extra dev
-make -C ../.. ai
-```
-
-Default `AI_RUNTIME_MODE=mock` để CI/dev không tải model nhiều GB.
+Use the AI subproject environment managed by `uv`; runtime-mode behavior is described in §5 below.
 
 ### Admin Web
 
-```bash
-pnpm install
-make admin
-```
+Run the Vite dev process separately from Core so frontend reload/debug does not restart the backend.
 
 ### Mobile
 
-```bash
-make mobile
-```
-
-Khi cần native build:
-
-```bash
-pnpm --filter @lyreo/mobile android
-# hoặc iOS trên macOS
-```
-
-Sau khi thêm native module/đổi Expo SDK cần rebuild Development Build.
+Mobile uses an Expo Development Build/Prebuild workflow when native capabilities are required.
+After adding a native module or changing the Expo SDK, rebuild the Development Build.
 
 ## 4. Recommended start order
 
@@ -102,145 +62,122 @@ Sau khi thêm native module/đổi Expo SDK cần rebuild Development Build.
 6. Mobile
 ```
 
-Core có thể start trước AI nhưng lesson AI calls sẽ fail/circuit-break cho tới khi AI Service available.
+This order minimizes expected dependency errors while preserving the ability to run/debug each
+process independently.
 
 ## 5. AI runtime modes
 
 ### `mock`
 
-Dùng cho UI/backend/test thông thường. Trả contract deterministic, không GPU/API bill.
+Use for normal UI/backend development and tests. It returns deterministic contract-compatible
+responses without GPU/model downloads or provider billing.
 
 ### `local`
 
-FastAPI import `qwen-asr` Python package và lazy-load:
+FastAPI loads the Qwen runtime for local STT/alignment capability execution. Local mode requires the
+Qwen optional dependencies and a machine/runtime appropriate for the selected model/device.
 
-- `Qwen3-ASR` cho STT;
-- `Qwen3-ForcedAligner` cho alignment.
+Docker GPU is a packaging/deployment option; a developer with a suitable GPU may run the Python
+runtime directly on the host.
 
-Docker GPU chỉ là packaging option; developer GPU có thể chạy Python local trực tiếp.
-
-Provider SaaS (Groq/Gemini/DeepSeek) được gọi theo route do Core quyết định. FastAPI không persist provider credential.
+External SaaS providers such as Groq/Gemini/DeepSeek are selected through Core capability routing.
+They are independent from `AI_RUNTIME_MODE` and do not constitute a third runtime mode.
 
 ## 6. Storage during development
 
-Default:
+Use the local filesystem adapter for ordinary development and switch to R2 only when testing R2
+integration behavior. Exact variables, defaults, and security rules are owned by
+`CONFIGURATION.md` §7.
 
-```dotenv
-STORAGE_MODE=local
-```
-
-Artifact đi vào `.data/storage`, đã gitignore.
-
-Khi team muốn test R2 integration:
-
-```dotenv
-STORAGE_MODE=r2
-R2_ENDPOINT=...
-R2_ACCESS_KEY_ID=...
-R2_SECRET_ACCESS_KEY=...
-R2_BUCKET=lyreo-dev
-```
-
-Nên dùng bucket dev riêng, không dùng chung production.
+Use a dedicated development bucket when testing R2. Never point a developer environment at the
+production bucket.
 
 ## 7. Database workflow
 
-### Không dùng Hibernate auto-update
+### Schema changes
 
-`ddl-auto=validate` nghĩa là Entity/JDBC mapping không tự sửa schema.
+For a schema change:
 
-Khi thay schema:
+1. create a new Flyway migration;
+2. run Core/tests so Flyway applies and validates it;
+3. verify Hibernate mapping validation;
+4. review compatibility/rollback implications for destructive changes.
 
-1. tạo migration mới `Vxxx__description.sql`;
-2. không sửa migration đã vào shared environment;
-3. start Core hoặc chạy tests để Flyway migrate;
-4. Hibernate validate schema;
-5. review rollback/compatibility nếu migration destructive.
-
-Large seed không để trong Flyway. Lexicon/Grammar/TOEIC dùng importer.
+Mandatory persistence rules are owned by `../AGENTS.md` §10. Large Lexicon/Grammar/TOEIC content
+uses importer tooling rather than Flyway seed blobs.
 
 ## 8. Data importer development
 
-```bash
-cd tools/data-import
-uv sync
-cp .env.example .env
-```
+Importer execution commands are owned by `../README.md` §13. Input semantics, current dataset
+shape, dry-run/apply behavior, checksums, and media handling are owned by `DATA_PIPELINES.md`.
 
-Dùng dry-run trước:
+Development practice:
 
-```bash
-uv run python import_grammar.py --data-dir "$DAUTOEIC_DATA_DIR"
-uv run python import_toeic.py --data-dir "$DAUTOEIC_DATA_DIR"
-uv run python import_lexicon.py --english "$KAIKKI_EN_JSONL" --limit 1000
-```
-
-Chỉ thêm `--apply` sau khi counts/checksum/validation hợp lý.
+- run dry-run/validation before any applied import;
+- inspect record counts and integrity output;
+- use `--apply` only after the source shape has been reviewed;
+- treat R2 media upload as a separate opt-in concern where supported.
 
 ## 9. Test/validation loop
 
-Offline policy check nhanh:
+Run the smallest relevant checks continuously while developing, then run the required completion
+checks for the changed area. Exact repository commands are owned by `../README.md` §15; completion
+requirements are owned by `../AGENTS.md` §15.
 
-```bash
-make validate
-```
-
-Full:
-
-```bash
-make test-java
-make test-ai
-pnpm typecheck
-```
-
-Nếu artifact còn `TESTING_NOTES.md`, dùng nó như handoff tạm để biết test nào cần chạy lại trên máy có network/Docker/GPU; không dùng file đó làm architecture doc.
+`TESTING_NOTES.md`, if still present, is only a temporary starter handoff. It is not an architecture
+or testing-policy source of truth.
 
 ## 10. Common troubleshooting
 
-### Maven không tải dependency
+### Maven cannot download dependencies
 
-Kiểm tra network/DNS tới Maven Central. Maven Wrapper cần tải Maven/dependency lần đầu.
+Check DNS/network access to Maven Central. The Maven Wrapper and dependencies may need network
+access on the first run.
 
-### Core báo schema validation fail
+### Core reports schema validation failure
 
-Không bật `ddl-auto=update`. Kiểm tra migration mới có được tạo/chạy đúng thứ tự không.
+Do not bypass the failure by enabling Hibernate schema mutation. Verify that the required Flyway
+migration exists, ran in order, and matches the current mappings. See `../AGENTS.md` §10.
 
-### Keycloak dev user login không được
+### Keycloak development user cannot log in
 
-```bash
-make keycloak-seed
-```
+Rerun the Keycloak bootstrap/seed workflow described in `../README.md` §7, then verify values in
+`infra/keycloak/.env` and the relevant client redirect URI.
 
-Sau đó kiểm tra `infra/keycloak/.env` và redirect URI của client.
+### Android emulator cannot reach localhost
 
-### Android emulator không gọi được localhost
+The Android emulator uses host alias `10.0.2.2`; the mobile `.env.example` uses this form for local
+Core/Keycloak access. A physical device needs a reachable LAN IP or an appropriate development
+tunnel.
 
-Android emulator dùng host alias `10.0.2.2`; `.env.example` mobile đã dùng giá trị này.
+### Shared TOEIC dataset is missing or Drive download fails
 
-Physical device phải dùng IP LAN hoặc dev tunnel phù hợp.
+Run `make data-check` first. `make data-fetch` uses the URL/checksum in `tools/data-import/.env`; for
+Google Drive it runs `gdown` ephemerally through `uvx`. Check Drive sharing permissions, available
+disk space, and the configured archive checksum. The app itself can still be developed without the
+dataset by using `SKIP_DATA=1 make setup`; importer/data work cannot.
 
-### Qwen tải model/GPU OOM
+### NativeWind classes do not update after configuration/native dependency changes
 
-Quay về:
+Restart Metro with a clean cache and rebuild the Expo Development Build after native dependency or
+Expo plugin changes. Admin Tailwind and Mobile NativeWind intentionally use separate platform
+configuration; do not copy one Tailwind config over the other.
 
-```dotenv
-AI_RUNTIME_MODE=mock
-```
+### Qwen model download/GPU OOM
 
-Chỉ bật `local` trên máy đủ VRAM; giảm concurrency trước khi đổi model.
+Return the AI runtime to `mock` for normal development. Use `local` only on a machine with suitable
+model dependencies and hardware; reduce concurrency before changing models as a first response to
+memory pressure.
 
-### Job kẹt RUNNING
+### Job remains RUNNING
 
-Không sửa DB trực tiếp trước. Xem `docs/OPERATIONS.md` phần Job Runbook: heartbeat/lease/retry/cancel có semantics riêng.
+Do not edit job rows manually before understanding lease state. Follow the background-job recovery
+runbook in `OPERATIONS.md` §5.
 
 ## 11. Coding-agent workflow
 
-Agent phải đọc `AGENTS.md` trước khi sửa code. `CLAUDE.md`, `GEMINI.md`, `AGENT.md` chỉ là symlink.
+Coding agents must read `../AGENTS.md` before modifying code. `CLAUDE.md`, `GEMINI.md`, and
+`AGENT.md` are aliases to the same contract.
 
-Trước khi hoàn tất task:
-
-- chạy test applicable;
-- thêm migration nếu schema đổi;
-- cập nhật docs/env example nếu config đổi;
-- không đưa secret/dataset raw vào commit;
-- nếu không chạy được test, ghi lý do cụ thể vào handoff/PR.
+The required completion checks and documentation ownership rules are defined in
+`../AGENTS.md` §13–15; do not maintain a second checklist here.

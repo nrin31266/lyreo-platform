@@ -94,18 +94,31 @@ platform/security
 platform/observability
 ```
 
-### Ownership highlights
+Detailed product/domain ownership is defined in `LYREO_PLATFORM_SPEC.md` §6–7. Enforceable
+module ownership rules for code changes are defined in `../AGENTS.md` §5.
 
-- `lesson`: content, annotations, activities, lesson-build job state, lesson practice attempts.
-- `speech-assessment`: learner speech recording assessment, ASR/timing/fluency/deep judge.
-- `lexicon`: global dictionary entries/senses/forms/pronunciation/source/license.
-- `vocabulary`: learner-owned SRS cards referencing Lexicon.
-- `grammar`: grammar taxonomy/question bank/practice attempts.
-- `toeic`: tests/passages/questions/attempts/scoring.
-- `curriculum`: paths/sections/items/enrollment/progress mapping other content IDs.
-- `gamification`: XP/level, Diamond ledger, missions.
-- `analytics`: projections/read models only, not source-of-truth detailed progress.
-- `ai`: provider/model routing, encrypted credentials, invocation audit.
+Frontend shared-package boundaries:
+
+```text
+packages/design-system  primitive/foundation tokens + semantic light/dark theme contract
+packages/i18n           intentionally shared common/admin/mobile translation resources
+apps/admin-web          Web component implementation and browser adapters
+apps/mobile             Native component implementation and device adapters
+```
+
+Web and Mobile share semantic names/resources where appropriate, not component implementation or
+platform-specific Tailwind configuration.
+
+Theme resolution is likewise adapter-owned while the color contract remains shared:
+
+```text
+semanticThemes.light / semanticThemes.dark
+        ├── Admin AppThemeProvider → prefers-color-scheme → .dark + CSS variables
+        └── Mobile AppThemeProvider → useColorScheme() → NativeWind vars on root View
+```
+
+Feature screens consume semantic roles only; they do not own raw hex palettes or duplicate a
+second light/dark theme map.
 
 ## 5. Cross-module communication
 
@@ -130,7 +143,8 @@ Gamification → mission/reward update
 Analytics → project study summary
 ```
 
-No Kafka is required for this in-process module isolation.
+The eventing transport decision and its rationale are recorded in `LYREO_PLATFORM_SPEC.md` §10
+and `DECISIONS.md` D-002.
 
 ## 6. Lesson model: Content ≠ Annotation ≠ Activity
 
@@ -256,19 +270,8 @@ curriculum  → item/path progress
 
 ## 12. Runtime configuration precedence
 
-```text
-deployment secret/capability
-        ↓
-admin runtime policy
-        ↓
-lesson build snapshot
-        ↓
-learner preference
-        ↓
-session override
-```
-
-See `CONFIGURATION.md` for persistence/override details.
+The authoritative configuration layers, precedence, persistence, and override semantics live in
+`CONFIGURATION.md`.
 
 ## 13. Storage
 
@@ -281,7 +284,8 @@ R2 stores:
 - learner recording;
 - raw AI output/debug artifact.
 
-DB stores object keys, never presigned URL.
+DB stores object keys, never presigned URL. Object-key namespace examples are documented in
+`LYREO_PLATFORM_SPEC.md` §28.3.
 
 ## 14. Cache / rate limit / resilience
 
@@ -289,10 +293,10 @@ DB stores object keys, never presigned URL.
 - Bucket4j: inbound single-node MVP API quota.
 - Resilience4j: outbound provider/FastAPI retry, circuit breaker, timeout, bulkhead.
 
-Redis is not needed until a measured distributed-cache/global-quota use case appears.
+Technology selection rationale, including the current Redis decision, lives in
+`TECH_CHOICES.md` and `DECISIONS.md`.
 
 ## 15. Schema ownership
 
-Flyway owns schema history. Hibernate runs with `ddl-auto=validate`.
-
-Large Lexicon/Grammar/TOEIC data is imported by tools, not Flyway migrations.
+Mandatory schema/persistence rules are defined in `../AGENTS.md` §10. Large dataset import
+semantics are defined in `DATA_PIPELINES.md`.

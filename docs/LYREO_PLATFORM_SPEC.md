@@ -328,6 +328,7 @@ platform/
   jobs
   storage
   cache
+  config
   security
   observability
 ```
@@ -1333,13 +1334,17 @@ Official Qwen3-ASR project hiện có:
 - timestamp output khi kết hợp forced aligner;
 - Python 3.12 recommended.
 
-Lyreo AI service hỗ trợ runtime mode:
+Lyreo AI service hiện có đúng hai runtime mode được implement:
 
 ```text
 mock
 local
-remote
 ```
+
+Groq/Gemini/DeepSeek là provider routing theo capability và độc lập với `AI_RUNTIME_MODE`; chúng
+không tạo thành runtime mode thứ ba. `remote` chỉ có thể được cân nhắc như một hướng mở rộng tương
+lai nếu xuất hiện model-host riêng và có architecture decision tương ứng; hiện tại chưa được
+implement.
 
 ### Dev không GPU
 
@@ -1774,11 +1779,13 @@ Grammar Practice mới kéo question bank.
 
 Dataset media lớn không commit vào Lyreo repo.
 
-Config:
+Default developer config (resolved from `tools/data-import/`):
 
 ```text
-DAUTOEIC_DATA_DIR=/absolute/path/to/dautoeic
+DAUTOEIC_DATA_DIR=../../.data/datasets/toeic
 ```
+
+An absolute external path is still supported when a developer already has the dataset elsewhere.
 
 ---
 
@@ -1786,13 +1793,19 @@ DAUTOEIC_DATA_DIR=/absolute/path/to/dautoeic
 
 Không dùng Flyway để nhét hàng GB data.
 
+Current repository layout:
+
 ```text
 tools/data-import/
-  common/
-  lexicon/
-  grammar/
-  toeic/
+├── common.py
+├── import_lexicon.py
+├── import_grammar.py
+├── import_toeic.py
+└── tests/
 ```
+
+The three pipelines remain logically separate even though the starter keeps their entry-point scripts
+in one small tool package.
 
 ### 36.1 Dataset import record
 
@@ -1827,6 +1840,24 @@ DB giữ object key.
 ### 36.3 Lexicon
 
 Stream JSONL, không load full dump vào RAM.
+
+### 36.4 Developer dataset bootstrap
+
+Grammar/TOEIC dataset vẫn là external product data, không commit vào Git. Team hiện có một shared
+`toeic-dataset.zip` trên Google Drive; `tools/data-import/.env` cấu hình:
+
+```text
+DAUTOEIC_DATA_DIR
+DAUTOEIC_DATA_URL
+DAUTOEIC_DATA_SHA256 (optional integrity pin)
+```
+
+`make data-fetch` kiểm tra dataset local trước, chỉ tải khi thiếu, extract an toàn và validate đúng
+cấu trúc mà importer hiện tại yêu cầu. `SKIP_DATA=1 make setup` cho phép dev chưa cần data trì hoãn
+việc tải archive nhiều GB.
+
+Lexicon là pipeline riêng: dữ liệu Kaikki/Wiktextract hiện **chưa được tải/scrape** và không nằm
+trong TOEIC archive.
 
 ---
 
@@ -2098,6 +2129,7 @@ apps/mobile/.env.example
 services/ai-service/.env.example
 infra/keycloak/.env.example
 infra/docker/.env.example
+tools/data-import/.env.example
 ```
 
 Biến khó phải có comment ngay trong file.
@@ -2121,11 +2153,17 @@ Docker dev:
   PostgreSQL
   Keycloak
 
-External:
-  R2 dev bucket
+Storage dev mặc định:
+  local filesystem (`.data/storage`)
+
+Optional external integration:
+  R2 dev bucket khi `STORAGE_MODE=r2`
+
+External development data (Git-ignored):
+  `.data/datasets/toeic` khi chạy `make data-fetch`
 ```
 
-Optional MinIO profile có thể thêm sau.
+R2 không phải yêu cầu để chạy development mặc định. Optional MinIO profile có thể thêm sau.
 
 Không Kafka, không Redis.
 
@@ -2157,13 +2195,22 @@ Mobile build/deploy riêng.
 
 ### 46.1 Mobile
 
-Khuyến nghị 09/2026:
+Baseline hiện tại:
 
 - Expo SDK 57;
 - React Native 0.86;
 - Expo Router;
 - Development Build / Prebuild;
-- New Architecture.
+- New Architecture;
+- NativeWind v4 với Tailwind v3.4 toolchain riêng cho Mobile;
+- selected React Native Reusables-style primitives được copy vào repo để Lyreo sở hữu code;
+- `expo-localization` + `i18next/react-i18next`;
+- locale/theme preference lưu bằng AsyncStorage, không dùng SecureStore.
+
+Expo Router dependencies phải là dependency trực tiếp của Mobile thay vì dựa vào transitive
+hoisting: `expo-router`, `expo-constants`, `expo-linking`, `expo-status-bar`,
+`react-native-safe-area-context`, `react-native-screens`. Khi nâng Expo SDK phải dùng baseline tương
+thích của Expo và chạy lại native build/typecheck; không pin ngẫu nhiên version mới nhất từng package.
 
 Không phụ thuộc Expo Go-only vì app có audio recording/native concerns.
 
@@ -2172,22 +2219,76 @@ Không phụ thuộc Expo Go-only vì app có audio recording/native concerns.
 - React;
 - Vite;
 - TypeScript;
-- routing;
-- typed API client;
-- design system.
+- Tailwind CSS v4;
+- shadcn/Radix-style components do Lyreo sở hữu trong repo;
+- `i18next/react-i18next`;
+- browser locale detection + localStorage cho locale/theme preference;
+- routing + typed API client.
 
-### 46.3 Design system
+### 46.3 Design system và i18n
 
-Token:
+`packages/design-system` tách rõ:
 
-- colors;
-- typography;
-- spacing;
-- radius;
-- elevation;
-- motion.
+```text
+brand + primitive color palette + foundation tokens (spacing/radius/motion/typography)
+                              ↓
+                        semantic color roles
+                              ↓
+                        light / dark theme
+                              ↓
+                     Web adapter / Mobile adapter
+```
 
-Phase đầu chỉ default theme nhưng code không hard-code style khắp component.
+Non-color foundation token dùng một nguồn dữ liệu `src/foundation.json`; TypeScript package API
+re-export từ nguồn đó. Mobile Tailwind đọc public subpath `@lyreo/design-system/foundation` cho
+radius, còn Admin adapter publish cùng radius contract thành CSS variables. Không copy một bộ radius
+khác trong từng app chỉ vì Web/Mobile dùng Tailwind version khác nhau.
+
+Theme preference chuẩn:
+
+```text
+system
+light
+dark
+```
+
+Default là `system`. Feature component không hard-code brand/theme color; dùng semantic roles như
+`background`, `foreground`, `surface`, `primary`, `muted`, `border`, `destructive`.
+
+Hai map `semanticThemes.light` và `semanticThemes.dark` phải có **parity 100%** với `ThemeColors`:
+không thiếu role, không extra role, không `undefined/null`. Repository validator kiểm tra invariant
+này offline để artifact vẫn tự chứng minh được ngay cả khi chưa cài `node_modules`.
+
+Dark-mode adapter:
+
+```text
+Admin Web
+  saved preference
+       ↓
+  system ? prefers-color-scheme : explicit light/dark
+       ↓
+  document.documentElement.classList.toggle("dark")
+       ↓
+  semantic CSS variables → Tailwind/shadcn-style components
+
+Mobile
+  saved preference
+       ↓
+  system ? React Native useColorScheme() : explicit light/dark
+       ↓
+  semanticThemes[resolvedMode]
+       ↓
+  NativeWind vars() on root View → semantic utility classes
+```
+
+`app.json` giữ `userInterfaceStyle: "automatic"` để device appearance change tới được React Native.
+Status bar và navigation content background cũng follow resolved semantic mode. Không tạo một bộ
+`darkColors` riêng trong Mobile hoặc raw hex branch trong screen `.tsx`.
+
+`packages/i18n` chia resource thành `common`, `admin`, `mobile` để share đúng text cần share nhưng
+không coupling hai UI. Web và Mobile **không share component implementation/Tailwind config**; chúng
+chỉ share semantic contracts, brand tokens và translation resources phù hợp.
+
 
 ---
 
@@ -2430,6 +2531,9 @@ Target baseline dùng bản stable/production-ready tại thời điểm chốt:
 | Qwen3-ForcedAligner | 0.6B |
 | React Native | 0.86 via Expo SDK 57 |
 | Expo | SDK 57 |
+| NativeWind | 4.2.x (Mobile) |
+| Tailwind CSS | 4.3.x Admin / 3.4.x Mobile NativeWind toolchain |
+| i18next / react-i18next | 26.x / 17.x |
 | Cloudflare R2 | S3-compatible Standard |
 | Bucket4j | 8.19.x |
 | Resilience4j | 2.4.x |

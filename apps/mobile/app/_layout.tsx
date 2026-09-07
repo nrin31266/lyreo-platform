@@ -1,18 +1,28 @@
+import '../global.css';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { AuthProvider } from '../src/auth';
-import { colors } from '../src/theme';
+import { AppProviders } from '../src/providers/AppProviders';
+import { useAppTheme } from '../src/providers/AppThemeProvider';
 
-export default function RootLayout() {
+function ThemedNavigator() {
+  const { colors, mode } = useAppTheme();
   return (
-    <AuthProvider>
-      <StatusBar style="dark" />
+    <>
+      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: colors.paper },
+          contentStyle: { backgroundColor: colors.background },
         }}
       />
-    </AuthProvider>
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <AppProviders>
+      <ThemedNavigator />
+    </AppProviders>
   );
 }

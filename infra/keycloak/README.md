@@ -40,9 +40,13 @@ make keycloak-seed
 
 `init-dev-env.sh` đồng bộ:
 
-- Core confidential client secret;
-- Keycloak bootstrap env;
+- confidential `lyreo-core-service` client secret giữa Docker/Keycloak bootstrap env;
 - Core dev bootstrap token.
+
+Core runtime **chưa đọc** secret của `lyreo-core-service`: client/service account này được giữ sẵn
+cho lúc thật sự cần Keycloak Admin API như spec mô tả. Khi capability đó được implement, thêm một
+Core runtime variable cùng code consumer trong cùng change; không copy secret vào Core `.env` trước
+chỉ để “phòng xa”.
 
 `make keycloak-seed`:
 

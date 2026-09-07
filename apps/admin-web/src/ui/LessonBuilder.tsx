@@ -1,5 +1,10 @@
 import { FormEvent, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../api';
+import { Button } from '../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Input } from '../components/ui/input';
+import { Textarea } from '../components/ui/textarea';
 
 const activityOptions = [
   'DICTATION',
@@ -50,13 +55,10 @@ type BuildAccepted = { lessonId: string; jobId: string };
 type PresetName = keyof typeof presets;
 
 export function LessonBuilder() {
+  const { t } = useTranslation('admin');
   const [preset, setPreset] = useState<PresetName>('STANDARD');
-  const [activities, setActivities] = useState<string[]>([
-    ...presets.STANDARD.activities,
-  ]);
-  const [annotations, setAnnotations] = useState<string[]>([
-    ...presets.STANDARD.annotations,
-  ]);
+  const [activities, setActivities] = useState<string[]>([...presets.STANDARD.activities]);
+  const [annotations, setAnnotations] = useState<string[]>([...presets.STANDARD.annotations]);
   const [source, setSource] = useState<SourceType>('TEXT');
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
@@ -86,11 +88,7 @@ export function LessonBuilder() {
     setAnnotations([...presets[nextPreset].annotations]);
   }
 
-  function toggle(
-    setter: (values: string[]) => void,
-    current: string[],
-    item: string,
-  ) {
+  function toggle(setter: (values: string[]) => void, current: string[], item: string) {
     setter(current.includes(item)
       ? current.filter(value => value !== item)
       : [...current, item]);
@@ -103,12 +101,12 @@ export function LessonBuilder() {
     setAccepted(null);
 
     try {
-      if (!title.trim()) throw new Error('Title is required.');
+      if (!title.trim()) throw new Error(t('lessonBuilder.validation.titleRequired'));
       if (source === 'TEXT' && !text.trim()) {
-        throw new Error('Text source cannot be empty.');
+        throw new Error(t('lessonBuilder.validation.textRequired'));
       }
       if (source !== 'TEXT' && !sourceReference.trim()) {
-        throw new Error('Audio/YouTube source reference is required.');
+        throw new Error(t('lessonBuilder.validation.referenceRequired'));
       }
 
       const response = await api<BuildAccepted>('/api/v1/admin/lessons/build', {
@@ -134,148 +132,143 @@ export function LessonBuilder() {
 
   return (
     <section>
-      <div className="eyebrow">Lesson / Create</div>
-      <h1>Lesson Builder</h1>
-      <p className="lead">
-        Content, annotations and activities are separate. The exact build selection is snapshotted
-        with the job for audit/debug instead of silently following future admin defaults.
-      </p>
+      <div className="eyebrow">{t('lessonBuilder.eyebrow')}</div>
+      <h1>{t('lessonBuilder.title')}</h1>
+      <p className="lead">{t('lessonBuilder.lead')}</p>
 
       <div className="two">
-        <form className="card form" onSubmit={submit}>
-          <label>
-            Title
-            <input
-              value={title}
-              onChange={event => setTitle(event.target.value)}
-              placeholder="Business small talk"
-            />
-          </label>
-
-          <label>
-            Source
-            <select
-              value={source}
-              onChange={event => setSource(event.target.value as SourceType)}
-            >
-              <option value="TEXT">Text</option>
-              <option value="AUDIO">Audio</option>
-              <option value="YOUTUBE">YouTube</option>
-            </select>
-          </label>
-
-          <label>
-            Preset
-            <select
-              value={preset}
-              onChange={event => applyPreset(event.target.value as PresetName)}
-            >
-              {Object.keys(presets).map(name => <option key={name}>{name}</option>)}
-            </select>
-          </label>
-
-          {source === 'TEXT' ? (
-            <label>
-              Source text
-              <textarea
-                value={text}
-                onChange={event => setText(event.target.value)}
-                placeholder="Paste curated English text here…"
-              />
-            </label>
-          ) : (
-            <label>
-              {source === 'YOUTUBE' ? 'YouTube URL' : 'Audio object key / URL'}
-              <input
-                value={sourceReference}
-                onChange={event => setSourceReference(event.target.value)}
-                placeholder={source === 'YOUTUBE'
-                  ? 'https://youtube.com/watch?v=…'
-                  : 'uploads/admin/example.m4a'}
-              />
-            </label>
-          )}
-
-          <div className="row">
-            <label>
-              Accent
-              <select value={accent} onChange={event => setAccent(event.target.value)}>
-                <option value="US">US</option>
-                <option value="UK">UK</option>
-              </select>
-            </label>
-
-            <label>
-              Sentence IPA
-              <select
-                value={pronunciationStrategy}
-                onChange={event => setPronunciationStrategy(event.target.value)}
-              >
-                <option value="DISABLED">Disabled</option>
-                <option value="ON_DEMAND">On demand</option>
-                <option value="PREGENERATE">Pre-generate</option>
-              </select>
-            </label>
-          </div>
-
-          <h3>Study activities</h3>
-          <div className="checks">
-            {activityOptions.map(item => (
-              <label key={item}>
-                <input
-                  type="checkbox"
-                  checked={activities.includes(item)}
-                  onChange={() => toggle(setActivities, activities, item)}
+        <Card className="mt-6">
+          <CardContent className="pt-6">
+            <form className="form" onSubmit={submit}>
+              <label>
+                {t('lessonBuilder.fields.title')}
+                <Input
+                  value={title}
+                  onChange={event => setTitle(event.target.value)}
+                  placeholder={t('lessonBuilder.placeholders.title')}
                 />
-                {item.replaceAll('_', ' ')}
               </label>
-            ))}
-          </div>
 
-          <h3>Annotations / enrichment</h3>
-          <div className="checks">
-            {annotationOptions.map(item => (
-              <label key={item}>
-                <input
-                  type="checkbox"
-                  checked={annotations.includes(item)}
-                  onChange={() => toggle(setAnnotations, annotations, item)}
-                />
-                {item.replaceAll('_', ' ')}
+              <label>
+                {t('lessonBuilder.fields.source')}
+                <select value={source} onChange={event => setSource(event.target.value as SourceType)}>
+                  <option value="TEXT">{t('lessonBuilder.source.TEXT')}</option>
+                  <option value="AUDIO">{t('lessonBuilder.source.AUDIO')}</option>
+                  <option value="YOUTUBE">YouTube</option>
+                </select>
               </label>
-            ))}
-          </div>
 
-          <button disabled={submitting}>
-            {submitting ? 'Queuing build…' : 'Create draft & queue build'}
-          </button>
+              <label>
+                {t('lessonBuilder.fields.preset')}
+                <select value={preset} onChange={event => applyPreset(event.target.value as PresetName)}>
+                  {Object.keys(presets).map(name => <option key={name}>{name}</option>)}
+                </select>
+              </label>
 
-          {error ? <p className="danger">{error}</p> : null}
-          {accepted ? (
-            <div className="success">
-              <strong>Accepted</strong>
-              <div>Lesson: {accepted.lessonId}</div>
-              <div>Job: {accepted.jobId}</div>
-              <a href={`/jobs?job=${accepted.jobId}`}>Inspect job →</a>
-            </div>
-          ) : null}
-        </form>
+              {source === 'TEXT' ? (
+                <label>
+                  {t('lessonBuilder.fields.sourceText')}
+                  <Textarea
+                    value={text}
+                    onChange={event => setText(event.target.value)}
+                    placeholder={t('lessonBuilder.placeholders.sourceText')}
+                  />
+                </label>
+              ) : (
+                <label>
+                  {source === 'YOUTUBE'
+                    ? t('lessonBuilder.fields.youtubeUrl')
+                    : t('lessonBuilder.fields.audioReference')}
+                  <Input
+                    value={sourceReference}
+                    onChange={event => setSourceReference(event.target.value)}
+                    placeholder={source === 'YOUTUBE'
+                      ? 'https://youtube.com/watch?v=…'
+                      : 'uploads/admin/example.m4a'}
+                  />
+                </label>
+              )}
 
-        <div className="card">
-          <h2>Build plan preview</h2>
-          <pre>{JSON.stringify({
-            source,
-            activities,
-            annotations,
-            accent,
-            pronunciationStrategy,
-            dependencyPreview,
-          }, null, 2)}</pre>
-          <p className="muted">
-            The authoritative Java planner runs only the expensive steps implied by the final
-            selection and current admin policy. This browser preview is explanatory only.
-          </p>
-        </div>
+              <div className="row">
+                <label>
+                  {t('lessonBuilder.fields.accent')}
+                  <select value={accent} onChange={event => setAccent(event.target.value)}>
+                    <option value="US">US</option>
+                    <option value="UK">UK</option>
+                  </select>
+                </label>
+
+                <label>
+                  {t('lessonBuilder.fields.sentenceIpa')}
+                  <select value={pronunciationStrategy} onChange={event => setPronunciationStrategy(event.target.value)}>
+                    <option value="DISABLED">{t('lessonBuilder.pronunciation.DISABLED')}</option>
+                    <option value="ON_DEMAND">{t('lessonBuilder.pronunciation.ON_DEMAND')}</option>
+                    <option value="PREGENERATE">{t('lessonBuilder.pronunciation.PREGENERATE')}</option>
+                  </select>
+                </label>
+              </div>
+
+              <h3>{t('lessonBuilder.studyActivities')}</h3>
+              <div className="checks">
+                {activityOptions.map(item => (
+                  <label key={item}>
+                    <input
+                      type="checkbox"
+                      checked={activities.includes(item)}
+                      onChange={() => toggle(setActivities, activities, item)}
+                    />
+                    {t(`lessonBuilder.activity.${item}`)}
+                  </label>
+                ))}
+              </div>
+
+              <h3>{t('lessonBuilder.annotations')}</h3>
+              <div className="checks">
+                {annotationOptions.map(item => (
+                  <label key={item}>
+                    <input
+                      type="checkbox"
+                      checked={annotations.includes(item)}
+                      onChange={() => toggle(setAnnotations, annotations, item)}
+                    />
+                    {t(`lessonBuilder.annotation.${item}`)}
+                  </label>
+                ))}
+              </div>
+
+              <Button className="mt-[22px]" disabled={submitting} type="submit">
+                {submitting ? t('lessonBuilder.queueing') : t('lessonBuilder.queue')}
+              </Button>
+
+              {error ? <p className="danger">{error}</p> : null}
+              {accepted ? (
+                <div className="success">
+                  <strong>{t('lessonBuilder.accepted')}</strong>
+                  <div>{t('lessonBuilder.lessonId')}: {accepted.lessonId}</div>
+                  <div>{t('lessonBuilder.jobId')}: {accepted.jobId}</div>
+                  <a href={`/jobs?job=${accepted.jobId}`}>{t('lessonBuilder.inspectJob')} →</a>
+                </div>
+              ) : null}
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>{t('lessonBuilder.preview.title')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <pre>{JSON.stringify({
+              source,
+              activities,
+              annotations,
+              accent,
+              pronunciationStrategy,
+              dependencyPreview,
+            }, null, 2)}</pre>
+            <p className="muted">{t('lessonBuilder.preview.note')}</p>
+          </CardContent>
+        </Card>
       </div>
     </section>
   );

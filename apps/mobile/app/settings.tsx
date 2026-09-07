@@ -1,18 +1,16 @@
+import { supportedLocales, type SupportedLocale } from '@lyreo/i18n';
+import type { ThemePreference } from '@lyreo/design-system';
 import { Link, Redirect } from 'expo-router';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Switch, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { mobileApi } from '../src/api';
 import { useAuth } from '../src/auth';
-import { colors, radius, spacing } from '../src/theme';
+import { Button } from '../src/components/ui/button';
+import { Text } from '../src/components/ui/text';
+import { useAppLocale } from '../src/providers/LocaleProvider';
+import { useAppTheme } from '../src/providers/AppThemeProvider';
 
 type DisplayTiming = 'OFF' | 'TAP_TO_SHOW' | 'AFTER_ATTEMPT' | 'ALWAYS';
 
@@ -40,15 +38,14 @@ const defaults: Preferences = {
   defaultPlaybackSpeed: 1,
 };
 
-const displayTimings: DisplayTiming[] = [
-  'OFF',
-  'TAP_TO_SHOW',
-  'AFTER_ATTEMPT',
-  'ALWAYS',
-];
+const displayTimings: DisplayTiming[] = ['OFF', 'TAP_TO_SHOW', 'AFTER_ATTEMPT', 'ALWAYS'];
+const themePreferences: ThemePreference[] = ['system', 'light', 'dark'];
 
 export default function SettingsScreen() {
   const auth = useAuth();
+  const { colors, preference: themePreference, setPreference: setThemePreference } = useAppTheme();
+  const { locale, setLocale } = useAppLocale();
+  const { t } = useTranslation(['mobile', 'common']);
   const [preferences, setPreferences] = useState<Preferences>(defaults);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -63,16 +60,13 @@ export default function SettingsScreen() {
     auth.getAccessToken()
       .then(token => {
         if (!token) return;
-        return mobileApi<Preferences>('/api/v1/learner/preferences', token)
-          .then(setPreferences);
+        return mobileApi<Preferences>('/api/v1/learner/preferences', token).then(setPreferences);
       })
-      .catch(() => setMessage('Could not load preferences. Local defaults are shown.'))
+      .catch(() => setMessage(t('mobile:settings.loadFailed')))
       .finally(() => setLoading(false));
-  }, [auth.authenticated, auth.getAccessToken]);
+  }, [auth.authenticated, auth.getAccessToken, t]);
 
-  if (!auth.loading && !auth.authenticated) {
-    return <Redirect href="/login" />;
-  }
+  if (!auth.loading && !auth.authenticated) return <Redirect href="/login" />;
 
   async function save() {
     const token = await auth.getAccessToken();
@@ -86,249 +80,176 @@ export default function SettingsScreen() {
         body: JSON.stringify(preferences),
       });
       setPreferences(saved);
-      setMessage('Saved across your Lyreo devices.');
+      setMessage(t('mobile:settings.saved'));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not save preferences.');
+      setMessage(error instanceof Error ? error.message : t('mobile:settings.saveFailed'));
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.page}>
-      <Link href="/" style={styles.back}>← Home</Link>
-      <Text style={styles.title}>Learning settings</Text>
-      <Text style={styles.lead}>
-        Persistent preferences sync across devices. Temporary playback speed, expanded notes
-        and other one-session choices stay local to the current learning session.
-      </Text>
+    <ScrollView className="flex-1 bg-background" contentContainerStyle={{ padding: 24, paddingTop: 54, paddingBottom: 50, gap: 16 }}>
+      <Link href="/" asChild>
+        <Pressable><Text className="font-bold text-primary">{t('mobile:settings.back')}</Text></Pressable>
+      </Link>
+      <Text className="mt-[18px] text-[40px] font-extrabold tracking-[-1.5px] text-foreground">{t('mobile:settings.title')}</Text>
+      <Text className="leading-[22px] text-muted-foreground">{t('mobile:settings.lead')}</Text>
+
+      <Section title={t('mobile:settings.appearance')}>
+        <Text className="mb-2 text-xs leading-[18px] text-muted-foreground">{t('mobile:settings.localPreferenceNote')}</Text>
+        <ChoiceChips<SupportedLocale>
+          label={t('mobile:settings.language')}
+          value={locale}
+          values={[...supportedLocales]}
+          renderLabel={value => t(`common:language.${value === 'en' ? 'english' : 'vietnamese'}`)}
+          onChange={value => void setLocale(value)}
+        />
+        <ChoiceChips<ThemePreference>
+          label={t('mobile:settings.theme')}
+          value={themePreference}
+          values={themePreferences}
+          renderLabel={value => t(`common:theme.${value}`)}
+          onChange={value => void setThemePreference(value)}
+        />
+      </Section>
 
       {loading ? (
-        <ActivityIndicator />
+        <ActivityIndicator color={colors.primary} />
       ) : (
         <>
-          <Section title="Shadowing">
+          <Section title={t('mobile:settings.shadowing')}>
             <Toggle
-              label="Thought groups"
+              label={t('mobile:settings.thoughtGroups')}
               value={preferences.thoughtGroups}
               set={thoughtGroups => setPreferences({ ...preferences, thoughtGroups })}
             />
             <Toggle
-              label="Karaoke highlighting"
+              label={t('mobile:settings.karaoke')}
               value={preferences.karaokeHighlighting}
               set={karaokeHighlighting => setPreferences({ ...preferences, karaokeHighlighting })}
             />
             <Choice
-              label="Sentence IPA"
+              label={t('mobile:settings.sentenceIpa')}
               value={preferences.sentenceIpa}
-              values={displayTimings}
               onChange={sentenceIpa => setPreferences({ ...preferences, sentenceIpa })}
             />
           </Section>
 
-          <Section title="Dictation">
+          <Section title={t('mobile:settings.dictation')}>
             <Toggle
-              label="Proper-noun hints"
+              label={t('mobile:settings.properNounHints')}
               value={preferences.properNounHints}
               set={properNounHints => setPreferences({ ...preferences, properNounHints })}
             />
             <Choice
-              label="Translation"
+              label={t('mobile:settings.translation')}
               value={preferences.translation}
-              values={displayTimings}
               onChange={translation => setPreferences({ ...preferences, translation })}
             />
           </Section>
 
-          <Section title="Vocabulary & grammar notes">
+          <Section title={t('mobile:settings.vocabularyGrammar')}>
             <Choice
-              label="Vocabulary notes"
+              label={t('mobile:settings.vocabularyNotes')}
               value={preferences.vocabularyNotes}
-              values={displayTimings}
               onChange={vocabularyNotes => setPreferences({ ...preferences, vocabularyNotes })}
             />
             <Choice
-              label="Grammar notes"
+              label={t('mobile:settings.grammarNotes')}
               value={preferences.grammarNotes}
-              values={displayTimings}
               onChange={grammarNotes => setPreferences({ ...preferences, grammarNotes })}
             />
           </Section>
 
-          <Pressable style={styles.primary} onPress={save} disabled={saving}>
-            <Text style={styles.primaryText}>{saving ? 'Saving…' : 'Save preferences'}</Text>
-          </Pressable>
-          {message ? <Text style={styles.note}>{message}</Text> : null}
+          <Button size="lg" onPress={() => void save()} disabled={saving}>
+            {saving ? t('common:status.saving') : t('mobile:settings.save')}
+          </Button>
+          {message ? <Text className="text-xs leading-[19px] text-muted-foreground">{message}</Text> : null}
         </>
       )}
 
-      <Pressable style={styles.signOut} onPress={auth.signOut}>
-        <Text style={styles.signOutText}>Sign out</Text>
-      </Pressable>
+      <Button variant="outline" size="lg" onPress={() => void auth.signOut()}>
+        {t('common:actions.signOut')}
+      </Button>
     </ScrollView>
   );
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <View style={styles.section}>
-      <Text style={styles.heading2}>{title}</Text>
+    <View className="rounded-lg border border-border bg-surface p-5">
+      <Text className="mb-2 text-xl font-extrabold text-foreground">{title}</Text>
       {children}
     </View>
   );
 }
 
-function Toggle({
-  label,
-  value,
-  set,
-}: {
-  label: string;
-  value: boolean;
-  set: (value: boolean) => void;
-}) {
+function Toggle({ label, value, set }: { label: string; value: boolean; set: (value: boolean) => void }) {
+  const { colors } = useAppTheme();
   return (
-    <View style={styles.toggle}>
-      <Text style={styles.item}>{label}</Text>
-      <Switch value={value} onValueChange={set} trackColor={{ true: colors.leaf }} />
+    <View className="flex-row items-center justify-between border-b border-border py-2.5">
+      <Text className="font-semibold text-foreground">{label}</Text>
+      <Switch
+        value={value}
+        onValueChange={set}
+        trackColor={{ false: colors.input, true: colors.primary }}
+        thumbColor={value ? colors.primaryForeground : colors.surface}
+      />
     </View>
   );
 }
 
-function Choice({
+function Choice({ label, value, onChange }: { label: string; value: DisplayTiming; onChange: (value: DisplayTiming) => void }) {
+  const { t } = useTranslation('mobile');
+  return (
+    <ChoiceChips
+      label={label}
+      value={value}
+      values={displayTimings}
+      renderLabel={option => t(`settings.displayTiming.${option}`)}
+      onChange={onChange}
+    />
+  );
+}
+
+function ChoiceChips<T extends string>({
   label,
   value,
   values,
+  renderLabel,
   onChange,
 }: {
   label: string;
-  value: DisplayTiming;
-  values: DisplayTiming[];
-  onChange: (value: DisplayTiming) => void;
+  value: T;
+  values: readonly T[];
+  renderLabel: (value: T) => string;
+  onChange: (value: T) => void;
 }) {
   return (
-    <View style={styles.choice}>
-      <Text style={styles.item}>{label}</Text>
-      <View style={styles.chips}>
-        {values.map(option => (
-          <Pressable
-            key={option}
-            onPress={() => onChange(option)}
-            style={[styles.chip, option === value && styles.chipActive]}
-          >
-            <Text style={[styles.chipText, option === value && styles.chipTextActive]}>
-              {option.replaceAll('_', ' ')}
-            </Text>
-          </Pressable>
-        ))}
+    <View className="gap-2 border-b border-border py-3 last:border-b-0">
+      <Text className="font-semibold text-foreground">{label}</Text>
+      <View className="flex-row flex-wrap gap-1.5">
+        {values.map(option => {
+          const active = option === value;
+          return (
+            <Pressable
+              key={option}
+              onPress={() => onChange(option)}
+              className={active
+                ? 'rounded-full border border-primary bg-primary px-2.5 py-2'
+                : 'rounded-full border border-border bg-surface px-2.5 py-2'}
+            >
+              <Text className={active
+                ? 'text-[11px] font-bold text-primary-foreground'
+                : 'text-[11px] font-bold text-muted-foreground'}
+              >
+                {renderLabel(option)}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  page: {
-    padding: spacing.lg,
-    paddingTop: 54,
-    paddingBottom: 50,
-    gap: 16,
-  },
-  back: {
-    color: colors.forest,
-    fontWeight: '700',
-  },
-  title: {
-    fontSize: 38,
-    fontWeight: '800',
-    letterSpacing: -1.4,
-    color: colors.ink,
-    marginTop: 18,
-  },
-  lead: {
-    color: colors.inkMuted,
-    lineHeight: 22,
-  },
-  section: {
-    backgroundColor: colors.surface,
-    padding: 20,
-    borderRadius: radius.lg,
-    borderColor: colors.border,
-    borderWidth: 1,
-  },
-  heading2: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: colors.ink,
-    marginBottom: 8,
-  },
-  toggle: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEF1EF',
-  },
-  item: {
-    color: colors.ink,
-    fontWeight: '600',
-  },
-  note: {
-    color: colors.inkMuted,
-    lineHeight: 19,
-    fontSize: 12,
-    marginTop: 4,
-  },
-  choice: {
-    paddingVertical: 12,
-    gap: 9,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEF1EF',
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  chip: {
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  chipActive: {
-    backgroundColor: colors.forest,
-    borderColor: colors.forest,
-  },
-  chipText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.inkMuted,
-  },
-  chipTextActive: {
-    color: colors.surface,
-  },
-  primary: {
-    backgroundColor: colors.forest,
-    borderRadius: radius.lg,
-    padding: 16,
-    alignItems: 'center',
-  },
-  primaryText: {
-    color: colors.surface,
-    fontWeight: '800',
-  },
-  signOut: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  signOutText: {
-    color: colors.ink,
-    fontWeight: '800',
-  },
-});

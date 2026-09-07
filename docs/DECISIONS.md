@@ -1,15 +1,15 @@
 # Lyreo Architecture Decisions
 
-This is the compact decision log. If a future change contradicts one of these, update the decision explicitly instead of silently drifting architecture.
+This is the compact decision log. If a future change contradicts one of these, update the decision explicitly instead of silently drifting architecture. Unless otherwise noted, D-001–D-016 were locked on 2026-09-06.
 
 ## D-001 — Modular Monolith
 Use Spring Boot + Spring Modulith. Do not split business modules into network services by default.
 
 ## D-002 — No Kafka at MVP
-Internal event isolation = Spring Modulith. Core↔AI = HTTP. Durable workflows = PostgreSQL jobs.
+Decision: do not introduce Kafka at MVP. Full rationale: `LYREO_PLATFORM_SPEC.md` §10.
 
 ## D-003 — No Redis at MVP
-Cancellation/job = PostgreSQL; read cache = Caffeine; inbound rate limit = Bucket4j.
+Decision: do not introduce Redis at MVP. Full rationale: `LYREO_PLATFORM_SPEC.md` §11.
 
 ## D-004 — Java orchestrates AI workflows
 Business/product prompts, output expectations and workflow live in Java. FastAPI executes capabilities.
@@ -33,8 +33,8 @@ Lexicon is global dictionary; Vocabulary is learner SRS referencing Lexicon.
 Each business module owns detailed progress. Analytics consumes events and projects summaries.
 
 ## D-011 — Configurable experience with precedence
-`deployment → admin policy → build snapshot → learner preference → session override`.
-Domain invariants remain code/schema rules.
+Decision: use layered configuration with domain invariants remaining code/schema rules.
+Authoritative precedence and override semantics: `CONFIGURATION.md` §1–6.
 
 ## D-012 — Login required initially
 Avoid guest progress/SRS/Curriculum/Diamond merge complexity in first release.
@@ -50,3 +50,16 @@ Qwen3-ASR/ForcedAligner may run directly in FastAPI Python process or a later de
 
 ## D-016 — Chat boundary exists but is low priority
 Keep module boundary so future English-only tutor can reuse AI routing, but do not prioritize chat over Lesson/TOEIC/Vocabulary/Curriculum core flows.
+
+## D-017 — Semantic theming and shared localization (2026-09-07)
+Use shared primitive/semantic design tokens with light/dark themes and `@lyreo/i18n` for intentional
+shared translations. Platform adapters own locale/theme persistence. Rationale: `TECH_CHOICES.md`.
+
+## D-018 — Platform-specific UI component ownership (2026-09-07)
+Admin uses Tailwind/shadcn-style owned Web components; Mobile uses NativeWind/RNR-style owned Native
+components. Share semantic contracts, not component implementations/configuration. Rationale: `TECH_CHOICES.md`.
+
+## D-019 — External dataset bootstrap (2026-09-07)
+Grammar/TOEIC raw data stays outside Git. Developer setup may fetch the configured shared ZIP into a
+Git-ignored local data directory and must validate importer-facing structure before use. Semantics: `DATA_PIPELINES.md`.
+

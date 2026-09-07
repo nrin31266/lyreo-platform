@@ -1,31 +1,31 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Redirect } from 'expo-router';
+import { ActivityIndicator, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { Button } from '../src/components/ui/button';
+import { Text } from '../src/components/ui/text';
 import { useAuth } from '../src/auth';
-import { colors, radius, spacing } from '../src/theme';
+import { useAppTheme } from '../src/providers/AppThemeProvider';
 
-export default function Login() {
+export default function LoginScreen() {
   const auth = useAuth();
-  if (auth.loading) return <View style={s.center}><ActivityIndicator /></View>;
-  if (auth.authenticated) return <Redirect href="/" />;
-  return <View style={s.page}>
-    <View style={s.mark}><Text style={s.wave}>〰</Text></View>
-    <Text style={s.name}>Lyreo</Text>
-    <Text style={s.tagline}>Listen. Notice. Speak.</Text>
-    <Text style={s.copy}>Your learning path, vocabulary reviews, TOEIC history and speaking progress stay with your account.</Text>
-    <Pressable style={s.button} onPress={auth.signIn}><Text style={s.buttonText}>Continue with Lyreo account</Text></Pressable>
-    <Text style={s.note}>Secure sign-in uses Keycloak Authorization Code + PKCE. Lyreo never asks your password through its API.</Text>
-  </View>;
-}
+  const { colors } = useAppTheme();
+  const { t } = useTranslation('mobile');
 
-const s = StyleSheet.create({
-  page: { flex: 1, padding: spacing.xl, justifyContent: 'center', backgroundColor: '#F7F8F5' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  mark: { width: 64, height: 64, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.forest },
-  wave: { color: 'white', fontSize: 34, fontWeight: '700' },
-  name: { fontSize: 44, fontWeight: '800', color: colors.ink, marginTop: 22, letterSpacing: -1.5 },
-  tagline: { color: colors.leaf, fontSize: 17, fontWeight: '700', marginTop: 4 },
-  copy: { color: colors.inkMuted, fontSize: 16, lineHeight: 24, marginTop: 24, maxWidth: 380 },
-  button: { marginTop: 34, backgroundColor: colors.forest, paddingVertical: 17, paddingHorizontal: 20, borderRadius: radius.lg, alignItems: 'center' },
-  buttonText: { color: 'white', fontWeight: '800', fontSize: 16 },
-  note: { color: colors.inkMuted, fontSize: 12, lineHeight: 18, marginTop: 18 },
-});
+  if (auth.loading) {
+    return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator color={colors.primary} /></View>;
+  }
+  if (auth.authenticated) return <Redirect href="/" />;
+
+  return (
+    <View className="flex-1 justify-center bg-background px-7 py-12">
+      <View className="h-14 w-14 items-center justify-center rounded-[20px] bg-primary">
+        <Text className="text-[34px] font-bold text-primary-foreground">L</Text>
+      </View>
+      <Text className="mt-[22px] text-[44px] font-extrabold tracking-[-1.5px] text-foreground">Lyreo</Text>
+      <Text className="mt-1 text-[17px] font-bold text-primary">{t('auth.name')}</Text>
+      <Text className="mt-6 max-w-[380px] text-base leading-6 text-muted-foreground">{t('auth.copy')}</Text>
+      <Button className="mt-[34px]" size="lg" onPress={() => void auth.signIn()}>{t('auth.signIn')}</Button>
+      <Text className="mt-[18px] text-xs leading-[18px] text-muted-foreground">{t('auth.note')}</Text>
+    </View>
+  );
+}

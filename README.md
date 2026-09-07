@@ -1,70 +1,67 @@
 # Lyreo
 
-**Lyreo** là nền tảng học tiếng Anh tập trung vào Listening, Dictation, Shadowing,
-Vocabulary, Grammar, TOEIC và Curriculum có cấu trúc.
+**Lyreo** is an English-learning platform focused on Listening, Dictation, Shadowing,
+Vocabulary, Grammar, TOEIC, and structured Curriculum.
 
 - Product: **Lyreo**
 - Mascot: **Lyrebird**
 - Java namespace: `com.lyreo`
 - Repository: `lyreo-platform`
 
-Lyreo được thiết kế lại từ đầu để tránh lặp lại kiểu backend chắp vá nhiều service/cache/job
-state. Repository này ưu tiên **boundary rõ, config rõ, durable state rõ và dễ cho developer/AI
-agent tiếp tục làm mà không phải đọc lịch sử chat**.
+This README is the **operational entry point for new developers**: what the repository contains,
+which tools are required, how to initialize the local environment, and how to run each part.
 
-## 1. Architecture snapshot
+> Mandatory engineering rules live only in `AGENTS.md`.  
+> The master product and architecture specification lives in `docs/LYREO_PLATFORM_SPEC.md`.
+
+---
+
+## 1. System at a glance
+
+Lyreo currently uses this development topology:
 
 ```text
-Admin Web (React/Vite) ─┐
-                         ├─ OIDC/API ─→ Core Service (Spring Boot Modular Monolith)
-Mobile (Expo/RN) ────────┘                  │
-                                            ├─ PostgreSQL
-                                            ├─ Cloudflare R2 / local storage adapter
-                                            └─ HTTP → AI Service (FastAPI/Python)
-                                                           ├─ Qwen3-ASR
-                                                           ├─ Qwen3-ForcedAligner
-                                                           ├─ Groq
-                                                           ├─ Gemini
-                                                           └─ DeepSeek
+Admin Web ─┐
+           ├──→ Core Service ───→ PostgreSQL
+Mobile ────┘         │
+                     ├──→ Object Storage
+                     └──→ AI Service
 
-Keycloak ← OIDC Authorization Code + PKCE → Admin/Mobile
+Admin/Mobile ─── OIDC/PKCE ───→ Keycloak
 ```
 
-Core architecture:
+Core is a Spring Boot modular monolith. The AI runtime is a separate FastAPI/Python service.
 
-- Spring Boot 4.1.x + Java 25;
-- Spring Modulith;
-- Pragmatic Clean/Hexagonal Architecture inside modules;
-- PostgreSQL + Flyway;
-- Hibernate/JPA schema validation only (`ddl-auto=validate`);
-- PostgreSQL background jobs (`FOR UPDATE SKIP LOCKED` + lease + heartbeat + retry + cancel + fencing);
-- Caffeine read cache;
-- Bucket4j inbound rate limiting;
-- Resilience4j outbound resilience;
-- Cloudflare R2 through S3-compatible abstraction;
-- FastAPI AI capability runtime;
-- Keycloak OIDC.
+For architecture boundaries and technology rationale, read:
 
-**Không Kafka. Không Redis ở MVP.** Xem `docs/DECISIONS.md` để biết rationale.
+- `AGENTS.md`
+- `docs/LYREO_PLATFORM_SPEC.md`
+- `docs/ARCHITECTURE.md`
+- `docs/TECH_CHOICES.md`
+
+---
 
 ## 2. Read this first
 
-Theo thứ tự:
+1. `README.md` — setup, run commands, and repository map.
+2. `AGENTS.md` — mandatory engineering contract.
+3. `docs/LYREO_PLATFORM_SPEC.md` — master product + architecture specification.
+4. `docs/ARCHITECTURE.md` — system/module/job/content boundaries.
+5. `docs/CONFIGURATION.md` — env, secrets, and configuration precedence.
+6. `docs/DEVELOPMENT.md` — development workflow and troubleshooting.
+7. `docs/TECH_CHOICES.md` — technology choices and trade-offs.
+8. `docs/DATA_PIPELINES.md` — Lexicon/Grammar/TOEIC import.
+9. `docs/OPERATIONS.md` — jobs/storage/backup/deployment runbook.
+10. `docs/DECISIONS.md` — architecture decision log.
 
-1. `AGENTS.md` — engineering contract bắt buộc cho developer/coding agent.
-2. `docs/LYREO_PLATFORM_SPEC.md` — master specification tiếng Việt.
-3. `docs/ARCHITECTURE.md` — system/module/job/content boundaries.
-4. `docs/CONFIGURATION.md` — env, secret, admin/user/session config precedence.
-5. `docs/TECH_CHOICES.md` — technology + trade-off.
-6. `docs/DATA_PIPELINES.md` — Lexicon/Grammar/TOEIC/Curriculum data import.
-7. `docs/DEVELOPMENT.md` — setup/running/troubleshooting.
-8. `docs/OPERATIONS.md` — runbook jobs/storage/backup/deployment.
-9. `docs/DECISIONS.md` — compact architecture decision log.
+`CLAUDE.md`, `GEMINI.md`, and `AGENT.md` are symlinks to `AGENTS.md`; maintain only one
+engineering contract.
 
-`CLAUDE.md`, `GEMINI.md`, `AGENT.md` là symlink về `AGENTS.md`; chỉ duy trì một bộ luật.
+`TESTING_NOTES.md` is a temporary handoff note from the starter artifact, not canonical
+documentation. After the team completes the first full verification pass, move remaining issues
+into the issue tracker/CI and remove this file if it is no longer useful.
 
-> `TESTING_NOTES.md` chỉ là **temporary artifact handoff** đi kèm ZIP này. Nó không nằm
-> trong canonical documentation order và có thể xóa sau khi team chạy full verification/CI đầu tiên.
+---
 
 ## 3. Repository map
 
@@ -89,9 +86,9 @@ lyreo-platform/
 │   ├── gamification/
 │   ├── analytics/
 │   ├── notification/
-│   └── chat/                  # low priority
+│   └── chat/
 │
-├── platform/                  # technical cross-cutting building blocks
+├── platform/                  # technical building blocks
 │   ├── cache/
 │   ├── config/
 │   ├── jobs/
@@ -100,13 +97,14 @@ lyreo-platform/
 │   └── observability/
 │
 ├── services/
-│   └── ai-service/            # FastAPI/Python AI capability runtime
+│   └── ai-service/            # FastAPI/Python capability runtime
 │
 ├── tools/
 │   └── data-import/           # Lexicon/Grammar/TOEIC importers
 │
 ├── packages/
-│   └── design-system/         # shared Lyreo brand/design tokens
+│   ├── design-system/         # shared primitive/semantic design tokens
+│   └── i18n/                  # shared common/admin/mobile translation resources
 │
 ├── infra/
 │   ├── docker/
@@ -123,24 +121,47 @@ lyreo-platform/
 └── AGENTS.md
 ```
 
-## 4. Toolchain baseline
+---
 
-Khuyến nghị tại architecture lock 09/2026:
+## 4. Toolchain
 
-- Java 25;
-- Maven Wrapper trong repo;
-- Python 3.12 + `uv`;
-- Node 24 LTS;
-- pnpm 12;
-- Docker + Docker Compose;
-- Android Studio/Xcode theo platform;
-- Expo Development Build/Prebuild.
+The development host needs Java, the repository Maven Wrapper (`./mvnw`), Node/pnpm, `uv`,
+Docker + Docker Compose, and Android Studio/Xcode when working on native mobile builds.
 
-Repo có `.java-version`, `.nvmrc`, `mise.toml`.
+Use the versions declared by repository toolchain files (`.java-version`, `.nvmrc`,
+`package.json#packageManager`, and `mise.toml`). The dated baseline and version rationale live in
+`docs/TECH_CHOICES.md`.
 
-## 5. Environment model: không có root `.env`
+Quick host check:
 
-Mỗi executable/tool có env riêng:
+```bash
+./scripts/doctor.sh
+```
+
+### Python environments
+
+`doctor.sh` reports the Python interpreter available on the current host shell. That is only a
+host/tooling sanity check; it does **not** define the interpreter used by Lyreo Python subprojects.
+
+The authoritative host-vs-project Python policy, supported project baseline, and agent rules live
+in `AGENTS.md` §9.
+
+For normal project work, use `uv` from inside the owning Python subproject:
+
+```bash
+uv sync
+uv run ...
+```
+
+You do not need to activate `.venv` manually when using `uv`.
+
+---
+
+## 5. Initialize the local environment
+
+Lyreo does not use one root `.env`.
+
+Each executable/tool owns its own environment file:
 
 ```text
 infra/docker/.env
@@ -152,344 +173,299 @@ apps/mobile/.env
 tools/data-import/.env
 ```
 
-Khởi tạo local:
+Create local files:
+
+```bash
+make init-env
+```
+
+or:
 
 ```bash
 ./scripts/init-dev-env.sh
 ```
 
-Script:
+The script copies from `.env.example` when a file does not already exist and generates/synchronizes
+the local development values that need to be shared between services.
 
-- copy `.env.example` nếu `.env` chưa tồn tại;
-- generate `MASTER_ENCRYPTION_KEY` local;
-- generate/sync `AI_SERVICE_INTERNAL_TOKEN`;
-- generate/sync `DEV_BOOTSTRAP_TOKEN`;
-- synchronize Keycloak confidential Core client secret;
-- synchronize local PostgreSQL credentials into Core env.
+Do not commit real `.env` files.
 
-**Không commit `.env` thật.** `VITE_*` và `EXPO_PUBLIC_*` là public bundle variables,
-không chứa secret.
-
-Chi tiết: `docs/CONFIGURATION.md`.
-
-## 6. Development topology
-
-Development cố ý chạy source app trên host:
+See:
 
 ```text
-Host
-├── apps/core-service        Spring Boot
-├── services/ai-service      FastAPI
-├── apps/admin-web           Vite
-└── apps/mobile              Expo Development Build
-
-Docker
-├── PostgreSQL
-└── Keycloak
-
-Storage
-└── local filesystem default (.data/storage)
-    hoặc R2 dev bucket khi STORAGE_MODE=r2
+docs/CONFIGURATION.md
 ```
 
-### 6.1 First start
+### First-clone setup
+
+For a new clone, the convenience target first runs the non-strict environment doctor, then
+initializes env files, installs the shared Grammar/TOEIC dataset when it is missing, syncs
+Python/frontend dependencies, starts PostgreSQL + Keycloak, and bootstraps Keycloak:
 
 ```bash
-make init-env
+make setup
+```
+
+The shared TOEIC archive is large. To prepare the codebase without downloading it yet:
+
+```bash
+SKIP_DATA=1 make setup
+```
+
+After setup, run `make core`, `make ai`, `make admin`, and `make mobile` in separate terminals.
+Dataset bootstrap behavior and source provenance are owned by `docs/DATA_PIPELINES.md`.
+
+---
+
+## 6. Start development infrastructure
+
+By default, PostgreSQL and Keycloak run in Docker while application source runs on the host.
+
+```bash
 make dev-infra
 ```
 
-Tương đương:
+Equivalent command:
 
 ```bash
-docker compose --env-file infra/docker/.env -f compose.dev.yml up -d
+docker compose   --env-file infra/docker/.env   -f compose.dev.yml   up -d
 ```
 
-### 6.2 Bootstrap Keycloak
+Inspect containers:
+
+```bash
+docker compose   --env-file infra/docker/.env   -f compose.dev.yml   ps
+```
+
+---
+
+## 7. Bootstrap Keycloak
+
+After Keycloak is healthy:
 
 ```bash
 make keycloak-seed
 ```
 
-Realm/client/roles/dev users được bootstrap idempotently. Không cần mỗi dev click UI tạo lại.
+The bootstrap scripts create/update the realm, clients, roles, and development users from local
+configuration.
 
-### 6.3 Run Core
+If bootstrap fails, check:
+
+```text
+infra/keycloak/README.md
+docs/DEVELOPMENT.md
+```
+
+---
+
+## 8. Run Core Service
+
+Open a dedicated terminal:
 
 ```bash
 make core
 ```
 
-API default: `http://localhost:8080`.
+Default address:
 
-### 6.4 Run AI Service
+```text
+http://localhost:8080
+```
+
+Core startup runs Flyway before the application becomes ready, and Hibernate checks mappings
+according to the project configuration.
+
+Migrations live at:
+
+```text
+apps/core-service/src/main/resources/db/migration/
+```
+
+If startup fails because of database/migration/schema problems, inspect the Core logs and read:
+
+```text
+docs/DEVELOPMENT.md
+docs/OPERATIONS.md
+```
+
+Schema ownership and migration rules live in `AGENTS.md`; README does not duplicate them.
+
+---
+
+## 9. Run AI Service
+
+First run, or after Python dependencies change:
 
 ```bash
 cd services/ai-service
 uv sync --extra dev
-cd ../..
+```
+
+Run directly:
+
+```bash
+uv run uvicorn app.main:app --reload
+```
+
+Or from the repository root:
+
+```bash
 make ai
 ```
 
-Default `AI_RUNTIME_MODE=mock`, không GPU/model download.
+The development configuration defaults to mock AI runtime, so the project can boot without a GPU
+or downloading local Qwen models.
 
-### 6.5 Run Admin/Mobile
+Run AI tests:
+
+```bash
+cd services/ai-service
+uv run pytest
+```
+
+Core/FastAPI responsibility boundaries live in `AGENTS.md` and `docs/ARCHITECTURE.md`.
+
+---
+
+## 10. Run Admin Web
+
+First install:
 
 ```bash
 pnpm install
+```
+
+Run:
+
+```bash
 make admin
+```
+
+Default Vite development address:
+
+```text
+http://localhost:5173
+```
+
+If OIDC/API URLs differ from local defaults, update `apps/admin-web/.env` using
+`apps/admin-web/.env.example` as the reference.
+
+---
+
+## 11. Run Mobile
+
+After:
+
+```bash
+pnpm install
+```
+
+run:
+
+```bash
 make mobile
 ```
 
-Mobile dùng Development Build; không thiết kế production quanh Expo Go-only.
+The mobile app uses Expo Development Build/Prebuild for workflows that need native capabilities.
 
-Chi tiết/troubleshooting: `docs/DEVELOPMENT.md`.
-
-
-## Starter implementation depth
-
-Repository này cố ý là **foundation có code thật**, không giả vờ là sản phẩm đã hoàn thiện.
-Các đường xương sống đã có implementation để agent/dev tiếp tục đúng pattern:
-
-- Identity JIT provisioning + Keycloak bootstrap;
-- PostgreSQL durable job queue/cancel/retry/lease/fencing;
-- Lesson build planning, persisted steps, text/audio/YouTube source hooks, annotations và server-owned Dictation scoring;
-- AI provider/model routing + encrypted credentials + invocation audit;
-- FastAPI capability runtime với mock/Qwen/Groq/Gemini/DeepSeek adapters;
-- Lexicon/Vocabulary, Grammar Bank practice, TOEIC attempts, Curriculum projection,
-  Gamification/Missions và Analytics boundaries;
-- Flyway schema, R2/local object-storage port, cache/rate-limit/resilience foundation;
-- Admin Web và Expo Mobile foundation để team xây UX thật tiếp theo;
-- Lexicon/Grammar/TOEIC import tools với dry-run/integrity checks.
-
-`chat`, recommendation, peer speaking, payment gateway, full curriculum editor và advanced
-real-life speaking là roadmap/low priority: boundary được giữ rõ nhưng không được ghi nhận như
-feature production-complete. Xem master spec để biết priority và expected evolution.
-
-## 7. Keycloak
-
-Realm: `lyreo`.
-
-Roles:
+Public runtime variables live in:
 
 ```text
-ADMIN
-LEARNER
+apps/mobile/.env
 ```
 
-Clients:
+See:
 
 ```text
-lyreo-admin-web      public + PKCE
-lyreo-mobile         public + PKCE
-lyreo-core-service   confidential/service account
+apps/mobile/README.md
+docs/DEVELOPMENT.md
 ```
 
-Keycloak là source of truth identity/role. Product DB giữ `app_user.keycloak_subject` và profile.
-User production được JIT-provision từ JWT subject; dev script có optional mirror convenience.
+---
 
-Chi tiết: `infra/keycloak/README.md`.
+## 12. Verify the local setup
 
-## 8. Database / Flyway / Hibernate
-
-Phân vai:
+After the components are running, the default development addresses are:
 
 ```text
-Flyway      → schema history + small stable reference seed
-Hibernate   → ORM/JPA provider + schema validation
-Spring Data → repository convenience khi dùng JPA
-JDBC        → explicit SQL cho queue/import/query adapter
+Core Service    http://localhost:8080
+AI Service      http://localhost:8000
+Admin Web       http://localhost:5173
+Keycloak        see compose.dev.yml / infra env
 ```
 
-Lyreo đặt:
+Use the health endpoints currently configured in code/config. If an endpoint or port changes,
+update `README.md`, the owning `.env.example`, and `docs/DEVELOPMENT.md` in the same change.
 
-```yaml
-spring.jpa.hibernate.ddl-auto: validate
-```
+Development account/bootstrap values come from `infra/keycloak/.env`; do not place real passwords
+or tokens in README.
 
-**Không sửa thành `update` để chữa migration.**
+---
 
-Large Lexicon/TOEIC/Grammar data đi qua importer riêng, không Flyway.
+## 13. Data import
 
-## 9. Lesson model
+Large datasets remain outside Git. The importer env points to the local dataset root.
 
-Lyreo tách ba khái niệm:
-
-```text
-Lesson Content
-├─ source/transcript/audio/sentences/timestamps
-
-Lesson Annotation
-├─ translation
-├─ lexical units
-├─ grammar points
-├─ entity/dictation hints
-├─ sentence IPA optional
-├─ thought groups
-└─ tips
-
-Lesson Activity
-├─ Dictation
-├─ Shadowing
-├─ Vocabulary Practice
-└─ Grammar Practice
-```
-
-`Vocabulary note` sau một câu Dictation **không phải** Vocabulary Practice. Tương tự Grammar note.
-
-Admin creator options được kiểm tra qua persisted Lesson processing policy và snapshot vào build job.
-
-## 10. Background jobs
-
-Long-running Lesson build:
-
-```text
-POST /api/v1/admin/lessons/build
-  → DRAFT lesson
-  → background_job + lesson_build_job
-  → HTTP 202 {lessonId, jobId}
-```
-
-Worker:
-
-```text
-SELECT ... FOR UPDATE SKIP LOCKED
-→ lease
-→ heartbeat
-→ persisted step state
-→ AI calls
-→ fencing against stale worker
-→ SUCCEEDED / RETRY_WAIT / CANCELLED / FAILED
-```
-
-Inspect/cancel:
-
-```text
-GET  /api/v1/jobs/{jobId}
-POST /api/v1/jobs/{jobId}/cancel
-```
-
-PostgreSQL là workflow source of truth. R2 JSON là artifact/debug.
-
-## 11. Cache / rate limit / resilience
-
-Old Redis responsibilities được tách:
-
-```text
-job/cancel state → PostgreSQL
-read cache       → Caffeine
-API rate limit   → Bucket4j + bounded Caffeine bucket cache
-raw artifacts    → R2
-module events    → Spring Modulith
-```
-
-Outbound dependency protection dùng Resilience4j.
-
-## 12. AI Service / Qwen
-
-FastAPI chỉ execute capability. Business prompt và orchestration ở Java.
-
-Implemented runtime modes:
-
-```text
-mock   # dev/CI
-local  # load qwen-asr / Qwen3 ForcedAligner in Python process
-```
-
-Qwen3-ASR/ForcedAligner là Python runtime. Docker GPU chỉ là packaging option, không phải bắt buộc để code chạy.
-
-## 13. Object storage
-
-Dev default:
-
-```dotenv
-STORAGE_MODE=local
-```
-
-Production target:
-
-```text
-Cloudflare R2
-```
-
-DB lưu object key, không lưu signed URL.
-
-Typical layout:
-
-```text
-lessons/{lessonId}/...
-lexicon/...
-toeic/...
-speech-attempts/{learnerId}/{attemptId}/...
-jobs/{jobId}/.../raw.json
-```
-
-## 14. Data import
-
-Dataset `dautoeic` không commit vào repo.
+Check whether the shared Grammar/TOEIC dataset is already installed:
 
 ```bash
-export DAUTOEIC_DATA_DIR=/home/<user>/KeepDownloads/dautoeic
+make data-check
 ```
 
-Grammar dry run:
+Download and safely extract the configured shared archive when it is missing:
 
 ```bash
-python tools/data-import/import_grammar.py --data-dir "$DAUTOEIC_DATA_DIR"
+make data-fetch
 ```
 
-TOEIC dry run:
+Prepare importer Python dependencies and load the importer env:
 
 ```bash
-python tools/data-import/import_toeic.py --data-dir "$DAUTOEIC_DATA_DIR"
+cd tools/data-import
+uv sync --extra dev
+set -a; source .env; set +a
 ```
 
-Lexicon:
+Run using the project environment:
 
 ```bash
-python tools/data-import/import_lexicon.py \
-  --english /data/kaikki-en.jsonl \
-  --vietnamese /data/kaikki-vi.jsonl
+uv run python import_grammar.py --data-dir "$DAUTOEIC_DATA_DIR"
+uv run python import_toeic.py --data-dir "$DAUTOEIC_DATA_DIR"
 ```
 
-Applied import writes checksum/status/count to `dataset_import`.
+Lexicon import is separate and becomes runnable after the intended Kaikki/Wiktextract JSONL sources
+have been obtained. Current source availability, exact expected files, Drive bootstrap behavior, and
+import semantics are owned by:
 
-Chi tiết: `docs/DATA_PIPELINES.md`.
-
-## 15. Docker full topology
-
-Dev Docker details: `infra/docker/README.md`.
-
-Self-host starter:
-
-```bash
-docker compose \
-  --env-file infra/docker/.env \
-  -f compose.prod.yml \
-  up -d --build
+```text
+tools/data-import/README.md
+docs/DATA_PIPELINES.md
 ```
 
-GPU override:
+---
 
-```bash
-docker compose \
-  --env-file infra/docker/.env \
-  -f compose.prod.yml \
-  -f compose.gpu.yml \
-  up -d --build
+## 14. Docker full topology
+
+README owns the local development setup commands above. Production/self-host deployment commands,
+GPU overrides, backups, storage operations, and recovery procedures are owned by:
+
+```text
+docs/OPERATIONS.md
+infra/docker/README.md
 ```
 
-`compose.prod.yml` là staging/self-host baseline, không tự động biến thành HA production.
-Đọc `docs/OPERATIONS.md` trước public deployment.
+---
 
-## 16. Validation
+## 15. Validation
 
-Fast policy/syntax checks:
+Minimum repository guardrail:
 
 ```bash
 make validate
 ```
 
-Full intended checks:
+Main checks can also be run separately:
 
 ```bash
 make test-java
@@ -498,25 +474,71 @@ pnpm typecheck
 pnpm build
 ```
 
-Artifact generation environment không có Docker/Java 25/Maven Central đầy đủ. Xem
-`TESTING_NOTES.md` (nếu còn trong artifact) chỉ ghi verification tạm: test nào đã chạy và test nào bị môi trường chặn.
+Python AI tests:
 
-## 17. Hard architecture rules
+```bash
+cd services/ai-service
+uv run pytest
+```
 
-Không được:
+Importer tests:
 
-- thêm Kafka chỉ để “enterprise hơn”;
-- thêm Redis khi chưa có measured use case/decision;
-- đưa Lesson/Curriculum/Gamification state machine vào FastAPI;
-- đưa business prompt sang Python;
-- dùng Hibernate auto schema update;
-- dùng raw R2 JSON làm workflow checkpoint;
-- trust score/XP/Diamond từ client;
-- persist provider API key plaintext;
-- persist presigned R2 URL;
-- access repository/JPA entity module khác;
-- tạo God `progress` module;
-- merge Lexicon với Vocabulary;
-- hard-code provider model names vào Java enum.
+```bash
+cd tools/data-import
+uv run pytest
+```
 
-`AGENTS.md` là source of truth đầy đủ.
+`AGENTS.md` defines which checks are mandatory for each type of change.
+
+The workspace lockfile must describe every pnpm importer (`apps/admin-web`, `apps/mobile`,
+`packages/design-system`, and `packages/i18n`). If `pnpm-lock.yaml` is absent after a fresh source
+artifact, run `pnpm install` on a networked machine, review the generated lockfile, and commit it
+before enabling frozen-lockfile CI.
+
+---
+
+## 16. Starter implementation status
+
+This repository is a foundation with real implementation patterns. It does not claim every product
+feature is production-complete.
+
+Areas with starter implementation/patterns include:
+
+```text
+identity
+jobs
+lesson
+ai
+speech-assessment
+lexicon
+vocabulary
+grammar
+toeic
+curriculum
+gamification
+analytics
+notification
+admin-web
+mobile
+data-import
+```
+
+For priorities and roadmap status, read:
+
+```text
+docs/LYREO_PLATFORM_SPEC.md
+```
+
+---
+
+## 17. Architecture rules
+
+All mandatory architecture boundaries, module ownership rules, dependency rules, security
+authority, and hard prohibitions live in:
+
+```text
+AGENTS.md
+```
+
+**`AGENTS.md` is the single source of truth for engineering rules. README does not maintain a
+second copy of those rules.**

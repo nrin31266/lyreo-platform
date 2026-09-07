@@ -1,19 +1,20 @@
-const stats = [
-  ['Lessons', '—', 'Admin-created content'],
-  ['Jobs', '—', 'PostgreSQL durable queue'],
-  ['Lexicon', '—', 'Wiktionary-backed'],
-  ['TOEIC', '2019–2026', 'Imported dataset range'],
-] as const;
+import { useTranslation } from 'react-i18next';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 
 export function Overview() {
+  const { t } = useTranslation('admin');
+  const stats = [
+    [t('overview.stats.lessons.label'), '—', t('overview.stats.lessons.note')],
+    [t('overview.stats.jobs.label'), '—', t('overview.stats.jobs.note')],
+    [t('overview.stats.lexicon.label'), '—', t('overview.stats.lexicon.note')],
+    [t('overview.stats.toeic.label'), '2019–2026', t('overview.stats.toeic.note')],
+  ] as const;
+
   return (
     <section>
-      <div className="eyebrow">Product workspace</div>
-      <h1>Good evening, Lyreo team.</h1>
-      <p className="lead">
-        Build English learning content without hiding infrastructure behind magic. Every long
-        workflow is inspectable, retryable and cancellable.
-      </p>
+      <div className="eyebrow">{t('overview.eyebrow')}</div>
+      <h1>{t('overview.title')}</h1>
+      <p className="lead">{t('overview.lead')}</p>
 
       <div className="stat-grid">
         {stats.map(([label, value, note]) => (
@@ -25,17 +26,21 @@ export function Overview() {
         ))}
       </div>
 
-      <div className="card">
-        <h2>Architecture pulse</h2>
-        <div className="pill-row">
-          <span>Spring Modulith</span>
-          <span>FastAPI AI runtime</span>
-          <span>R2 artifacts</span>
-          <span>PostgreSQL jobs</span>
-          <span>No Kafka</span>
-          <span>No Redis MVP</span>
-        </div>
-      </div>
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>{t('overview.architecturePulse')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="pill-row">
+            <span>{t('overview.architecture.springModulith')}</span>
+            <span>{t('overview.architecture.fastApiRuntime')}</span>
+            <span>{t('overview.architecture.r2Artifacts')}</span>
+            <span>{t('overview.architecture.postgresJobs')}</span>
+            <span>{t('overview.architecture.noKafka')}</span>
+            <span>{t('overview.architecture.noRedis')}</span>
+          </div>
+        </CardContent>
+      </Card>
     </section>
   );
 }

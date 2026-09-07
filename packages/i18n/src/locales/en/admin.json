@@ -1,0 +1,172 @@
+{
+  "workspace": "Admin workspace",
+  "signIn": "Sign in with Keycloak",
+  "completingSignIn": "Completing sign-in…",
+  "loading": "Loading Lyreo…",
+  "nav": {
+    "overview": "Overview",
+    "lessonBuilder": "Lesson Builder",
+    "jobs": "Background Jobs",
+    "aiProviders": "AI Providers",
+    "curriculum": "Curriculum",
+    "lexicon": "Lexicon"
+  },
+  "appearance": {
+    "language": "Language",
+    "theme": "Theme"
+  },
+  "overview": {
+    "eyebrow": "Product workspace",
+    "title": "Good evening, Lyreo team.",
+    "lead": "Build English learning content without hiding infrastructure behind magic. Every long workflow is inspectable, retryable and cancellable.",
+    "architecturePulse": "Architecture pulse",
+    "stats": {
+      "lessons": {
+        "label": "Lessons",
+        "note": "Admin-created content"
+      },
+      "jobs": {
+        "label": "Jobs",
+        "note": "PostgreSQL durable queue"
+      },
+      "lexicon": {
+        "label": "Lexicon",
+        "note": "Wiktionary-backed"
+      },
+      "toeic": {
+        "label": "TOEIC",
+        "note": "Imported dataset range"
+      }
+    },
+    "architecture": {
+      "springModulith": "Spring Modulith",
+      "fastApiRuntime": "FastAPI AI runtime",
+      "r2Artifacts": "R2 artifacts",
+      "postgresJobs": "PostgreSQL jobs",
+      "noKafka": "No Kafka",
+      "noRedis": "No Redis at MVP"
+    }
+  },
+  "jobs": {
+    "eyebrow": "Operations",
+    "title": "Background Jobs",
+    "lead": "PostgreSQL is the durable source of truth. R2 JSON is an artifact, never workflow state.",
+    "enterUuid": "Enter a Job UUID.",
+    "jobUuid": "Job UUID",
+    "inspect": "Inspect",
+    "waiting": "waiting",
+    "attempt": "Attempt {{current}}/{{max}}",
+    "requestCancellation": "Request cancellation",
+    "cancelDialog": {
+      "title": "Cancel this background job?",
+      "description": "Cancellation is cooperative. The worker will stop at a safe checkpoint and preserve durable job state.",
+      "confirm": "Request cancellation"
+    }
+  },
+  "lessonBuilder": {
+    "eyebrow": "Lesson / Create",
+    "title": "Lesson Builder",
+    "lead": "Content, annotations and activities are separate. The exact build selection is snapshotted with the job for audit/debug instead of silently following future admin defaults.",
+    "fields": {
+      "title": "Title",
+      "source": "Source",
+      "preset": "Preset",
+      "sourceText": "Source text",
+      "youtubeUrl": "YouTube URL",
+      "audioReference": "Audio object key / URL",
+      "accent": "Accent",
+      "sentenceIpa": "Sentence IPA"
+    },
+    "placeholders": {
+      "title": "Business small talk",
+      "sourceText": "Paste curated English text here…"
+    },
+    "source": {
+      "TEXT": "Text",
+      "AUDIO": "Audio"
+    },
+    "pronunciation": {
+      "DISABLED": "Disabled",
+      "ON_DEMAND": "On demand",
+      "PREGENERATE": "Pre-generate"
+    },
+    "studyActivities": "Study activities",
+    "annotations": "Annotations / enrichment",
+    "activity": {
+      "DICTATION": "Dictation",
+      "SHADOWING": "Shadowing",
+      "VOCABULARY_PRACTICE": "Vocabulary practice",
+      "GRAMMAR_PRACTICE": "Grammar practice"
+    },
+    "annotation": {
+      "TRANSLATION": "Translation",
+      "LEXICAL": "Lexical",
+      "GRAMMAR": "Grammar",
+      "ENTITY_HINTS": "Entity hints",
+      "DICTATION_HINTS": "Dictation hints",
+      "THOUGHT_GROUPS": "Thought groups",
+      "SENTENCE_IPA": "Sentence IPA",
+      "LEARNING_TIPS": "Learning tips"
+    },
+    "queueing": "Queuing build…",
+    "queue": "Create draft & queue build",
+    "accepted": "Accepted",
+    "lessonId": "Lesson",
+    "jobId": "Job",
+    "inspectJob": "Inspect job",
+    "preview": {
+      "title": "Build plan preview",
+      "note": "The authoritative Java planner runs only the expensive steps implied by the final selection and current admin policy. This browser preview is explanatory only."
+    },
+    "validation": {
+      "titleRequired": "Title is required.",
+      "textRequired": "Text source cannot be empty.",
+      "referenceRequired": "Audio/YouTube source reference is required."
+    }
+  },
+  "aiSettings": {
+    "eyebrow": "Settings / AI",
+    "title": "Provider routing",
+    "lead": "Provider/model is runtime data. Product prompts stay in Java business modules; plaintext provider API keys are never returned to the browser.",
+    "apiError": "API error",
+    "providers": "Providers",
+    "routes": "Capability routes",
+    "internalRuntime": "internal/local runtime",
+    "notConfigured": "not configured",
+    "disabled": "disabled",
+    "table": {
+      "provider": "Provider",
+      "endpoint": "Endpoint",
+      "credential": "Credential",
+      "status": "Status",
+      "capability": "Capability",
+      "model": "Model",
+      "priority": "Priority",
+      "fallback": "Fallback"
+    },
+    "modelNamesNote": "Model names remain strings by design because provider model catalogs change frequently.",
+    "configure": "Configure / replace provider credential",
+    "fields": {
+      "code": "Code",
+      "displayName": "Display name",
+      "baseUrl": "Base URL",
+      "apiKey": "New API key",
+      "apiKeyPlaceholder": "Leave blank to keep existing secret",
+      "enabled": "Enabled"
+    },
+    "save": "Save provider",
+    "encryptionNote": "The master encryption key stays outside the database. Provider secrets are AES-GCM encrypted at rest."
+  },
+  "placeholders": {
+    "eyebrow": "Lyreo workspace",
+    "curriculum": {
+      "title": "Curriculum",
+      "text": "Build learning paths from references to Lesson, Grammar, TOEIC and future content types."
+    },
+    "lexicon": {
+      "title": "Lexicon",
+      "text": "Global dictionary with provenance, missing-Vietnamese maintenance and lazy enrichment."
+    },
+    "boundary": "This boundary is intentional; full domain-specific CRUD belongs to a later implementation slice rather than a fake starter screen."
+  }
+}

@@ -20,6 +20,10 @@ Raw datasets stay outside Git.
 
 ## 2. Lexicon pipeline
 
+Current status: the Lyreo Lexicon dataset has **not been scraped/downloaded yet**. It is separate
+from the current Grammar/TOEIC scraper output. The intended source is pre-existing
+Wiktextract/Kaikki JSONL, as specified in `LYREO_PLATFORM_SPEC.md` §30.
+
 Goal: broad global dictionary, independent from one lesson, while still allowing lesson runtime discovery of unknown phrases.
 
 ```text
@@ -69,62 +73,88 @@ lookup Lexicon
 
 Lesson remains usable even before global Lexicon catches up.
 
-## 4. Grammar importer (`dautoeic/grammar_data`)
+## 4. Grammar importer (`grammar_data`)
 
-Expected files include:
+The current dataset on the development machine contains both CSV and JSON exports:
 
 ```text
-grammar_topics.json
-grammar_subtopics.json
-grammar_difficulty_levels.json
-grammar_bank_sets.json
-grammar_questions.json
-grammar_question_memberships.json
-grammar_questions_flat.json
+grammar_bank_sets.{csv,json}
+grammar_difficulty_levels.{csv,json}
+grammar_question_memberships.{csv,json}
+grammar_questions.{csv,json}
+grammar_questions_flat.{csv,json}
+grammar_subtopics.{csv,json}
+grammar_topics.{csv,json}
 manifest.json
+schema.sql
 ```
 
-Preserve existing:
+`tools/data-import/import_grammar.py` currently reads **only** these JSON files:
 
-- source question/options/correct answer;
-- Vietnamese explanation/translation;
-- answer translation;
-- vocabulary annotation;
-- difficulty;
-- bank/test/source metadata;
-- nullable topic/subtopic.
+```text
+grammar_questions_flat.json
+grammar_topics.json
+grammar_subtopics.json
+grammar_bank_sets.json
+```
 
-AI is useful for **missing topic/subtopic classification or on-demand explanation**, not for regenerating a bank that already exists.
+The script does not currently read the CSV copies, `grammar_difficulty_levels.json`,
+`grammar_question_memberships.json`, `grammar_questions.json`, `manifest.json`, or `schema.sql`
+directly. Membership information is taken from flat-question fields such as `bank_set_id` and
+`order_index` when present.
 
-## 5. TOEIC importer (`dautoeic/mock_test_data`)
+Fields consumed from the flat question rows include `question_id`/`id`, question/options/correct
+answer, explanations/translations, vocabulary note, difficulty, nullable topic/subtopic, bank-set
+metadata, and original test/source metadata. `prefer_ai_explanation` maps to the importer
+explanation policy.
 
-Expected aggregates:
+AI is useful for **missing topic/subtopic classification or on-demand explanation**, not for
+regenerating a bank that already exists.
+
+## 5. TOEIC importer (`mock_test_data`)
+
+The current dataset on the development machine contains aggregate CSV/JSON exports and downloaded
+media:
+
+```text
+all_mock_tests.{csv,json}
+all_passages.{csv,json}
+all_questions.{csv,json}
+all_difficulty_stats.{csv,json}
+downloads/{2019..2026}/Test {1..10}/{audio,data,images}/
+```
+
+`tools/data-import/import_toeic.py` currently reads JSON only:
 
 ```text
 all_mock_tests.json
 all_passages.json
-all_questions.json
-all_difficulty_stats.json
+all_questions_updated.json  # preferred if present
+all_questions.json          # fallback; present in the current dataset
 ```
 
-Media structure currently includes years 2019–2026:
+`all_difficulty_stats.*` and the CSV copies are not consumed by the current importer. The importer
+recursively catalogs files under `mock_test_data/downloads/` for media resolution.
+
+The integrity check expects test IDs from `id`/`test_id`, passage IDs from `id`/`passage_id`, and
+question IDs from `id`/`question_id`; passages/questions reference `test_id`, while a question may
+optionally reference `passage_id`. Media references are resolved from the first available field in:
 
 ```text
-downloads/<year>/Test <n>/
-├── audio/
-├── data/
-└── images/
+audio: audio_path | audio_file | audio | local_audio_path
+image: image_path | image_file | image | local_image_path
 ```
 
 Mapping:
 
 ```text
 structured metadata/questions/passages → PostgreSQL
-audio/images                           → R2
-raw source directory                   → external filesystem, not Git
+local media (with --upload-media)       → configured R2 bucket
+raw source directory                    → external filesystem, not Git
 ```
 
-Importer should not store `/home/user/...` paths in DB.
+The importer stores generated object keys in PostgreSQL, never developer-machine absolute paths or
+presigned URLs.
 
 ## 6. Curriculum seed
 
@@ -163,11 +193,42 @@ Raw R2 file is for debug/audit, **not** resume checkpoint/source of truth.
 
 ## 8. Import environment
 
+The project owner's original Grammar/TOEIC dataset is still available locally at
+`~/KeepDownloads/toeic`. A shared `toeic-dataset.zip` is also available for team bootstrap:
+
+```text
+https://drive.google.com/file/d/1FQgEswv3hUmT0Wv8Tyy9Jl_p9iLfoLZs/view?usp=sharing
+```
+
+`tools/data-import/.env.example` defaults `DAUTOEIC_DATA_DIR` to the Git-ignored
+`../../.data/datasets/toeic` path and configures that Drive file as `DAUTOEIC_DATA_URL`.
+
+`make data-fetch` / `scripts/fetch-data.sh` implements the developer bootstrap path:
+
+1. validate an existing dataset and skip download when it already matches the importer contract;
+2. use ephemeral `uvx --from gdown gdown --fuzzy` for the Google Drive large-file flow;
+3. optionally verify `DAUTOEIC_DATA_SHA256` when the team has pinned it;
+4. accept ZIP/tar archives while rejecting path traversal and tar links before extraction;
+5. locate exactly one extracted root containing both `grammar_data/` and `mock_test_data/`;
+6. validate the exact JSON files required by the current Grammar/TOEIC importers; `downloads/` media is catalogued when present but is not required for JSON-only work;
+7. install the dataset into `DAUTOEIC_DATA_DIR` only after archive and shape validation succeed.
+
+`make data-check` performs only local importer-facing validation. `SKIP_DATA=1 make setup` lets a
+developer defer the multi-GB download when working on areas that do not need this dataset.
+
+Lexicon remains a **separate, not-yet-downloaded dataset pipeline**. The TOEIC archive does not make
+Kaikki/Wiktextract data available. Populate `KAIKKI_EN_JSONL` / `KAIKKI_VI_JSONL` only after those
+sources have actually been obtained.
+
 Use `tools/data-import/.env` for:
 
-- `DAUTOEIC_DATA_DIR`;
+- `DAUTOEIC_DATA_DIR`, `DAUTOEIC_DATA_URL`, optional `DAUTOEIC_DATA_SHA256`;
 - DB connection;
 - optional R2 credentials;
-- Kaikki paths.
+- Kaikki paths when Lexicon source files become available.
 
-Keep importer config separate from Core `.env` so a data-maintenance machine does not need every application secret.
+Storage location does not determine AI token cost. Token/inference cost belongs to capability calls
+(STT/TTS/LLM/etc.); local-vs-R2 persistence only changes where artifact bytes are stored.
+
+Keep importer config separate from Core `.env` so a data-maintenance machine does not need every
+application secret.

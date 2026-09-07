@@ -27,32 +27,22 @@ This file records current choices and **why** they exist. Version numbers may re
 | Jobs | PostgreSQL queue | Durable cancel/retry/lease without broker |
 | Auth | Keycloak 26.7.x | OIDC/PKCE/realm roles/bootstrapable dev topology |
 | Admin | React + Vite | Internal/admin SPA, no SEO requirement |
+| Admin UI | Tailwind CSS 4.3.x + shadcn/Radix-style owned components | Product-owned primitives without rebuilding accessibility-heavy Web controls |
 | Mobile | Expo SDK 57 / RN 0.86 | Modern RN + Development Build/native escape hatch |
-| Monorepo JS | pnpm workspaces | Shared design system, predictable package boundaries |
+| Mobile UI | NativeWind 4.2.x + Tailwind 3.4.x + selected RNR-style owned primitives | Semantic utility contract on native without forcing Web component sharing |
+| Localization | i18next 26.x + react-i18next 17.x; expo-localization on Mobile | Same translation model across Web/Native with platform-specific locale detection |
+| Themes | Shared semantic light/dark tokens; `system | light | dark` preference | Prevent feature-level color literals and make dark mode a foundation concern |
+| Monorepo JS | pnpm workspaces | Shared design-system/i18n contracts with platform-specific component ownership |
 
 ## Kafka deliberately not selected
 
-Lyreo currently has no demonstrated high-throughput event-stream/replay/multi-service consumer requirement.
-
-- Java module events → Spring Modulith.
-- Core↔AI → HTTP.
-- long-running workflow → PostgreSQL jobs.
-
-Adding Kafka would add producer/consumer/topic/offset/ops complexity without removing the need for durable business state.
+Kafka is not part of the MVP architecture. The full rationale is owned by
+`LYREO_PLATFORM_SPEC.md` §10; the compact decision record is `DECISIONS.md` D-002.
 
 ## Redis deliberately not selected
 
-Old responsibilities were separated:
-
-```text
-cancel/job state → PostgreSQL
-read cache       → Caffeine
-API rate limit   → Bucket4j
-raw artifacts    → R2
-module events    → Spring Modulith
-```
-
-Redis can return later only when multi-instance distributed cache/global rate quota/session use case is measured.
+Redis is not part of the MVP architecture. The full rationale is owned by
+`LYREO_PLATFORM_SPEC.md` §11; the compact decision record is `DECISIONS.md` D-003.
 
 ## R2 instead of Cloudinary for core storage
 
@@ -88,6 +78,27 @@ Qwen3-ASR/ForcedAligner are loaded via Python package/runtime. Docker GPU is pac
 ## Mobile: Development Build, not Expo Go-only
 
 Audio recording/playback and future native integrations require an escape hatch. Development Build keeps Expo tooling without treating Expo Go as the production runtime constraint.
+
+## Frontend styling and localization
+
+`packages/design-system` owns brand primitives and semantic color roles. Both Admin and Mobile consume
+the semantic contract, but their component implementations remain platform-owned. Admin uses
+Tailwind CSS v4 with shadcn/Radix-style copied components; Mobile stays on stable NativeWind v4 with
+its Tailwind v3.4 toolchain and selected React Native Reusables-style copied primitives. This avoids
+forcing two different rendering/accessibility systems through one component abstraction.
+
+`packages/i18n` owns intentionally shared `common`, `admin`, and `mobile` resources. Admin detects
+browser locale and stores an explicit override in localStorage. Mobile detects OS locale through
+`expo-localization` and stores ordinary locale/theme preferences in AsyncStorage, not SecureStore.
+
+Dark mode is semantic rather than component-specific. Admin resolves `system` through
+`prefers-color-scheme`, toggles the `.dark` DOM class and exposes semantic CSS variables. Mobile
+uses `expo.userInterfaceStyle=automatic` + React Native `useColorScheme()`, then exposes the same
+semantic roles through NativeWind `vars()`. Feature screens never own raw theme colors.
+
+Expo Router dependencies that its installation contract expects (`expo-constants`, `expo-linking`,
+`expo-status-bar`, `react-native-safe-area-context`, `react-native-screens`) are direct Mobile
+dependencies. They must be kept on Expo SDK-compatible versions rather than inherited transitively.
 
 ## Upgrade policy
 

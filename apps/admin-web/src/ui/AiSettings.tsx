@@ -1,5 +1,10 @@
 import { FormEvent, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../api';
+import { Button } from '../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Input } from '../components/ui/input';
+import { Switch } from '../components/ui/switch';
 
 type Provider = {
   id: string;
@@ -23,6 +28,7 @@ type Route = {
 };
 
 export function AiSettings() {
+  const { t } = useTranslation('admin');
   const [providers, setProviders] = useState<Provider[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [error, setError] = useState('');
@@ -31,6 +37,7 @@ export function AiSettings() {
   const [displayName, setDisplayName] = useState('Groq');
   const [baseUrl, setBaseUrl] = useState('https://api.groq.com/openai/v1');
   const [apiKey, setApiKey] = useState('');
+  const [enabled, setEnabled] = useState(true);
 
   async function load() {
     try {
@@ -59,7 +66,7 @@ export function AiSettings() {
           displayName,
           baseUrl,
           apiKey: apiKey || null,
-          enabled: true,
+          enabled,
         }),
       });
       setApiKey('');
@@ -71,113 +78,116 @@ export function AiSettings() {
 
   return (
     <section>
-      <div className="eyebrow">Settings / AI</div>
-      <h1>Provider routing</h1>
-      <p className="lead">
-        Provider/model is runtime data. Product prompts stay in Java business modules; plaintext
-        provider API keys are never returned to the browser.
-      </p>
+      <div className="eyebrow">{t('aiSettings.eyebrow')}</div>
+      <h1>{t('aiSettings.title')}</h1>
+      <p className="lead">{t('aiSettings.lead')}</p>
 
       {error ? (
-        <div className="card">
-          <strong>API error</strong>
-          <p className="muted">{error}</p>
-        </div>
+        <Card className="mt-6">
+          <CardHeader><CardTitle>{t('aiSettings.apiError')}</CardTitle></CardHeader>
+          <CardContent><p className="muted">{error}</p></CardContent>
+        </Card>
       ) : null}
 
-      <div className="card">
-        <h2>Providers</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Provider</th>
-              <th>Endpoint</th>
-              <th>Credential</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {providers.map(provider => (
-              <tr key={provider.id}>
-                <td>
-                  <strong>{provider.code}</strong>
-                  <br />
-                  <span className="muted">{provider.display_name}</span>
-                </td>
-                <td>{provider.base_url || 'internal/local runtime'}</td>
-                <td>
-                  {provider.configured ? `•••• ${provider.key_last4 || ''}` : 'not configured'}
-                </td>
-                <td>{provider.enabled ? provider.connection_status : 'disabled'}</td>
+      <Card className="mt-6">
+        <CardHeader><CardTitle>{t('aiSettings.providers')}</CardTitle></CardHeader>
+        <CardContent>
+          <table>
+            <thead>
+              <tr>
+                <th>{t('aiSettings.table.provider')}</th>
+                <th>{t('aiSettings.table.endpoint')}</th>
+                <th>{t('aiSettings.table.credential')}</th>
+                <th>{t('aiSettings.table.status')}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {providers.map(provider => (
+                <tr key={provider.id}>
+                  <td>
+                    <strong>{provider.code}</strong>
+                    <br />
+                    <span className="muted">{provider.display_name}</span>
+                  </td>
+                  <td>{provider.base_url || t('aiSettings.internalRuntime')}</td>
+                  <td>
+                    {provider.configured
+                      ? `•••• ${provider.key_last4 || ''}`
+                      : t('aiSettings.notConfigured')}
+                  </td>
+                  <td>{provider.enabled ? provider.connection_status : t('aiSettings.disabled')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
 
-      <div className="card">
-        <h2>Capability routes</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Capability</th>
-              <th>Provider</th>
-              <th>Model</th>
-              <th>Priority</th>
-              <th>Fallback</th>
-            </tr>
-          </thead>
-          <tbody>
-            {routes.map(route => (
-              <tr key={route.id}>
-                <td>{route.capability}</td>
-                <td>{route.provider}</td>
-                <td>{route.model}</td>
-                <td>{route.priority}</td>
-                <td>{route.is_fallback ? 'Yes' : 'No'}</td>
+      <Card className="mt-6">
+        <CardHeader><CardTitle>{t('aiSettings.routes')}</CardTitle></CardHeader>
+        <CardContent>
+          <table>
+            <thead>
+              <tr>
+                <th>{t('aiSettings.table.capability')}</th>
+                <th>{t('aiSettings.table.provider')}</th>
+                <th>{t('aiSettings.table.model')}</th>
+                <th>{t('aiSettings.table.priority')}</th>
+                <th>{t('aiSettings.table.fallback')}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="muted">
-          Model names remain strings by design because provider model catalogs change frequently.
-        </p>
-      </div>
+            </thead>
+            <tbody>
+              {routes.map(route => (
+                <tr key={route.id}>
+                  <td>{route.capability}</td>
+                  <td>{route.provider}</td>
+                  <td>{route.model}</td>
+                  <td>{route.priority}</td>
+                  <td>{route.is_fallback ? t('common:yes') : t('common:no')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="muted">{t('aiSettings.modelNamesNote')}</p>
+        </CardContent>
+      </Card>
 
-      <form className="card form" onSubmit={saveProvider}>
-        <h2>Configure / replace provider credential</h2>
-        <div className="form-grid">
-          <label>
-            Code
-            <input
-              value={providerCode}
-              onChange={event => setProviderCode(event.target.value.toUpperCase())}
-            />
-          </label>
-          <label>
-            Display name
-            <input value={displayName} onChange={event => setDisplayName(event.target.value)} />
-          </label>
-          <label className="wide">
-            Base URL
-            <input value={baseUrl} onChange={event => setBaseUrl(event.target.value)} />
-          </label>
-          <label className="wide">
-            New API key
-            <input
-              type="password"
-              value={apiKey}
-              onChange={event => setApiKey(event.target.value)}
-              placeholder="Leave blank to keep existing secret"
-            />
-          </label>
-        </div>
-        <button type="submit">Save provider</button>
-        <p className="muted">
-          The master encryption key stays outside the database. Provider secrets are AES-GCM
-          encrypted at rest.
-        </p>
-      </form>
+      <Card className="mt-6">
+        <CardHeader><CardTitle>{t('aiSettings.configure')}</CardTitle></CardHeader>
+        <CardContent>
+          <form className="form" onSubmit={saveProvider}>
+            <div className="form-grid">
+              <label>
+                {t('aiSettings.fields.code')}
+                <Input value={providerCode} onChange={event => setProviderCode(event.target.value.toUpperCase())} />
+              </label>
+              <label>
+                {t('aiSettings.fields.displayName')}
+                <Input value={displayName} onChange={event => setDisplayName(event.target.value)} />
+              </label>
+              <label className="wide">
+                {t('aiSettings.fields.baseUrl')}
+                <Input value={baseUrl} onChange={event => setBaseUrl(event.target.value)} />
+              </label>
+              <label className="wide">
+                {t('aiSettings.fields.apiKey')}
+                <Input
+                  type="password"
+                  value={apiKey}
+                  onChange={event => setApiKey(event.target.value)}
+                  placeholder={t('aiSettings.fields.apiKeyPlaceholder')}
+                />
+              </label>
+              <label className="wide flex-row items-center justify-between">
+                <span>{t('aiSettings.fields.enabled')}</span>
+                <Switch checked={enabled} onCheckedChange={setEnabled} />
+              </label>
+            </div>
+            <Button className="mt-[22px]" type="submit">{t('aiSettings.save')}</Button>
+            <p className="muted">{t('aiSettings.encryptionNote')}</p>
+          </form>
+        </CardContent>
+      </Card>
     </section>
   );
 }

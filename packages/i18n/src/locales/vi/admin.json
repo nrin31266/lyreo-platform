@@ -1,0 +1,172 @@
+{
+  "workspace": "Không gian quản trị",
+  "signIn": "Đăng nhập bằng Keycloak",
+  "completingSignIn": "Đang hoàn tất đăng nhập…",
+  "loading": "Đang tải Lyreo…",
+  "nav": {
+    "overview": "Tổng quan",
+    "lessonBuilder": "Tạo bài học",
+    "jobs": "Tác vụ nền",
+    "aiProviders": "Nhà cung cấp AI",
+    "curriculum": "Lộ trình",
+    "lexicon": "Từ điển"
+  },
+  "appearance": {
+    "language": "Ngôn ngữ",
+    "theme": "Giao diện"
+  },
+  "overview": {
+    "eyebrow": "Không gian sản phẩm",
+    "title": "Chào buổi tối, đội ngũ Lyreo.",
+    "lead": "Xây dựng nội dung học tiếng Anh mà không che giấu hạ tầng bằng cơ chế khó hiểu. Mọi workflow dài đều có thể kiểm tra, thử lại và hủy.",
+    "architecturePulse": "Tình trạng kiến trúc",
+    "stats": {
+      "lessons": {
+        "label": "Bài học",
+        "note": "Nội dung do Admin tạo"
+      },
+      "jobs": {
+        "label": "Tác vụ",
+        "note": "Hàng đợi bền vững PostgreSQL"
+      },
+      "lexicon": {
+        "label": "Từ điển",
+        "note": "Dựa trên Wiktionary"
+      },
+      "toeic": {
+        "label": "TOEIC",
+        "note": "Khoảng dữ liệu đã import"
+      }
+    },
+    "architecture": {
+      "springModulith": "Spring Modulith",
+      "fastApiRuntime": "Runtime AI FastAPI",
+      "r2Artifacts": "Artifact trên R2",
+      "postgresJobs": "Tác vụ PostgreSQL",
+      "noKafka": "Không dùng Kafka",
+      "noRedis": "Không dùng Redis ở MVP"
+    }
+  },
+  "jobs": {
+    "eyebrow": "Vận hành",
+    "title": "Tác vụ nền",
+    "lead": "PostgreSQL là nguồn sự thật bền vững. JSON trên R2 chỉ là artifact, không phải trạng thái workflow.",
+    "enterUuid": "Nhập UUID của tác vụ.",
+    "jobUuid": "UUID tác vụ",
+    "inspect": "Kiểm tra",
+    "waiting": "đang chờ",
+    "attempt": "Lần thử {{current}}/{{max}}",
+    "requestCancellation": "Yêu cầu hủy",
+    "cancelDialog": {
+      "title": "Hủy tác vụ nền này?",
+      "description": "Việc hủy diễn ra theo cơ chế cooperative. Worker sẽ dừng ở checkpoint an toàn và giữ nguyên trạng thái bền vững của tác vụ.",
+      "confirm": "Yêu cầu hủy"
+    }
+  },
+  "lessonBuilder": {
+    "eyebrow": "Bài học / Tạo mới",
+    "title": "Trình tạo bài học",
+    "lead": "Content, annotation và activity là các khái niệm tách biệt. Lựa chọn build chính xác được snapshot cùng job để audit/debug thay vì âm thầm chạy theo default Admin thay đổi về sau.",
+    "fields": {
+      "title": "Tiêu đề",
+      "source": "Nguồn",
+      "preset": "Preset",
+      "sourceText": "Văn bản nguồn",
+      "youtubeUrl": "URL YouTube",
+      "audioReference": "Object key / URL audio",
+      "accent": "Giọng",
+      "sentenceIpa": "IPA cả câu"
+    },
+    "placeholders": {
+      "title": "Hội thoại công việc",
+      "sourceText": "Dán đoạn tiếng Anh đã biên tập vào đây…"
+    },
+    "source": {
+      "TEXT": "Văn bản",
+      "AUDIO": "Audio"
+    },
+    "pronunciation": {
+      "DISABLED": "Tắt",
+      "ON_DEMAND": "Theo nhu cầu",
+      "PREGENERATE": "Sinh trước"
+    },
+    "studyActivities": "Hoạt động học",
+    "annotations": "Annotation / enrichment",
+    "activity": {
+      "DICTATION": "Dictation",
+      "SHADOWING": "Shadowing",
+      "VOCABULARY_PRACTICE": "Luyện từ vựng",
+      "GRAMMAR_PRACTICE": "Luyện ngữ pháp"
+    },
+    "annotation": {
+      "TRANSLATION": "Bản dịch",
+      "LEXICAL": "Từ vựng",
+      "GRAMMAR": "Ngữ pháp",
+      "ENTITY_HINTS": "Gợi ý thực thể",
+      "DICTATION_HINTS": "Gợi ý dictation",
+      "THOUGHT_GROUPS": "Nhóm ý",
+      "SENTENCE_IPA": "IPA cả câu",
+      "LEARNING_TIPS": "Mẹo học"
+    },
+    "queueing": "Đang đưa vào hàng đợi…",
+    "queue": "Tạo bản nháp & đưa vào hàng đợi",
+    "accepted": "Đã tiếp nhận",
+    "lessonId": "Bài học",
+    "jobId": "Tác vụ",
+    "inspectJob": "Kiểm tra tác vụ",
+    "preview": {
+      "title": "Xem trước kế hoạch build",
+      "note": "Java planner mới là nguồn quyết định chính thức và chỉ chạy các bước tốn chi phí theo lựa chọn cuối cùng cùng policy Admin hiện tại. Preview trên trình duyệt chỉ để giải thích."
+    },
+    "validation": {
+      "titleRequired": "Bắt buộc nhập tiêu đề.",
+      "textRequired": "Nguồn văn bản không được để trống.",
+      "referenceRequired": "Bắt buộc có tham chiếu Audio/YouTube."
+    }
+  },
+  "aiSettings": {
+    "eyebrow": "Cài đặt / AI",
+    "title": "Định tuyến nhà cung cấp",
+    "lead": "Provider/model là dữ liệu runtime. Product prompt nằm trong các module nghiệp vụ Java; API key dạng plaintext không bao giờ được trả lại trình duyệt.",
+    "apiError": "Lỗi API",
+    "providers": "Nhà cung cấp",
+    "routes": "Định tuyến capability",
+    "internalRuntime": "runtime nội bộ/local",
+    "notConfigured": "chưa cấu hình",
+    "disabled": "đã tắt",
+    "table": {
+      "provider": "Nhà cung cấp",
+      "endpoint": "Endpoint",
+      "credential": "Thông tin xác thực",
+      "status": "Trạng thái",
+      "capability": "Capability",
+      "model": "Model",
+      "priority": "Ưu tiên",
+      "fallback": "Dự phòng"
+    },
+    "modelNamesNote": "Tên model được giữ dạng chuỗi có chủ đích vì danh mục model của provider thay đổi thường xuyên.",
+    "configure": "Cấu hình / thay thế credential của provider",
+    "fields": {
+      "code": "Mã",
+      "displayName": "Tên hiển thị",
+      "baseUrl": "Base URL",
+      "apiKey": "API key mới",
+      "apiKeyPlaceholder": "Để trống để giữ secret hiện tại",
+      "enabled": "Bật"
+    },
+    "save": "Lưu provider",
+    "encryptionNote": "Master encryption key nằm ngoài database. Secret của provider được mã hóa AES-GCM khi lưu."
+  },
+  "placeholders": {
+    "eyebrow": "Không gian Lyreo",
+    "curriculum": {
+      "title": "Lộ trình",
+      "text": "Xây dựng learning path từ tham chiếu tới Lesson, Grammar, TOEIC và các loại content tương lai."
+    },
+    "lexicon": {
+      "title": "Từ điển",
+      "text": "Từ điển toàn cục có provenance, bảo trì phần dịch tiếng Việt còn thiếu và enrichment theo nhu cầu."
+    },
+    "boundary": "Ranh giới này là chủ đích; CRUD đầy đủ theo domain thuộc một implementation slice sau, không phải một starter screen giả."
+  }
+}
