@@ -1,0 +1,18 @@
+[project]
+name = "lyreo-data-import"
+version = "0.1.0"
+description = "Offline/maintenance importers for Lyreo Lexicon, Grammar and TOEIC datasets."
+requires-python = ">=3.12"
+dependencies = [
+  "psycopg[binary]>=3.2,<4",
+  "boto3>=1.40,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4,<10",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

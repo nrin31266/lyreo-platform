@@ -1,0 +1,36 @@
+# Keep Docker build contexts small and, more importantly, never send local secrets
+# or multi-GB datasets to the daemon. Dockerfiles copy source explicitly from repo root.
+.git
+.github
+.idea
+.vscode
+.DS_Store
+
+# Secrets / machine-local configuration
+**/.env
+!**/.env.example
+
+# Build output / package caches
+**/target
+**/node_modules
+**/dist
+**/.expo
+**/.gradle
+**/Pods
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/*.pyc
+
+# Local data and generated artifacts
+.data
+data/raw
+data/cache
+data/generated
+**/*.jsonl.gz
+**/*.tar.gz
+
+# IDE / temporary files
+**/*.iml
+**/*.log
+**/.cache

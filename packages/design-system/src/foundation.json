@@ -1,0 +1,39 @@
+{
+  "spacing": {
+    "xs": 4,
+    "sm": 8,
+    "md": 16,
+    "lg": 24,
+    "xl": 32,
+    "xxl": 48
+  },
+  "radius": {
+    "sm": 8,
+    "md": 14,
+    "lg": 22,
+    "pill": 999
+  },
+  "motion": {
+    "fast": 140,
+    "normal": 220,
+    "slow": 360
+  },
+  "typography": {
+    "fontFamily": {
+      "sans": "System"
+    },
+    "fontSize": {
+      "xs": 12,
+      "sm": 14,
+      "md": 16,
+      "lg": 18,
+      "xl": 24,
+      "display": 40
+    },
+    "lineHeight": {
+      "tight": 1.15,
+      "normal": 1.45,
+      "relaxed": 1.6
+    }
+  }
+}

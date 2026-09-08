@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "notebooklm": {
+      "command": "<team-approved-notebooklm-mcp-command>",
+      "args": [],
+      "env": {
+        "NOTEBOOKLM_AUTH": "<store-outside-git>"
+      }
+    }
+  }
+}
