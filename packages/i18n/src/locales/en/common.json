@@ -1,0 +1,25 @@
+{
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "continue": "Continue",
+    "retry": "Try again",
+    "signOut": "Sign out",
+    "close": "Close"
+  },
+  "status": {
+    "loading": "Loading…",
+    "saving": "Saving…"
+  },
+  "language": {
+    "english": "English",
+    "vietnamese": "Vietnamese"
+  },
+  "theme": {
+    "system": "System",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "yes": "Yes",
+  "no": "No"
+}

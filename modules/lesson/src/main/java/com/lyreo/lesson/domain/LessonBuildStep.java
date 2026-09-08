@@ -1,0 +1,17 @@
+package com.lyreo.lesson.domain;
+
+public enum LessonBuildStep {
+    SOURCE_PREPARE,
+    STT,
+    TTS,
+    ALIGNMENT,
+    NLP,
+    TRANSLATION,
+    LEXICAL_ANALYSIS,
+    GRAMMAR_ANALYSIS,
+    THOUGHT_GROUP_ANALYSIS,
+    LEARNING_TIPS,
+    PRONUNCIATION_ENRICHMENT,
+    ACTIVITY_BUILD,
+    FINALIZE
+}

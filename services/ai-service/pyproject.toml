@@ -1,0 +1,23 @@
+[project]
+name = "lyreo-ai-service"
+version = "0.1.0"
+description = "AI capability runtime for Lyreo. No business orchestration lives here."
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.120,<1",
+  "uvicorn[standard]>=0.35,<1",
+  "pydantic-settings>=2.10,<3",
+  "httpx>=0.28,<1",
+  "python-multipart>=0.0.20,<1",
+]
+
+[project.optional-dependencies]
+qwen = ["qwen-asr==0.0.6", "torch>=2.7"]
+dev = ["pytest>=8.4,<9", "pytest-asyncio>=1.1,<2"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.uv]
+default-groups = []

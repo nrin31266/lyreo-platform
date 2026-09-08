@@ -1,0 +1,25 @@
+{
+  "actions": {
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "continue": "Tiếp tục",
+    "retry": "Thử lại",
+    "signOut": "Đăng xuất",
+    "close": "Đóng"
+  },
+  "status": {
+    "loading": "Đang tải…",
+    "saving": "Đang lưu…"
+  },
+  "language": {
+    "english": "Tiếng Anh",
+    "vietnamese": "Tiếng Việt"
+  },
+  "theme": {
+    "system": "Theo hệ thống",
+    "light": "Sáng",
+    "dark": "Tối"
+  },
+  "yes": "Có",
+  "no": "Không"
+}

@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.lyreo</groupId>
+  <artifactId>lyreo-parent</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <properties>
+    <java.version>25</java.version>
+    <maven.compiler.release>${java.version}</maven.compiler.release>
+    <spring-boot.version>4.1.1</spring-boot.version>
+    <spring-modulith.version>2.1.1</spring-modulith.version>
+    <resilience4j.version>2.4.0</resilience4j.version>
+    <bucket4j.version>8.19.0</bucket4j.version>
+    <aws-sdk.version>2.49.6</aws-sdk.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.springframework.modulith</groupId>
+        <artifactId>spring-modulith-bom</artifactId>
+        <version>${spring-modulith.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.github.resilience4j</groupId>
+        <artifactId>resilience4j-bom</artifactId>
+        <version>${resilience4j.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>${aws-sdk.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.14.1</version>
+          <configuration>
+            <release>${java.version}</release>
+            <parameters>true</parameters>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-maven-plugin</artifactId>
+          <version>${spring-boot.version}</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+
+  <modules>
+    <module>libs/contracts</module>
+    <module>platform/cache</module>
+    <module>platform/config</module>
+    <module>platform/jobs</module>
+    <module>platform/storage</module>
+    <module>platform/security</module>
+    <module>platform/observability</module>
+
+    <module>modules/identity</module>
+    <module>modules/learner</module>
+    <module>modules/ai</module>
+    <module>modules/lesson</module>
+    <module>modules/speech-assessment</module>
+    <module>modules/lexicon</module>
+    <module>modules/vocabulary</module>
+    <module>modules/grammar</module>
+    <module>modules/toeic</module>
+    <module>modules/curriculum</module>
+    <module>modules/gamification</module>
+    <module>modules/analytics</module>
+    <module>modules/notification</module>
+    <module>modules/chat</module>
+
+    <module>apps/core-service</module>
+  </modules>
+</project>

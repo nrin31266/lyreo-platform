@@ -1,0 +1,37 @@
+# Secrets / env
+.env
+**/.env
+!**/.env.example
+
+# Java
+target/
+*.class
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Node
+node_modules/
+dist/
+.expo/
+.expo-shared/
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Data dumps and importer working data
+data/raw/
+data/cache/
+data/generated/
+*.jsonl.gz
+*.tar.gz
+
+# OS
+.DS_Store
+.data/

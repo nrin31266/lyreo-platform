@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+    <project xmlns="http://maven.apache.org/POM/4.0.0"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+      <modelVersion>4.0.0</modelVersion>
+      <parent>
+        <groupId>com.lyreo</groupId>
+        <artifactId>lyreo-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../..</relativePath>
+      </parent>
+      <artifactId>lyreo-core-service</artifactId>
+      <dependencies>
+
+<dependency>
+  <groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId>
+</dependency>
+<dependency>
+  <groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-webclient</artifactId>
+</dependency>
+<dependency>
+  <groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-json</artifactId>
+</dependency>
+<dependency>
+  <groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId>
+</dependency>
+<dependency>
+  <groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+</dependency>
+<dependency>
+  <groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-jdbc</artifactId>
+</dependency>
+<dependency>
+  <groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-jpa</artifactId>
+</dependency>
+<dependency>
+  <groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-flyway</artifactId>
+</dependency>
+<dependency>
+  <groupId>org.flywaydb</groupId><artifactId>flyway-database-postgresql</artifactId>
+</dependency>
+<dependency>
+  <groupId>org.postgresql</groupId><artifactId>postgresql</artifactId><scope>runtime</scope>
+</dependency>
+<dependency>
+  <groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+<dependency>
+  <groupId>org.springframework.modulith</groupId><artifactId>spring-modulith-starter-jdbc</artifactId>
+</dependency>
+
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-platform-cache</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-platform-config</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-platform-jobs</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-platform-storage</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-platform-security</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-platform-observability</artifactId><version>${project.version}</version></dependency>
+
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-identity</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-learner</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-ai</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-lesson</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-speech-assessment</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-lexicon</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-vocabulary</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-grammar</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-toeic</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-curriculum</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-gamification</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-analytics</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-notification</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-chat</artifactId><version>${project.version}</version></dependency>
+
+<dependency>
+  <groupId>org.springframework.modulith</groupId><artifactId>spring-modulith-starter-test</artifactId><scope>test</scope>
+</dependency>
+<dependency>
+  <groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope>
+</dependency>
+
+      </dependencies>
+    
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+

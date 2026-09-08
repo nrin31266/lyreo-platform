@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+jobs:
+  repository-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Offline repository guardrails
+        run: |
+          python3 -m compileall -q services/ai-service/app services/ai-service/tests tools/data-import
+          bash -n scripts/*.sh infra/keycloak/scripts/*.sh infra/postgres/init/*.sh
+          python3 tooling/validate_repo.py
+
+  java:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - run: ./mvnw -B test
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: AI Service tests
+        run: |
+          cd services/ai-service
+          uv sync --extra dev
+          uv run pytest
+      - name: Data importer tests
+        run: |
+          cd tools/data-import
+          uv sync --extra dev
+          uv run pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.20.0'
+      - run: corepack enable && corepack prepare pnpm@12.3.1 --activate
+      # First networked team setup should generate/commit pnpm-lock.yaml; then switch this to --frozen-lockfile.
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm build
