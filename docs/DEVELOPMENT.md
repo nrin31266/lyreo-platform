@@ -49,7 +49,23 @@ Run the Vite dev process separately from Core so frontend reload/debug does not 
 ### Mobile
 
 Mobile uses an Expo Development Build/Prebuild workflow when native capabilities are required.
-After adding a native module or changing the Expo SDK, rebuild the Development Build.
+Expo Go is **not supported** — `expo-dev-client` is required.
+
+**`make mobile` only starts Metro.** It does not install an app or trigger an EAS build. You must
+have the Lyreo Dev Build already installed on your device or emulator.
+
+**Android (Linux CLI, no Android Studio required)**: Install Android Command-line Tools, set
+`ANDROID_HOME`, then use `make android-check → make android-emulator-create → make android-emulator
+→ make mobile-android-install`. The canonical AVD is `Lyreo_Pixel8_API36` (API 36, x86_64). KVM
+provides hardware acceleration; graphics defaults to auto (`-gpu auto`) with software fallback,
+and Mesa layer protection ensures reliability across Linux distributions (Ubuntu, Fedora, Arch).
+
+**iOS (EAS cloud, no Xcode required on Linux/Fedora)**: iOS builds run entirely in the EAS cloud.
+Register the device UDID, trigger a cloud build, install the `.ipa` via the EAS URL.
+
+The full first-time setup, SDK installation, emulator options, KVM, networking (emulator uses
+`10.0.2.2` to reach host `localhost`), rebuild triggers, and daily workflow are documented in
+`apps/mobile/README.md`.
 
 ## 4. Recommended start order
 

@@ -7,6 +7,12 @@
       "skillPath": "skills/305-frameworks-spring-boot-modulith/SKILL.md",
       "computedHash": "a62b3648ee535c1ccf0585952f3363fd9b15c5947865393ac826340e899d2da9"
     },
+    "create-prd": {
+      "source": "phuryn/pm-skills",
+      "sourceType": "github",
+      "skillPath": "pm-execution/skills/create-prd/SKILL.md",
+      "computedHash": "5c242d3abb9508f59021ed22936230e555971feab690cbf2a90142e06d10e7ae"
+    },
     "expo-dev-client": {
       "source": "expo/skills",
       "sourceType": "github",

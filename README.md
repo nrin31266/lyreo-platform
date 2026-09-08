@@ -367,19 +367,25 @@ run:
 make mobile
 ```
 
-The mobile app uses Expo Development Build/Prebuild for workflows that need native capabilities.
+This starts the Expo Metro bundler. **Expo Go is not supported.** You must have the Lyreo Dev Build
+installed on your device or emulator before Metro is useful. `make mobile` never triggers a build.
+
+For first-time Android setup (Linux CLI emulator without Android Studio) or iOS setup:
+
+```text
+apps/mobile/README.md
+```
+
+For cross-project mobile workflow context, see:
+
+```text
+docs/DEVELOPMENT.md §3 Mobile
+```
 
 Public runtime variables live in:
 
 ```text
 apps/mobile/.env
-```
-
-See:
-
-```text
-apps/mobile/README.md
-docs/DEVELOPMENT.md
 ```
 
 ---

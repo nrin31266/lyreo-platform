@@ -1,93 +1,131 @@
 # Lyreo Mobile
 
-Expo SDK 57 + React Native 0.86, Development Build/Prebuild, New Architecture.
+Expo SDK 57 + React Native 0.86 (New Architecture), Expo Development Client.
 
-Mobile is the **learner experience**, not an admin console. The initial product requires login before
-entering learning state so progress/SRS/Curriculum/Diamond always have an owner.
+Mobile is the **learner experience**, providing dictation, shadowing, SRS vocabulary, TOEIC practice, and progress analytics.
 
-## Main learner areas
+---
 
-```text
-Home / Continue learning
-Lesson (Dictation / Shadowing / contextual notes)
-Vocabulary SRS
-TOEIC
-Progress
-Settings
-```
+## 1. Quick Start Guide
 
-Chat keeps a module boundary but remains low priority.
+> [!IMPORTANT]
+> **Expo Go is NOT supported.** Lyreo requires native audio recording and background execution via `expo-dev-client`. You must have the **Lyreo Development Build** installed on your device or emulator before Metro is useful.
+> **Metro Port**: Metro runs on port **8082** by default (to avoid port 8081 occupied by Keycloak).
 
-## UI foundation
-
-Mobile uses:
-
-- NativeWind v4 with its Tailwind v3.4 toolchain;
-- shared semantic light/dark tokens from `@lyreo/design-system`;
-- selected repo-owned React Native Reusables-style primitives under `src/components/ui`;
-- shared EN/VI resources from `@lyreo/i18n`;
-- `expo-localization` for initial OS locale detection;
-- AsyncStorage for ordinary locale/theme preferences;
-- `system | light | dark` theme preference, default `system`.
-
-Expo Router runtime dependencies are declared **directly** in this app (`expo-router`,
-`expo-constants`, `expo-linking`, `expo-status-bar`, `react-native-safe-area-context`, and
-`react-native-screens`) instead of relying on pnpm hoisting/transitive dependencies. Keep their
-versions aligned with Expo SDK 57 via `expo install` when upgrading the SDK.
-
-Dark-mode flow is deliberately platform-native: `expo.userInterfaceStyle=automatic` lets React
-Native observe device appearance; `AppThemeProvider` resolves `system | light | dark` with
-`useColorScheme()`, maps the resolved mode through `semanticThemes`, and publishes those roles as
-NativeWind CSS variables on the root view. Screens consume semantic classes such as
-`bg-background`, `text-foreground`, and `border-border` rather than branching on dark mode.
-
-Web and Mobile intentionally do **not** share component implementations or Tailwind config. They
-share semantic contracts/resources only. Starter screens should use semantic NativeWind classes or
-`useAppTheme()` instead of raw theme/brand color literals.
-
-## Why Development Build
-
-Lyreo needs audio playback/recording and may add native capabilities later. Do not design production
-runtime around Expo Go-only constraints.
-
-## Environment
+### Environment Configuration
 
 ```bash
-cp .env.example .env
+# From repository root:
+cp apps/mobile/.env.example apps/mobile/.env
 ```
 
-`EXPO_PUBLIC_*` is public metadata. Do not place API keys/client secrets there.
+Default addresses in `apps/mobile/.env`:
+- **Android Emulator**: Reaches host services via `10.0.2.2` (Core: `10.0.2.2:8080`, Keycloak: `10.0.2.2:8081`).
+- **Physical device**: Set `EXPO_PUBLIC_API_BASE_URL` and `EXPO_PUBLIC_KEYCLOAK_URL` to your machine's LAN IP, or use a development tunnel (`npx expo start --tunnel`).
 
-Android Emulator defaults to `10.0.2.2` for host-machine access. A physical device needs a reachable
-LAN IP or an appropriate development tunnel.
+---
 
-## Authentication and local storage
+## 2. Android Development (Linux CLI / No Android Studio needed)
 
-Authorization Code + PKCE uses public Keycloak client `lyreo-mobile`.
+### Prerequisites
+- **JDK 17 LTS (canonical)** or 21 LTS for Android native compilation (matches EAS build image; Spring Boot 4 backend uses Java 25). `make mobile-android-install` automatically prioritizes JDK 17 when available.
+- **Android Command-line Tools** (`adb`, `emulator`). If not installed yet:
+  ```bash
+  curl -fsSL https://dl.google.com/android/cli/latest/linux_x86_64/install.sh | bash
+  ```
+  Verify your environment:
+  ```bash
+  make android-check
+  ```
 
-`expo-secure-store` is reserved for authentication/session credentials (access/refresh/id token and
-related auth-session metadata). Ordinary theme/locale preferences use AsyncStorage instead of a
-secret store.
-
-## Run
+### First-Time Android Setup (Run once)
 
 ```bash
-pnpm --filter @lyreo/mobile start
-pnpm --filter @lyreo/mobile android
+# 1. Create the canonical emulator (Lyreo_Pixel8_API36)
+make android-emulator-create
+
+# 2. Start the emulator in a dedicated terminal (Terminal 1)
+make android-emulator
+
+# 3. Build & install the Lyreo Dev Build into the running emulator (Terminal 2)
+make mobile-android-install
+
+# 4. Start Metro bundler (Terminal 2)
+make mobile
 ```
 
-After adding/changing native modules, Expo plugins, NativeWind native integration, or SDK versions,
-rebuild the Development Build. When NativeWind configuration changes, restart Metro with a clean
-cache if styles appear stale.
+### Daily Android Workflow
 
-Typecheck after dependencies are installed:
+1. **Terminal 1** (Start emulator):
+   ```bash
+   make android-emulator
+   ```
+2. **Terminal 2** (Start Metro):
+   ```bash
+   make mobile
+   ```
+   Press `a` in the Metro terminal or tap the **Lyreo** app on the emulator. Metro hot-reloads all TSX, components, and Tailwind styling instantly.
+
+---
+
+## 3. iOS Development (EAS Cloud / No macOS or Xcode needed on Linux)
+
+### First-Time iOS Setup (Run once per physical iPhone)
 
 ```bash
-pnpm --filter @lyreo/mobile typecheck
+# 1. Register your iPhone UDID (interactive EAS cloud flow)
+make mobile-ios-device-register
+
+# 2. Build the Development Build in EAS Cloud
+make mobile-ios-build
+
+# 3. Open the install URL printed by EAS in Safari on your iPhone and tap "Install"
+
+# 4. Start Metro bundler on your PC
+make mobile
 ```
 
-## Product principle
+### Daily iOS Workflow
 
-Learning screens prioritize focus and modern feedback rather than showing every annotation at once.
-Learner preference controls `OFF / TAP_TO_SHOW / AFTER_ATTEMPT / ALWAYS` for IPA/translation/notes
-when admin policy permits it.
+1. Start Metro on your PC:
+   ```bash
+   make mobile
+   ```
+2. Open the **Lyreo** app on your iPhone (ensure your phone is on the same Wi-Fi network).
+
+---
+
+## 4. When to Rebuild vs When Metro Hot-Reloads
+
+| Change Type | Action Needed |
+|---|---|
+| Editing `.tsx` screens, components, UI, styles | **Hot-reload** (`make mobile` is enough) |
+| Updating translation strings in `@lyreo/i18n` | **Hot-reload** (`make mobile` is enough) |
+| Changing `EXPO_PUBLIC_*` in `.env` | Restart Metro (`make mobile`) |
+| Adding/removing npm packages with native code | Rebuild (`make mobile-android-install` or `make mobile-ios-build`) |
+| Modifying Expo config plugins in `app.json` | Rebuild native app |
+| Upgrading Expo SDK version | Rebuild native app |
+
+---
+
+## 5. Architecture & Native Code Policy
+
+- **Continuous Native Generation (CNG)**: `apps/mobile/android/` and `apps/mobile/ios/` are **generated build artifacts** derived from `app.json` and `package.json`. They are intentionally git-ignored. Do not commit manual edits inside those folders; declare native changes via Expo config plugins instead.
+- **UI Foundation**: Uses NativeWind v4 (Tailwind v3.4), consuming semantic light/dark tokens from `@lyreo/design-system`.
+- **Internationalization**: Uses `@lyreo/i18n` for shared EN/VI resources.
+- **Security & Storage**: Authentication tokens (Access, Refresh, ID) use `expo-secure-store`. Ordinary preferences (theme, locale) use `AsyncStorage`.
+- **Typecheck**:
+  ```bash
+  pnpm --filter @lyreo/mobile typecheck
+  ```
+
+---
+
+## 6. Common Troubleshooting
+
+| Issue | Cause & Solution |
+|---|---|
+| **`/dev/kvm: Permission denied`** | Add your user to the KVM group: `sudo usermod -aG kvm $(whoami)`, then log out and back in. |
+| **Port 8081 already in use** | Keycloak runs on 8081. Mobile Metro runs on port **8082** by default to avoid conflicts. `make mobile` automatically uses 8082. |
+| **Android native build fails on Java 25** | Android Gradle Plugin (AGP) requires JDK 17 (or 21 LTS). Install JDK 17 via SDKMAN (`sdk install java 17.0.14-tem`). `make mobile-android-install` automatically prioritizes JDK 17. |
+| **Emulator cannot reach backend services** | In the Android emulator, `localhost` refers to the emulator itself. Use `10.0.2.2` to access host services (e.g. `http://10.0.2.2:8080` for Core). |

@@ -16,5 +16,4 @@ void mobileI18n.use(initReactI18next).init({
   ns: ['common', 'mobile'],
   defaultNS: 'common',
   interpolation: { escapeValue: false },
-  initImmediate: false,
 });

@@ -10,6 +10,7 @@ type AuthState = {
   loading: boolean;
   authenticated: boolean;
   accessToken: string | null;
+  error: string | null;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
   getAccessToken: () => Promise<string | null>;
@@ -20,7 +21,9 @@ const redirectUri = AuthSession.makeRedirectUri({ scheme: 'lyreo', path: 'auth' 
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [stored, setStored] = useState<StoredSession | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [exchanging, setExchanging] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [discovery, setDiscovery] = useState<AuthSession.DiscoveryDocument | null>(null);
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest({
@@ -34,11 +37,22 @@ export function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     Promise.all([sessionStore.get(), AuthSession.fetchDiscoveryAsync(keycloakIssuer)])
       .then(([session, doc]) => { setStored(session); setDiscovery(doc); })
-      .finally(() => setLoading(false));
+      .finally(() => setInitialLoading(false));
   }, []);
 
   useEffect(() => {
-    if (response?.type !== 'success' || !response.params.code || !request?.codeVerifier || !discovery) return;
+    if (!response) return;
+    if (response.type === 'error') {
+      setError(response.error?.message ?? 'Authentication failed');
+      return;
+    }
+    if (response.type === 'cancel' || response.type === 'dismiss') {
+      return;
+    }
+    if (response.type !== 'success' || !response.params.code || !request?.codeVerifier || !discovery) return;
+
+    setExchanging(true);
+    setError(null);
     AuthSession.exchangeCodeAsync({
       clientId: mobileEnv.keycloakClientId,
       code: response.params.code,
@@ -54,6 +68,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
       };
       await sessionStore.set(session);
       setStored(session);
+    }).catch(err => {
+      setError(err instanceof Error ? err.message : 'Token exchange failed');
+    }).finally(() => {
+      setExchanging(false);
     });
   }, [response, request, discovery]);
 
@@ -89,6 +107,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const signIn = useCallback(async () => {
     if (!request || !discovery) return;
+    setError(null);
     await promptAsync();
   }, [request, discovery, promptAsync]);
 
@@ -96,6 +115,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const idToken = stored?.idToken;
     await sessionStore.clear();
     setStored(null);
+    setError(null);
     // Keycloak logout is browser-based; the local session is cleared even if the browser is dismissed.
     if (discovery?.endSessionEndpoint) {
       const url = new URL(discovery.endSessionEndpoint);
@@ -107,13 +127,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [stored, discovery]);
 
   const value = useMemo<AuthState>(() => ({
-    loading,
+    loading: initialLoading || exchanging,
     authenticated: Boolean(stored?.accessToken),
     accessToken: stored?.accessToken ?? null,
+    error,
     signIn,
     signOut,
     getAccessToken: refreshIfNeeded,
-  }), [loading, stored, signIn, signOut, refreshIfNeeded]);
+  }), [initialLoading, exchanging, stored, error, signIn, signOut, refreshIfNeeded]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

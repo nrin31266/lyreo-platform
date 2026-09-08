@@ -18,8 +18,7 @@ node_modules/
 dist/
 .expo/
 .expo-shared/
-android/.gradle/
-ios/Pods/
+*.tsbuildinfo
 
 # IDE
 .idea/

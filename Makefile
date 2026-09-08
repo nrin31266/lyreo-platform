@@ -1,28 +1,39 @@
 .PHONY: help init-env doctor setup deps deps-java data-fetch data-check dev-infra dev-config keycloak-seed down core ai admin mobile \
+        mobile-ios-device-register mobile-ios-build \
+        android-check android-emulator-create android-emulator mobile-android-install \
         test-java test-ai test-importers typecheck build-frontend validate check prod-config verify-prod-env
 
 help:
 	@printf '%s\n' \
 	  'Lyreo common commands:' \
-	  '  make setup           First-clone setup: env + dataset + deps + PostgreSQL/Keycloak bootstrap' \
-	  '  make init-env        Copy/synchronize local .env files' \
-	  '  make doctor          Inspect local toolchain/env/data readiness' \
-	  '  make data-fetch      Download/install Grammar+TOEIC dataset when missing' \
-	  '  make data-check      Validate the importer-facing Grammar+TOEIC dataset structure' \
-	  '  make deps            Sync Python dependencies and install pnpm workspace dependencies' \
-	  '  make deps-java       Compile and install internal Java artifacts required by Core into local Maven cache' \
-	  '  make dev-infra       Start PostgreSQL + Keycloak only' \
-	  '  make keycloak-seed   Verify realm/client/roles and seed dev users' \
-	  '  make core            Run Spring Boot locally' \
-	  '  make ai              Run FastAPI locally' \
-	  '  make admin           Run Admin Vite dev server' \
-	  '  make mobile          Run Expo Development Build dev server' \
-	  '  make validate        Offline repository/syntax guardrails' \
-	  '  make check           Run available Java/Python/importer/frontend checks' \
-	  '  make dev-config      Validate compose.dev.yml syntax/resolution' \
-	  '  make prod-config     Validate compose.prod.yml syntax/resolution' \
+	  '  make setup                       First-clone setup: env + dataset + deps + PostgreSQL/Keycloak bootstrap' \
+	  '  make init-env                    Copy/synchronize local .env files' \
+	  '  make doctor                      Inspect local toolchain/env/data readiness' \
+	  '  make data-fetch                  Download/install Grammar+TOEIC dataset when missing' \
+	  '  make data-check                  Validate the importer-facing Grammar+TOEIC dataset structure' \
+	  '  make deps                        Sync Python dependencies and install pnpm workspace dependencies' \
+	  '  make deps-java                   Compile and install internal Java artifacts required by Core into local Maven cache' \
+	  '  make dev-infra                   Start PostgreSQL + Keycloak only' \
+	  '  make keycloak-seed               Verify realm/client/roles and seed dev users' \
+	  '  make core                        Run Spring Boot locally' \
+	  '  make ai                          Run FastAPI locally' \
+	  '  make admin                       Run Admin Vite dev server' \
+	  '  make mobile                      Run Expo Metro bundler (requires Dev Build installed on device/emulator)' \
+	  '  make mobile-ios-device-register  Register a physical iOS device with EAS (run once per device)' \
+	  '  make mobile-ios-build            Trigger EAS cloud build for iOS development profile' \
+	  '  make android-check               Verify Android CLI tools, KVM, and AVD readiness' \
+	  '  make android-emulator-create     Create the canonical Lyreo Android emulator (idempotent)' \
+	  '  make android-emulator            Start the Android emulator (no Android Studio needed)' \
+	  '  make mobile-android-install      Build and install Android Dev Build into running emulator/device' \
+	  '  make validate                    Offline repository/syntax guardrails' \
+	  '  make check                       Run available Java/Python/importer/frontend checks' \
+	  '  make dev-config                  Validate compose.dev.yml syntax/resolution' \
+	  '  make prod-config                 Validate compose.prod.yml syntax/resolution' \
 	  '' \
-	  'First clone downloads the shared TOEIC archive by default. Use SKIP_DATA=1 make setup to defer it.'
+	  'First clone downloads the shared TOEIC archive by default. Use SKIP_DATA=1 make setup to defer it.' \
+	  '' \
+	  'Android first-time: make android-check -> make android-emulator-create -> make android-emulator -> make mobile-android-install -> make mobile' \
+	  'iOS first-time:     make mobile-ios-device-register -> make mobile-ios-build -> install IPA from EAS URL -> make mobile'
 
 init-env:
 	./scripts/init-dev-env.sh
@@ -85,6 +96,55 @@ admin:
 
 mobile:
 	pnpm --filter @lyreo/mobile start
+
+# Register a physical iOS device (UDID) with EAS for ad-hoc/internal distribution.
+# Run this once per new device before triggering a new iOS development build.
+# Requires EAS login: npx eas-cli@latest login
+mobile-ios-device-register:
+	cd apps/mobile && npx eas-cli@latest device:create
+
+# Trigger an EAS cloud build for the iOS development profile.
+# Use this after: adding a native module, changing Expo plugins/SDK, or registering a new device.
+# The resulting .ipa is installed via the EAS build URL — no Xcode or macOS required on Fedora/Linux.
+mobile-ios-build:
+	cd apps/mobile && npx eas-cli@latest build --platform ios --profile development
+
+# Verify Android CLI tools, KVM access, and canonical AVD status.
+android-check:
+	./scripts/android-emulator.sh check
+
+# Create the canonical Lyreo Android emulator (idempotent — safe to re-run).
+# Requires: Android SDK with cmdline-tools and system-images;android-36;google_apis;x86_64.
+android-emulator-create:
+	./scripts/android-emulator.sh create
+
+# Start the canonical emulator without Android Studio.
+# Run this in a dedicated terminal; Metro runs separately with: make mobile
+android-emulator:
+	./scripts/android-emulator.sh start
+
+# Build and install the Android Development Build into the running emulator or connected device.
+# Uses --no-bundler so that 'make mobile' retains sole responsibility for running Metro.
+# Requires an emulator or device to be visible via adb before running.
+# Automatically sets sdk.dir and prioritizes canonical JDK 17 LTS (or 21 LTS fallback) when host Java is >= 24 (Spring Boot 4 backend).
+mobile-android-install:
+	@SDK=$$(./scripts/android-emulator.sh sdk-path 2>/dev/null || echo "$$ANDROID_HOME"); \
+	[ -z "$$SDK" ] && SDK="$$HOME/Android/Sdk"; \
+	export ANDROID_HOME="$$SDK"; \
+	export ANDROID_SDK_ROOT="$$SDK"; \
+	export PATH="$$SDK/platform-tools:$$SDK/cmdline-tools/latest/bin:$$PATH"; \
+	mkdir -p apps/mobile/android && echo "sdk.dir=$$SDK" > apps/mobile/android/local.properties; \
+	CUR_JAVA_VER=$$(java -version 2>&1 | awk -F '"' '/version/{print $$2}' | cut -d. -f1); \
+	if [ "$${CUR_JAVA_VER:-0}" -ge 24 ]; then \
+	  for cand in "$$JAVA_17_HOME" "$$JAVA_21_HOME" "$$HOME/.sdkman/candidates/java/17"* "$$HOME/.sdkman/candidates/java/21"* /usr/lib/jvm/java-17* /usr/lib/jvm/java-21*; do \
+	    if [ -n "$$cand" ] && [ -d "$$cand" ]; then \
+	      export JAVA_HOME="$$cand"; \
+	      export PATH="$$JAVA_HOME/bin:$$PATH"; \
+	      break; \
+	    fi; \
+	  done; \
+	fi; \
+	cd apps/mobile && npx expo run:android --no-bundler
 
 test-java:
 	./mvnw -B test

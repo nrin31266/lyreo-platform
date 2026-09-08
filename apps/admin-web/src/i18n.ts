@@ -13,7 +13,6 @@ void i18n.use(initReactI18next).init({
   ns: ['common', 'admin'],
   defaultNS: 'common',
   interpolation: { escapeValue: false },
-  initImmediate: false,
 });
 
 export function persistAdminLocale(locale: SupportedLocale) {

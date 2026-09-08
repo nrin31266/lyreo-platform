@@ -25,6 +25,9 @@ export default function LoginScreen() {
       <Text className="mt-1 text-[17px] font-bold text-primary">{t('auth.name')}</Text>
       <Text className="mt-6 max-w-[380px] text-base leading-6 text-muted-foreground">{t('auth.copy')}</Text>
       <Button className="mt-[34px]" size="lg" onPress={() => void auth.signIn()}>{t('auth.signIn')}</Button>
+      {auth.error && (
+        <Text className="mt-3 text-sm text-destructive">{auth.error}</Text>
+      )}
       <Text className="mt-[18px] text-xs leading-[18px] text-muted-foreground">{t('auth.note')}</Text>
     </View>
   );
