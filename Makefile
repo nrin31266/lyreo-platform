@@ -1,7 +1,7 @@
 .PHONY: help init-env doctor setup deps deps-java data-fetch data-check dev-infra dev-config keycloak-seed down core ai admin mobile \
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
-        test-java test-ai test-importers typecheck build-frontend validate check prod-config verify-prod-env
+        test-java test-ai test-importers test-docs typecheck build-frontend validate-docs validate check prod-config verify-prod-env
 
 help:
 	@printf '%s\n' \
@@ -26,6 +26,7 @@ help:
 	  '  make android-emulator            Start the Android emulator (no Android Studio needed)' \
 	  '  make mobile-android-install      Build and install Android Dev Build into running emulator/device' \
 	  '  make validate                    Offline repository/syntax guardrails' \
+	  '  make validate-docs               Offline Markdown link/anchor/ID/path guardrails' \
 	  '  make check                       Run available Java/Python/importer/frontend checks' \
 	  '  make dev-config                  Validate compose.dev.yml syntax/resolution' \
 	  '  make prod-config                 Validate compose.prod.yml syntax/resolution' \
@@ -161,7 +162,14 @@ typecheck:
 build-frontend:
 	pnpm build
 
+validate-docs:
+	python3 tooling/validate_docs.py
+
+test-docs:
+	python3 -m unittest tooling.tests.test_validate_docs
+
 validate:
+	$(MAKE) validate-docs
 	@tmp=$$(mktemp -d); \
 	  PYTHONPYCACHEPREFIX="$$tmp" python3 -m compileall -q \
 	    services/ai-service/app \
@@ -175,7 +183,7 @@ validate:
 	bash -n scripts/*.sh infra/keycloak/scripts/*.sh infra/postgres/init/*.sh
 	python3 tooling/validate_repo.py
 
-check: validate test-java test-ai test-importers typecheck build-frontend
+check: validate test-docs test-java test-ai test-importers typecheck build-frontend
 
 verify-prod-env:
 	./scripts/verify-prod-env.sh

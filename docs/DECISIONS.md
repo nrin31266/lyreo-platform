@@ -6,10 +6,10 @@ This is the compact decision log. If a future change contradicts one of these, u
 Use Spring Boot + Spring Modulith. Do not split business modules into network services by default.
 
 ## D-002 — No Kafka at MVP
-Decision: do not introduce Kafka at MVP. Full rationale: `LYREO_PLATFORM_SPEC.md` §10.
+Decision: do not introduce Kafka at MVP. Rationale: [`TECH_CHOICES.md`](TECH_CHOICES.md#kafka-deliberately-not-selected).
 
 ## D-003 — No Redis at MVP
-Decision: do not introduce Redis at MVP. Full rationale: `LYREO_PLATFORM_SPEC.md` §11.
+Decision: do not introduce Redis at MVP. Rationale: [`TECH_CHOICES.md`](TECH_CHOICES.md#redis-deliberately-not-selected).
 
 ## D-004 — Java orchestrates AI workflows
 Business/product prompts, output expectations and workflow live in Java. FastAPI executes capabilities.
@@ -34,7 +34,7 @@ Each business module owns detailed progress. Analytics consumes events and proje
 
 ## D-011 — Configurable experience with precedence
 Decision: use layered configuration with domain invariants remaining code/schema rules.
-Authoritative precedence and override semantics: `CONFIGURATION.md` §1–6.
+Authoritative precedence and override semantics: [`CONFIGURATION.md`](CONFIGURATION.md).
 
 ## D-012 — Login required initially
 Avoid guest progress/SRS/Curriculum/Diamond merge complexity in first release.
@@ -63,3 +63,8 @@ components. Share semantic contracts, not component implementations/configuratio
 Grammar/TOEIC raw data stays outside Git. Developer setup may fetch the configured shared ZIP into a
 Git-ignored local data directory and must validate importer-facing structure before use. Semantics: `DATA_PIPELINES.md`.
 
+## D-020 — Task-routed documentation ownership (2026-09-09)
+The repository uses `docs/README.md` as its single task/domain/code route and assigns product,
+requirement, story, feature, technical and evidence facts to separate owners. The legacy master path
+is a compatibility index only. Source: the documentation setup directive accepted for this change;
+this decision governs documentation structure, not unresolved product behavior.

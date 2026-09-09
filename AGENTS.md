@@ -1,425 +1,220 @@
 # AGENTS.md — Lyreo Engineering Contract
 
-This file is the **single source of truth for Lyreo engineering rules**.
+This is the single source of truth for mandatory Lyreo engineering rules. Setup and run commands
+belong in [README.md](README.md); task-oriented documentation routes live in
+[docs/README.md](docs/README.md). If a task conflicts with this contract, surface the conflict and
+request an explicit architecture decision instead of silently changing the foundation.
 
-Primary audience:
+## 1. Selective reading workflow
 
-- coding agents such as Codex, Claude, Gemini, and other agents;
-- developers changing code;
-- reviewers deciding whether a change preserves the foundation.
+For normal work:
 
-This file is **not** the project runbook and does not duplicate the master specification.
+1. Read this contract and `docs/README.md`. Identify the task intent, affected code paths, and
+   owning domain.
+2. Select the matching route. Read only the relevant section of the owner document; use `rg` on
+   IDs, headings, and symbols before opening larger ranges.
+3. Open the code entrypoint, tests, and contracts named by that route. Expand to another module
+   only when an event, API, schema, config, or UI consumer is affected.
+4. Read Discovery/PRD only for scope, value, or priority changes. Read coursework only when writing
+   the report. Load only the skill relevant to the current task.
+5. If a route is missing, find the owner from code/docs, add the route, then continue. If sources
+   conflict, follow the docs/code divergence workflow below; do not choose the newest or longest
+   file by default.
+6. After context compaction or a task change, restore the selected owners/IDs and unresolved issues;
+   do not rescan all documentation without a reason.
 
-- Setup/run/troubleshooting → `README.md`, `docs/DEVELOPMENT.md`
-- Product/feature intent → `docs/LYREO_PLATFORM_SPEC.md`
-- Architecture explanation → `docs/ARCHITECTURE.md`
-- Technology rationale → `docs/TECH_CHOICES.md`
-- Mandatory engineering rules → **`AGENTS.md`**
+The one-time documentation migration may inventory all project docs. That is not a rule for future
+tasks. A vague request to change “progress” must first be resolved to Lesson completion,
+Curriculum progress, Analytics projection, Gamification, or UI state.
 
-If a task conflicts with this contract, do not silently change the foundation. Surface the conflict
-and request an architecture decision/approval first.
+## 2. Product and architecture boundary
 
----
+Lyreo is an English-learning platform covering Text/Audio/YouTube Lessons, Dictation, Shadowing,
+annotations, Lexicon, Vocabulary SRS, Grammar, TOEIC, Curriculum, Analytics, Level/Diamond/Mission,
+notifications, and low-priority Chat. The Lyrebird mascot is presentation/brand only; do not name
+business or domain classes after it.
 
-## 1. Product boundary
+The fixed baseline is:
 
-Lyreo is an English-learning platform that includes:
+- Java + Spring Boot modular monolith with Spring Modulith;
+- pragmatic Clean/Hexagonal Architecture inside business modules;
+- PostgreSQL + Flyway, PostgreSQL-backed jobs, Caffeine, Bucket4j, and Resilience4j;
+- FastAPI as an AI capability service;
+- Cloudflare R2 behind an S3-compatible storage port, with local filesystem for development;
+- Keycloak/OIDC, React/Vite Admin, and Expo/React Native Mobile.
 
-- Lessons from Text/Audio/YouTube;
-- Dictation;
-- Shadowing;
-- contextual annotations;
-- Lexicon;
-- Vocabulary SRS;
-- Grammar;
-- TOEIC;
-- Curriculum;
-- Analytics;
-- Level/Diamond/Mission;
-- low-priority Chat.
+Exact versions and rationale belong in `docs/TECH_CHOICES.md`. Do not add infrastructure merely to
+make the system look more enterprise; require measured or operational need.
 
-The **Lyrebird** mascot is a presentation/brand concern.
+Project-local skills are procedural guidance. Precedence is: this contract, canonical Lyreo docs,
+existing architecture/technology decisions, then third-party skill guidance. Skills must adapt to
+Lyreo rather than migrate the project to their preferred stack.
 
-Do not name business/domain classes after the mascot.
-
----
-
-## 2. Architecture baseline
-
-- Java + Spring Boot.
-- Modular Monolith + Spring Modulith.
-- Pragmatic Clean/Hexagonal Architecture inside business modules.
-- PostgreSQL + Flyway.
-- FastAPI AI capability service.
-- Cloudflare R2 through an S3-compatible storage port; local filesystem adapter for dev.
-- Keycloak/OIDC.
-- Caffeine read cache.
-- Typed/versioned runtime configuration.
-- Bucket4j inbound rate limiting.
-- Resilience4j outbound resilience.
-- PostgreSQL-backed background jobs with lease, heartbeat, and fencing.
-- React/Vite Admin.
-- Expo/React Native Mobile.
-
-Exact version baselines and upgrade rationale live in `docs/TECH_CHOICES.md`; the dated architecture
-snapshot also appears in `docs/LYREO_PLATFORM_SPEC.md` §59.
-
-Do not add infrastructure only because it makes the architecture look more “enterprise”.
-There must be a measured or operational need.
-
----
-## 3. Third-party Agent Skills
-
-Project-local skills under `.agents/skills/` provide procedural guidance
-for supported coding agents.
-
-Precedence:
-
-1. `AGENTS.md`
-2. Canonical Lyreo documentation
-3. Existing architecture and technology decisions
-4. Third-party `SKILL.md` guidance
-
-Third-party skills must not change Lyreo architecture merely to match
-their preferred stack.
-
-In particular, skills must not introduce or migrate to Kafka, Redis,
-Expo API Routes, NativeWind v5, Next.js server architecture,
-cross-platform shared UI implementations, or business orchestration
-inside FastAPI unless the corresponding Lyreo architecture decision
-is explicitly changed first.
-## 4. Dependency rule
+## 3. Dependency and module communication rules
 
 ```text
-api / adapters-in
-        ↓
-application
-        ↓
-domain
-
-infrastructure → implements inward-facing ports
+api / adapters-in -> application -> domain
+infrastructure -> implements inward-facing ports
 ```
 
-Domain/application must not depend on infrastructure.
+Domain/application must not depend on JPA/JDBC adapters, PostgreSQL, R2/S3 SDKs, HTTP/FastAPI,
+Keycloak SDKs, or frontend frameworks. Persistence annotations do not belong in domain/application.
 
-Domain must not know about:
+Cross-module interaction is allowed only through named/public module APIs, intentionally shared
+public contracts, or Spring Modulith events. Never import another module's repository, JPA entity,
+or internal infrastructure, and never query another module's tables as a shortcut. Architecture
+tests and validators must protect these boundaries.
 
-- JPA/JDBC adapters;
-- PostgreSQL;
-- R2/S3 SDKs;
-- HTTP/FastAPI;
-- Keycloak SDK;
-- frontend frameworks.
+## 4. Domain ownership
 
-Infrastructure may depend inward to implement ports.
+- `identity`: Keycloak subject to app-user mapping and JIT provisioning.
+- `learner`: onboarding, profile, and persistent learner preferences.
+- `ai`: provider/model routing, encrypted credentials, and invocation audit.
+- `lesson`: content, annotations, activities, build workflow, and lesson practice.
+- `speech-assessment`: recordings, ASR, timing, fluency, and deep-judge results.
+- `lexicon`: global dictionary; `vocabulary`: learner SRS referencing Lexicon.
+- `grammar`: taxonomy, questions, and practice; `toeic`: tests, attempts, and scoring.
+- `curriculum`: paths, enrollment, item progress, and content references.
+- `gamification`: level/XP, Diamond ledger, missions, and rewards.
+- `analytics`: projections/read models, not detailed domain progress.
+- `notification`: realtime/push boundary; `chat`: low-priority tutor boundary.
 
----
+`platform/*` is technical and must not depend on business modules. Do not create a God `progress`
+module. Detailed ownership is in `docs/ARCHITECTURE.md`.
 
-## 5. Module communication
+Lesson source selection, selected activities, enrichment, and pronunciation strategy are
+independent dimensions. Vocabulary Practice and Grammar Practice are real Lesson activities;
+contextual vocabulary/grammar notes attached to another activity are not those practice loops.
+A lesson must not be assumed to require generated text.
 
-Cross-module interaction is allowed only through:
+## 5. Hard prohibitions
 
-1. named/public module APIs or intentionally shared public contracts;
-2. Spring Modulith event contracts.
+Without an approved architecture decision, do not:
 
-Do not:
-
-- import another module's repository;
-- import another module's JPA entity;
-- import another module's internal infrastructure package;
-- query another module's tables directly as a shortcut around a public API/event.
-
-Architecture tests/validators must protect these boundaries.
-
----
-
-## 6. Domain ownership
-
-- `identity`: app-user mapping/JIT provisioning around Keycloak subject.
-- `learner`: onboarding/profile/persistent learner preferences.
-- `ai`: provider/model routing, encrypted credentials, invocation audit.
-- `lesson`: content, annotations, activities, build workflow, lesson practice.
-- `speech-assessment`: user recording/ASR/timing/fluency/deep-judge results.
-- `lexicon`: global dictionary.
-- `vocabulary`: learner SRS referencing Lexicon.
-- `grammar`: taxonomy/questions/practice.
-- `toeic`: tests/questions/attempts/scoring.
-- `curriculum`: path/section/item/enrollment/progress over content references.
-- `gamification`: level/XP, Diamond ledger, missions/rewards.
-- `analytics`: projections/read models; does not own detailed domain progress.
-- `notification`: realtime/push boundary.
-- `chat`: low-priority tutor boundary.
-
-`platform/*` contains technical modules and must not depend on business modules.
-
-Lesson composition invariant: Text/Audio/YouTube source selection, selected activities, and selected
-enrichment are independent dimensions of a lesson build. Vocabulary Practice and Grammar Practice
-are real Lesson activities. A contextual vocabulary/grammar note attached to another activity
-(for example, shown after a Dictation sentence) is **not** the same as Vocabulary Practice / Grammar
-Practice. Exact activity and option details are owned by `docs/LYREO_PLATFORM_SPEC.md` §14–15.
-
-Do not create a God `progress` module.
-
----
-
-## 7. Hard prohibitions
-
-Without a new approved architecture decision, **DO NOT**:
-
-- introduce Kafka;
-- introduce Redis;
-- put Lesson/Curriculum/Gamification workflow in FastAPI;
-- put business/product LLM prompts in Python;
-- set Hibernate `ddl-auto=update/create/create-drop`;
-- use R2 raw JSON as the workflow source of truth;
-- store provider API keys in plaintext;
-- store signed/presigned R2 URLs in the database;
-- trust client-provided score, XP, or Diamond amount;
-- access another module's repository/JPA entity/infrastructure;
-- create a God `progress` module;
-- merge Lexicon and Vocabulary;
-- treat contextual vocabulary/grammar notes as Vocabulary/Grammar Practice;
+- introduce Kafka or Redis, or copy the legacy Kafka/Redis lesson pipeline;
+- introduce Expo API Routes, NativeWind v5, or a Next.js server architecture;
+- move Lesson/Curriculum/Gamification workflow or product prompts into FastAPI/Python;
+- use Hibernate `ddl-auto=update/create/create-drop`;
+- use R2 raw JSON as workflow truth or store signed/presigned URLs in the database;
+- store provider keys in plaintext or expose server secrets in `VITE_*`/`EXPO_PUBLIC_*`;
+- trust client-provided score, XP, or Diamond amounts;
+- access another module's repository/entity/infrastructure or create a God `progress` module;
+- merge Lexicon with Vocabulary or confuse contextual notes with dedicated practice;
 - hard-code provider model names in Java enums;
-- commit raw TOEIC/Kaikki datasets into Git;
-- copy the legacy Kafka/Redis lesson pipeline into Lyreo;
-- hide failed/unrun required tests or call a feature “done” when mandatory verification has not passed.
-- hard-code theme/brand color literals in feature UI instead of consuming semantic design tokens;
-- create separate copies of shared translation strings when the text belongs in `@lyreo/i18n`;
-- force Web and Mobile to share component implementations merely because they share semantic tokens;
-- store ordinary locale/theme preferences in SecureStore or another secret store.
+- commit raw TOEIC/Kaikki datasets, secrets, or generated build artifacts;
+- hard-code feature UI brand/theme colors instead of semantic design tokens;
+- duplicate shared translation text outside `@lyreo/i18n`;
+- force Web and Mobile to share components merely because tokens are shared;
+- store ordinary locale/theme preferences in SecureStore;
+- hide failed/unrun required checks or call a feature done without required evidence.
 
----
+## 6. Background jobs
 
-## 8. Background jobs
+PostgreSQL is authoritative workflow state. Long-running handlers must claim through the
+`platform/jobs` lease protocol, check durable cancellation before and between expensive steps,
+heartbeat, persist idempotent step state, respect lease ownership/fencing, and prevent stale workers
+from overwriting recovered work. UI progress events are never durability. Raw AI responses are
+debug/audit artifacts, not checkpoints.
 
-PostgreSQL is the authoritative workflow state.
+If external inference cannot be hard-cancelled, check cancellation before committing and discard
+results that are no longer allowed. Protocol details: `docs/architecture/background-jobs.md`.
 
-Long-running handlers must:
+## 7. AI boundary
 
-- claim work through the `platform/jobs` queue/lease protocol;
-- check cancellation before and between expensive steps;
-- heartbeat the lease according to the protocol;
-- persist idempotent step state;
-- respect lease ownership/fencing;
-- never let a stale worker overwrite a recovered job;
-- never use UI progress events as a durability mechanism;
-- store raw AI responses as artifact/debug data, not as workflow checkpoints.
+Java/Core owns business intent and prompts, expected schemas, orchestration, routing, retry/fallback,
+persistence, and state transitions. FastAPI executes STT, alignment, TTS, NLP, generic LLM
+generation, and multimodal judging. Do not create business endpoints such as `/generate-lesson` in
+FastAPI. Provider credentials remain server-side. See `docs/architecture/ai-execution.md`.
 
-Cancellation is durable database state.
+## 8. Database, storage, and data
 
-If external inference cannot be hard-cancelled, the worker must check cancellation before committing
-the output and discard the result if the job is no longer allowed to continue.
-
----
-
-## 9. AI boundary
-
-Java/Core owns:
-
-- business intent;
-- business/product prompts;
-- expected schemas;
-- orchestration;
-- provider/model routing;
-- retry/fallback policy;
-- persistence/state transition.
-
-FastAPI owns capability execution:
-
-- STT;
-- alignment;
-- TTS;
-- NLP;
-- generic LLM generation;
-- multimodal judging.
-
-Do not design FastAPI endpoints around business workflows such as `/generate-lesson`.
-
-External provider credentials always remain server-side.
-
----
-
-## 10. Python project environment
-
-`uv` is the standard tool for Lyreo Python subprojects.
-
-**The host Python version is not the project Python version.**
-
-The host interpreter and the project environments are separate concerns. The supported/recommended
-Python baseline is owned by `docs/TECH_CHOICES.md` and enforced by each subproject's
-`pyproject.toml`.
-
-Agents/developers must not:
-
-- require changing the system/default Python only because the host version differs from the project version;
-- infer runtime compatibility only from `python --version` at repository root;
-- install project dependencies into system Python as a quick fix;
-- depend on `.venv` already being activated.
-
-Prefer:
-
-```bash
-uv sync
-uv run ...
-```
-
-Supported Python constraints and dependencies must live in the owning subproject's `pyproject.toml`.
-
-If the supported Python policy changes:
-
-- update the relevant `pyproject.toml`;
-- update developer documentation when workflow changes;
-- rerun relevant tests and local/GPU compatibility checks.
-
----
-
-## 11. Database and persistence
-
-Flyway owns schema evolution.
-
-Every schema change requires a new migration.
-
-Do not edit a migration after it has been applied in a shared environment.
-
-Hibernate validates mapping/schema; it must not create/update the schema.
-
+Flyway owns schema evolution; every schema change needs a new migration, and an applied shared
+migration must not be edited. Hibernate validates mappings/schema and must not mutate schema.
 Large Lexicon/TOEIC/Grammar/Curriculum content belongs in importer tooling, not Flyway.
 
-JPA/JDBC are infrastructure details. Do not put persistence annotations into domain/application
-code just to make an adapter easier.
+Store durable/queryable normalized state in PostgreSQL and large immutable/debug artifacts in
+object storage. Persist object keys, not expiring URLs. Sensitive learner recordings are private by
+default. Importer semantics belong in `docs/DATA_PIPELINES.md`.
 
----
+## 9. Configuration and Python environments
 
-## 12. Configuration
+Config precedence and persistence are owned by `docs/CONFIGURATION.md`. Business modules consume
+typed policies/ports; do not scatter untyped maps or turn invariants into toggles. New environment
+variables go in the owning executable's `.env.example`; update configuration docs when semantics or
+precedence changes. Never create a root `.env` containing all service secrets.
 
-Configuration layers, precedence, persistence, and override semantics are owned by
-`docs/CONFIGURATION.md` §1–6.
+`uv` is standard for Python subprojects. The host Python is not the project Python. Do not require a
+system Python change, install dependencies into system Python, infer compatibility from root
+`python --version`, or depend on an activated `.venv`. Prefer `uv sync` and `uv run`; supported
+constraints live in the owning `pyproject.toml`.
 
-Business modules consume runtime configuration through appropriate typed policies/ports.
+## 10. Development and frontend foundation
 
-Do not scatter untyped configuration maps through business logic and do not turn domain invariants
-into checkboxes.
+Application source runs locally; Docker development runs PostgreSQL and Keycloak. Local filesystem
+storage and mock AI are defaults; R2 development is optional. Do not add Kafka, Redis, MinIO, queue
+brokers, or observability stacks to development compose without an explained operational need.
 
-When adding an environment variable:
+`packages/design-system` owns primitive/semantic light/dark contracts and
+`packages/i18n` owns intentionally shared EN/VI resources. Admin Web and Mobile own their
+platform-specific adapters and component implementations. Authentication tokens may use secure
+storage; ordinary preferences use appropriate non-secret platform storage.
 
-- put it in the owning executable/service `.env.example`;
-- document purpose/format/security when it is not obvious;
-- update `docs/CONFIGURATION.md` when behavior/precedence changes;
-- never place server secrets in `VITE_*` or `EXPO_PUBLIC_*`.
+## 11. Security authority
 
-Do not create a root `.env` containing all service secrets.
+- Keycloak roles are `ADMIN` and `LEARNER`; Mobile/Admin use Authorization Code + PKCE.
+- Provider API keys are AES-GCM encrypted using a master key from environment configuration.
+- Clients have no authority over scoring or rewards; authorization is enforced server-side.
+- Learners may access only authorized resources; logs must not expose credentials or tokens.
+- Dev-only endpoints must be disabled outside development.
 
----
+## 12. Docs/code divergence and change workflow
 
-## 13. Development topology constraint
+Code describes current implementation; owner docs describe applicable intent/contract. Neither
+always wins. Timestamp, file length, a passing test, or skill advice does not grant authority.
 
-The default development model is:
+- Mechanical factual drift (link, path, symbol, typo): update owner and references without asking.
+- Code differs from a decided requirement: for coding work, fix code/tests; for docs-only work,
+  preserve the requirement and record evidence in `docs/requirements/gaps.md`.
+- A clear user instruction changes behavior: update owner requirement/AC/spec, code, tests, and
+  traceability in the same change set; do not ask again about what was already decided.
+- Conflicting requirements without authority: record both sources, impact, and pending decision;
+  complete independent work and ask only if the current action requires choosing.
+- Changes to public API, authorization, scoring/rewards, data, scope, or architecture require
+  explicit authority when not already granted.
+- Internal refactors with unchanged behavior/contracts need no ceremonial doc edit; state why.
+- Event/API/schema changes require checking consumers, ownership, migrations, and compatibility.
 
-- application source runs locally;
-- Docker dev runs dependency infrastructure;
-- PostgreSQL + Keycloak are the primary dev infrastructure;
-- local filesystem is the default storage adapter;
-- an R2 dev bucket is optional;
-- AI runtime provides `mock` mode for normal dev/CI.
+Workflow: **owner/ID → compare intent with code → classify → decide if needed → update owner + AC →
+implementation/tests when in scope → traceability/evidence → link/route checks → handoff**.
 
-Step-by-step commands belong in `README.md` / `docs/DEVELOPMENT.md`; do not duplicate the runbook
-here.
+Requirement IDs are never reused for a new meaning. Retired requirements are marked superseded.
+Architecture decisions retain D-001–D-019 and meaningful new decisions go in `docs/DECISIONS.md`.
+Documentation conventions are owned by `docs/documentation.md`.
 
-Do not add Kafka/Redis/MinIO/queue brokers/observability stacks to the dev compose merely to make it
-look “complete”. Explain the operational need first.
+## 13. Documentation and comments
 
-Frontend foundation follows the same ownership principle: `packages/design-system` owns primitive
-and semantic theme contracts, while `packages/i18n` owns intentionally shared translation resources.
-Admin Web and Mobile own their platform-specific component implementations.
+Comments explain why, invariants, trade-offs, failure modes, or non-obvious protocols—not syntax.
+Each normative fact has one owner; other docs may orient and link but must not copy whole rule,
+acceptance, endpoint/schema, configuration, or roadmap tables.
 
----
+- setup/run → `README.md`, `docs/DEVELOPMENT.md`;
+- task routing → `docs/README.md`; doc conventions → `docs/documentation.md`;
+- product scope/value → `docs/product/prd.md`; requirements/AC → `docs/requirements/`;
+- workflow behavior → `docs/features/`; architecture/decisions → `docs/ARCHITECTURE.md`,
+  `docs/architecture/`, `docs/DECISIONS.md`;
+- configuration/data/operations → their existing canonical docs;
+- evidence status → `docs/requirements/traceability.md`; unresolved items → `gaps.md`;
+- `docs/LYREO_PLATFORM_SPEC.md` is compatibility navigation, not a competing owner;
+- `TESTING_NOTES.md` is a dated historical handoff, never current authority.
 
-## 14. Comments and documentation ownership
+## 14. Testing and completion
 
-Comments should explain:
+Run checks applicable to the changed area: Java and Modulith tests, Flyway startup/validation,
+Python tests/compile, importer tests/dry-run, TypeScript typecheck/build, shell/config validation, and
+secret/build-output sanity checks as appropriate. `make validate` is only the minimum offline
+guardrail.
 
-- why;
-- invariants;
-- trade-offs;
-- failure modes;
-- non-obvious protocols.
-
-Do not narrate obvious syntax.
-
-Documentation ownership:
-
-- setup/run/repository entry point → `README.md`;
-- product/feature/architecture intent → `docs/LYREO_PLATFORM_SPEC.md`;
-- module/system/topology explanation → `docs/ARCHITECTURE.md`;
-- architecture decision changes → `docs/DECISIONS.md`;
-- technology rationale → `docs/TECH_CHOICES.md`;
-- env/config behavior → owning `.env.example` + `docs/CONFIGURATION.md`;
-- developer workflow/troubleshooting → `docs/DEVELOPMENT.md`;
-- operational behavior → `docs/OPERATIONS.md`;
-- importer/data semantics → `docs/DATA_PIPELINES.md`.
-
-**Do not copy the same normative rule into multiple files.**
-
-If a sentence can be “violated”, it normally belongs in `AGENTS.md` or in an explicitly referenced
-architecture decision. README should point to that source rather than maintaining a second copy.
-
-`TESTING_NOTES.md` is a temporary handoff note, not an architecture source of truth.
-
----
-
-## 15. Security authority
-
-- Keycloak roles: `ADMIN` / `LEARNER`.
-- Mobile/Admin: OIDC Authorization Code + PKCE.
-- Provider API keys are encrypted with AES-GCM using a master key from env.
-- Public frontend env must not contain server/provider secrets.
-- Dev-only endpoints must be disabled outside dev.
-- The client has no authority over score/reward decisions.
-- Learners may access only resources they are authorized to access.
-- Sensitive learner recordings/artifacts are private by default.
-- Logs must not contain provider credentials/tokens in plaintext.
-
----
-
-## 16. Testing and completion
-
-Before completing a task, run **the checks applicable to the changed area**:
-
-- Java tests;
-- Spring Modulith/architecture verification;
-- Flyway migration startup/validation when schema changes;
-- Python tests/compile when Python code changes;
-- importer tests/dry-run when importer/data code changes;
-- TypeScript typecheck/build when frontend/shared TypeScript changes;
-- shell/config validation when scripts/config change;
-- secret/build-output sanity checks before commit/release.
-
-`make validate` is the minimum offline guardrail, not a replacement for compilation/integration tests.
-
-If a required check cannot be run:
-
-1. do not claim it passed;
-2. state which check was not run;
-3. state why;
-4. provide the command for developer/CI to rerun it.
-
-Temporary artifact limitations may be written in `TESTING_NOTES.md`; long-lived issues belong in the
-issue tracker/CI.
-
----
-
-## 17. Definition of an acceptable change
-
-A change preserves the foundation when:
-
-- module ownership is correct;
-- dependencies point in the correct direction;
-- public/event contracts are clear;
-- authorization/server validation is correct;
-- schema changes include migrations;
-- config/docs ownership is updated in the correct place;
-- no secret leak is introduced;
-- required tests ran or limitations are reported honestly;
-- no hard prohibition is broken.
-
-Prefer simple, boring, predictable code over abstractions/infrastructure without a proven use case.
+Before claiming completion, use fresh evidence. If a required check cannot run, name it, explain
+why, and provide the exact command for developer/CI. An acceptable change preserves ownership and
+dependency direction, public/event contracts, authorization/server validation, migration/config
+ownership, secrets, and required evidence. Prefer simple, boring, predictable code.

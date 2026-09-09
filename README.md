@@ -12,7 +12,7 @@ This README is the **operational entry point for new developers**: what the repo
 which tools are required, how to initialize the local environment, and how to run each part.
 
 > Mandatory engineering rules live only in `AGENTS.md`.  
-> The master product and architecture specification lives in `docs/LYREO_PLATFORM_SPEC.md`.
+> Start task-oriented reading from `docs/README.md`; the old master path is compatibility-only.
 
 ---
 
@@ -35,7 +35,8 @@ Core is a Spring Boot modular monolith. The AI runtime is a separate FastAPI/Pyt
 For architecture boundaries and technology rationale, read:
 
 - `AGENTS.md`
-- `docs/LYREO_PLATFORM_SPEC.md`
+- `docs/README.md`
+- `docs/product/prd.md`
 - `docs/ARCHITECTURE.md`
 - `docs/TECH_CHOICES.md`
 
@@ -44,15 +45,11 @@ For architecture boundaries and technology rationale, read:
 ## 2. Read this first
 
 1. `README.md` — setup, run commands, and repository map.
-2. `AGENTS.md` — mandatory engineering contract.
-3. `docs/LYREO_PLATFORM_SPEC.md` — master product + architecture specification.
-4. `docs/ARCHITECTURE.md` — system/module/job/content boundaries.
-5. `docs/CONFIGURATION.md` — env, secrets, and configuration precedence.
-6. `docs/DEVELOPMENT.md` — development workflow and troubleshooting.
-7. `docs/TECH_CHOICES.md` — technology choices and trade-offs.
-8. `docs/DATA_PIPELINES.md` — Lexicon/Grammar/TOEIC import.
-9. `docs/OPERATIONS.md` — jobs/storage/backup/deployment runbook.
-10. `docs/DECISIONS.md` — architecture decision log.
+2. `AGENTS.md` — mandatory engineering contract and selective-reading workflow.
+3. `docs/README.md` — the single task/domain/code routing table.
+4. Open only the owner docs, code and tests selected by that route.
+
+`docs/LYREO_PLATFORM_SPEC.md` preserves old paths/anchors; it is no longer a normative master.
 
 `CLAUDE.md`, `GEMINI.md`, and `AGENT.md` are symlinks to `AGENTS.md`; maintain only one
 engineering contract.
@@ -144,7 +141,7 @@ Quick host check:
 host/tooling sanity check; it does **not** define the interpreter used by Lyreo Python subprojects.
 
 The authoritative host-vs-project Python policy, supported project baseline, and agent rules live
-in `AGENTS.md` §9.
+in [`AGENTS.md`](AGENTS.md#9-configuration-and-python-environments).
 
 For normal project work, use `uv` from inside the owning Python subproject:
 
@@ -379,7 +376,7 @@ apps/mobile/README.md
 For cross-project mobile workflow context, see:
 
 ```text
-docs/DEVELOPMENT.md §3 Mobile
+docs/DEVELOPMENT.md#3-start-executable-apps
 ```
 
 Public runtime variables live in:
@@ -474,6 +471,7 @@ make validate
 Main checks can also be run separately:
 
 ```bash
+make validate-docs
 make test-java
 make test-ai
 pnpm typecheck
@@ -529,10 +527,11 @@ mobile
 data-import
 ```
 
-For priorities and roadmap status, read:
+For intended priorities and current evidence status, read:
 
 ```text
-docs/LYREO_PLATFORM_SPEC.md
+docs/product/prd.md
+docs/requirements/traceability.md
 ```
 
 ---

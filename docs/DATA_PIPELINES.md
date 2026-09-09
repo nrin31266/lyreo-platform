@@ -22,7 +22,8 @@ Raw datasets stay outside Git.
 
 Current status: the Lyreo Lexicon dataset has **not been scraped/downloaded yet**. It is separate
 from the current Grammar/TOEIC scraper output. The intended source is pre-existing
-Wiktextract/Kaikki JSONL, as specified in `LYREO_PLATFORM_SPEC.md` §30.
+Wiktextract/Kaikki JSONL, as specified in
+[`requirements/lexicon-vocabulary.md`](requirements/lexicon-vocabulary.md#br-lex-002--provenance-and-coverage).
 
 Goal: broad global dictionary, independent from one lesson, while still allowing lesson runtime discovery of unknown phrases.
 

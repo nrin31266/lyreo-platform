@@ -81,8 +81,9 @@ Large import runs should retain checksum/dataset-version metadata so reruns rema
 ## 4. R2 ownership
 
 R2 stores large artifacts/files such as lesson media, lexicon media, TOEIC media, learner speech
-artifacts, and job artifacts. Canonical storage authority rules are defined in `../AGENTS.md`; object
-layout intent is documented in `LYREO_PLATFORM_SPEC.md` §28–29.
+artifacts, and job artifacts. Canonical storage authority and semantics are defined in
+[`AGENTS.md`](../AGENTS.md#8-database-storage-and-data) and
+[`CONFIGURATION.md`](CONFIGURATION.md#7-storage-configuration).
 
 Use separate buckets per environment, for example:
 
@@ -111,7 +112,8 @@ FAILED
 ```
 
 A `RUNNING` job carries lease/heartbeat information. The authoritative queue/cancellation/fencing
-rules are defined in `../AGENTS.md` §7; this section describes how to operate those states.
+rules are defined in [`architecture/background-jobs.md`](architecture/background-jobs.md); this
+section describes how to operate those states.
 
 ### 5.2 Cancel
 
@@ -157,7 +159,7 @@ When a provider is failing:
 4. rotate the provider credential if compromise is suspected.
 
 Do not modify business prompts in FastAPI as an incident workaround; the AI responsibility boundary
-is owned by `../AGENTS.md` §8.
+is owned by [`AGENTS.md`](../AGENTS.md#7-ai-boundary).
 
 `MASTER_ENCRYPTION_KEY` must not be casually rotated because stored provider credentials are encrypted
 with it. Production rotation requires a deliberate re-encryption procedure.
