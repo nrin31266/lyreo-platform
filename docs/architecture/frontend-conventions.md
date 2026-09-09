@@ -31,5 +31,31 @@ states are part of feature completeness. Admin Settings groups providers/routing
 domain settings; Learner Settings groups learning/playback/practice/pronunciation/notification/
 accessibility rather than a flat toggle wall.
 
+### Lyrebird illustration contract
+
+The mascot illustration should support these mood/context variants when artwork is finalized:
+
+- `default` — idle/neutral;
+- `listening` — audio playback or recording in progress;
+- `speaking` — TTS or shadowing feedback;
+- `thinking` — AI processing/loading;
+- `celebrating` — level-up, mission completion, reward;
+- `empty state` — no content/results.
+
+Codebase prepares named contract and placeholder slots. Do not commit or ship fabricated artwork as
+final asset in the starter. The mood list is a design contract, not a hard implementation
+requirement for early phases.
+
+### Mascot name in code
+
+`Lyrebird` is a presentation/brand concern. Do not name business or domain classes after the mascot:
+
+- `LyrebirdLessonService`, `LyrebirdRewardManager`, `LyrebirdAiProcessor` and similar patterns are
+  prohibited — they would conflate brand identity with domain ownership.
+
+Backend may use the name only in application metadata, OpenAPI title or service display name.
+Frontend brand constants (product name, mascot name, tagline) are presentation data, not domain
+invariants.
+
 Implementation maturity and sample-data gaps are tracked in
 [GAP-009](../requirements/gaps.md#gap-009--startermocked-implementation-maturity).

@@ -103,3 +103,25 @@ dependencies. They must be kept on Expo SDK-compatible versions rather than inhe
 ## Upgrade policy
 
 Patch/minor version upgrades require tests and changelog review. Major changes to auth, persistence, eventing, object storage or job protocol require architecture decision update.
+
+## Official references checked at architecture lock (2026-09-09)
+
+These links reflect the versions known at the time this file was written. Version authority is the
+manifest/lockfile; these links are a starting point for upgrade research, not a promise of
+current-latest.
+
+- Spring Boot 4.1.1 release: <https://spring.io/blog/2026/08/20/spring-boot-4-1-1-available-now/>
+- Spring Modulith 2.1.1 release: <https://spring.io/blog/2026/08/26/spring-modulith-2-2-m1-2-1-1-2-0-8-and-1-4-13-released/>
+- Spring Modulith event docs: <https://docs.spring.io/spring-modulith/reference/events.html>
+- Keycloak 26.7.3 release: <https://www.keycloak.org/2026/08/keycloak-2673-released>
+- PostgreSQL 18 docs: <https://www.postgresql.org/docs/release/18.6/>
+- Cloudflare R2 pricing: <https://developers.cloudflare.com/r2/pricing/>
+- Cloudflare R2 S3 API: <https://developers.cloudflare.com/r2/api/s3/>
+- Qwen3-ASR official repo: <https://github.com/QwenLM/Qwen3-ASR>
+- FastAPI docs: <https://fastapi.tiangolo.com/>
+- Expo SDK 57 changelog: <https://expo.dev/changelog/sdk-57>
+- Expo SDK reference: <https://docs.expo.dev/versions/latest/>
+- Bucket4j: <https://github.com/bucket4j/bucket4j>
+- Resilience4j: <https://resilience4j.readme.io/>
+- Wiktextract: <https://github.com/tatuylonen/wiktextract>
+- Kaikki: <https://kaikki.org/>

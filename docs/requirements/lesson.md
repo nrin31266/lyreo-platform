@@ -13,6 +13,7 @@ hóa thành content/media phù hợp. Release timing của YouTube còn mở t�
 Status: inherited. Source, selected activities, annotations/enrichment và pronunciation strategy là
 các chiều độc lập. Preset chỉ pre-fill; request/snapshot cuối mới điều khiển build.
 
+<a id="br-lsn-001--content-annotation-activity-tach-biet"></a>
 ### BR-LSN-001 — Content, annotation, activity tách biệt
 
 Status: inherited. Content chứa source/transcript/sentence/segment/media/timestamp; annotation gắn

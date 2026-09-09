@@ -2,6 +2,7 @@
 
 Requirements: [Curriculum/Gamification](../curriculum-gamification.md).
 
+<a id="us-cur-001--tien-theo-curriculum"></a>
 ### US-CUR-001 — Tiến theo curriculum
 
 Là learner, tôi muốn completion của content mở đúng item tiếp theo mà không copy progress.

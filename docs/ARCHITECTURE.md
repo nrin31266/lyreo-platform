@@ -302,3 +302,36 @@ Technology selection rationale, including the current Redis decision, lives in
 Mandatory schema/persistence rules are defined in
 [`AGENTS.md`](../AGENTS.md#8-database-storage-and-data). Large dataset import
 semantics are defined in `DATA_PIPELINES.md`.
+
+## 16. API path conventions
+
+```text
+/api/v1/*          Core public API (Learner and Admin)
+/internal/*        Core internal/FastAPI-to-Core calls; not exposed to Mobile/Admin clients
+/v1/*              FastAPI capability service (internal-only)
+```
+
+Do not version endpoints by provider name. When breaking API changes are needed, bump the path
+version and document the deprecation in the feature's owner doc.
+
+## 17. API error envelope
+
+All Core HTTP error responses use a consistent envelope:
+
+```json
+{
+  "code": "DOMAIN_SPECIFIC_CODE",
+  "message": "Human-readable summary for developer/log",
+  "correlationId": "...",
+  "details": {}
+}
+```
+
+Job errors additionally carry:
+
+- a stable machine-readable `code`;
+- a human-readable summary;
+- a `retryable` boolean (transient provider/network errors are retryable; invalid input is not);
+- reference to the raw provider artifact/log in object storage for audit (not for Mobile display).
+
+Do not expose raw provider error details or server stack traces in Mobile-facing responses.

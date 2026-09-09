@@ -2,6 +2,7 @@
 
 Requirements: [Grammar/TOEIC](../grammar-toeic.md).
 
+<a id="us-grm-001--luyen-grammar-tu-question-bank"></a>
 ### US-GRM-001 — Luyện Grammar từ question bank
 
 Là learner, tôi muốn trả lời question có taxonomy/explanation để luyện đúng topic.
@@ -16,6 +17,7 @@ trả correct/explanation phù hợp; client không quyết định correctness.
 Given question hoặc option không hợp lệ, when submit, then không tạo successful attempt/event; AI
 không tự generate câu thay thế mặc định.
 
+<a id="us-toe-001--nop-toeic-attempt"></a>
 ### US-TOE-001 — Nộp TOEIC attempt
 
 Là learner, tôi muốn nộp answers để nhận Listening/Reading result và history chính xác.

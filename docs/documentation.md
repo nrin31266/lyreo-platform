@@ -78,6 +78,7 @@ ghi supersession và tác động; khi thêm feature, chỉ thêm route/ID sau k
 Gap gồm ID, type (`question`, `conflict`, `implementation-gap`, `verification-gap`), mô tả, nguồn,
 tác động, bước kế tiếp và trạng thái. Chỉ gọi “confirmed bug” khi có chứng cứ phù hợp.
 
+<a id="kiem-tra"></a>
 ## Kiểm tra
 
 ```bash
