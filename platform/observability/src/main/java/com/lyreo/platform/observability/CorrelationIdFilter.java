@@ -5,13 +5,21 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.MDC;
+import org.springframework.core.Ordered;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-public final class CorrelationIdFilter extends OncePerRequestFilter {
-    public static final String HEADER = "X-Correlation-Id";
+/**
+ * Ensures every incoming HTTP request receives a valid, sanitized correlation ID
+ * before any security, rate-limiting, or MVC handler executes.
+ */
+public final class CorrelationIdFilter extends OncePerRequestFilter implements Ordered {
+
+    @Override
+    public int getOrder() {
+        return Ordered.HIGHEST_PRECEDENCE;
+    }
 
     @Override
     protected void doFilterInternal(
@@ -19,15 +27,20 @@ public final class CorrelationIdFilter extends OncePerRequestFilter {
         HttpServletResponse response,
         FilterChain filterChain
     ) throws ServletException, IOException {
-        String id = Optional.ofNullable(request.getHeader(HEADER))
-            .filter(v -> !v.isBlank() && v.length() <= 128)
-            .orElseGet(() -> UUID.randomUUID().toString());
-        MDC.put("correlationId", id);
-        response.setHeader(HEADER, id);
+        String incoming = request.getHeader(CorrelationIdAccessor.HEADER);
+        String correlationId = CorrelationIdAccessor.sanitize(incoming);
+        if (correlationId == null) {
+            correlationId = UUID.randomUUID().toString();
+        }
+
+        request.setAttribute(CorrelationIdAccessor.ATTRIBUTE, correlationId);
+        MDC.put(CorrelationIdAccessor.MDC_KEY, correlationId);
+        response.setHeader(CorrelationIdAccessor.HEADER, correlationId);
+
         try {
             filterChain.doFilter(request, response);
         } finally {
-            MDC.remove("correlationId");
+            MDC.remove(CorrelationIdAccessor.MDC_KEY);
         }
     }
 }

@@ -7,6 +7,9 @@ import java.util.Map;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
@@ -17,6 +20,13 @@ public final class KeycloakJwtAuthenticationConverter implements Converter<Jwt, 
 
     @Override
     public JwtAuthenticationToken convert(Jwt jwt) {
+        String subject = jwt.getSubject();
+        if (subject == null || subject.isBlank()) {
+            throw new OAuth2AuthenticationException(
+                new OAuth2Error(OAuth2ErrorCodes.INVALID_TOKEN, "JWT subject claim (sub) is missing or blank", null)
+            );
+        }
+
         List<GrantedAuthority> authorities = new ArrayList<>();
         Collection<GrantedAuthority> scopeAuthorities = scopes.convert(jwt);
         if (scopeAuthorities != null) authorities.addAll(scopeAuthorities);

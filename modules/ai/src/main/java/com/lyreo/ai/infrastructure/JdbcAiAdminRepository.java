@@ -1,6 +1,7 @@
 package com.lyreo.ai.infrastructure;
 
 import com.lyreo.ai.application.AiAdminRepository;
+import com.lyreo.contracts.errors.ResourceNotFoundException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -90,14 +91,15 @@ public final class JdbcAiAdminRepository implements AiAdminRepository {
         boolean fallback,
         boolean enabled
     ) {
-        UUID provider = jdbc.queryForObject(
+        List<UUID> providers = jdbc.query(
             "SELECT id FROM ai_provider WHERE code=:code",
             Map.of("code", providerCode),
-            UUID.class
+            (rs, rowNum) -> rs.getObject("id", UUID.class)
         );
-        if (provider == null) {
-            throw new IllegalArgumentException("Unknown AI provider " + providerCode);
+        if (providers.isEmpty()) {
+            throw new ResourceNotFoundException("Unknown AI provider: " + providerCode);
         }
+        UUID provider = providers.get(0);
         UUID id = UUID.randomUUID();
         jdbc.update(
             """

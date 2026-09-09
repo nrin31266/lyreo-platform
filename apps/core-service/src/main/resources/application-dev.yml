@@ -1,0 +1,8 @@
+# Development profile overrides for Lyreo Core Service
+# Automatically activated when SPRING_PROFILES_ACTIVE=dev
+
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_API_DOCS_ENABLED:true}
+  swagger-ui:
+    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:true}

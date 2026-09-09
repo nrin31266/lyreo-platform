@@ -1,8 +1,8 @@
 package com.lyreo.platform.web;
 
+import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.platform.jobs.application.BackgroundJobRepository;
 import com.lyreo.platform.jobs.application.BackgroundJobService;
-import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -25,24 +25,35 @@ public class JobController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<?> get(@PathVariable UUID id) {
+    public JobResponse get(@PathVariable UUID id) {
         return repository.findById(id)
-            .<ResponseEntity<?>>map(job -> ResponseEntity.ok(Map.of(
-                "id", job.id(),
-                "jobType", job.jobType(),
-                "status", job.status(),
-                "currentStep", job.currentStep() == null ? "" : job.currentStep(),
-                "progressPercent", job.progressPercent(),
-                "attemptCount", job.attemptCount(),
-                "maxAttempts", job.maxAttempts()
-            )))
-            .orElseGet(() -> ResponseEntity.notFound().build());
+            .map(job -> new JobResponse(
+                job.id(),
+                job.jobType(),
+                job.status().name(),
+                job.currentStep() == null ? "" : job.currentStep(),
+                job.progressPercent(),
+                job.attemptCount(),
+                job.maxAttempts()
+            ))
+            .orElseThrow(() -> new ResourceNotFoundException("Background job not found: " + id));
     }
 
     @PostMapping("/{id}/cancel")
     public ResponseEntity<Void> cancel(@PathVariable UUID id) {
-        return service.cancel(id)
-            ? ResponseEntity.accepted().build()
-            : ResponseEntity.notFound().build();
+        if (!service.cancel(id)) {
+            throw new ResourceNotFoundException("Background job not found: " + id);
+        }
+        return ResponseEntity.accepted().build();
     }
+
+    public record JobResponse(
+        UUID id,
+        String jobType,
+        String status,
+        String currentStep,
+        int progressPercent,
+        int attemptCount,
+        int maxAttempts
+    ) {}
 }

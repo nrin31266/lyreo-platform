@@ -40,3 +40,11 @@ Business module chỉ cross-module qua public API/event. Xem `../../AGENTS.md` v
 ## Long-running work
 
 Controller tạo durable `background_job` và trả HTTP 202. Không giữ request mở trong suốt STT/TTS/alignment/LLM pipeline.
+
+## HTTP API Contract
+
+Core public endpoints tuân thủ convention `/api/v1/**`:
+- Responses thành công trả trực tiếp resource/DTO, không dùng global envelope.
+- Responses lỗi sử dụng RFC 9457 Problem Details (`application/problem+json`) với mã lỗi ổn định và `correlationId`.
+- Swagger UI khả dụng tại `/swagger-ui.html` và OpenAPI schema tại `/v3/api-docs` (bật mặc định trong profile `dev`/`test`, tắt mặc định trong `prod`).
+- Xem chi tiết tại [`http-api-contract.md`](../../docs/architecture/http-api-contract.md).

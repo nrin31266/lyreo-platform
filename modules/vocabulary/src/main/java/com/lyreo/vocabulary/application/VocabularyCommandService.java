@@ -1,5 +1,6 @@
 package com.lyreo.vocabulary.application;
 
+import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.vocabulary.VocabularyReviewCompletedEvent;
 import com.lyreo.vocabulary.domain.VocabularyCard;
 import java.time.Instant;
@@ -43,7 +44,7 @@ public class VocabularyCommandService {
         SpacedRepetitionScheduler.Rating rating
     ) {
         VocabularyCard card = repository.findCard(learnerId, cardId)
-            .orElseThrow(() -> new IllegalArgumentException("Vocabulary card not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Vocabulary card not found: " + cardId));
         Instant at = Instant.now();
         var result = scheduler.schedule(card, rating, at);
         repository.applyReview(card.id(), rating, result, at);

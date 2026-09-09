@@ -6,7 +6,8 @@ latency, availability hay model accuracy khi chưa có quyết định; xem [GAP
 ### NFR-SEC-001 — Authorization phía server
 
 Status: inherited. Core phải enforce role/resource ownership; ẩn menu phía client không đủ. Learner
-chỉ truy cập resource được cấp quyền; Admin-only settings/build phải kiểm tra `ADMIN`.
+chỉ truy cập resource được cấp quyền; Admin-only settings/build phải kiểm tra `ADMIN`. Từ chối quyền
+trả về RFC 9457 theo [HTTP API Contract](../architecture/http-api-contract.md).
 
 ### NFR-SEC-002 — Secret confidentiality
 
@@ -26,7 +27,7 @@ và ngăn stale worker commit. Điều kiện protocol: [Background Jobs](../arc
 ### NFR-OPS-002 — Observable correlation
 
 Status: inherited. Request/job/AI invocation phải có identifiers liên kết được; failure giữ stable
-error code và summary an toàn. Production metrics/alert threshold còn chưa quyết định.
+error code và summary an toàn. Chi tiết correlation và RFC 9457 contract: [HTTP API Contract](../architecture/http-api-contract.md). Production metrics/alert threshold còn chưa quyết định.
 
 ### NFR-OPS-003 — Dependency resilience
 

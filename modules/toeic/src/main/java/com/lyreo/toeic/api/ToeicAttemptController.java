@@ -2,6 +2,8 @@ package com.lyreo.toeic.api;
 
 import com.lyreo.identity.application.AppUserProvisioningService;
 import com.lyreo.toeic.application.ToeicAttemptService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -30,7 +32,7 @@ public class ToeicAttemptController {
     public ToeicAttemptService.SubmitResult submit(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable UUID testId,
-        @RequestBody SubmitRequest request
+        @Valid @RequestBody SubmitRequest request
     ) {
         UUID learnerId = users.provision(
             jwt.getSubject(),
@@ -40,6 +42,7 @@ public class ToeicAttemptController {
     }
 
     public record SubmitRequest(
+        @NotNull(message = "mode is required")
         ToeicAttemptService.Mode mode,
         Map<UUID, String> answers
     ) {}

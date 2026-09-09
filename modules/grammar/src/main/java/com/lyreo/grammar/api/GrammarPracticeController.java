@@ -3,6 +3,8 @@ package com.lyreo.grammar.api;
 import com.lyreo.grammar.application.GrammarPracticeRepository.PracticeFilter;
 import com.lyreo.grammar.application.GrammarPracticeService;
 import com.lyreo.identity.application.AppUserProvisioningService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -47,7 +49,7 @@ public class GrammarPracticeController {
     public GrammarPracticeService.SubmitResult submit(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable UUID questionId,
-        @RequestBody SubmitRequest request
+        @Valid @RequestBody SubmitRequest request
     ) {
         UUID learnerId = users.provision(
             jwt.getSubject(),
@@ -56,5 +58,8 @@ public class GrammarPracticeController {
         return practice.submit(learnerId, questionId, request.answer());
     }
 
-    public record SubmitRequest(String answer) {}
+    public record SubmitRequest(
+        @NotBlank(message = "answer is required")
+        String answer
+    ) {}
 }

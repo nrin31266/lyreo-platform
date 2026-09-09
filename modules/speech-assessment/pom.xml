@@ -29,5 +29,10 @@
   <groupId>tools.jackson.core</groupId>
   <artifactId>jackson-databind</artifactId>
 </dependency>
+<dependency>
+  <groupId>com.lyreo</groupId>
+  <artifactId>lyreo-contracts</artifactId>
+  <version>${project.version}</version>
+</dependency>
 </dependencies>
     </project>

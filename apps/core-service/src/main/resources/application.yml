@@ -38,6 +38,16 @@ spring:
       # in multi-instance deployments because another instance may still own the publication.
       republish-outstanding-events-on-restart: ${MODULITH_REPUBLISH_OUTSTANDING_ON_RESTART:false}
 
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_API_DOCS_ENABLED:false}
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:false}
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+
 management:
   endpoints:
     web:

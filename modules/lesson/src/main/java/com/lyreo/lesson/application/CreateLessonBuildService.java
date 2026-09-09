@@ -8,6 +8,7 @@ import com.lyreo.lesson.domain.LessonBuildOptions;
 import com.lyreo.lesson.domain.LessonBuildPlan;
 import com.lyreo.lesson.domain.LessonBuildStep;
 import com.lyreo.platform.jobs.application.BackgroundJobService;
+import com.lyreo.contracts.errors.RequestValidationException;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -119,20 +120,20 @@ public class CreateLessonBuildService {
         LessonBuildOptions options
     ) {
         if (title == null || title.isBlank()) {
-            throw new IllegalArgumentException("Lesson title is required");
+            throw new RequestValidationException("Lesson title is required");
         }
         if (options == null) {
-            throw new IllegalArgumentException("Lesson build options are required");
+            throw new RequestValidationException("Lesson build options are required");
         }
         switch (options.sourceType()) {
             case TEXT -> {
                 if (sourceText == null || sourceText.isBlank()) {
-                    throw new IllegalArgumentException("TEXT lesson requires sourceText");
+                    throw new RequestValidationException("TEXT lesson requires sourceText");
                 }
             }
             case AUDIO, YOUTUBE -> {
                 if (sourceReference == null || sourceReference.isBlank()) {
-                    throw new IllegalArgumentException(
+                    throw new RequestValidationException(
                         options.sourceType() + " lesson requires sourceReference"
                     );
                 }

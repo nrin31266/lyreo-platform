@@ -1,5 +1,6 @@
 package com.lyreo.learner.application;
 
+import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.learner.domain.LearnerPreferences;
 import com.lyreo.learner.domain.LearnerProfile;
 import java.util.UUID;
@@ -20,7 +21,7 @@ public final class OnboardingService {
         String focusArea
     ) {
         if (dailyMinutes < 5 || dailyMinutes > 240) {
-            throw new IllegalArgumentException("dailyMinutes must be between 5 and 240");
+            throw new RequestValidationException("dailyMinutes must be between 5 and 240");
         }
         return repository.save(new LearnerProfile(
             learnerId, displayName, currentLevel, goal, dailyMinutes, focusArea,

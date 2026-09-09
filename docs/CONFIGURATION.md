@@ -344,3 +344,16 @@ Before adding a setting, ask:
 8. Does it require a migration, or is it a backward-compatible JSON field?
 9. Do the owning `.env.example` and developer docs explain any non-obvious variable?
 10. Does this accidentally turn a domain invariant into configuration?
+
+## 12. OpenAPI and Swagger configuration
+
+Springdoc configuration in Core Service:
+
+| Property | Default | Environment override | Purpose |
+|---|---|---|---|
+| `springdoc.api-docs.enabled` | `true` (dev/test), `false` (prod) | `SPRINGDOC_API_DOCS_ENABLED` | Controls access to raw OpenAPI v3 JSON (`/v3/api-docs`) |
+| `springdoc.swagger-ui.enabled` | `true` (dev/test), `false` (prod) | `SPRINGDOC_SWAGGER_UI_ENABLED` | Controls access to Swagger UI (`/swagger-ui.html`) |
+
+In production, Swagger UI and raw OpenAPI descriptors are disabled by default to prevent leaking
+internal surface information. Enable explicitly only in controlled staging or internal environments.
+Canonical specification: [`http-api-contract.md`](architecture/http-api-contract.md).

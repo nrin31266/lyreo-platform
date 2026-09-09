@@ -2,6 +2,9 @@ package com.lyreo.lesson.api;
 
 import com.lyreo.identity.application.AppUserProvisioningService;
 import com.lyreo.lesson.application.LessonPracticeService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -31,7 +34,7 @@ public class LessonPracticeController {
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable UUID lessonId,
         @PathVariable UUID activityId,
-        @RequestBody DictationAttemptRequest request
+        @Valid @RequestBody DictationAttemptRequest request
     ) {
         UUID learnerId = users.provision(
             jwt.getSubject(),
@@ -47,5 +50,10 @@ public class LessonPracticeController {
         );
     }
 
-    public record DictationAttemptRequest(UUID sentenceId, String answer) {}
+    public record DictationAttemptRequest(
+        @NotNull(message = "sentenceId is required")
+        UUID sentenceId,
+        @NotBlank(message = "answer is required")
+        String answer
+    ) {}
 }

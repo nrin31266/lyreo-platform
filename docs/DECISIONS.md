@@ -68,3 +68,14 @@ The repository uses `docs/README.md` as its single task/domain/code route and as
 requirement, story, feature, technical and evidence facts to separate owners. The legacy master path
 is a compatibility index only. Source: the documentation setup directive accepted for this change;
 this decision governs documentation structure, not unresolved product behavior.
+
+## D-021 — RFC 9457 Problem Details and Core HTTP Foundation (2026-09-09)
+Decision: Core public HTTP API uses direct resource/DTO returns for success (no global envelope) and
+RFC 9457 Problem Details (`application/problem+json`) with stable uppercase error codes and correlation ID
+for errors. Generic Java exceptions are never mapped wholesale to client 4xx responses; infrastructure
+failures yield safe 500 responses without leaking internals. Shared baseline semantic application errors
+(`ResourceNotFoundException`, `StateConflictException`, `RequestValidationException`) are owned by
+`libs/contracts/errors` (an open shared contract module) so that business modules and application services
+can express application boundary outcomes without coupling domain logic to Spring MVC or HTTP runtime
+classes. Swagger/OpenAPI is generated via springdoc with dev/test enablement and production disabled by default.
+Rationale: [`http-api-contract.md`](architecture/http-api-contract.md).

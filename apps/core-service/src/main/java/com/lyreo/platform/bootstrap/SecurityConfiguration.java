@@ -12,6 +12,8 @@ import org.springframework.security.oauth2.server.resource.web.authentication.Be
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
+import com.lyreo.platform.web.ProblemAccessDeniedHandler;
+import com.lyreo.platform.web.ProblemAuthenticationEntryPoint;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -23,22 +25,31 @@ public class SecurityConfiguration {
     SecurityFilterChain apiSecurity(
         HttpSecurity http,
         @Qualifier("apiRateLimitFilter") OncePerRequestFilter apiRateLimitFilter,
-        CorsConfigurationSource corsConfigurationSource
+        CorsConfigurationSource corsConfigurationSource,
+        ProblemAuthenticationEntryPoint authenticationEntryPoint,
+        ProblemAccessDeniedHandler accessDeniedHandler
     ) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
             .cors(cors -> cors.configurationSource(corsConfigurationSource))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 // Controller exists only in the dev Spring profile and additionally requires a shared token.
                 .requestMatchers("/internal/dev/**").permitAll()
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()
             )
-            .oauth2ResourceServer(oauth -> oauth.jwt(jwt ->
-                jwt.jwtAuthenticationConverter(new KeycloakJwtAuthenticationConverter())
-            ))
+            .oauth2ResourceServer(oauth -> oauth
+                .jwt(jwt -> jwt.jwtAuthenticationConverter(new KeycloakJwtAuthenticationConverter()))
+                .authenticationEntryPoint(authenticationEntryPoint)
+                .accessDeniedHandler(accessDeniedHandler)
+            )
+            .exceptionHandling(exceptions -> exceptions
+                .authenticationEntryPoint(authenticationEntryPoint)
+                .accessDeniedHandler(accessDeniedHandler)
+            )
             .addFilterAfter(apiRateLimitFilter, BearerTokenAuthenticationFilter.class);
         return http.build();
     }
@@ -55,7 +66,7 @@ public class SecurityConfiguration {
         config.setAllowedOrigins(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Correlation-Id"));
-        config.setExposedHeaders(List.of("X-Correlation-Id"));
+        config.setExposedHeaders(List.of("X-Correlation-Id", "Location", "Retry-After"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

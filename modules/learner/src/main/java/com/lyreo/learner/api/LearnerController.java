@@ -4,7 +4,15 @@ import com.lyreo.identity.application.AppUserProvisioningService;
 import com.lyreo.learner.application.LearnerProfileRepository;
 import com.lyreo.learner.application.OnboardingService;
 import com.lyreo.learner.domain.LearnerPreferences;
-import java.util.Map;
+import com.lyreo.learner.domain.LearnerProfile;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.util.UUID;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,18 +39,21 @@ public class LearnerController {
     }
 
     @GetMapping("/profile")
-    public Map<String, Object> profile(@AuthenticationPrincipal Jwt jwt) {
+    public LearnerProfileResponse profile(@AuthenticationPrincipal Jwt jwt) {
         var user = users.provision(jwt.getSubject(), jwt.getClaimAsString("email"));
         var profile = profiles.findByLearnerId(user.id()).orElse(null);
-        return Map.of(
-            "userId", user.id(),
-            "onboarded", profile != null,
-            "profile", profile == null ? Map.of() : profile
+        return new LearnerProfileResponse(
+            user.id(),
+            profile != null,
+            profile
         );
     }
 
     @PutMapping("/onboarding")
-    public Object onboarding(@AuthenticationPrincipal Jwt jwt, @RequestBody OnboardingRequest request) {
+    public LearnerProfile onboarding(
+        @AuthenticationPrincipal Jwt jwt,
+        @Valid @RequestBody OnboardingRequest request
+    ) {
         var user = users.provision(jwt.getSubject(), jwt.getClaimAsString("email"));
         return onboarding.onboard(
             user.id(), request.displayName(), request.currentLevel(), request.goal(),
@@ -61,27 +72,59 @@ public class LearnerController {
     @PutMapping("/preferences")
     public LearnerPreferences preferences(
         @AuthenticationPrincipal Jwt jwt,
-        @RequestBody LearnerPreferences preferences
+        @Valid @RequestBody UpdatePreferencesRequest request
     ) {
         var user = users.provision(jwt.getSubject(), jwt.getClaimAsString("email"));
-        validate(preferences);
-        return profiles.savePreferences(user.id(), preferences);
+        return profiles.savePreferences(user.id(), request.toDomain());
     }
 
-    private static void validate(LearnerPreferences preferences) {
-        if (preferences.defaultPlaybackSpeed() < 0.5 || preferences.defaultPlaybackSpeed() > 2.0) {
-            throw new IllegalArgumentException("defaultPlaybackSpeed must be between 0.5 and 2.0");
-        }
-        if (preferences.preferredAccent() == null || preferences.preferredAccent().isBlank()) {
-            throw new IllegalArgumentException("preferredAccent is required");
-        }
-    }
+    public record LearnerProfileResponse(
+        UUID userId,
+        boolean onboarded,
+        LearnerProfile profile
+    ) {}
 
     public record OnboardingRequest(
+        @NotBlank(message = "displayName is required")
         String displayName,
         String currentLevel,
         String goal,
+        @Min(value = 5, message = "dailyMinutes must be at least 5")
+        @Max(value = 240, message = "dailyMinutes must be at most 240")
         int dailyMinutes,
         String focusArea
     ) {}
+
+    public record UpdatePreferencesRequest(
+        @NotBlank(message = "preferredAccent is required")
+        String preferredAccent,
+        @NotNull(message = "translation is required")
+        LearnerPreferences.DisplayTiming translation,
+        @NotNull(message = "sentenceIpa is required")
+        LearnerPreferences.DisplayTiming sentenceIpa,
+        @NotNull(message = "vocabularyNotes is required")
+        LearnerPreferences.DisplayTiming vocabularyNotes,
+        @NotNull(message = "grammarNotes is required")
+        LearnerPreferences.DisplayTiming grammarNotes,
+        boolean thoughtGroups,
+        boolean karaokeHighlighting,
+        boolean properNounHints,
+        @DecimalMin(value = "0.5", message = "defaultPlaybackSpeed must be between 0.5 and 2.0")
+        @DecimalMax(value = "2.0", message = "defaultPlaybackSpeed must be between 0.5 and 2.0")
+        double defaultPlaybackSpeed
+    ) {
+        public LearnerPreferences toDomain() {
+            return new LearnerPreferences(
+                preferredAccent,
+                translation,
+                sentenceIpa,
+                vocabularyNotes,
+                grammarNotes,
+                thoughtGroups,
+                karaokeHighlighting,
+                properNounHints,
+                defaultPlaybackSpeed
+            );
+        }
+    }
 }
