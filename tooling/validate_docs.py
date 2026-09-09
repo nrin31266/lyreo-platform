@@ -9,7 +9,6 @@ from __future__ import annotations
 import os
 import re
 import sys
-import unicodedata
 from collections import defaultdict
 from pathlib import Path
 from urllib.parse import unquote
@@ -74,11 +73,16 @@ def without_fences(text: str) -> str:
 
 
 def slugify(value: str) -> str:
+    """GitHub-style heading anchor: lowercase, keep Unicode word chars and hyphens, spaces→hyphens.
+
+    GitHub does NOT strip Unicode letters (e.g. Vietnamese diacritics are preserved).
+    See https://github.com/gjtorikian/commonmarker for the canonical implementation.
+    Use explicit <a id="…"></a> anchors for headings that must be stable cross-references.
+    """
     value = re.sub(r"<[^>]+>", "", value).strip().lower()
     value = re.sub(r"\s*—\s*", "--", value)
-    value = "".join(char for char in unicodedata.normalize("NFKD", value)
-                    if not unicodedata.combining(char))
-    value = value.replace("đ", "d")
+    # Keep Unicode word characters (\w covers letters/digits/underscore across locales) and hyphens.
+    # Do NOT normalize/decompose Unicode — GitHub preserves diacritics as-is.
     value = re.sub(r"[^\w\- ]", "", value, flags=re.UNICODE)
     return re.sub(r"\s+", "-", value).strip("-")
 

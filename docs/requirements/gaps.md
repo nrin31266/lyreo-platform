@@ -11,6 +11,7 @@ intent vẫn ở owner requirement/spec; status ở đây không tự thay đổ
 - Impact: release scope, legal/policy hardening và verification của adapter.
 - Next: product owner quyết định YouTube thuộc first Lesson release hay phase sau.
 
+<a id="gap-002--nguong-hoan-thanh-dictation-70"></a>
 ## GAP-002 — Ngưỡng hoàn thành Dictation 70
 
 - Type/status: `question` / `open`.
@@ -20,6 +21,7 @@ intent vẫn ở owner requirement/spec; status ở đây không tự thay đổ
 - Impact: activity/lesson completion events và downstream reward/progress.
 - Next: duyệt threshold/config policy trước khi ghi 70 thành business rule được chốt.
 
+<a id="gap-003--shadowing-chua-noi-end-to-end"></a>
 ## GAP-003 — Shadowing chưa nối end-to-end
 
 - Type/status: `implementation-gap` / `open`.
@@ -30,6 +32,7 @@ intent vẫn ở owner requirement/spec; status ở đây không tự thay đổ
 - Impact: không được claim Shadowing production-complete.
 - Next: thiết kế/implement API upload/private artifact và Mobile integration trong task riêng.
 
+<a id="gap-004--admin-jobs-chua-dung-realtime"></a>
 ## GAP-004 — Admin Jobs chưa dùng realtime
 
 - Type/status: `implementation-gap` / `open`.
@@ -39,6 +42,7 @@ intent vẫn ở owner requirement/spec; status ở đây không tự thay đổ
 - Impact: UI không tự cập nhật progress như target behavior.
 - Next: nối SSE hoặc quyết định polling UX; transport dài hạn vẫn là open decision.
 
+<a id="gap-005--cancel-202-body-va-admin-api-helper"></a>
 ## GAP-005 — Cancel 202 body và Admin API helper
 
 - Type/status: `implementation-gap` / `observed-static-unreproduced`.
@@ -48,6 +52,7 @@ intent vẫn ở owner requirement/spec; status ở đây không tự thay đổ
 - Impact: Admin cancel có thể báo lỗi dù server đã nhận request.
 - Next: tái hiện bằng test/runtime rồi sửa contract/helper trong task product-code riêng.
 
+<a id="gap-006--fencing-cua-lesson-step-writes-chua-duoc-chung-minh"></a>
 ## GAP-006 — Fencing của Lesson step writes chưa được chứng minh
 
 - Type/status: `verification-gap` / `open`.
@@ -58,6 +63,7 @@ intent vẫn ở owner requirement/spec; status ở đây không tự thay đổ
 - Impact: risk đối với invariant fencing nếu lease bị mất giữa expensive call và step commit.
 - Next: concurrency/integration test và transaction review; không hạ requirement để khớp code.
 
+<a id="gap-007--kpi-va-nguong-nfr-chua-duoc-chot"></a>
 ## GAP-007 — KPI và ngưỡng NFR chưa được chốt
 
 - Type/status: `question` / `open`.

@@ -47,6 +47,7 @@ Requirement mô tả nghĩa vụ; story/AC mô tả kết quả quan sát; featu
 architecture giải thích solution boundary. Trạng thái implementation chỉ có một owner tại
 [traceability](traceability.md).
 
+<a id="phu-thuoc-xuyen-module"></a>
 ## Phụ thuộc xuyên module
 
 Completion/review/answer facts đi qua `libs/contracts`, được Curriculum, Gamification và Analytics

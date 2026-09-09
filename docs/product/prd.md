@@ -50,6 +50,7 @@ Các nhóm này là phân loại nhu cầu từ đặc tả, chưa phải market
 - Server giữ quyền scoring/reward; learner nhận feedback có thể truy vết.
 - AI routing có audit và fallback, trong khi provider/model có thể thay đổi.
 
+<a id="6-scope-va-uu-tien"></a>
 ## 6. Scope và ưu tiên
 
 | Mức | Scope sản phẩm |
@@ -86,6 +87,7 @@ quản AI provider/routing và các content areas theo từng giai đoạn.
 - Normal dev/CI dùng mock AI; mock không chứng minh chất lượng provider/model thật.
 - Learner-facing YouTube playback ưu tiên official player là giả định hiện hành, cần policy review.
 
+<a id="8-release-direction-va-non-goals"></a>
 ## 8. Release direction và non-goals
 
 Hướng release kế thừa: Platform → Lesson MVP → Learning Data → TOEIC/Curriculum → Retention →

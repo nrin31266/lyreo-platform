@@ -16,6 +16,7 @@ không bịa Vietnamese translation khi source thiếu.
 Given Lesson phát hiện phrase chưa có entry, when enrichment hoàn tất, then Lesson giữ contextual
 meaning với trạng thái unresolved và vẫn usable; resolver có thể link sau.
 
+<a id="us-voc-001--on-tu-theo-lich"></a>
 ### US-VOC-001 — Ôn từ theo lịch
 
 Là learner, tôi muốn lưu lexical unit và review để nhận lịch tiếp theo cùng history cá nhân.

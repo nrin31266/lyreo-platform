@@ -2,6 +2,7 @@
 
 Requirements: [Lesson](../lesson.md).
 
+<a id="us-lsn-001--tao-lesson-theo-option"></a>
 ### US-LSN-001 — Tạo Lesson theo option
 
 Là content manager, tôi muốn chọn source, activities và enrichments độc lập để chỉ chạy xử lý cần thiết.
@@ -19,6 +20,7 @@ không mặc định generate text/TTS/STT/alignment.
 <a id="dictation"></a>
 ## Dictation
 
+<a id="us-lsn-002--lam-dictation"></a>
 ### US-LSN-002 — Làm Dictation
 
 Là learner, tôi muốn nghe và gửi câu chép để nhận feedback server-side và tiến độ chính xác.
@@ -36,6 +38,7 @@ không có score/reward từ client được chấp nhận.
 <a id="shadowing"></a>
 ## Shadowing
 
+<a id="us-lsn-003--nhan-feedback-shadowing"></a>
 ### US-LSN-003 — Nhận feedback Shadowing
 
 Là learner, tôi muốn record theo reference audio để nhận word accuracy, timing và fluency feedback.
