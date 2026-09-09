@@ -37,12 +37,12 @@ This file records current choices and **why** they exist. Version numbers may re
 ## Kafka deliberately not selected
 
 Kafka is not part of the MVP architecture. The full rationale is owned by
-`LYREO_PLATFORM_SPEC.md` §10; the compact decision record is `DECISIONS.md` D-002.
+[`DECISIONS.md`](DECISIONS.md#d-002--no-kafka-at-mvp) D-002.
 
 ## Redis deliberately not selected
 
 Redis is not part of the MVP architecture. The full rationale is owned by
-`LYREO_PLATFORM_SPEC.md` §11; the compact decision record is `DECISIONS.md` D-003.
+[`DECISIONS.md`](DECISIONS.md#d-003--no-redis-at-mvp) D-003.
 
 ## R2 instead of Cloudinary for core storage
 

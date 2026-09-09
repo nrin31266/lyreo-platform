@@ -24,14 +24,14 @@ The first-run workflow is:
 5. bootstrap the Lyreo realm/clients/roles/dev users;
 6. start application processes locally.
 
-Use the exact commands in `../README.md` §5–11. Dev users/passwords are sourced from
+Use the exact commands in [`README.md`](../README.md). Dev users/passwords are sourced from
 `infra/keycloak/.env` and must not be copied into documentation.
 
 ## 3. Start executable apps
 
 Run each executable as a separate local process so it can be restarted/debugged independently.
 The exact commands, default addresses, and initial dependency-installation steps are owned by
-`../README.md` §8–12.
+[`README.md`](../README.md).
 
 ### Core Service
 
@@ -40,7 +40,8 @@ is available.
 
 ### AI Service
 
-Use the AI subproject environment managed by `uv`; runtime-mode behavior is described in §5 below.
+Use the AI subproject environment managed by `uv`; runtime-mode behavior is described in
+[AI runtime modes](#5-ai-runtime-modes).
 
 ### Admin Web
 
@@ -103,7 +104,7 @@ They are independent from `AI_RUNTIME_MODE` and do not constitute a third runtim
 
 Use the local filesystem adapter for ordinary development and switch to R2 only when testing R2
 integration behavior. Exact variables, defaults, and security rules are owned by
-`CONFIGURATION.md` §7.
+[`CONFIGURATION.md`](CONFIGURATION.md#7-storage-configuration).
 
 Use a dedicated development bucket when testing R2. Never point a developer environment at the
 production bucket.
@@ -119,12 +120,13 @@ For a schema change:
 3. verify Hibernate mapping validation;
 4. review compatibility/rollback implications for destructive changes.
 
-Mandatory persistence rules are owned by `../AGENTS.md` §10. Large Lexicon/Grammar/TOEIC content
+Mandatory persistence rules are owned by
+[`AGENTS.md`](../AGENTS.md#8-database-storage-and-data). Large Lexicon/Grammar/TOEIC content
 uses importer tooling rather than Flyway seed blobs.
 
 ## 8. Data importer development
 
-Importer execution commands are owned by `../README.md` §13. Input semantics, current dataset
+Importer execution commands are owned by [`README.md`](../README.md#13-data-import). Input semantics, current dataset
 shape, dry-run/apply behavior, checksums, and media handling are owned by `DATA_PIPELINES.md`.
 
 Development practice:
@@ -137,8 +139,9 @@ Development practice:
 ## 9. Test/validation loop
 
 Run the smallest relevant checks continuously while developing, then run the required completion
-checks for the changed area. Exact repository commands are owned by `../README.md` §15; completion
-requirements are owned by `../AGENTS.md` §15.
+checks for the changed area. Exact repository commands are owned by
+[`README.md`](../README.md#15-validation); completion requirements are owned by
+[`AGENTS.md`](../AGENTS.md#14-testing-and-completion).
 
 `TESTING_NOTES.md`, if still present, is only a temporary starter handoff. It is not an architecture
 or testing-policy source of truth.
@@ -153,11 +156,13 @@ access on the first run.
 ### Core reports schema validation failure
 
 Do not bypass the failure by enabling Hibernate schema mutation. Verify that the required Flyway
-migration exists, ran in order, and matches the current mappings. See `../AGENTS.md` §10.
+migration exists, ran in order, and matches the current mappings. See
+[`AGENTS.md`](../AGENTS.md#8-database-storage-and-data).
 
 ### Keycloak development user cannot log in
 
-Rerun the Keycloak bootstrap/seed workflow described in `../README.md` §7, then verify values in
+Rerun the Keycloak bootstrap/seed workflow described in
+[`README.md`](../README.md#7-bootstrap-keycloak), then verify values in
 `infra/keycloak/.env` and the relevant client redirect URI.
 
 ### Android emulator cannot reach localhost
@@ -188,7 +193,7 @@ memory pressure.
 ### Job remains RUNNING
 
 Do not edit job rows manually before understanding lease state. Follow the background-job recovery
-runbook in `OPERATIONS.md` §5.
+runbook in [`OPERATIONS.md`](OPERATIONS.md#5-background-job-runbook).
 
 ## 11. Coding-agent workflow
 
@@ -196,4 +201,4 @@ Coding agents must read `../AGENTS.md` before modifying code. `CLAUDE.md`, `GEMI
 `AGENT.md` are aliases to the same contract.
 
 The required completion checks and documentation ownership rules are defined in
-`../AGENTS.md` §13–15; do not maintain a second checklist here.
+[`AGENTS.md`](../AGENTS.md#13-documentation-and-comments); do not maintain a second checklist here.

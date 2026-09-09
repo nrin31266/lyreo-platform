@@ -263,7 +263,8 @@ Current ownership remains intentionally separated:
 
 - `README.md` -> onboarding/setup/run/repository map;
 - `AGENTS.md` -> mandatory engineering contract;
-- `LYREO_PLATFORM_SPEC.md` -> detailed product + architecture master spec;
+- At the 2026-09-07 snapshot, `LYREO_PLATFORM_SPEC.md` was the detailed master; it is now a
+  compatibility index and current owners are routed from `docs/README.md`.
 - `ARCHITECTURE.md` -> system/module/runtime boundaries;
 - `CONFIGURATION.md` -> env/runtime/admin/user preference precedence and ownership;
 - `DATA_PIPELINES.md` -> external data/import semantics;

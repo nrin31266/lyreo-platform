@@ -15,6 +15,8 @@ jobs:
           python3 -m compileall -q services/ai-service/app services/ai-service/tests tools/data-import
           bash -n scripts/*.sh infra/keycloak/scripts/*.sh infra/postgres/init/*.sh
           python3 tooling/validate_repo.py
+          python3 tooling/validate_docs.py
+          python3 -m unittest tooling.tests.test_validate_docs
 
   java:
     runs-on: ubuntu-latest

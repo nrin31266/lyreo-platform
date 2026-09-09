@@ -234,7 +234,8 @@ Mobile     → AsyncStorage
 Mobile detects the OS locale with `expo-localization` when no explicit locale has been saved. Theme
 preference is `system | light | dark`, with `system` as the default. These values are not secrets and
 therefore must not be stored in SecureStore. Learning preferences that affect cross-device study
-behavior continue to use the learner preference API described in §5.
+behavior continue to use the learner preference API described in
+[Learner persistent preferences](#5-learner-persistent-preferences).
 
 Theme/locale are also **not deployment environment variables**. Admin persists them in browser
 `localStorage`; Mobile persists them in AsyncStorage. Deployment env controls capability/endpoints,

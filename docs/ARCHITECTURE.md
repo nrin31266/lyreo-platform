@@ -94,8 +94,9 @@ platform/security
 platform/observability
 ```
 
-Detailed product/domain ownership is defined in `LYREO_PLATFORM_SPEC.md` §6–7. Enforceable
-module ownership rules for code changes are defined in `../AGENTS.md` §5.
+Detailed product/domain ownership is defined in the routed area requirements from
+[`requirements/analysis.md`](requirements/analysis.md). Enforceable module ownership rules are
+defined in [`AGENTS.md`](../AGENTS.md#4-domain-ownership).
 
 Frontend shared-package boundaries:
 
@@ -143,8 +144,8 @@ Gamification → mission/reward update
 Analytics → project study summary
 ```
 
-The eventing transport decision and its rationale are recorded in `LYREO_PLATFORM_SPEC.md` §10
-and `DECISIONS.md` D-002.
+The eventing transport decision and its rationale are recorded in `TECH_CHOICES.md` and
+`DECISIONS.md` D-002.
 
 ## 6. Lesson model: Content ≠ Annotation ≠ Activity
 
@@ -284,8 +285,8 @@ R2 stores:
 - learner recording;
 - raw AI output/debug artifact.
 
-DB stores object keys, never presigned URL. Object-key namespace examples are documented in
-`LYREO_PLATFORM_SPEC.md` §28.3.
+DB stores object keys, never presigned URL. Storage semantics are documented in
+[`CONFIGURATION.md`](CONFIGURATION.md#7-storage-configuration) and the owning feature/data docs.
 
 ## 14. Cache / rate limit / resilience
 
@@ -298,5 +299,6 @@ Technology selection rationale, including the current Redis decision, lives in
 
 ## 15. Schema ownership
 
-Mandatory schema/persistence rules are defined in `../AGENTS.md` §10. Large dataset import
+Mandatory schema/persistence rules are defined in
+[`AGENTS.md`](../AGENTS.md#8-database-storage-and-data). Large dataset import
 semantics are defined in `DATA_PIPELINES.md`.
