@@ -30,16 +30,8 @@ class OpenApiSmokeTest {
         assertThat(openAPI.getSecurity()).singleElement()
             .satisfies(req -> assertThat(req.containsKey(OpenApiConfiguration.BEARER_AUTH)).isTrue());
 
-        // Standard error schemas
-        assertThat(openAPI.getComponents().getSchemas()).containsKeys("ProblemDetail", "ApiFieldViolation");
-        var violationSchema = openAPI.getComponents().getSchemas().get("ApiFieldViolation");
-        assertThat(violationSchema.getProperties()).containsKeys("field", "code", "message");
-        assertThat(violationSchema.getProperties()).doesNotContainKey("rejectedValue");
-
-        var problemSchema = openAPI.getComponents().getSchemas().get("ProblemDetail");
-        assertThat(problemSchema.getProperties()).containsKeys(
-            "type", "title", "status", "detail", "instance", "code", "correlationId", "errors"
-        );
+        // Base bean no longer registers schemas (moved to customizer phase)
+        assertThat(openAPI.getComponents().getSchemas()).isNull();
 
         // Tags
         assertThat(openAPI.getTags()).extracting(Tag::getName).contains(
@@ -59,7 +51,7 @@ class OpenApiSmokeTest {
     }
 
     @Test
-    void customizerEnforcesOperationLevelContractsAndRateLimit429() {
+    void customizerRegistersLyreoProblemDetailSchemasAndOperationContracts() {
         OpenApiConfiguration config = new OpenApiConfiguration();
         OpenAPI openAPI = config.lyreoOpenAPI();
 
@@ -81,6 +73,19 @@ class OpenApiSmokeTest {
         // Run customizer
         config.lyreoOpenApiCustomizer().customise(openAPI);
 
+        // Schemas are registered at customizer time
+        assertThat(openAPI.getComponents().getSchemas())
+            .containsKeys(OpenApiConfiguration.PROBLEM_SCHEMA_NAME, OpenApiConfiguration.VIOLATION_SCHEMA_NAME);
+
+        var violationSchema = openAPI.getComponents().getSchemas().get(OpenApiConfiguration.VIOLATION_SCHEMA_NAME);
+        assertThat(violationSchema.getProperties()).containsKeys("field", "code", "message");
+        assertThat(violationSchema.getProperties()).doesNotContainKey("rejectedValue");
+
+        var problemSchema = openAPI.getComponents().getSchemas().get(OpenApiConfiguration.PROBLEM_SCHEMA_NAME);
+        assertThat(problemSchema.getProperties()).containsKeys(
+            "type", "title", "status", "detail", "instance", "code", "correlationId", "errors"
+        );
+
         // Verify /api/v1/admin/lessons/build operation contracts
         var lessonBuildOp = openAPI.getPaths().get("/api/v1/admin/lessons/build").getPost();
         assertThat(lessonBuildOp.getResponses()).doesNotContainKey("200");
@@ -95,6 +100,11 @@ class OpenApiSmokeTest {
 
         assertThat(lessonBuildOp.getResponses()).containsKey("403");
         assertThat(lessonBuildOp.getResponses().get("403").getContent()).containsKey("application/problem+json");
+
+        // Verify all $ref strings point to LyreoProblemDetail, not ProblemDetail
+        assertThat(lessonBuildOp.getResponses().get("400").getContent()
+            .get("application/problem+json").getSchema().get$ref())
+            .isEqualTo(OpenApiConfiguration.PROBLEM_SCHEMA_REF);
 
         // Verify protected operation requires BearerAuth and documents 429 RATE_LIMITED
         assertThat(lessonBuildOp.getSecurity()).singleElement()
@@ -113,5 +123,36 @@ class OpenApiSmokeTest {
         var devBootstrapOp = openAPI.getPaths().get("/internal/dev/bootstrap/users").getPost();
         assertThat(devBootstrapOp.getSecurity()).isEmpty();
         assertThat(devBootstrapOp.getResponses()).doesNotContainKey("429");
+    }
+
+    @Test
+    void ensureProblemSchemasIsIdempotentViaCustomizer() {
+        OpenApiConfiguration config = new OpenApiConfiguration();
+        OpenAPI openAPI = config.lyreoOpenAPI();
+
+        // Provide paths so customizer has operations to work with
+        io.swagger.v3.oas.models.Paths paths = new io.swagger.v3.oas.models.Paths();
+        paths.addPathItem("/api/v1/me",
+            new io.swagger.v3.oas.models.PathItem().get(
+                new io.swagger.v3.oas.models.Operation()
+                    .responses(new io.swagger.v3.oas.models.responses.ApiResponses())));
+        openAPI.setPaths(paths);
+
+        // Run customizer twice to verify schema registration is idempotent
+        var customizer = config.lyreoOpenApiCustomizer();
+        customizer.customise(openAPI);
+        customizer.customise(openAPI);
+
+        assertThat(openAPI.getComponents().getSchemas())
+            .containsKeys(OpenApiConfiguration.PROBLEM_SCHEMA_NAME, OpenApiConfiguration.VIOLATION_SCHEMA_NAME)
+            .hasSize(2);
+    }
+
+    @Test
+    void schemaConstantsFormValidJsonPointers() {
+        assertThat(OpenApiConfiguration.PROBLEM_SCHEMA_REF)
+            .isEqualTo("#/components/schemas/LyreoProblemDetail");
+        assertThat(OpenApiConfiguration.VIOLATION_SCHEMA_REF)
+            .isEqualTo("#/components/schemas/ApiFieldViolation");
     }
 }

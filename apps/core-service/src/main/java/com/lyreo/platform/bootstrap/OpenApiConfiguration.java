@@ -23,37 +23,36 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * OpenAPI 3.0 configuration for Springdoc.
+ * OpenAPI configuration for Springdoc.
  *
- * Configures the Bearer JWT security scheme, standard RFC 9457 Problem Details schema,
- * high-level domain tags, and operation-level contracts.
+ * <p>The base {@link #lyreoOpenAPI()} bean declares API info, security scheme, and tags.
+ * The {@link #lyreoOpenApiCustomizer()} registers Lyreo's programmatic component schemas
+ * (LyreoProblemDetail, ApiFieldViolation) <em>at customizer time</em> — the same lifecycle
+ * phase that adds {@code $ref} pointers — so springdoc cannot prune them between phases.
+ *
+ * <p>The custom schema is named {@code LyreoProblemDetail} (not generic {@code ProblemDetail})
+ * to avoid collision with {@code org.springframework.http.ProblemDetail} which springdoc may
+ * also generate from return-type scanning.
  */
 @Configuration
 public class OpenApiConfiguration {
 
     public static final String BEARER_AUTH = "BearerAuth";
 
+    /** Component schema name for Lyreo's RFC 9457 extension payload. */
+    public static final String PROBLEM_SCHEMA_NAME = "LyreoProblemDetail";
+
+    /** JSON Pointer ref to the problem schema in components. */
+    public static final String PROBLEM_SCHEMA_REF = "#/components/schemas/" + PROBLEM_SCHEMA_NAME;
+
+    /** Component schema name for field-level validation violations. */
+    public static final String VIOLATION_SCHEMA_NAME = "ApiFieldViolation";
+
+    /** JSON Pointer ref to the field violation schema in components. */
+    public static final String VIOLATION_SCHEMA_REF = "#/components/schemas/" + VIOLATION_SCHEMA_NAME;
+
     @Bean
     public OpenAPI lyreoOpenAPI() {
-        Schema<?> fieldViolationSchema = new ObjectSchema()
-            .name("ApiFieldViolation")
-            .description("Field-level validation error detail")
-            .addProperty("field", new StringSchema().description("Name of the invalid field"))
-            .addProperty("code", new StringSchema().example("NotBlank").description("Constraint violation code (e.g., NotBlank, Min, Pattern)"))
-            .addProperty("message", new StringSchema().description("Human-readable violation message"));
-
-        Schema<?> problemDetailSchema = new ObjectSchema()
-            .name("ProblemDetail")
-            .description("RFC 9457 Problem Details error payload")
-            .addProperty("type", new StringSchema().example("urn:lyreo:problem:request-validation-failed").description("URI reference identifying problem type"))
-            .addProperty("title", new StringSchema().example("Bad Request").description("Short human-readable summary of problem type"))
-            .addProperty("status", new IntegerSchema().example(400).description("HTTP status code"))
-            .addProperty("detail", new StringSchema().example("Invalid request content").description("Human-readable explanation specific to this occurrence"))
-            .addProperty("instance", new StringSchema().example("/api/v1/lessons/build").description("URI reference identifying specific occurrence"))
-            .addProperty("code", new StringSchema().example("REQUEST_VALIDATION_FAILED").description("Machine-readable stable error code"))
-            .addProperty("correlationId", new StringSchema().example("req-123e4567-e89b-12d3-a456-426614174000").description("Correlation identifier for tracing"))
-            .addProperty("errors", new ArraySchema().items(new Schema<>().$ref("#/components/schemas/ApiFieldViolation")).description("Field-level validation errors"));
-
         SecurityScheme securityScheme = new SecurityScheme()
             .type(SecurityScheme.Type.HTTP)
             .scheme("bearer")
@@ -66,9 +65,7 @@ public class OpenApiConfiguration {
                 .version("1.0.0")
                 .description("Lyreo English-learning platform Core HTTP API services."))
             .components(new Components()
-                .addSecuritySchemes(BEARER_AUTH, securityScheme)
-                .addSchemas("ApiFieldViolation", fieldViolationSchema)
-                .addSchemas("ProblemDetail", problemDetailSchema))
+                .addSecuritySchemes(BEARER_AUTH, securityScheme))
             .addSecurityItem(new SecurityRequirement().addList(BEARER_AUTH))
             .tags(List.of(
                 new Tag().name("Identity").description("User identity and session endpoints"),
@@ -89,11 +86,15 @@ public class OpenApiConfiguration {
     @Bean
     public OpenApiCustomizer lyreoOpenApiCustomizer() {
         return openApi -> {
+            // Register component schemas at customizer time, before adding any $ref.
+            // This prevents springdoc from pruning schemas that have no references yet.
+            ensureProblemSchemas(openApi);
+
             if (openApi.getPaths() == null) {
                 return;
             }
 
-            var problemRef = new Schema<>().$ref("#/components/schemas/ProblemDetail");
+            var problemRef = new Schema<>().$ref(PROBLEM_SCHEMA_REF);
             var problemContent = new Content().addMediaType(
                 "application/problem+json",
                 new MediaType().schema(problemRef)
@@ -157,5 +158,56 @@ public class OpenApiConfiguration {
                 });
             });
         };
+    }
+
+    /**
+     * Registers Lyreo's programmatic component schemas if not already present.
+     *
+     * <p>Called inside the customizer so schemas and their {@code $ref} consumers
+     * exist in the same springdoc lifecycle phase, preventing premature pruning.
+     */
+    static void ensureProblemSchemas(OpenAPI openApi) {
+        Components components = openApi.getComponents();
+        if (components == null) {
+            components = new Components();
+            openApi.setComponents(components);
+        }
+        if (components.getSchemas() == null || !components.getSchemas().containsKey(VIOLATION_SCHEMA_NAME)) {
+            components.addSchemas(VIOLATION_SCHEMA_NAME, new ObjectSchema()
+                .description("Field-level validation error detail")
+                .addProperty("field", new StringSchema().description("Name of the invalid field"))
+                .addProperty("code", new StringSchema().example("NotBlank")
+                    .description("Constraint violation code (e.g., NotBlank, Min, Pattern)"))
+                .addProperty("message", new StringSchema()
+                    .description("Human-readable violation message")));
+        }
+        if (components.getSchemas() == null || !components.getSchemas().containsKey(PROBLEM_SCHEMA_NAME)) {
+            components.addSchemas(PROBLEM_SCHEMA_NAME, new ObjectSchema()
+                .description("RFC 9457 Problem Details error payload with Lyreo extensions")
+                .addProperty("type", new StringSchema()
+                    .example("urn:lyreo:problem:request-validation-failed")
+                    .description("URI reference identifying problem type"))
+                .addProperty("title", new StringSchema()
+                    .example("Bad Request")
+                    .description("Short human-readable summary of problem type"))
+                .addProperty("status", new IntegerSchema()
+                    .example(400)
+                    .description("HTTP status code"))
+                .addProperty("detail", new StringSchema()
+                    .example("Invalid request content")
+                    .description("Human-readable explanation specific to this occurrence"))
+                .addProperty("instance", new StringSchema()
+                    .example("/api/v1/lessons/build")
+                    .description("URI reference identifying specific occurrence"))
+                .addProperty("code", new StringSchema()
+                    .example("REQUEST_VALIDATION_FAILED")
+                    .description("Machine-readable stable error code"))
+                .addProperty("correlationId", new StringSchema()
+                    .example("req-123e4567-e89b-12d3-a456-426614174000")
+                    .description("Correlation identifier for tracing"))
+                .addProperty("errors", new ArraySchema()
+                    .items(new Schema<>().$ref(VIOLATION_SCHEMA_REF))
+                    .description("Field-level validation errors")));
+        }
     }
 }

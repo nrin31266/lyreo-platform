@@ -175,10 +175,31 @@ Khi request vượt quá token bucket:
   - `/v3/api-docs`
   - `/v3/api-docs.yaml`
   - `/swagger-ui.html`
-- Security scheme: HTTP Bearer JWT (`bearerAuth`).
+- Security scheme: HTTP Bearer JWT (`BearerAuth`).
 - Quản lý kích hoạt theo Spring profile:
   - `dev` / `test`: Kích hoạt mặc định.
   - `prod`: Tắt mặc định (`springdoc.api-docs.enabled=false`, `springdoc.swagger-ui.enabled=false`), cho phép bật qua cấu hình môi trường có kiểm soát.
+
+### Component schemas
+
+Lyreo đăng ký hai programmatic component schemas trong OpenAPI spec:
+
+- `LyreoProblemDetail`: RFC 9457 Problem Details payload mở rộng với `code`, `correlationId`, `errors`.
+- `ApiFieldViolation`: Chi tiết vi phạm validation trên từng field.
+
+Schema được đặt tên `LyreoProblemDetail` (không phải `ProblemDetail`) để tránh collision với
+`org.springframework.http.ProblemDetail` mà springdoc có thể tự sinh từ return-type scanning.
+Constants `PROBLEM_SCHEMA_NAME`, `PROBLEM_SCHEMA_REF`, `VIOLATION_SCHEMA_NAME`, `VIOLATION_SCHEMA_REF`
+trong `OpenApiConfiguration` được dùng cho toàn bộ `$ref` pointer.
+
+### Schema registration lifecycle
+
+Schemas được đăng ký bên trong `OpenApiCustomizer` (method `ensureProblemSchemas`) — cùng lifecycle
+phase mà `$ref` pointer được thêm vào operations. Điều này ngăn springdoc pruning schema definitions
+chưa có reference tại thời điểm bean `OpenAPI` được tạo.
+
+Ngoài ra, property `springdoc.remove-broken-reference-definitions=false` được set trong
+`application.yml` như belt-and-suspenders bảo vệ thêm.
 
 ---
 

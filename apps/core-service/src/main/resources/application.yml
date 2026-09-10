@@ -47,6 +47,11 @@ springdoc:
     path: /swagger-ui.html
     operations-sorter: alpha
     tags-sorter: alpha
+  # Belt-and-suspenders: prevent springdoc from pruning component schemas that have no
+  # operation-level references at the time it performs its reference cleanup pass.
+  # The primary fix is in OpenApiConfiguration.ensureProblemSchemas(), which registers schemas
+  # at customizer time so they always exist alongside their $ref pointers.
+  remove-broken-reference-definitions: false
 
 management:
   endpoints:
