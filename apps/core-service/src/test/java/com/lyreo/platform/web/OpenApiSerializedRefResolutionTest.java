@@ -47,6 +47,11 @@ class OpenApiSerializedRefResolutionTest {
             new io.swagger.v3.oas.models.PathItem().get(
                 new io.swagger.v3.oas.models.Operation()
                     .responses(new io.swagger.v3.oas.models.responses.ApiResponses())));
+        paths.addPathItem("/api/v1/jobs/{id}/cancel",
+            new io.swagger.v3.oas.models.PathItem().post(
+                new io.swagger.v3.oas.models.Operation()
+                    .responses(new io.swagger.v3.oas.models.responses.ApiResponses()
+                        .addApiResponse("200", new io.swagger.v3.oas.models.responses.ApiResponse()))));
         paths.addPathItem("/api/v1/me",
             new io.swagger.v3.oas.models.PathItem().get(
                 new io.swagger.v3.oas.models.Operation()

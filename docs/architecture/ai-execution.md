@@ -14,7 +14,7 @@ or endpoints named after Lesson/Curriculum/Reward workflows.
 
 Current FastAPI endpoints are `GET /health`, `POST /v1/stt`, `/v1/align`, `/v1/tts`,
 `/v1/nlp/analyze`, `/v1/llm/generate`, `/v1/multimodal/judge`. `/v1/*` requires
-`X-Lyreo-Internal-Token`. Canonical DTOs are code-owned in `services/ai-service/app/schemas.py`; Java
+`X-Lyreo-Internal-Token`. Canonical DTOs are code-owned in `apps/ai-service/app/schemas.py`; Java
 gateway must be reviewed with them whenever fields/errors/credential transport change.
 
 Core sends selected capability/provider/model and business-built prompt/input/options. FastAPI

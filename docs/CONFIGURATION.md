@@ -56,7 +56,7 @@ Each executable owns its own environment:
 infra/docker/.env             Docker infrastructure interpolation
 infra/keycloak/.env           local bootstrap scripts
 apps/core-service/.env        Spring Boot runtime
-services/ai-service/.env      FastAPI/model runtime
+apps/ai-service/.env          FastAPI/model runtime
 apps/admin-web/.env           browser-public build/dev config
 apps/mobile/.env              EXPO_PUBLIC_* only
 tools/data-import/.env        importer DB/R2/data paths

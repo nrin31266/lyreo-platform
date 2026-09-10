@@ -1,6 +1,7 @@
 package com.lyreo.platform.jobs.infrastructure;
 
 import com.lyreo.platform.jobs.application.BackgroundJobRepository;
+import com.lyreo.platform.jobs.application.CancellationResult;
 import com.lyreo.platform.jobs.domain.BackgroundJob;
 import com.lyreo.platform.jobs.domain.BackgroundJobStatus;
 import java.sql.ResultSet;
@@ -83,21 +84,31 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
     }
 
     @Override
-    public boolean requestCancellation(UUID id) {
-        return jdbc.update("""
-            UPDATE background_job
-               SET status = CASE
-                   WHEN status IN ('QUEUED','RETRY_WAIT') THEN 'CANCELLED'
-                   ELSE 'CANCEL_REQUESTED'
-               END,
-               cancel_requested_at = now(),
-               finished_at = CASE
-                   WHEN status IN ('QUEUED','RETRY_WAIT') THEN now()
-                   ELSE finished_at
-               END
-             WHERE id = :id
-               AND status IN ('QUEUED','RUNNING','RETRY_WAIT')
-            """, Map.of("id", id)) == 1;
+    public CancellationResult requestCancellation(UUID id) {
+        String result = jdbc.queryForObject("""
+            WITH updated AS (
+                UPDATE background_job
+                   SET status = CASE
+                           WHEN status IN ('QUEUED','RETRY_WAIT') THEN 'CANCELLED'
+                           ELSE 'CANCEL_REQUESTED'
+                       END,
+                       cancel_requested_at = now(),
+                       finished_at = CASE
+                           WHEN status IN ('QUEUED','RETRY_WAIT') THEN now()
+                           ELSE finished_at
+                       END
+                 WHERE id = :id
+                   AND status IN ('QUEUED','RUNNING','RETRY_WAIT')
+                RETURNING id
+            )
+            SELECT CASE
+                WHEN EXISTS (SELECT 1 FROM updated) THEN 'ACCEPTED'
+                WHEN EXISTS (SELECT 1 FROM background_job WHERE id = :id) THEN 'NOT_CANCELLABLE'
+                ELSE 'NOT_FOUND'
+            END AS result
+            """, Map.of("id", id), String.class);
+
+        return CancellationResult.valueOf(result != null ? result : "NOT_FOUND");
     }
 
     @Override

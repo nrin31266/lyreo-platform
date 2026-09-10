@@ -1,5 +1,7 @@
 package com.lyreo.ai.application;
 
+import org.springframework.modulith.NamedInterface;
+
 /**
  * Failure of one AI route/capability execution.
  *
@@ -8,6 +10,7 @@ package com.lyreo.ai.application;
  * business request/schema is marked non-fallback so Lyreo does not spend money repeating the
  * same invalid request against every provider.</p>
  */
+@NamedInterface("application")
 public final class AiExecutionException extends RuntimeException {
     private final boolean fallbackAllowed;
     private final String errorCode;

@@ -14,11 +14,11 @@ public final class AiAdminService {
         this.cipher = cipher;
     }
 
-    public List<Map<String, Object>> providers() {
+    public List<ProviderSummary> providers() {
         return repository.providers();
     }
 
-    public List<Map<String, Object>> routes() {
+    public List<RouteSummary> routes() {
         return repository.routes();
     }
 

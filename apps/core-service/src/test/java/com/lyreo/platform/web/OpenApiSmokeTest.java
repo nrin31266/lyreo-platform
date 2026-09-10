@@ -65,6 +65,10 @@ class OpenApiSmokeTest {
             .responses(new io.swagger.v3.oas.models.responses.ApiResponses());
         paths.addPathItem("/api/v1/jobs/{id}", new io.swagger.v3.oas.models.PathItem().get(jobGet));
 
+        io.swagger.v3.oas.models.Operation jobCancelPost = new io.swagger.v3.oas.models.Operation()
+            .responses(new io.swagger.v3.oas.models.responses.ApiResponses().addApiResponse("200", new io.swagger.v3.oas.models.responses.ApiResponse()));
+        paths.addPathItem("/api/v1/jobs/{id}/cancel", new io.swagger.v3.oas.models.PathItem().post(jobCancelPost));
+
         io.swagger.v3.oas.models.Operation devBootstrapPost = new io.swagger.v3.oas.models.Operation()
             .responses(new io.swagger.v3.oas.models.responses.ApiResponses().addApiResponse("204", new io.swagger.v3.oas.models.responses.ApiResponse()));
         paths.addPathItem("/internal/dev/bootstrap/users", new io.swagger.v3.oas.models.PathItem().post(devBootstrapPost));
@@ -118,6 +122,17 @@ class OpenApiSmokeTest {
             .satisfies(req -> assertThat(req.containsKey(OpenApiConfiguration.BEARER_AUTH)).isTrue());
         assertThat(jobGetOp.getResponses()).containsKey("429");
         assertThat(jobGetOp.getResponses().get("429").getHeaders()).containsKey("Retry-After");
+
+        var jobCancelOp = openAPI.getPaths().get("/api/v1/jobs/{id}/cancel").getPost();
+        assertThat(jobCancelOp.getResponses()).doesNotContainKey("200");
+        assertThat(jobCancelOp.getResponses()).containsKey("202");
+        assertThat(jobCancelOp.getResponses().get("202").getContent()).isNull();
+        assertThat(jobCancelOp.getResponses()).containsKey("404");
+        assertThat(jobCancelOp.getResponses().get("404").getContent().get("application/problem+json").getSchema().get$ref())
+            .isEqualTo(OpenApiConfiguration.PROBLEM_SCHEMA_REF);
+        assertThat(jobCancelOp.getResponses()).containsKey("409");
+        assertThat(jobCancelOp.getResponses().get("409").getContent().get("application/problem+json").getSchema().get$ref())
+            .isEqualTo(OpenApiConfiguration.PROBLEM_SCHEMA_REF);
 
         // Verify public dev endpoint has empty security and no 429
         var devBootstrapOp = openAPI.getPaths().get("/internal/dev/bootstrap/users").getPost();

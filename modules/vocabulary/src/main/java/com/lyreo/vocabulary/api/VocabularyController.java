@@ -31,20 +31,24 @@ public class VocabularyController {
     }
 
     @PostMapping("/cards")
-    public VocabularyCard add(
+    public VocabularyCardResponse add(
         @AuthenticationPrincipal Jwt jwt,
         @Valid @RequestBody AddCardRequest request
     ) {
         UUID learnerId = learnerId(jwt);
-        return vocabulary.add(learnerId, request.lexiconEntryId(), request.sourceContextType(), request.sourceContextId());
+        return VocabularyCardResponse.from(
+            vocabulary.add(learnerId, request.lexiconEntryId(), request.sourceContextType(), request.sourceContextId())
+        );
     }
 
     @GetMapping("/due")
-    public List<VocabularyCard> due(
+    public List<VocabularyCardResponse> due(
         @AuthenticationPrincipal Jwt jwt,
         @RequestParam(defaultValue = "20") int limit
     ) {
-        return vocabulary.due(learnerId(jwt), limit);
+        return vocabulary.due(learnerId(jwt), limit).stream()
+            .map(VocabularyCardResponse::from)
+            .toList();
     }
 
     @PostMapping("/cards/{cardId}/review")
@@ -84,4 +88,32 @@ public class VocabularyController {
         double stability,
         double difficulty
     ) {}
+
+    public record VocabularyCardResponse(
+        UUID id,
+        UUID learnerId,
+        UUID lexiconEntryId,
+        String sourceContextType,
+        UUID sourceContextId,
+        Instant nextReviewAt,
+        double stability,
+        double difficulty,
+        int lapseCount,
+        int reviewCount
+    ) {
+        public static VocabularyCardResponse from(VocabularyCard card) {
+            return new VocabularyCardResponse(
+                card.id(),
+                card.learnerId(),
+                card.lexiconEntryId(),
+                card.sourceContextType(),
+                card.sourceContextId(),
+                card.nextReviewAt(),
+                card.stability(),
+                card.difficulty(),
+                card.lapseCount(),
+                card.reviewCount()
+            );
+        }
+    }
 }

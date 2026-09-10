@@ -54,10 +54,6 @@ For architecture boundaries and technology rationale, read:
 `CLAUDE.md`, `GEMINI.md`, and `AGENT.md` are symlinks to `AGENTS.md`; maintain only one
 engineering contract.
 
-`TESTING_NOTES.md` is a temporary handoff note from the starter artifact, not canonical
-documentation. After the team completes the first full verification pass, move remaining issues
-into the issue tracker/CI and remove this file if it is no longer useful.
-
 ---
 
 ## 3. Repository map
@@ -66,6 +62,7 @@ into the issue tracker/CI and remove this file if it is no longer useful.
 lyreo-platform/
 ├── apps/
 │   ├── core-service/          # Spring Boot deployable
+│   ├── ai-service/            # FastAPI/Python capability runtime
 │   ├── admin-web/             # React + Vite admin
 │   └── mobile/                # Expo/React Native learner app
 │
@@ -92,9 +89,6 @@ lyreo-platform/
 │   ├── storage/
 │   ├── security/
 │   └── observability/
-│
-├── services/
-│   └── ai-service/            # FastAPI/Python capability runtime
 │
 ├── tools/
 │   └── data-import/           # Lexicon/Grammar/TOEIC importers
@@ -164,7 +158,7 @@ Each executable/tool owns its own environment file:
 infra/docker/.env
 infra/keycloak/.env
 apps/core-service/.env
-services/ai-service/.env
+apps/ai-service/.env
 apps/admin-web/.env
 apps/mobile/.env
 tools/data-import/.env
@@ -295,7 +289,7 @@ Schema ownership and migration rules live in `AGENTS.md`; README does not duplic
 First run, or after Python dependencies change:
 
 ```bash
-cd services/ai-service
+cd apps/ai-service
 uv sync --extra dev
 ```
 
@@ -317,7 +311,7 @@ or downloading local Qwen models.
 Run AI tests:
 
 ```bash
-cd services/ai-service
+cd apps/ai-service
 uv run pytest
 ```
 
@@ -330,7 +324,7 @@ Core/FastAPI responsibility boundaries live in `AGENTS.md` and `docs/ARCHITECTUR
 First install:
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 ```
 
 Run:
@@ -481,7 +475,7 @@ pnpm build
 Python AI tests:
 
 ```bash
-cd services/ai-service
+cd apps/ai-service
 uv run pytest
 ```
 
@@ -494,10 +488,8 @@ uv run pytest
 
 `AGENTS.md` defines which checks are mandatory for each type of change.
 
-The workspace lockfile must describe every pnpm importer (`apps/admin-web`, `apps/mobile`,
-`packages/design-system`, and `packages/i18n`). If `pnpm-lock.yaml` is absent after a fresh source
-artifact, run `pnpm install` on a networked machine, review the generated lockfile, and commit it
-before enabling frozen-lockfile CI.
+The committed workspace lockfile (`pnpm-lock.yaml`) describes every pnpm importer (`apps/admin-web`, `apps/mobile`,
+`packages/design-system`, and `packages/i18n`). Normal installs and CI must always use `pnpm install --frozen-lockfile`.
 
 ---
 

@@ -18,7 +18,7 @@ for example in \
   "$ROOT/infra/docker/.env.example" \
   "$ROOT/infra/keycloak/.env.example" \
   "$ROOT/apps/core-service/.env.example" \
-  "$ROOT/services/ai-service/.env.example" \
+  "$ROOT/apps/ai-service/.env.example" \
   "$ROOT/apps/admin-web/.env.example" \
   "$ROOT/apps/mobile/.env.example" \
   "$ROOT/tools/data-import/.env.example"; do
@@ -28,7 +28,7 @@ done
 DOCKER_ENV="$ROOT/infra/docker/.env"
 KC_ENV="$ROOT/infra/keycloak/.env"
 CORE_ENV="$ROOT/apps/core-service/.env"
-AI_ENV="$ROOT/services/ai-service/.env"
+AI_ENV="$ROOT/apps/ai-service/.env"
 DATA_ENV="$ROOT/tools/data-import/.env"
 
 get_env() {

@@ -1,16 +1,17 @@
 package com.lyreo.platform.web;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lyreo.platform.observability.CorrelationIdAccessor;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Objects;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Writes ProblemDetail directly to HttpServletResponse with application/problem+json.
- * Used by security entry points, access denied handlers, and rate limit filters.
+ * Uses the injected Spring Boot auto-configured Jackson ObjectMapper bean.
  */
 @Component
 public final class ApiProblemWriter {
@@ -18,13 +19,8 @@ public final class ApiProblemWriter {
 
     private final ObjectMapper objectMapper;
 
-    public ApiProblemWriter() {
-        this(new ObjectMapper());
-    }
-
     public ApiProblemWriter(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
-        this.objectMapper.addMixIn(ProblemDetail.class, org.springframework.http.converter.json.ProblemDetailJacksonMixin.class);
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
     }
 
     public void write(HttpServletResponse response, ProblemDetail problem) throws IOException {

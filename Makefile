@@ -52,7 +52,7 @@ deps-java:
 	./mvnw -B -pl apps/core-service -am -DskipTests install
 
 deps: deps-java
-	cd services/ai-service && uv sync --locked --extra dev
+	cd apps/ai-service && uv sync --locked --extra dev
 	cd tools/data-import && uv sync --locked --extra dev
 	pnpm install --frozen-lockfile
 
@@ -90,7 +90,7 @@ core: deps-java
 	cd apps/core-service && set -a && . ./.env && set +a && ../../mvnw spring-boot:run
 
 ai:
-	cd services/ai-service && set -a && . ./.env && set +a && uv run uvicorn app.main:app --reload --port 8000
+	cd apps/ai-service && set -a && . ./.env && set +a && uv run uvicorn app.main:app --reload --port 8000
 
 admin:
 	pnpm --filter @lyreo/admin-web dev
@@ -151,10 +151,10 @@ test-java:
 	./mvnw -B test
 
 test-ai:
-	cd services/ai-service && uv run --locked --extra dev pytest
+	cd apps/ai-service && uv run --locked --extra dev python -m pytest
 
 test-importers:
-	cd tools/data-import && uv run --locked --extra dev pytest
+	cd tools/data-import && uv run --locked --extra dev python -m pytest
 
 typecheck:
 	pnpm typecheck
@@ -172,8 +172,8 @@ validate:
 	$(MAKE) validate-docs
 	@tmp=$$(mktemp -d); \
 	  PYTHONPYCACHEPREFIX="$$tmp" python3 -m compileall -q \
-	    services/ai-service/app \
-	    services/ai-service/tests \
+	    apps/ai-service/app \
+	    apps/ai-service/tests \
 	    tools/data-import/import_grammar.py \
 	    tools/data-import/import_toeic.py \
 	    tools/data-import/import_lexicon.py \

@@ -17,7 +17,7 @@ trả trực tiếp resource hoặc typed DTO.
 |---|---|---|
 | `200 OK` | Query hoặc update thành công có body | `GET /api/v1/jobs/{id}`, `GET /api/v1/me`, `PUT /api/v1/learner/preferences` |
 | `201 Created` | Tạo mới tài nguyên synchronous có body | Tạo mới tài nguyên tức thì kèm thông tin đối tượng |
-| `202 Accepted` | Tiếp nhận tác vụ async thành công | `POST /api/v1/admin/lessons/build` (kèm header `Location: /api/v1/jobs/{jobId}`), `POST /api/v1/jobs/{id}/cancel` |
+| `202 Accepted` | Tiếp nhận tác vụ async thành công | `POST /api/v1/admin/lessons/build` (kèm header `Location: /api/v1/jobs/{jobId}` và body ticket `BuildAcceptedResponse(lessonId, jobId)`), `POST /api/v1/jobs/{id}/cancel` (empty body) |
 | `204 No Content` | Thao tác thành công, không trả body | `POST /internal/dev/bootstrap/users` |
 
 ---
@@ -164,6 +164,8 @@ Khi request vượt quá token bucket:
 
 - Các endpoint công khai của Core Service trả về typed Java record DTOs thay vì `Map<String, Object>` hoặc `Object`.
 - Domain/application entity không được expose trực tiếp ra ngoài nếu làm rò rỉ chi tiết persistence hoặc gây schema OpenAPI không ổn định.
+- `POST /api/v1/admin/lessons/build`: trả typed record `BuildAcceptedResponse` (`lessonId`, `jobId`), không serialize internal `LessonBuildPlan`. Tiến độ build được theo dõi bất đồng bộ qua `Location: /api/v1/jobs/{jobId}`.
+- `POST /api/v1/jobs/{id}/cancel`: trả `202 Accepted` với empty body. Lỗi (nếu có: 404 `RESOURCE_NOT_FOUND`, 409 `STATE_CONFLICT`) tuân thủ RFC 9457 `LyreoProblemDetail`.
 - Các payload động đặc thù (như AI raw JSON artifact lưu trữ) được giữ nguyên theo tính chất dữ liệu.
 
 ---

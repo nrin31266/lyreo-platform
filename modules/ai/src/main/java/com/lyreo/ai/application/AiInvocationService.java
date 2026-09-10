@@ -10,8 +10,10 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.modulith.NamedInterface;
 
 /** Resolves provider/model routes and audits every concrete AI attempt. */
+@NamedInterface("application")
 public final class AiInvocationService {
     private final AiRouter router;
     private final AiRouteRepository routes;

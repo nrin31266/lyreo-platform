@@ -26,13 +26,34 @@ public class AiAdminController {
     }
 
     @GetMapping("/providers")
-    public List<Map<String, Object>> providers() {
-        return service.providers();
+    public List<ProviderSummaryResponse> providers() {
+        return service.providers().stream()
+            .map(p -> new ProviderSummaryResponse(
+                p.id(),
+                p.code(),
+                p.displayName(),
+                p.baseUrl(),
+                p.enabled(),
+                p.connectionStatus(),
+                p.keyLast4(),
+                p.configured()
+            ))
+            .toList();
     }
 
     @GetMapping("/routes")
-    public List<Map<String, Object>> routes() {
-        return service.routes();
+    public List<RouteSummaryResponse> routes() {
+        return service.routes().stream()
+            .map(r -> new RouteSummaryResponse(
+                r.id(),
+                r.capability(),
+                r.provider(),
+                r.model(),
+                r.priority(),
+                r.fallback(),
+                r.enabled()
+            ))
+            .toList();
     }
 
     @PutMapping("/providers/{code}")
@@ -96,5 +117,26 @@ public class AiAdminController {
 
     public record RouteResponse(
         UUID id
+    ) {}
+
+    public record ProviderSummaryResponse(
+        UUID id,
+        String code,
+        String display_name,
+        String base_url,
+        boolean enabled,
+        String connection_status,
+        String key_last4,
+        boolean configured
+    ) {}
+
+    public record RouteSummaryResponse(
+        UUID id,
+        String capability,
+        String provider,
+        String model,
+        int priority,
+        boolean is_fallback,
+        boolean enabled
     ) {}
 }

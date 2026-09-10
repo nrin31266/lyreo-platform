@@ -29,9 +29,10 @@ public class JobStateTransitionService {
     }
 
     @Transactional
-    public boolean requestCancellation(UUID jobId) {
-        if (!repository.requestCancellation(jobId)) {
-            return false;
+    public CancellationResult requestCancellation(UUID jobId) {
+        CancellationResult result = repository.requestCancellation(jobId);
+        if (result != CancellationResult.ACCEPTED) {
+            return result;
         }
         BackgroundJob current = repository.findById(jobId).orElseThrow();
         publish(
@@ -40,7 +41,7 @@ public class JobStateTransitionService {
             current.currentStep(),
             current.progressPercent()
         );
-        return true;
+        return CancellationResult.ACCEPTED;
     }
 
     @Transactional

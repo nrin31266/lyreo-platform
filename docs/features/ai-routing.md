@@ -25,5 +25,5 @@ job cancellation.
 ## Contracts and evidence
 
 Java code: `modules/ai/src/main/java/com/lyreo/ai/`. FastAPI wire models:
-`services/ai-service/app/schemas.py`; endpoints in `app/main.py`; contract tests in
-`services/ai-service/tests/test_api.py`. Mock success proves schema/path, not model quality/cost.
+`apps/ai-service/app/schemas.py`; endpoints in `app/main.py`; contract tests in
+`apps/ai-service/tests/test_api.py`. Mock success proves schema/path, not model quality/cost.

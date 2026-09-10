@@ -48,7 +48,7 @@ for path in \
   infra/docker/.env \
   infra/keycloak/.env \
   apps/core-service/.env \
-  services/ai-service/.env \
+  apps/ai-service/.env \
   apps/admin-web/.env \
   apps/mobile/.env \
   tools/data-import/.env; do

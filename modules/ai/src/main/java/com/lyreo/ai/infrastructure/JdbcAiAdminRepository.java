@@ -1,6 +1,8 @@
 package com.lyreo.ai.infrastructure;
 
 import com.lyreo.ai.application.AiAdminRepository;
+import com.lyreo.ai.application.ProviderSummary;
+import com.lyreo.ai.application.RouteSummary;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import java.util.List;
 import java.util.Map;
@@ -16,29 +18,48 @@ public final class JdbcAiAdminRepository implements AiAdminRepository {
     }
 
     @Override
-    public List<Map<String, Object>> providers() {
-        return jdbc.queryForList(
+    public List<ProviderSummary> providers() {
+        return jdbc.query(
             """
             SELECT id, code, display_name, base_url, enabled, connection_status,
-                   key_last4, (encrypted_api_key IS NOT NULL) configured
+                   key_last4, (encrypted_api_key IS NOT NULL) AS configured
               FROM ai_provider
              ORDER BY code
             """,
-            Map.of()
+            Map.of(),
+            (rs, rowNum) -> new ProviderSummary(
+                rs.getObject("id", UUID.class),
+                rs.getString("code"),
+                rs.getString("display_name"),
+                rs.getString("base_url"),
+                rs.getBoolean("enabled"),
+                rs.getString("connection_status"),
+                rs.getString("key_last4"),
+                rs.getBoolean("configured")
+            )
         );
     }
 
     @Override
-    public List<Map<String, Object>> routes() {
-        return jdbc.queryForList(
+    public List<RouteSummary> routes() {
+        return jdbc.query(
             """
-            SELECT r.id, r.capability, p.code provider, r.model, r.priority,
-                   r.is_fallback, r.enabled, r.config_json
+            SELECT r.id, r.capability, p.code AS provider, r.model, r.priority,
+                   r.is_fallback, r.enabled
               FROM ai_capability_route r
-              JOIN ai_provider p ON p.id=r.provider_id
+              JOIN ai_provider p ON p.id = r.provider_id
              ORDER BY r.capability, r.priority
             """,
-            Map.of()
+            Map.of(),
+            (rs, rowNum) -> new RouteSummary(
+                rs.getObject("id", UUID.class),
+                rs.getString("capability"),
+                rs.getString("provider"),
+                rs.getString("model"),
+                rs.getInt("priority"),
+                rs.getBoolean("is_fallback"),
+                rs.getBoolean("enabled")
+            )
         );
     }
 

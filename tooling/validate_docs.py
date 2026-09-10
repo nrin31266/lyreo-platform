@@ -202,7 +202,7 @@ def _check_concrete_evidence_paths(root: Path, texts: dict[Path, str], errors: l
 def _check_legacy_owner_references(root: Path, texts: dict[Path, str], errors: list[str]) -> None:
     allowed = {root / "docs/LYREO_PLATFORM_SPEC.md", root / "README.md", root / "AGENTS.md",
                root / "AGENT.md", root / "CLAUDE.md", root / "GEMINI.md", root / "docs/README.md",
-               root / "docs/documentation.md", root / "TESTING_NOTES.md"}
+               root / "docs/documentation.md"}
     for path, text in texts.items():
         if path not in allowed and "LYREO_PLATFORM_SPEC.md" in without_fences(text):
             errors.append(f"{path.relative_to(root).as_posix()}: legacy master referenced as a current owner")

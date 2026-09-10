@@ -210,8 +210,7 @@ acceptance, endpoint/schema, configuration, or roadmap tables.
   `docs/architecture/`, `docs/DECISIONS.md`;
 - configuration/data/operations → their existing canonical docs;
 - evidence status → `docs/requirements/traceability.md`; unresolved items → `gaps.md`;
-- `docs/LYREO_PLATFORM_SPEC.md` is compatibility navigation, not a competing owner;
-- `TESTING_NOTES.md` is a dated historical handoff, never current authority.
+- `docs/LYREO_PLATFORM_SPEC.md` is compatibility navigation, not a competing owner.
 
 ## 14. Testing and completion
 

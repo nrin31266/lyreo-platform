@@ -47,7 +47,7 @@ public class AdminLessonController {
     @PostMapping("/build")
     @ResponseStatus(HttpStatus.ACCEPTED)
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<CreateLessonBuildService.BuildAccepted> build(@Valid @RequestBody BuildLessonRequest request) {
+    public ResponseEntity<BuildAcceptedResponse> build(@Valid @RequestBody BuildLessonRequest request) {
         var options = new LessonBuildOptions(
             request.sourceType(),
             request.activities(),
@@ -63,8 +63,13 @@ public class AdminLessonController {
         );
         return ResponseEntity.accepted()
             .location(URI.create("/api/v1/jobs/" + accepted.jobId()))
-            .body(accepted);
+            .body(new BuildAcceptedResponse(accepted.lessonId(), accepted.jobId()));
     }
+
+    public record BuildAcceptedResponse(
+        UUID lessonId,
+        UUID jobId
+    ) {}
 
     public record BuildLessonRequest(
         @NotBlank(message = "title is required")
