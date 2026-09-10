@@ -16,4 +16,4 @@ Mobile values as learner facts.
 
 Notification may deliver mission/level/job events to UI, but transport is not durability. Code:
 `modules/gamification`, `modules/analytics`, `modules/notification`, `libs/contracts`. Unit evidence
-for reward policy: `apps/core-service/src/test/java/com/lyreo/gamification/RewardPolicyTest.java`.
+for reward policy: `modules/gamification/src/test/java/com/lyreo/gamification/RewardPolicyTest.java`.

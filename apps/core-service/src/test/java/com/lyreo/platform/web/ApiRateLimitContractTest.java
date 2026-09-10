@@ -36,7 +36,10 @@ class ApiRateLimitContractTest {
         // 2 requests per minute capacity
         rateLimitService = new LocalRateLimitService(2, java.time.Duration.ofMinutes(1));
         ApiRateLimitConfiguration config = new ApiRateLimitConfiguration();
-        OncePerRequestFilter filter = config.apiRateLimitFilter(rateLimitService, new ApiProblemWriter());
+        OncePerRequestFilter filter = config.apiRateLimitFilter(
+            rateLimitService,
+            new ApiProblemWriter(TestMappers.productionJsonMapper())
+        );
 
         mockMvc = MockMvcBuilders.standaloneSetup(new RateLimitTestController())
             .setControllerAdvice(new ApiExceptionHandler())
@@ -64,6 +67,7 @@ class ApiRateLimitContractTest {
             .andExpect(jsonPath("$.status").value(429))
             .andExpect(jsonPath("$.code").value("RATE_LIMITED"))
             .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.startsWith("Too many requests. Please try again in ")))
-            .andExpect(jsonPath("$.correlationId").isString());
+            .andExpect(jsonPath("$.correlationId").isString())
+            .andExpect(jsonPath("$.properties").doesNotExist());
     }
 }

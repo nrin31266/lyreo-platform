@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.modulith.NamedInterface;
 
 /**
  * Produces a credential-free routing snapshot for durable business jobs.
@@ -16,6 +17,7 @@ import java.util.Map;
  * fully pinned reproducibility, introduce that explicitly rather than silently changing this
  * semantic.</p>
  */
+@NamedInterface("application")
 public final class AiRoutingSnapshotService {
     private final AiRouteRepository routes;
 

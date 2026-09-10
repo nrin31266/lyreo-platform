@@ -53,10 +53,10 @@ services:
   ai-service:
     build:
       context: .
-      dockerfile: services/ai-service/Dockerfile
+      dockerfile: apps/ai-service/Dockerfile
     restart: unless-stopped
     env_file:
-      - services/ai-service/.env
+      - apps/ai-service/.env
     healthcheck:
       test:
         - CMD

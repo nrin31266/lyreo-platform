@@ -143,9 +143,6 @@ checks for the changed area. Exact repository commands are owned by
 [`README.md`](../README.md#15-validation); completion requirements are owned by
 [`AGENTS.md`](../AGENTS.md#14-testing-and-completion).
 
-`TESTING_NOTES.md`, if still present, is only a temporary starter handoff. It is not an architecture
-or testing-policy source of truth.
-
 ## 10. Common troubleshooting
 
 ### Maven cannot download dependencies

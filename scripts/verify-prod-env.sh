@@ -5,7 +5,7 @@ set -euo pipefail
 required_files=(
   infra/docker/.env
   apps/core-service/.env
-  services/ai-service/.env
+  apps/ai-service/.env
 )
 
 for file in "${required_files[@]}"; do
@@ -32,7 +32,7 @@ require_non_placeholder infra/docker/.env KEYCLOAK_ADMIN_PASSWORD
 require_non_placeholder infra/docker/.env LYREO_CORE_CLIENT_SECRET
 require_non_placeholder apps/core-service/.env MASTER_ENCRYPTION_KEY
 require_non_placeholder apps/core-service/.env AI_SERVICE_INTERNAL_TOKEN
-require_non_placeholder services/ai-service/.env AI_SERVICE_INTERNAL_TOKEN
+require_non_placeholder apps/ai-service/.env AI_SERVICE_INTERNAL_TOKEN
 
 if [[ "$(get_env apps/core-service/.env SPRING_PROFILES_ACTIVE)" == "dev" ]]; then
   echo 'Production Core env must not use SPRING_PROFILES_ACTIVE=dev' >&2

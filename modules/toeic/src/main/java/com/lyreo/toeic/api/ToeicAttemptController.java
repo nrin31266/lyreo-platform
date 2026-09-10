@@ -29,7 +29,7 @@ public class ToeicAttemptController {
     }
 
     @PostMapping("/{testId}/attempts")
-    public ToeicAttemptService.SubmitResult submit(
+    public ToeicSubmitResponse submit(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable UUID testId,
         @Valid @RequestBody SubmitRequest request
@@ -38,12 +38,44 @@ public class ToeicAttemptController {
             jwt.getSubject(),
             jwt.getClaimAsString("email")
         ).id();
-        return attempts.submit(learnerId, testId, request.mode(), request.answers());
+        ToeicAttemptService.Mode serviceMode = ToeicAttemptService.Mode.valueOf(request.mode().name());
+        var result = attempts.submit(learnerId, testId, serviceMode, request.answers());
+        var score = result.score();
+        return new ToeicSubmitResponse(
+            result.attemptId(),
+            new ToeicScoreResponse(
+                score.listeningCorrect(),
+                score.listeningTotal(),
+                score.readingCorrect(),
+                score.readingTotal(),
+                score.listeningScaledScore(),
+                score.readingScaledScore()
+            )
+        );
+    }
+
+    public enum AttemptMode {
+        FULL_TEST,
+        DRILL
     }
 
     public record SubmitRequest(
         @NotNull(message = "mode is required")
-        ToeicAttemptService.Mode mode,
+        AttemptMode mode,
         Map<UUID, String> answers
+    ) {}
+
+    public record ToeicScoreResponse(
+        int listeningCorrect,
+        int listeningTotal,
+        int readingCorrect,
+        int readingTotal,
+        Integer listeningScaledScore,
+        Integer readingScaledScore
+    ) {}
+
+    public record ToeicSubmitResponse(
+        UUID attemptId,
+        ToeicScoreResponse score
     ) {}
 }

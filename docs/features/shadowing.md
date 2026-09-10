@@ -25,4 +25,4 @@ Mobile nối end-to-end. `apps/mobile/app/lesson.tsx` có recording/score minh h
 không được ghi `verified`; xem [GAP-003](../requirements/gaps.md#gap-003--shadowing-chua-noi-end-to-end).
 
 Code/evidence: `modules/speech-assessment/src/main/java/com/lyreo/speechassessment/` và
-`apps/core-service/src/test/java/com/lyreo/speechassessment/SpeechScoringPolicyTest.java`.
+`modules/speech-assessment/src/test/java/com/lyreo/speechassessment/SpeechScoringPolicyTest.java`.

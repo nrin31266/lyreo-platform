@@ -12,4 +12,4 @@ The current `StarterFsrsCompatibleScheduler` is a starter abstraction, not a cla
 equivalence. Replacing it requires benchmark, state migration and compatibility evidence.
 
 Code: `modules/vocabulary/src/main/java/com/lyreo/vocabulary/`; unit evidence location:
-`apps/core-service/src/test/java/com/lyreo/vocabulary/StarterSchedulerTest.java`.
+`modules/vocabulary/src/test/java/com/lyreo/vocabulary/StarterSchedulerTest.java`.

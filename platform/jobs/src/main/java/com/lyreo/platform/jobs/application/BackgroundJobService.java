@@ -31,9 +31,9 @@ public final class BackgroundJobService {
     /**
      * Requests cancellation and emits a durable job-state event in the same transaction.
      *
-     * @return false if the job does not exist or is already terminal.
+     * @return CancellationResult indicating ACCEPTED, NOT_FOUND, or NOT_CANCELLABLE.
      */
-    public boolean cancel(UUID jobId) {
+    public CancellationResult cancel(UUID jobId) {
         return transitions.requestCancellation(jobId);
     }
 }

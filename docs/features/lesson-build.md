@@ -14,7 +14,8 @@ pronunciation strategy độc lập; preset chỉ thuộc form và không thay f
 1. `AdminLessonController` map request thành `LessonBuildOptions`.
 2. `CreateLessonBuildService` validate, tạo Lesson, gọi `LessonBuildPlanner`, snapshot routing context,
    tạo generic `background_job` cùng Lesson build state/steps.
-3. API trả `202` và `Location: /api/v1/jobs/{jobId}`; Lesson status, job status và từng step status
+3. API trả `202` kèm header `Location: /api/v1/jobs/{jobId}` và body ticket `BuildAcceptedResponse(lessonId, jobId)`;
+   internal build plan không được serialize ra wire contract. Lesson status, job status và từng step status
    không được coi là một field duy nhất.
 4. Worker claim lease. `LessonBuildJobHandler` đọc plan và skip durable `DONE` steps.
 5. Mỗi step kiểm tra cancellation, materialize source hoặc gọi Java-owned AI invocation, normalize
@@ -50,7 +51,7 @@ PostgreSQL giữ normalized/workflow state.
 
 - Code: `modules/lesson/src/main/java/com/lyreo/lesson/api/AdminLessonController.java`,
   `CreateLessonBuildService.java`, `LessonBuildPlanner.java`, `LessonBuildJobHandler.java`.
-- Tests: `apps/core-service/src/test/java/com/lyreo/lesson/LessonBuildPlannerTest.java`,
+- Tests: `modules/lesson/src/test/java/com/lyreo/lesson/LessonBuildPlannerTest.java`,
   `LessonProcessingPolicyTest.java`, `LessonPromptFactoryTest.java`.
 - Tests trên chứng minh unit behavior tương ứng khi được chạy; không tự chứng minh worker recovery,
   live provider quality hoặc YouTube policy. Fencing evidence gap: [GAP-006](../requirements/gaps.md#gap-006--fencing-cua-lesson-step-writes-chua-duoc-chung-minh).

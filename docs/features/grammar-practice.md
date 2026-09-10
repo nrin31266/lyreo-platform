@@ -13,4 +13,4 @@ Lesson contextual Grammar annotations may reference taxonomy but do not create G
 progress. Import shape/provenance belongs in [Data Pipelines](../DATA_PIPELINES.md).
 
 Code: `modules/grammar`; unit evidence location:
-`apps/core-service/src/test/java/com/lyreo/grammar/GrammarPracticeServiceTest.java`.
+`modules/grammar/src/test/java/com/lyreo/grammar/GrammarPracticeServiceTest.java`.

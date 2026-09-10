@@ -11,7 +11,7 @@ public interface BackgroundJobRepository {
     UUID enqueue(String jobType, String ownerModule, UUID ownerReferenceId, int priority, int maxAttempts, String configSnapshotJson);
     List<BackgroundJob> claim(String workerId, int limit, Duration lease);
     Optional<BackgroundJob> findById(UUID id);
-    boolean requestCancellation(UUID id);
+    CancellationResult requestCancellation(UUID id);
     boolean isCancellationRequested(UUID id);
 
     /** Lease-aware writes are fencing operations: stale workers must not mutate recovered jobs. */

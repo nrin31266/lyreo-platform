@@ -1,7 +1,9 @@
 package com.lyreo.identity.application;
 
 import com.lyreo.identity.domain.AppUser;
+import org.springframework.modulith.NamedInterface;
 
+@NamedInterface("application")
 public final class AppUserProvisioningService {
     private final AppUserRepository repository;
 

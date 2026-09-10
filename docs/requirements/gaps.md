@@ -82,7 +82,7 @@ intent vẫn ở owner requirement/spec; status ở đây không tự thay đổ
 ## GAP-009 — Starter/mocked implementation maturity
 
 - Type/status: `verification-gap` / `open`.
-- Sources: [traceability](traceability.md), historical [`TESTING_NOTES`](../../TESTING_NOTES.md).
+- Sources: [traceability](traceability.md), initial starter audit.
 - Evidence: Vocabulary scheduler là starter; Admin Curriculum/Lexicon và Mobile progress còn
   placeholder/sample data; live provider/native/Docker integration chưa được chứng nhận trong docs setup.
 - Impact: feature presence không đồng nghĩa end-to-end completeness.
@@ -90,9 +90,8 @@ intent vẫn ở owner requirement/spec; status ở đây không tự thay đổ
 
 ## GAP-010 — Frontend dependency install policy lệch CI
 
-- Type/status: `verification-gap` / `open`.
+- Type/status: `verification-gap` / `resolved`.
 - Sources: `Makefile`, `.github/workflows/ci.yml`, `pnpm-lock.yaml`.
-- Evidence: lockfile hiện tồn tại; Makefile dùng frozen install, CI còn `--no-frozen-lockfile` từ
-  lịch sử trước lockfile.
-- Impact: CI có thể không phát hiện lock drift theo policy local.
-- Next: đổi CI dependency gate trong task dependency/workflow riêng; docs migration không sửa policy này.
+- Evidence: CI và Makefile hiện đồng bộ sử dụng `pnpm install --frozen-lockfile` và `uv sync --locked`.
+- Impact: CI phát hiện lock drift chính xác theo policy local.
+- Next: duy trì frozen/locked install trong mọi pipeline.

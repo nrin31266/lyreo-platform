@@ -136,6 +136,33 @@ public class OpenApiConfiguration {
                     .content(problemContent));
             }
 
+            // Operation-level contract for POST /api/v1/jobs/{id}/cancel
+            var jobCancelPath = openApi.getPaths().get("/api/v1/jobs/{id}/cancel");
+            if (jobCancelPath != null && jobCancelPath.getPost() != null) {
+                var post = jobCancelPath.getPost();
+                ApiResponses responses = post.getResponses();
+                if (responses == null) {
+                    responses = new ApiResponses();
+                    post.setResponses(responses);
+                }
+                responses.remove("200");
+                ApiResponse response202 = new ApiResponse()
+                    .description("Job cancellation requested successfully");
+                responses.addApiResponse("202", response202);
+                responses.addApiResponse("401", new ApiResponse()
+                    .description("Authentication required")
+                    .content(problemContent));
+                responses.addApiResponse("403", new ApiResponse()
+                    .description("Access denied (ADMIN role required)")
+                    .content(problemContent));
+                responses.addApiResponse("404", new ApiResponse()
+                    .description("Background job not found")
+                    .content(problemContent));
+                responses.addApiResponse("409", new ApiResponse()
+                    .description("Background job is not cancellable in its current state")
+                    .content(problemContent));
+            }
+
             // Operation security and rate limit documentation scoped to API paths
             openApi.getPaths().forEach((pathPattern, pathItem) -> {
                 boolean isPublic = !pathPattern.startsWith("/api/");

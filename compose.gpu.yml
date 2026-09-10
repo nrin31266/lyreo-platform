@@ -4,7 +4,7 @@ services:
   ai-service:
     build:
       context: .
-      dockerfile: services/ai-service/Dockerfile.gpu
+      dockerfile: apps/ai-service/Dockerfile.gpu
     environment:
       AI_RUNTIME_MODE: local
     deploy:

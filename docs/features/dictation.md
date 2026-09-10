@@ -31,4 +31,4 @@ không lộ ra Mobile.
 
 Code: `LessonPracticeController.java`, `LessonPracticeService.java`, `DictationScoringPolicy.java`,
 `JdbcLessonPracticeRepository.java`. Unit evidence locations:
-`apps/core-service/src/test/java/com/lyreo/lesson/DictationScoringPolicyTest.java`.
+`modules/lesson/src/test/java/com/lyreo/lesson/DictationScoringPolicyTest.java`.

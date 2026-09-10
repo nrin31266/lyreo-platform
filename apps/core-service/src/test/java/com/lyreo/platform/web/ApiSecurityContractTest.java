@@ -8,16 +8,20 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.json.ProblemDetailJacksonMixin;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import java.net.URI;
+import tools.jackson.databind.JsonNode;
 
 class ApiSecurityContractTest {
 
-    private final ApiProblemWriter problemWriter = new ApiProblemWriter();
+    private final ApiProblemWriter problemWriter = new ApiProblemWriter(TestMappers.productionJsonMapper());
     private final ProblemAuthenticationEntryPoint authenticationEntryPoint =
         new ProblemAuthenticationEntryPoint(problemWriter);
     private final ProblemAccessDeniedHandler accessDeniedHandler =
@@ -59,6 +63,7 @@ class ApiSecurityContractTest {
         assertThat(body).contains("\"status\":403");
         assertThat(body).contains("\"correlationId\":\"corr-sec-403\"");
         assertThat(body).contains("\"type\":\"urn:lyreo:problem:access-denied\"");
+        assertThat(body).doesNotContain("\"properties\"");
     }
 
     @Test
@@ -120,5 +125,28 @@ class ApiSecurityContractTest {
         assertThat(body).contains("\"status\":401");
         assertThat(body).contains("\"correlationId\":\"corr-sub-missing-401\"");
         assertThat(body).contains("\"type\":\"urn:lyreo:problem:authentication-required\"");
+        assertThat(body).doesNotContain("\"properties\"");
+    }
+
+    @Test
+    void problemDetailExtensionsAreSerializedAtTopLevelWithoutPropertiesNesting() throws Exception {
+        ProblemDetail problem = ProblemDetail.forStatus(403);
+        problem.setType(URI.create("urn:lyreo:problem:access-denied"));
+        problem.setTitle("Access denied");
+        problem.setProperty("code", "ACCESS_DENIED");
+        problem.setProperty("correlationId", "corr-top-level-test");
+
+        String json = TestMappers.productionJsonMapper().writeValueAsString(problem);
+
+        assertThat(json).contains("\"code\":\"ACCESS_DENIED\"");
+        assertThat(json).contains("\"correlationId\":\"corr-top-level-test\"");
+        assertThat(json).doesNotContain("\"properties\"");
+
+        JsonNode rootNode = TestMappers.productionJsonMapper().readTree(json);
+        assertThat(rootNode.has("code")).isTrue();
+        assertThat(rootNode.get("code").asText()).isEqualTo("ACCESS_DENIED");
+        assertThat(rootNode.has("correlationId")).isTrue();
+        assertThat(rootNode.get("correlationId").asText()).isEqualTo("corr-top-level-test");
+        assertThat(rootNode.has("properties")).isFalse();
     }
 }

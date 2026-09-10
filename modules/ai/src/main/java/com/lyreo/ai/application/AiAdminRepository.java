@@ -6,8 +6,8 @@ import java.util.UUID;
 
 /** Persistence port for runtime provider/model routing configuration. */
 public interface AiAdminRepository {
-    List<Map<String, Object>> providers();
-    List<Map<String, Object>> routes();
+    List<ProviderSummary> providers();
+    List<RouteSummary> routes();
 
     UUID saveProvider(
         String code,

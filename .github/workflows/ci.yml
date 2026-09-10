@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Offline repository guardrails
         run: |
-          python3 -m compileall -q services/ai-service/app services/ai-service/tests tools/data-import
+          python3 -m compileall -q apps/ai-service/app apps/ai-service/tests tools/data-import
           bash -n scripts/*.sh infra/keycloak/scripts/*.sh infra/postgres/init/*.sh
           python3 tooling/validate_repo.py
           python3 tooling/validate_docs.py
@@ -36,13 +36,13 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - name: AI Service tests
         run: |
-          cd services/ai-service
-          uv sync --extra dev
+          cd apps/ai-service
+          uv sync --locked --extra dev
           uv run pytest
       - name: Data importer tests
         run: |
           cd tools/data-import
-          uv sync --extra dev
+          uv sync --locked --extra dev
           uv run pytest
 
   frontend:
@@ -53,7 +53,6 @@ jobs:
         with:
           node-version: '24.20.0'
       - run: corepack enable && corepack prepare pnpm@12.3.1 --activate
-      # First networked team setup should generate/commit pnpm-lock.yaml; then switch this to --frozen-lockfile.
-      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm build

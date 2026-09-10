@@ -12,4 +12,4 @@ see [GAP-008](../requirements/gaps.md#gap-008--toeic-scaled-score-conversion-tab
 is in PostgreSQL and media uses object keys.
 
 Code: `modules/toeic`; unit evidence location:
-`apps/core-service/src/test/java/com/lyreo/toeic/ToeicAttemptServiceTest.java`.
+`modules/toeic/src/test/java/com/lyreo/toeic/ToeicAttemptServiceTest.java`.

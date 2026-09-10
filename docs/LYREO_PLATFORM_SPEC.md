@@ -247,7 +247,7 @@ Owner mới: [AI requirements](requirements/ai.md#br-ai-003--provider-credential
 ## 25. Qwen3-ASR / ForcedAligner
 
 Owner mới: [AI execution](architecture/ai-execution.md#runtime-and-routing),
-[AI Service README](../services/ai-service/README.md), và [Tech Choices](TECH_CHOICES.md).
+[AI Service README](../apps/ai-service/README.md), và [Tech Choices](TECH_CHOICES.md).
 
 ### Dev không GPU
 

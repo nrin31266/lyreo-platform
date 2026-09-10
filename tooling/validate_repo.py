@@ -108,7 +108,7 @@ REQUIRED = [
     "apps/core-service/.env.example",
     "apps/admin-web/.env.example",
     "apps/mobile/.env.example",
-    "services/ai-service/.env.example",
+    "apps/ai-service/.env.example",
     "infra/keycloak/import/lyreo-realm.json",
     "infra/postgres/init/01-create-keycloak-db.sh",
     "tools/data-import/import_grammar.py",
@@ -154,13 +154,6 @@ gitignore = ROOT / ".gitignore"
 if gitignore.exists() and ".data/" not in gitignore.read_text(encoding="utf-8"):
     errors.append(".gitignore must exclude repo-local .data/ datasets/artifacts")
 
-# TESTING_NOTES is an artifact handoff only. The repository must remain valid after team deletes it.
-testing_notes = ROOT / "TESTING_NOTES.md"
-if testing_notes.exists():
-    head = testing_notes.read_text(encoding="utf-8")[:800].upper()
-    if "TEMPORARY" not in head:
-        errors.append("TESTING_NOTES.md must clearly identify itself as temporary handoff material")
-
 # Manifests/config syntax -------------------------------------------------------
 for path in repo_files(ROOT, "pom.xml"):
     try:
@@ -199,7 +192,7 @@ for path in repo_files(ROOT, "pom.xml"):
             errors.append(f"forbidden {label} dependency in {path.relative_to(ROOT)}")
 
 # FastAPI is an AI execution boundary, not a shadow business backend.
-for path in repo_files(ROOT / "services/ai-service", "*.py"):
+for path in repo_files(ROOT / "apps/ai-service", "*.py"):
     text = path.read_text(encoding="utf-8").lower()
     for forbidden in (
         "curriculum_progress",
@@ -301,7 +294,7 @@ for module_name, package_name in MODULE_PACKAGE.items():
         errors.append(f"business module missing root package-info.java: modules/{module_name}")
 
 # FastAPI must stay a thin capability runtime: no ORM/business database dependency.
-ai_pyproject = ROOT / "services/ai-service/pyproject.toml"
+ai_pyproject = ROOT / "apps/ai-service/pyproject.toml"
 if ai_pyproject.exists():
     ai_manifest = ai_pyproject.read_text(encoding="utf-8").lower()
     for token in ("sqlalchemy", "psycopg", "asyncpg", "alembic"):
@@ -723,7 +716,7 @@ for rel, adapter in (
 # consumer in the owner scope (or be an explicitly documented tool-level implicit variable).
 ENV_OWNER_SCOPES = {
     "apps/core-service/.env.example": ("apps/core-service",),
-    "services/ai-service/.env.example": ("services/ai-service/app",),
+    "apps/ai-service/.env.example": ("apps/ai-service/app",),
     "infra/docker/.env.example": ("compose.dev.yml", "compose.prod.yml", "compose.gpu.yml", "scripts/init-dev-env.sh"),
     "infra/keycloak/.env.example": ("infra/keycloak/scripts", "scripts/init-dev-env.sh"),
     "tools/data-import/.env.example": ("tools/data-import", "scripts/fetch-data.sh", "scripts/init-dev-env.sh", "scripts/doctor.sh"),
@@ -808,8 +801,26 @@ for app in ("apps/admin-web", "apps/mobile"):
         if f"components/ui/{component_file.stem}" not in combined:
             warnings.append(f"repo-owned UI primitive currently has no screen consumer: {component_file.relative_to(ROOT)}")
 
-# A lockfile is useful only if it actually represents the workspace. A root-only lockfile
-# creates false reproducibility and is worse than an explicit first-install bootstrap.
+# Production Java source must use Spring Boot 4 Jackson 3 (tools.jackson.*);
+# importing Jackson 2 databind in main production Java is forbidden.
+JACKSON2_DATABIND_RE = re.compile(r"^import\s+com\.fasterxml\.jackson\.databind\.", re.MULTILINE)
+for path in repo_files(ROOT, "*.java"):
+    if "/src/main/java/" in path.as_posix():
+        text = path.read_text(encoding="utf-8")
+        if JACKSON2_DATABIND_RE.search(text):
+            errors.append(f"production Java code must not import com.fasterxml.jackson.databind: {path.relative_to(ROOT)}")
+
+# Committed lockfiles are repository invariants.
+REQUIRED_LOCKFILES = (
+    "pnpm-lock.yaml",
+    "apps/ai-service/uv.lock",
+    "tools/data-import/uv.lock",
+)
+for lock_rel in REQUIRED_LOCKFILES:
+    lock_path = ROOT / lock_rel
+    if not lock_path.exists():
+        errors.append(f"missing required lockfile: {lock_rel}")
+
 lockfile = ROOT / "pnpm-lock.yaml"
 if lockfile.exists():
     lock_text = lockfile.read_text(encoding="utf-8")
@@ -822,8 +833,6 @@ if lockfile.exists():
     missing_importers = [item[:-1] for item in required_importers if not re.search(rf"^  {re.escape(item)}", lock_text, re.MULTILINE)]
     if missing_importers:
         errors.append("pnpm-lock.yaml is stale/incomplete; missing workspace importers: " + ", ".join(missing_importers))
-else:
-    warnings.append("pnpm-lock.yaml is absent; generate it after `pnpm install` on a networked dev machine")
 
 if errors:
     print("VALIDATION FAILED")

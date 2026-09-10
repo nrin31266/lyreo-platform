@@ -32,7 +32,7 @@ public class GrammarPracticeController {
     }
 
     @GetMapping("/questions")
-    public List<GrammarPracticeService.QuestionView> questions(
+    public List<GrammarQuestionResponse> questions(
         @RequestParam(required = false) UUID topicId,
         @RequestParam(required = false) UUID subtopicId,
         @RequestParam(required = false) UUID bankSetId,
@@ -42,11 +42,11 @@ public class GrammarPracticeController {
         return practice.practice(
             new PracticeFilter(topicId, subtopicId, bankSetId, difficulty),
             limit
-        );
+        ).stream().map(GrammarQuestionResponse::from).toList();
     }
 
     @PostMapping("/questions/{questionId}/attempts")
-    public GrammarPracticeService.SubmitResult submit(
+    public GrammarSubmitResponse submit(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable UUID questionId,
         @Valid @RequestBody SubmitRequest request
@@ -55,11 +55,64 @@ public class GrammarPracticeController {
             jwt.getSubject(),
             jwt.getClaimAsString("email")
         ).id();
-        return practice.submit(learnerId, questionId, request.answer());
+        return GrammarSubmitResponse.from(practice.submit(learnerId, questionId, request.answer()));
     }
 
     public record SubmitRequest(
         @NotBlank(message = "answer is required")
         String answer
     ) {}
+
+    public record QuestionOptionResponse(
+        String key,
+        String text
+    ) {}
+
+    public record GrammarQuestionResponse(
+        UUID id,
+        String questionText,
+        List<QuestionOptionResponse> options,
+        int difficultyLevel,
+        UUID topicId,
+        UUID subtopicId
+    ) {
+        public static GrammarQuestionResponse from(GrammarPracticeService.QuestionView view) {
+            return new GrammarQuestionResponse(
+                view.id(),
+                view.questionText(),
+                view.options().stream()
+                    .map(o -> new QuestionOptionResponse(o.key(), o.text()))
+                    .toList(),
+                view.difficultyLevel(),
+                view.topicId(),
+                view.subtopicId()
+            );
+        }
+    }
+
+    public record GrammarSubmitResponse(
+        UUID attemptId,
+        UUID questionId,
+        boolean correct,
+        String correctAnswer,
+        String explanationVi,
+        String translationVi,
+        String answerTranslationVi,
+        String vocabularyNote,
+        String explanationPolicy
+    ) {
+        public static GrammarSubmitResponse from(GrammarPracticeService.SubmitResult result) {
+            return new GrammarSubmitResponse(
+                result.attemptId(),
+                result.questionId(),
+                result.correct(),
+                result.correctAnswer(),
+                result.explanationVi(),
+                result.translationVi(),
+                result.answerTranslationVi(),
+                result.vocabularyNote(),
+                result.explanationPolicy() != null ? result.explanationPolicy().name() : null
+            );
+        }
+    }
 }
