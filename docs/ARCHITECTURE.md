@@ -316,14 +316,20 @@ version and document the deprecation in the feature's owner doc.
 
 ## 17. API error envelope
 
-All Core HTTP error responses use a consistent envelope:
+All Core public HTTP error responses follow the RFC 9457 Problem Details standard, owned canonically
+by [`http-api-contract.md`](architecture/http-api-contract.md). Responses use `Content-Type: application/problem+json`
+with `type`, `title`, `status`, `detail`, `instance`, machine-readable `code`, and `correlationId`.
 
 ```json
 {
-  "code": "DOMAIN_SPECIFIC_CODE",
-  "message": "Human-readable summary for developer/log",
+  "type": "urn:lyreo:problem:request-validation-failed",
+  "title": "Request validation failed",
+  "status": 400,
+  "detail": "One or more request fields are invalid.",
+  "instance": "/api/v1/...",
+  "code": "REQUEST_VALIDATION_FAILED",
   "correlationId": "...",
-  "details": {}
+  "errors": []
 }
 ```
 

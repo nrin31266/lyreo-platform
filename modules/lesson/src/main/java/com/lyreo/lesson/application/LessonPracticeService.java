@@ -2,6 +2,8 @@ package com.lyreo.lesson.application;
 
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
+import com.lyreo.contracts.errors.RequestValidationException;
+import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.lesson.LessonActivityCompletedEvent;
 import com.lyreo.contracts.lesson.LessonCompletedEvent;
 import java.time.Instant;
@@ -45,10 +47,10 @@ public class LessonPracticeService {
         UUID sentenceId,
         String answer
     ) {
-        if (answer == null) throw new IllegalArgumentException("answer is required");
+        if (answer == null) throw new RequestValidationException("answer is required");
 
         var target = repository.findDictationTarget(lessonId, activityId, sentenceId)
-            .orElseThrow(() -> new IllegalArgumentException(
+            .orElseThrow(() -> new ResourceNotFoundException(
                 "Dictation activity/sentence does not belong to this lesson"
             ));
 

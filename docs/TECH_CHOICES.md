@@ -33,6 +33,9 @@ This file records current choices and **why** they exist. Version numbers may re
 | Localization | i18next 26.x + react-i18next 17.x; expo-localization on Mobile | Same translation model across Web/Native with platform-specific locale detection |
 | Themes | Shared semantic light/dark tokens; `system | light | dark` preference | Prevent feature-level color literals and make dark mode a foundation concern |
 | Monorepo JS | pnpm workspaces | Shared design-system/i18n contracts with platform-specific component ownership |
+| HTTP errors | RFC 9457 Problem Details | Native Spring `ProblemDetail`, stable codes, correlation ID, safe 500s |
+| Validation | Jakarta Bean Validation / Hibernate Validator | Standard request boundary shape/syntax constraints |
+| API Docs | Springdoc OpenAPI 3.1.x / Swagger UI | Automated OpenAPI contract, Bearer JWT auth, dev/test profile controlled |
 
 ## Kafka deliberately not selected
 

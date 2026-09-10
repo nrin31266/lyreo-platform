@@ -2,6 +2,7 @@ package com.lyreo.lesson;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.lyreo.contracts.errors.StateConflictException;
 import com.lyreo.lesson.domain.LessonActivityType;
 import com.lyreo.lesson.domain.LessonAnnotationType;
 import com.lyreo.lesson.domain.LessonBuildOptions;
@@ -30,7 +31,7 @@ class LessonProcessingPolicyTest {
         );
 
         assertThatThrownBy(() -> policy.validate(requested))
-            .isInstanceOf(IllegalArgumentException.class)
+            .isInstanceOf(StateConflictException.class)
             .hasMessageContaining("activity disabled");
     }
 }

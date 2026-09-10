@@ -1,11 +1,11 @@
 package com.lyreo.lexicon.api;
 
+import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.lexicon.application.LexiconRepository;
 import com.lyreo.lexicon.application.LexiconSearchService;
 import com.lyreo.lexicon.domain.LexiconEntry;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,7 +30,8 @@ public class LexiconController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<LexiconEntry> get(@PathVariable UUID id) {
-        return repository.findById(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    public LexiconEntry get(@PathVariable UUID id) {
+        return repository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Lexicon entry not found: " + id));
     }
 }

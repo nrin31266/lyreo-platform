@@ -4,8 +4,10 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
+import io.github.bucket4j.ConsumptionProbe;
 import io.github.bucket4j.Refill;
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Single-node API rate limiter for the MVP.
@@ -44,13 +46,34 @@ public final class LocalRateLimitService {
     }
 
     public boolean tryConsume(String key) {
+        return tryConsumeProbe(key).allowed();
+    }
+
+    public RateLimitResult tryConsumeProbe(String key) {
         if (key == null || key.isBlank()) throw new IllegalArgumentException("rate-limit key is required");
-        return buckets.get(key, ignored -> newBucket()).tryConsume(1);
+        ConsumptionProbe probe = buckets.get(key, ignored -> newBucket()).tryConsumeAndReturnRemaining(1);
+        return new RateLimitResult(
+            probe.isConsumed(),
+            probe.getRemainingTokens(),
+            probe.isConsumed() ? 0 : probe.getNanosToWaitForRefill()
+        );
     }
 
     private Bucket newBucket() {
         var refill = Refill.intervally(tokens, window);
         var bandwidth = Bandwidth.classic(tokens, refill);
         return Bucket.builder().addLimit(bandwidth).build();
+    }
+
+    public record RateLimitResult(
+        boolean allowed,
+        long remainingTokens,
+        long nanosToWaitForRefill
+    ) {
+        public long secondsToWaitForRefill() {
+            if (nanosToWaitForRefill <= 0) return 0;
+            long seconds = TimeUnit.NANOSECONDS.toSeconds(nanosToWaitForRefill);
+            return Math.max(1, seconds);
+        }
     }
 }

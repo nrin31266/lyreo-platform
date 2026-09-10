@@ -1,6 +1,8 @@
 package com.lyreo.ai.api;
 
 import com.lyreo.ai.application.AiAdminService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -34,9 +36,9 @@ public class AiAdminController {
     }
 
     @PutMapping("/providers/{code}")
-    public Map<String, Object> provider(
+    public ProviderResponse provider(
         @PathVariable String code,
-        @RequestBody ProviderRequest request
+        @Valid @RequestBody ProviderRequest request
     ) {
         String normalizedCode = code.toUpperCase();
         UUID id = service.saveProvider(
@@ -46,29 +48,28 @@ public class AiAdminController {
             request.apiKey(),
             request.enabled()
         );
-        return Map.of(
-            "id", id,
-            "code", normalizedCode,
-            "credentialAccepted", request.apiKey() != null && !request.apiKey().isBlank()
+        return new ProviderResponse(
+            id,
+            normalizedCode,
+            request.apiKey() != null && !request.apiKey().isBlank()
         );
     }
 
     @PostMapping("/routes")
-    public Map<String, Object> route(@RequestBody RouteRequest request) {
-        return Map.of(
-            "id",
-            service.saveRoute(
-                request.capability(),
-                request.providerCode().toUpperCase(),
-                request.model(),
-                request.priority(),
-                request.fallback(),
-                request.enabled()
-            )
+    public RouteResponse route(@Valid @RequestBody RouteRequest request) {
+        UUID id = service.saveRoute(
+            request.capability(),
+            request.providerCode().toUpperCase(),
+            request.model(),
+            request.priority(),
+            request.fallback(),
+            request.enabled()
         );
+        return new RouteResponse(id);
     }
 
     public record ProviderRequest(
+        @NotBlank(message = "displayName is required")
         String displayName,
         String baseUrl,
         String apiKey,
@@ -76,11 +77,24 @@ public class AiAdminController {
     ) {}
 
     public record RouteRequest(
+        @NotBlank(message = "capability is required")
         String capability,
+        @NotBlank(message = "providerCode is required")
         String providerCode,
+        @NotBlank(message = "model is required")
         String model,
         int priority,
         boolean fallback,
         boolean enabled
+    ) {}
+
+    public record ProviderResponse(
+        UUID id,
+        String code,
+        boolean credentialAccepted
+    ) {}
+
+    public record RouteResponse(
+        UUID id
     ) {}
 }

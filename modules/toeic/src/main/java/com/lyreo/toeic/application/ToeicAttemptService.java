@@ -1,5 +1,7 @@
 package com.lyreo.toeic.application;
 
+import com.lyreo.contracts.errors.RequestValidationException;
+import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent;
 import com.lyreo.toeic.application.ToeicAttemptRepository.QuestionKey;
 import com.lyreo.toeic.application.ToeicAttemptRepository.ScoreSummary;
@@ -41,7 +43,7 @@ public class ToeicAttemptService {
         Map<UUID, String> answers
     ) {
         if (learnerId == null || testId == null || mode == null) {
-            throw new IllegalArgumentException("learnerId, testId and mode are required");
+            throw new RequestValidationException("learnerId, testId and mode are required");
         }
         Map<UUID, String> safeAnswers = answers == null
             ? Map.of()
@@ -51,15 +53,15 @@ public class ToeicAttemptService {
             ? Set.copyOf(safeAnswers.keySet())
             : Set.of();
         if (mode == Mode.DRILL && requestedQuestionIds.isEmpty()) {
-            throw new IllegalArgumentException("DRILL submission requires at least one answer");
+            throw new RequestValidationException("DRILL submission requires at least one answer");
         }
 
         List<QuestionKey> answerKey = repository.answerKey(testId, requestedQuestionIds);
         if (answerKey.isEmpty()) {
-            throw new IllegalArgumentException("No TOEIC questions found for this submission");
+            throw new ResourceNotFoundException("No TOEIC questions found for this submission");
         }
         if (mode == Mode.DRILL && answerKey.size() != requestedQuestionIds.size()) {
-            throw new IllegalArgumentException("One or more drill questions do not belong to the test");
+            throw new RequestValidationException("One or more drill questions do not belong to the test");
         }
 
         ScoreSummary score = score(answerKey, safeAnswers);
@@ -133,7 +135,7 @@ public class ToeicAttemptService {
             if (questionId == null) return;
             String value = answer == null ? "" : answer.strip().toUpperCase(Locale.ROOT);
             if (!value.isEmpty() && !Set.of("A", "B", "C", "D").contains(value)) {
-                throw new IllegalArgumentException("TOEIC answer must be A, B, C or D");
+                throw new RequestValidationException("TOEIC answer must be A, B, C or D");
             }
             normalized.put(questionId, value);
         });

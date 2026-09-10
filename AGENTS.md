@@ -59,6 +59,10 @@ infrastructure -> implements inward-facing ports
 
 Domain/application must not depend on JPA/JDBC adapters, PostgreSQL, R2/S3 SDKs, HTTP/FastAPI,
 Keycloak SDKs, or frontend frameworks. Persistence annotations do not belong in domain/application.
+Domain/application code remains HTTP-agnostic; stable HTTP boundaries use explicit API DTOs.
+Core public HTTP contract is owned by `docs/architecture/http-api-contract.md`. Successful Core
+responses are not globally wrapped, and public API failures use RFC 9457 Problem Details with a
+stable code and correlation ID.
 
 Cross-module interaction is allowed only through named/public module APIs, intentionally shared
 public contracts, or Spring Modulith events. Never import another module's repository, JPA entity,
@@ -106,6 +110,8 @@ Without an approved architecture decision, do not:
 - duplicate shared translation text outside `@lyreo/i18n`;
 - force Web and Mobile to share components merely because tokens are shared;
 - store ordinary locale/theme preferences in SecureStore;
+- map generic Java exception classes wholesale to client 4xx responses or leak internal failure details;
+- wrap successful Core HTTP responses in an envelope or compromise the RFC 9457 error contract;
 - hide failed/unrun required checks or call a feature done without required evidence.
 
 ## 6. Background jobs

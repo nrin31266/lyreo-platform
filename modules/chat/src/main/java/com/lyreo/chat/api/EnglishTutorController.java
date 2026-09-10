@@ -1,7 +1,8 @@
 package com.lyreo.chat.api;
 
 import com.lyreo.chat.application.EnglishTutorService;
-import java.util.Map;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,9 +19,17 @@ public class EnglishTutorController {
     }
 
     @PostMapping("/ask")
-    public Map<String, String> ask(@RequestBody AskRequest request) {
-        return Map.of("answer", tutor.ask(request.learnerLevel(), request.question()));
+    public AskResponse ask(@Valid @RequestBody AskRequest request) {
+        return new AskResponse(tutor.ask(request.learnerLevel(), request.question()));
     }
 
-    public record AskRequest(String learnerLevel, String question) {}
+    public record AskRequest(
+        String learnerLevel,
+        @NotBlank(message = "question is required")
+        String question
+    ) {}
+
+    public record AskResponse(
+        String answer
+    ) {}
 }

@@ -3,6 +3,7 @@ package com.lyreo.speechassessment.application;
 import tools.jackson.databind.ObjectMapper;
 import com.lyreo.ai.application.AiInvocationService;
 import com.lyreo.ai.domain.AiCapability;
+import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.platform.storage.ObjectStoragePort;
 import com.lyreo.speechassessment.domain.SpeechAttempt;
 import java.net.URI;
@@ -46,10 +47,10 @@ public final class SpeechAssessmentService {
         boolean deepJudge
     ) {
         if (referenceText == null || referenceText.isBlank()) {
-            throw new IllegalArgumentException("referenceText is required");
+            throw new RequestValidationException("referenceText is required");
         }
         if (recordingObjectKey == null || recordingObjectKey.isBlank()) {
-            throw new IllegalArgumentException("recordingObjectKey is required");
+            throw new RequestValidationException("recordingObjectKey is required");
         }
 
         URI audio = storage.createDownloadUrl(recordingObjectKey, Duration.ofMinutes(15));

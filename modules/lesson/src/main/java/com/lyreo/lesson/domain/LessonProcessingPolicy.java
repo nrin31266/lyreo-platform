@@ -1,5 +1,6 @@
 package com.lyreo.lesson.domain;
 
+import com.lyreo.contracts.errors.StateConflictException;
 import java.util.Locale;
 import java.util.Set;
 
@@ -25,16 +26,16 @@ public record LessonProcessingPolicy(
 
     public void validate(LessonBuildOptions options) {
         if (!allowedActivities.containsAll(options.activities())) {
-            throw new IllegalArgumentException("Lesson requests an activity disabled by admin policy");
+            throw new StateConflictException("Lesson requests an activity disabled by admin policy");
         }
         if (!allowedAnnotations.containsAll(options.annotations())) {
-            throw new IllegalArgumentException("Lesson requests an annotation disabled by admin policy");
+            throw new StateConflictException("Lesson requests an annotation disabled by admin policy");
         }
         if (!allowedPronunciationStrategies.contains(options.pronunciationStrategy())) {
-            throw new IllegalArgumentException("Pronunciation strategy disabled by admin policy: " + options.pronunciationStrategy());
+            throw new StateConflictException("Pronunciation strategy disabled by admin policy: " + options.pronunciationStrategy());
         }
         if (!allowedAccents.contains(options.accent())) {
-            throw new IllegalArgumentException("Accent disabled by admin policy: " + options.accent());
+            throw new StateConflictException("Accent disabled by admin policy: " + options.accent());
         }
     }
 

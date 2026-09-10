@@ -1,5 +1,7 @@
 package com.lyreo.grammar.application;
 
+import com.lyreo.contracts.errors.RequestValidationException;
+import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.grammar.GrammarQuestionAnsweredEvent;
 import com.lyreo.grammar.domain.GrammarQuestion;
 import java.time.Instant;
@@ -50,11 +52,11 @@ public class GrammarPracticeService {
     @Transactional
     public SubmitResult submit(UUID learnerId, UUID questionId, String answer) {
         if (learnerId == null || questionId == null) {
-            throw new IllegalArgumentException("learnerId and questionId are required");
+            throw new RequestValidationException("learnerId and questionId are required");
         }
         String normalized = normalizeAnswer(answer);
         GrammarQuestion question = repository.findQuestion(questionId)
-            .orElseThrow(() -> new IllegalArgumentException("Grammar question not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Grammar question not found: " + questionId));
         boolean correct = scorer.correct(question, normalized);
         Instant now = Instant.now();
         UUID attemptId = repository.saveAttempt(
@@ -92,7 +94,7 @@ public class GrammarPracticeService {
     private static String normalizeAnswer(String answer) {
         String normalized = answer == null ? "" : answer.strip().toUpperCase(Locale.ROOT);
         if (!normalized.isEmpty() && !List.of("A", "B", "C", "D").contains(normalized)) {
-            throw new IllegalArgumentException("Grammar answer must be A, B, C or D");
+            throw new RequestValidationException("Grammar answer must be A, B, C or D");
         }
         return normalized;
     }
