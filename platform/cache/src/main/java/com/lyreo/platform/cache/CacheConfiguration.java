@@ -14,13 +14,7 @@ public class CacheConfiguration {
 
     @Bean
     CacheManager lyreoCacheManager() {
-        var manager = new CaffeineCacheManager(
-            "lexiconHotEntries",
-            "grammarTaxonomy",
-            "curriculumMetadata",
-            "aiRouting",
-            "runtimeConfig"
-        );
+        var manager = new CaffeineCacheManager("lexiconHotEntries");
         manager.setCaffeine(Caffeine.newBuilder()
             .maximumSize(20_000)
             .expireAfterAccess(Duration.ofMinutes(30)));

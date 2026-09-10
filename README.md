@@ -60,13 +60,13 @@ engineering contract.
 
 ```text
 lyreo-platform/
-├── apps/
+├── apps/                      # deployable applications
 │   ├── core-service/          # Spring Boot deployable
 │   ├── ai-service/            # FastAPI/Python capability runtime
 │   ├── admin-web/             # React + Vite admin
 │   └── mobile/                # Expo/React Native learner app
 │
-├── modules/                   # business modules
+├── modules/                   # Java business capabilities
 │   ├── identity/
 │   ├── learner/
 │   ├── ai/
@@ -82,7 +82,7 @@ lyreo-platform/
 │   ├── notification/
 │   └── chat/
 │
-├── platform/                  # technical building blocks
+├── platform/                  # reusable Java technical building blocks
 │   ├── cache/
 │   ├── config/
 │   ├── jobs/
@@ -90,27 +90,47 @@ lyreo-platform/
 │   ├── security/
 │   └── observability/
 │
-├── tools/
-│   └── data-import/           # Lexicon/Grammar/TOEIC importers
+├── libs/                      # shared Java/Maven contracts/artifacts
+│   └── contracts/             # shared cross-module events and exceptions
 │
-├── packages/
+├── packages/                  # shared pnpm/TypeScript packages
 │   ├── design-system/         # shared primitive/semantic design tokens
 │   └── i18n/                  # shared common/admin/mobile translation resources
 │
-├── infra/
+├── tools/                     # standalone/offline/operator utilities with own runtimes/deps
+│   └── data-import/           # Lexicon/Grammar/TOEIC importers
+│
+├── tooling/                   # repository validators and developer/agent support code
+│
+├── infra/                     # infrastructure and deployment assets
 │   ├── docker/
 │   ├── keycloak/
 │   ├── nginx/
 │   └── postgres/
 │
-├── docs/
-├── tooling/
+├── docs/                      # canonical project knowledge
 ├── compose.dev.yml
 ├── compose.prod.yml
 ├── compose.gpu.yml
 ├── Makefile
 └── AGENTS.md
 ```
+
+### Folder taxonomy & responsibilities
+
+- `apps/`: Deployable runtime applications (Spring Boot core service, FastAPI AI service, Admin Vite web app, Expo mobile app).
+- `modules/`: Java business capability modules with Clean/Hexagonal boundaries.
+- `platform/`: Reusable Java technical building blocks (cache, config, jobs, storage, security, observability). Business modules consume platform through public interfaces and ports, never platform infrastructure internals.
+- `libs/`: Shared Java/Maven contracts and artifacts (`libs/contracts` defines shared domain events and error exceptions).
+- `packages/`: Shared pnpm/TypeScript packages consumed across frontend applications (`design-system` tokens, `i18n` translations).
+- `tools/`: Standalone, offline, or operator utilities with their own runtimes and dependencies (such as the Python data importers in `tools/data-import`).
+- `tooling/`: Lightweight repository guardrails, validators, and developer/agent support code.
+- `infra/`: Infrastructure definitions, Keycloak realm bootstrap, Dockerfiles, and compose assets.
+- `docs/`: Canonical project knowledge, specifications, and architecture decisions.
+
+**Key distinctions:**
+- `libs/ != packages/`: `libs/` contains shared Java/Maven libraries and contracts. `packages/` contains shared pnpm/TypeScript packages.
+- `tools/ != tooling/`: `tools/` hosts standalone operator tools with their own dedicated runtimes and dependencies. `tooling/` contains repo-level validators and developer/agent automation scripts.
 
 ---
 
