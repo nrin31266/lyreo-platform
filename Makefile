@@ -166,7 +166,7 @@ validate-docs:
 	python3 tooling/validate_docs.py
 
 test-docs:
-	python3 -m unittest tooling.tests.test_validate_docs
+	python3 -m unittest discover -s tooling/tests
 
 validate:
 	$(MAKE) validate-docs

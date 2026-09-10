@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.lyreo</groupId>
   <artifactId>lyreo-parent</artifactId>
@@ -87,7 +87,6 @@
     <module>platform/storage</module>
     <module>platform/security</module>
     <module>platform/observability</module>
-
     <module>modules/identity</module>
     <module>modules/learner</module>
     <module>modules/ai</module>
@@ -102,7 +101,6 @@
     <module>modules/analytics</module>
     <module>modules/notification</module>
     <module>modules/chat</module>
-
     <module>apps/core-service</module>
   </modules>
 </project>
