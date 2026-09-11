@@ -1,5 +1,7 @@
 package com.lyreo.platform.jobs.application;
 
+import com.lyreo.platform.jobs.domain.BackgroundJob;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Public command facade for enqueue/cancel operations. */
@@ -26,6 +28,11 @@ public final class BackgroundJobService {
         return repository.enqueue(
             type, ownerModule, ownerReferenceId, priority, maxAttempts, snapshotJson
         );
+    }
+
+    /** Reads a job by ID. Returns empty if the job does not exist. */
+    public Optional<BackgroundJob> findById(UUID jobId) {
+        return repository.findById(jobId);
     }
 
     /**

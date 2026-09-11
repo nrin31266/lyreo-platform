@@ -1,7 +1,7 @@
 package com.lyreo.learner.api;
 
 import com.lyreo.identity.application.AppUserProvisioningService;
-import com.lyreo.learner.application.LearnerProfileRepository;
+import com.lyreo.learner.application.LearnerProfileService;
 import com.lyreo.learner.application.OnboardingService;
 import com.lyreo.learner.domain.LearnerPreferences;
 import com.lyreo.learner.domain.LearnerProfile;
@@ -25,12 +25,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/learner")
 public class LearnerController {
     private final AppUserProvisioningService users;
-    private final LearnerProfileRepository profiles;
+    private final LearnerProfileService profiles;
     private final OnboardingService onboarding;
 
     public LearnerController(
         AppUserProvisioningService users,
-        LearnerProfileRepository profiles,
+        LearnerProfileService profiles,
         OnboardingService onboarding
     ) {
         this.users = users;
@@ -45,44 +45,94 @@ public class LearnerController {
         return new LearnerProfileResponse(
             user.id(),
             profile != null,
-            profile
+            LearnerProfileDto.from(profile)
         );
     }
 
     @PutMapping("/onboarding")
-    public LearnerProfile onboarding(
+    public LearnerProfileDto onboarding(
         @AuthenticationPrincipal Jwt jwt,
         @Valid @RequestBody OnboardingRequest request
     ) {
         var user = users.provision(jwt.getSubject(), jwt.getClaimAsString("email"));
-        return onboarding.onboard(
+        var profile = onboarding.onboard(
             user.id(), request.displayName(), request.currentLevel(), request.goal(),
             request.dailyMinutes(), request.focusArea()
         );
+        return LearnerProfileDto.from(profile);
     }
 
     @GetMapping("/preferences")
-    public LearnerPreferences preferences(@AuthenticationPrincipal Jwt jwt) {
+    public LearnerPreferencesResponse preferences(@AuthenticationPrincipal Jwt jwt) {
         var user = users.provision(jwt.getSubject(), jwt.getClaimAsString("email"));
-        return profiles.findByLearnerId(user.id())
-            .map(profile -> profile.preferences())
-            .orElseGet(LearnerPreferences::defaults);
+        return LearnerPreferencesResponse.from(profiles.findPreferences(user.id()));
     }
 
     @PutMapping("/preferences")
-    public LearnerPreferences preferences(
+    public LearnerPreferencesResponse preferences(
         @AuthenticationPrincipal Jwt jwt,
         @Valid @RequestBody UpdatePreferencesRequest request
     ) {
         var user = users.provision(jwt.getSubject(), jwt.getClaimAsString("email"));
-        return profiles.savePreferences(user.id(), request.toDomain());
+        var saved = profiles.savePreferences(user.id(), request.toDomain());
+        return LearnerPreferencesResponse.from(saved);
     }
 
     public record LearnerProfileResponse(
         UUID userId,
         boolean onboarded,
-        LearnerProfile profile
+        LearnerProfileDto profile
     ) {}
+
+    public record LearnerProfileDto(
+        UUID learnerId,
+        String displayName,
+        String currentLevel,
+        String goal,
+        Integer dailyMinutes,
+        String focusArea,
+        LearnerPreferencesResponse preferences
+    ) {
+        public static LearnerProfileDto from(LearnerProfile p) {
+            if (p == null) return null;
+            return new LearnerProfileDto(
+                p.learnerId(),
+                p.displayName(),
+                p.currentLevel(),
+                p.goal(),
+                p.dailyMinutes(),
+                p.focusArea(),
+                LearnerPreferencesResponse.from(p.preferences())
+            );
+        }
+    }
+
+    public record LearnerPreferencesResponse(
+        String preferredAccent,
+        LearnerPreferences.DisplayTiming translation,
+        LearnerPreferences.DisplayTiming sentenceIpa,
+        LearnerPreferences.DisplayTiming vocabularyNotes,
+        LearnerPreferences.DisplayTiming grammarNotes,
+        boolean thoughtGroups,
+        boolean karaokeHighlighting,
+        boolean properNounHints,
+        double defaultPlaybackSpeed
+    ) {
+        public static LearnerPreferencesResponse from(LearnerPreferences p) {
+            if (p == null) return null;
+            return new LearnerPreferencesResponse(
+                p.preferredAccent(),
+                p.translation(),
+                p.sentenceIpa(),
+                p.vocabularyNotes(),
+                p.grammarNotes(),
+                p.thoughtGroups(),
+                p.karaokeHighlighting(),
+                p.properNounHints(),
+                p.defaultPlaybackSpeed()
+            );
+        }
+    }
 
     public record OnboardingRequest(
         @NotBlank(message = "displayName is required")

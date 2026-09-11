@@ -34,7 +34,7 @@ Then prepare the Python project environment:
 
 ```bash
 cd tools/data-import
-uv sync --extra dev
+uv sync --locked --extra dev
 set -a; source .env; set +a
 ```
 

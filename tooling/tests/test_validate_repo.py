@@ -190,5 +190,96 @@ class ValidateRepoTest(unittest.TestCase):
         self.assertEqual([], errors)
 
 
+    def test_internal_cross_module_type_import_fails(self) -> None:
+        """Internal types (AiRouteRepository, AppUserRepository, AiRoute) imported from another module must fail."""
+        for fqn, label in [
+            ("com.lyreo.ai.infrastructure.AiRouteRepository", "AiRouteRepository"),
+            ("com.lyreo.identity.application.AppUserRepository", "AppUserRepository"),
+            ("com.lyreo.ai.domain.AiRoute", "AiRoute"),
+        ]:
+            with self.subTest(fqn=fqn):
+                root = self.create_fixture({
+                    "modules/lesson/src/main/java/com/lyreo/lesson/package-info.java": "package com.lyreo.lesson;\n",
+                    "modules/lesson/src/main/java/com/lyreo/lesson/application/LessonService.java": (
+                        f"package com.lyreo.lesson.application;\nimport {fqn};\npublic class LessonService {{}}\n"
+                    ),
+                })
+                errors: list[str] = []
+                check_clean_architecture_and_boundaries(root, errors)
+                self.assertTrue(
+                    any("cross-module import must use a named/public interface" in e for e in errors),
+                    f"Expected violation for {label}; got: {errors}",
+                )
+
+    def test_allowed_cross_module_types_pass(self) -> None:
+        """Explicitly allowed types (AiCapability, AiInvocationService, AppUserProvisioningService) must not fail."""
+        allowed_imports = "\n".join([
+            "import com.lyreo.ai.domain.AiCapability;",
+            "import com.lyreo.ai.application.AiInvocationService;",
+            "import com.lyreo.identity.application.AppUserProvisioningService;",
+        ])
+        root = self.create_fixture({
+            "modules/lesson/src/main/java/com/lyreo/lesson/package-info.java": "package com.lyreo.lesson;\n",
+            "modules/lesson/src/main/java/com/lyreo/lesson/application/LessonService.java": (
+                f"package com.lyreo.lesson.application;\n{allowed_imports}\npublic class LessonService {{}}\n"
+            ),
+        })
+        errors: list[str] = []
+        check_clean_architecture_and_boundaries(root, errors)
+        cross_errors = [e for e in errors if "cross-module import" in e]
+        self.assertEqual([], cross_errors, f"Unexpected cross-module errors: {cross_errors}")
+
+    def test_wildcard_internal_import_fails(self) -> None:
+        """Wildcard imports of another module's internal packages must be rejected."""
+        root = self.create_fixture({
+            "modules/lesson/src/main/java/com/lyreo/lesson/package-info.java": "package com.lyreo.lesson;\n",
+            "modules/lesson/src/main/java/com/lyreo/lesson/infrastructure/Foo.java": (
+                "package com.lyreo.lesson.infrastructure;\n"
+                "import com.lyreo.ai.infrastructure.*;\n"
+                "public class Foo {}\n"
+            ),
+        })
+        errors: list[str] = []
+        check_clean_architecture_and_boundaries(root, errors)
+        self.assertTrue(
+            any("wildcard" in e or "infrastructure" in e for e in errors),
+            f"Expected wildcard import violation; got: {errors}",
+        )
+
+    def test_static_internal_import_fails(self) -> None:
+        """Static imports of another module's internal infrastructure types must be rejected."""
+        root = self.create_fixture({
+            "modules/lesson/src/main/java/com/lyreo/lesson/package-info.java": "package com.lyreo.lesson;\n",
+            "modules/lesson/src/main/java/com/lyreo/lesson/infrastructure/Bar.java": (
+                "package com.lyreo.lesson.infrastructure;\n"
+                "import static com.lyreo.ai.infrastructure.FastApiAiExecutionGateway.TIMEOUT;\n"
+                "public class Bar {}\n"
+            ),
+        })
+        errors: list[str] = []
+        check_clean_architecture_and_boundaries(root, errors)
+        self.assertTrue(
+            any("static" in e or "infrastructure" in e for e in errors),
+            f"Expected static import violation; got: {errors}",
+        )
+
+    def test_cross_owner_sql_reference_in_lesson_fails(self) -> None:
+        """Lesson module SQL or Java files must not reference background_job (platform/jobs owned)."""
+        from tooling.repo_checks.backend import check_cross_owner_sql
+        root = self.create_fixture({
+            "modules/lesson/src/main/java/com/lyreo/lesson/infrastructure/Query.java": (
+                "package com.lyreo.lesson.infrastructure;\n"
+                "// SELECT * FROM background_job WHERE id = ?\n"
+                "public class Query {}\n"
+            ),
+        })
+        errors: list[str] = []
+        check_cross_owner_sql(root, errors)
+        self.assertTrue(
+            any("background_job" in e for e in errors),
+            f"Expected cross-owner SQL error; got: {errors}",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

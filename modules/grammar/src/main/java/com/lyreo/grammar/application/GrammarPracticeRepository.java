@@ -8,7 +8,7 @@ import java.util.UUID;
 
 /** Persistence port for the curated/imported grammar bank and append-only learner attempts. */
 public interface GrammarPracticeRepository {
-    List<GrammarQuestion> findPracticeQuestions(PracticeFilter filter, int limit);
+    List<GrammarQuestion> findPracticeQuestions(GrammarPracticeFilter filter, int limit);
 
     Optional<GrammarQuestion> findQuestion(UUID questionId);
 
@@ -19,11 +19,4 @@ public interface GrammarPracticeRepository {
         boolean correct,
         Instant answeredAt
     );
-
-    record PracticeFilter(
-        UUID topicId,
-        UUID subtopicId,
-        UUID bankSetId,
-        Integer difficultyLevel
-    ) {}
 }

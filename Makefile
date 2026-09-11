@@ -1,7 +1,7 @@
 .PHONY: help init-env doctor setup deps deps-java data-fetch data-check dev-infra dev-config keycloak-seed down core ai admin mobile \
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
-        test-java test-ai test-importers test-docs typecheck build-frontend validate-docs validate check prod-config verify-prod-env
+        test-java test-ai test-importers test-docs test-tooling typecheck build-frontend validate-docs validate check prod-config verify-prod-env down-v
 
 help:
 	@printf '%s\n' \
@@ -165,8 +165,11 @@ build-frontend:
 validate-docs:
 	python3 tooling/validate_docs.py
 
-test-docs:
-	python3 -m unittest discover -s tooling/tests
+test-tooling:
+	python3 -m unittest discover -s tooling/tests -v
+
+# Backward-compatible alias for test-tooling
+test-docs: test-tooling
 
 validate:
 	$(MAKE) validate-docs
@@ -183,7 +186,7 @@ validate:
 	bash -n scripts/*.sh infra/keycloak/scripts/*.sh infra/postgres/init/*.sh
 	python3 tooling/validate_repo.py
 
-check: validate test-docs test-java test-ai test-importers typecheck build-frontend
+check: validate test-tooling test-java test-ai test-importers typecheck build-frontend
 
 verify-prod-env:
 	./scripts/verify-prod-env.sh

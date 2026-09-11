@@ -3,6 +3,7 @@ package com.lyreo.grammar;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.lyreo.contracts.grammar.GrammarQuestionAnsweredEvent;
+import com.lyreo.grammar.application.GrammarPracticeFilter;
 import com.lyreo.grammar.application.GrammarPracticeRepository;
 import com.lyreo.grammar.application.GrammarPracticeScorer;
 import com.lyreo.grammar.application.GrammarPracticeService;
@@ -48,7 +49,7 @@ class GrammarPracticeServiceTest {
         );
 
         var before = service.practice(
-            new GrammarPracticeRepository.PracticeFilter(null, null, null, 3),
+            new GrammarPracticeFilter(null, null, null, 3),
             10
         );
         assertThat(before).singleElement().satisfies(view -> {
@@ -72,7 +73,7 @@ class GrammarPracticeServiceTest {
         }
 
         @Override
-        public List<GrammarQuestion> findPracticeQuestions(PracticeFilter filter, int limit) {
+        public List<GrammarQuestion> findPracticeQuestions(GrammarPracticeFilter filter, int limit) {
             return List.of(question);
         }
 

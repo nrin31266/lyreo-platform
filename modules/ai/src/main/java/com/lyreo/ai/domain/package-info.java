@@ -1,3 +1,2 @@
-/** Public AI capability vocabulary; provider-specific implementation remains internal. */
-@org.springframework.modulith.NamedInterface("domain")
+/** AI domain types; only AiCapability is a named public interface. */
 package com.lyreo.ai.domain;

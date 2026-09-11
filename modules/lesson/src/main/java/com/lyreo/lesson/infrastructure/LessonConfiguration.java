@@ -11,6 +11,7 @@ import com.lyreo.lesson.application.LessonBuildPlanner;
 import com.lyreo.lesson.application.LessonBuildStateRepository;
 import com.lyreo.lesson.application.LessonEnrichmentWriter;
 import com.lyreo.lesson.application.LessonPreviewQuery;
+import com.lyreo.lesson.application.LessonPreviewService;
 import com.lyreo.lesson.application.LessonPracticeRepository;
 import com.lyreo.lesson.application.LessonPracticeService;
 import com.lyreo.lesson.application.LessonProcessingPolicyRepository;
@@ -41,6 +42,14 @@ public class LessonConfiguration {
         ObjectMapper mapper
     ) {
         return new JdbcLessonPreviewQuery(jdbc, mapper);
+    }
+
+    @Bean
+    LessonPreviewService lessonPreviewService(
+        LessonPreviewQuery query,
+        BackgroundJobService jobs
+    ) {
+        return new LessonPreviewService(query, jobs);
     }
 
     @Bean

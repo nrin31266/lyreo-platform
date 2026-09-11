@@ -33,7 +33,7 @@ public final class CorrelationIdAccessor {
 
     /**
      * Resolves the authoritative correlation ID for the request.
-     * Order of precedence: request attribute -> MDC -> sanitized header.
+     * Order of precedence: request attribute -> sanitized header -> MDC.
      */
     public static String get(HttpServletRequest request) {
         if (request != null) {

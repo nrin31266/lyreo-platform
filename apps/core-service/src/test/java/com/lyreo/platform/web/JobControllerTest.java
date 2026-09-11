@@ -8,7 +8,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.lyreo.platform.jobs.application.BackgroundJobRepository;
 import com.lyreo.platform.jobs.application.BackgroundJobService;
 import com.lyreo.platform.jobs.application.CancellationResult;
 import com.lyreo.platform.jobs.domain.BackgroundJob;
@@ -24,15 +23,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class JobControllerTest {
 
-    private BackgroundJobRepository repository;
     private BackgroundJobService service;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        repository = mock(BackgroundJobRepository.class);
         service = mock(BackgroundJobService.class);
-        mockMvc = MockMvcBuilders.standaloneSetup(new JobController(repository, service))
+        mockMvc = MockMvcBuilders.standaloneSetup(new JobController(service))
             .setControllerAdvice(new ApiExceptionHandler())
             .addFilters(new CorrelationIdFilter())
             .build();
@@ -41,10 +38,10 @@ class JobControllerTest {
     @Test
     void getReturnsJobDetailsWhenFound() throws Exception {
         UUID id = UUID.randomUUID();
-        when(repository.findById(id)).thenReturn(Optional.of(new BackgroundJob(
+        when(service.findById(id)).thenReturn(Optional.of(new BackgroundJob(
             id, "LESSON_BUILD", "lesson", UUID.randomUUID(),
             BackgroundJobStatus.RUNNING, 10, "GENERATE_TEXT", 40,
-            1, 3, null, "worker-1", Instant.now().plusSeconds(60), null
+            1, 3, null, "worker-1", Instant.now().plusSeconds(60), null, null
         )));
 
         mockMvc.perform(get("/api/v1/jobs/" + id))
@@ -59,7 +56,7 @@ class JobControllerTest {
     @Test
     void getReturns404WhenJobNotFound() throws Exception {
         UUID id = UUID.randomUUID();
-        when(repository.findById(id)).thenReturn(Optional.empty());
+        when(service.findById(id)).thenReturn(Optional.empty());
 
         mockMvc.perform(get("/api/v1/jobs/" + id))
             .andExpect(status().isNotFound())

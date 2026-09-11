@@ -54,7 +54,7 @@ Qwen **không bắt buộc Docker**. Developer GPU có thể chạy Python local
 
 ```bash
 cp .env.example .env
-uv sync --extra dev
+uv sync --locked --extra dev
 set -a; source .env; set +a
 uv run uvicorn app.main:app --reload --port 8000
 ```
@@ -68,7 +68,7 @@ uv run --extra dev pytest
 ## Local Qwen/GPU
 
 ```bash
-uv sync --extra qwen --extra dev
+uv sync --locked --extra qwen --extra dev
 AI_RUNTIME_MODE=local uv run uvicorn app.main:app --port 8000
 ```
 

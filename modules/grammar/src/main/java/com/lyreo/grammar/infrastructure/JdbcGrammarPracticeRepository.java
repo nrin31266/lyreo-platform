@@ -1,5 +1,6 @@
 package com.lyreo.grammar.infrastructure;
 
+import com.lyreo.grammar.application.GrammarPracticeFilter;
 import com.lyreo.grammar.application.GrammarPracticeRepository;
 import com.lyreo.grammar.domain.GrammarQuestion;
 import com.lyreo.grammar.domain.GrammarQuestion.ExplanationPolicy;
@@ -23,8 +24,8 @@ public final class JdbcGrammarPracticeRepository implements GrammarPracticeRepos
     }
 
     @Override
-    public List<GrammarQuestion> findPracticeQuestions(PracticeFilter filter, int limit) {
-        PracticeFilter safe = filter == null ? new PracticeFilter(null, null, null, null) : filter;
+    public List<GrammarQuestion> findPracticeQuestions(GrammarPracticeFilter filter, int limit) {
+        GrammarPracticeFilter safe = filter == null ? new GrammarPracticeFilter(null, null, null, null) : filter;
         StringBuilder sql = new StringBuilder(BASE_SELECT).append(" WHERE 1=1 ");
         MapSqlParameterSource params = new MapSqlParameterSource().addValue("limit", limit);
 

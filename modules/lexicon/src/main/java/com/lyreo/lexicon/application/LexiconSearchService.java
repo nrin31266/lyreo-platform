@@ -2,6 +2,8 @@ package com.lyreo.lexicon.application;
 
 import com.lyreo.lexicon.domain.LexiconEntry;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.cache.annotation.Cacheable;
 
 public class LexiconSearchService {
@@ -16,5 +18,9 @@ public class LexiconSearchService {
         String query = rawQuery == null ? "" : rawQuery.strip().toLowerCase();
         if (query.length() < 1) return List.of();
         return repository.search(query, Math.min(Math.max(limit, 1), 50));
+    }
+
+    public Optional<LexiconEntry> findById(UUID id) {
+        return repository.findById(id);
     }
 }

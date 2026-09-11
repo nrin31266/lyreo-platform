@@ -16,7 +16,7 @@ jobs:
           bash -n scripts/*.sh infra/keycloak/scripts/*.sh infra/postgres/init/*.sh
           python3 tooling/validate_repo.py
           python3 tooling/validate_docs.py
-          python3 -m unittest tooling.tests.test_validate_docs
+          make test-tooling
 
   java:
     runs-on: ubuntu-latest

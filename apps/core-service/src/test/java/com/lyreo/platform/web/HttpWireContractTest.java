@@ -20,13 +20,26 @@ import com.lyreo.grammar.application.GrammarPracticeService;
 import com.lyreo.grammar.domain.GrammarQuestion;
 import com.lyreo.identity.application.AppUserProvisioningService;
 import com.lyreo.identity.application.ProvisionedUser;
+import com.lyreo.learner.api.LearnerController;
+import com.lyreo.learner.application.LearnerProfileService;
+import com.lyreo.learner.application.OnboardingService;
+import com.lyreo.learner.domain.LearnerPreferences;
+import com.lyreo.learner.domain.LearnerProfile;
 import com.lyreo.lesson.api.AdminLessonController;
 import com.lyreo.lesson.api.LessonPracticeController;
 import com.lyreo.lesson.application.CreateLessonBuildService;
 import com.lyreo.lesson.application.LessonPracticeService;
 import com.lyreo.lesson.application.LessonPreviewQuery;
+import com.lyreo.lesson.application.LessonPreviewService;
+import com.lyreo.lesson.application.LessonPreviewView;
 import com.lyreo.lesson.domain.LessonBuildPlan;
 import com.lyreo.lesson.domain.LessonSourceType;
+import com.lyreo.lexicon.api.LexiconController;
+import com.lyreo.lexicon.application.LexiconSearchService;
+import com.lyreo.lexicon.domain.LexiconEntry;
+import com.lyreo.platform.jobs.application.BackgroundJobService;
+import com.lyreo.platform.jobs.domain.BackgroundJob;
+import com.lyreo.platform.jobs.domain.BackgroundJobStatus;
 import com.lyreo.platform.observability.CorrelationIdFilter;
 import com.lyreo.toeic.api.ToeicAttemptController;
 import com.lyreo.toeic.application.ToeicAttemptService;
@@ -36,6 +49,7 @@ import com.lyreo.vocabulary.application.VocabularyCommandService;
 import com.lyreo.vocabulary.domain.VocabularyCard;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,12 +66,18 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class HttpWireContractTest {
 
     private CreateLessonBuildService lessonBuildService;
+    private LessonPreviewQuery lessonPreviewQuery;
+    private BackgroundJobService backgroundJobService;
+    private LessonPreviewService lessonPreviewService;
     private LessonPracticeService lessonPracticeService;
     private GrammarPracticeService grammarPracticeService;
     private ToeicAttemptService toeicAttemptService;
     private VocabularyCommandService vocabularyCommandService;
     private AiAdminService aiAdminService;
     private AppUserProvisioningService provisioningService;
+    private LearnerProfileService learnerProfileService;
+    private OnboardingService onboardingService;
+    private LexiconSearchService lexiconSearchService;
 
     private MockMvc lessonMvc;
     private MockMvc practiceMvc;
@@ -65,6 +85,9 @@ class HttpWireContractTest {
     private MockMvc toeicMvc;
     private MockMvc vocabularyMvc;
     private MockMvc aiMvc;
+    private MockMvc learnerMvc;
+    private MockMvc lexiconMvc;
+    private MockMvc jobMvc;
 
     private static final Jwt MOCK_JWT = Jwt.withTokenValue("mock.jwt.token")
         .header("alg", "none")
@@ -96,9 +119,12 @@ class HttpWireContractTest {
             }
         };
 
-        // Lesson build
+        // Lesson build & preview
         lessonBuildService = mock(CreateLessonBuildService.class);
-        lessonMvc = MockMvcBuilders.standaloneSetup(new AdminLessonController(lessonBuildService, mock(LessonPreviewQuery.class)))
+        lessonPreviewQuery = mock(LessonPreviewQuery.class);
+        backgroundJobService = mock(BackgroundJobService.class);
+        lessonPreviewService = new LessonPreviewService(lessonPreviewQuery, backgroundJobService);
+        lessonMvc = MockMvcBuilders.standaloneSetup(new AdminLessonController(lessonBuildService, lessonPreviewService))
             .setControllerAdvice(new ApiExceptionHandler())
             .addFilters(new CorrelationIdFilter())
             .build();
@@ -141,6 +167,28 @@ class HttpWireContractTest {
             .setControllerAdvice(new ApiExceptionHandler())
             .addFilters(new CorrelationIdFilter())
             .build();
+
+        // Learner
+        learnerProfileService = mock(LearnerProfileService.class);
+        onboardingService = mock(OnboardingService.class);
+        learnerMvc = MockMvcBuilders.standaloneSetup(new LearnerController(provisioningService, learnerProfileService, onboardingService))
+            .setCustomArgumentResolvers(jwtResolver)
+            .setControllerAdvice(new ApiExceptionHandler())
+            .addFilters(new CorrelationIdFilter())
+            .build();
+
+        // Lexicon
+        lexiconSearchService = mock(LexiconSearchService.class);
+        lexiconMvc = MockMvcBuilders.standaloneSetup(new LexiconController(lexiconSearchService))
+            .setControllerAdvice(new ApiExceptionHandler())
+            .addFilters(new CorrelationIdFilter())
+            .build();
+
+        // Jobs
+        jobMvc = MockMvcBuilders.standaloneSetup(new JobController(backgroundJobService))
+            .setControllerAdvice(new ApiExceptionHandler())
+            .addFilters(new CorrelationIdFilter())
+            .build();
     }
 
     @Test
@@ -168,6 +216,89 @@ class HttpWireContractTest {
             .andExpect(jsonPath("$.lessonId").value(lessonId.toString()))
             .andExpect(jsonPath("$.jobId").value(jobId.toString()))
             .andExpect(jsonPath("$.plan").doesNotExist());
+    }
+
+    @Test
+    void lessonPreviewReturnsExactPublicContract() throws Exception {
+        UUID lessonId = UUID.randomUUID();
+        UUID sentenceId = UUID.randomUUID();
+        UUID jobId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-09-11T12:00:00Z");
+
+        LessonPreviewView previewView = new LessonPreviewView(
+            lessonId,
+            "Preview Lesson",
+            "TEXT",
+            "Sample source text",
+            "Ref-1",
+            "audio/canonical.mp3",
+            "READY",
+            now,
+            now,
+            List.of(new LessonPreviewView.SentenceView(
+                sentenceId,
+                1,
+                "Sentence text",
+                100,
+                500,
+                "audio/clip.mp3",
+                List.of(new LessonPreviewView.WordView(1, "Sentence", 100, 300)),
+                List.of(new LessonPreviewView.AnnotationView("TRANSLATION", "Translation text", "ai", "openai", "gpt-4o", "VERIFIED", now))
+            )),
+            List.of(new LessonPreviewView.ActivityView(UUID.randomUUID(), "DICTATION", 1, true, "{}")),
+            List.of(new LessonPreviewView.BuildJobView(jobId, now, null, null, null, null, null))
+        );
+
+        when(lessonPreviewQuery.find(lessonId)).thenReturn(Optional.of(previewView));
+        when(backgroundJobService.findById(jobId)).thenReturn(Optional.of(new BackgroundJob(
+            jobId, "LESSON_BUILD", "lesson", lessonId,
+            BackgroundJobStatus.SUCCEEDED, 10, "DONE", 100,
+            1, 3, null, null, null, null, null
+        )));
+
+        lessonMvc.perform(get("/api/v1/admin/lessons/" + lessonId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(lessonId.toString()))
+            .andExpect(jsonPath("$.title").value("Preview Lesson"))
+            .andExpect(jsonPath("$.source_type").value("TEXT"))
+            .andExpect(jsonPath("$.source_text").value("Sample source text"))
+            .andExpect(jsonPath("$.canonical_audio_object_key").value("audio/canonical.mp3"))
+            .andExpect(jsonPath("$.sentences[0].id").value(sentenceId.toString()))
+            .andExpect(jsonPath("$.sentences[0].audio_start_ms").value(100))
+            .andExpect(jsonPath("$.sentences[0].words[0].surface_text").value("Sentence"))
+            .andExpect(jsonPath("$.activities[0].activity_type").value("DICTATION"))
+            .andExpect(jsonPath("$.buildJobs[0].job_id").value(jobId.toString()))
+            .andExpect(jsonPath("$.buildJobs[0].status").value("SUCCEEDED"))
+            .andExpect(jsonPath("$.buildJobs[0].current_step").value("DONE"))
+            .andExpect(jsonPath("$.buildJobs[0].progress_percent").value(100));
+    }
+
+    @Test
+    void lessonPreviewReturnsStoredErrorMessageWhenJobFailed() throws Exception {
+        UUID lessonId = UUID.randomUUID();
+        UUID jobId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-09-11T12:00:00Z");
+
+        LessonPreviewView previewView = new LessonPreviewView(
+            lessonId, "Failed Lesson", "TEXT", "Source", "Ref", null, "BUILD_FAILED", now, now,
+            List.of(), List.of(),
+            List.of(new LessonPreviewView.BuildJobView(jobId, now, null, null, null, null, null))
+        );
+
+        when(lessonPreviewQuery.find(lessonId)).thenReturn(Optional.of(previewView));
+        when(backgroundJobService.findById(jobId)).thenReturn(Optional.of(new BackgroundJob(
+            jobId, "LESSON_BUILD", "lesson", lessonId,
+            BackgroundJobStatus.FAILED, 10, "GENERATE_TEXT", 30,
+            3, 3, null, null, null, null, "AI provider rate limit exceeded: 429 Too Many Requests"
+        )));
+
+        lessonMvc.perform(get("/api/v1/admin/lessons/" + lessonId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(lessonId.toString()))
+            .andExpect(jsonPath("$.buildJobs[0].job_id").value(jobId.toString()))
+            .andExpect(jsonPath("$.buildJobs[0].status").value("FAILED"))
+            .andExpect(jsonPath("$.buildJobs[0].current_step").value("GENERATE_TEXT"))
+            .andExpect(jsonPath("$.buildJobs[0].error_message").value("AI provider rate limit exceeded: 429 Too Many Requests"));
     }
 
     @Test
@@ -361,5 +492,120 @@ class HttpWireContractTest {
             .andExpect(jsonPath("$[0].is_fallback").value(false))
             .andExpect(jsonPath("$[0].enabled").value(true))
             .andExpect(jsonPath("$[0].config_json").doesNotExist());
+    }
+
+    @Test
+    void learnerProfileAndPreferencesReturnExactWireShape() throws Exception {
+        UUID learnerId = UUID.randomUUID();
+        when(provisioningService.provision(any(), any()))
+            .thenReturn(new ProvisionedUser(learnerId, "keycloak-user-1", "test@lyreo.com", Instant.now()));
+
+        LearnerPreferences prefs = LearnerPreferences.defaults();
+        when(learnerProfileService.findByLearnerId(learnerId)).thenReturn(Optional.of(
+            new LearnerProfile(learnerId, "Jane Doe", "B1", "Career", 20, "SPEAKING", prefs)
+        ));
+        when(learnerProfileService.findPreferences(learnerId)).thenReturn(prefs);
+
+        learnerMvc.perform(get("/api/v1/learner/profile")
+                .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(MOCK_JWT)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.userId").value(learnerId.toString()))
+            .andExpect(jsonPath("$.onboarded").value(true))
+            .andExpect(jsonPath("$.profile.learnerId").value(learnerId.toString()))
+            .andExpect(jsonPath("$.profile.displayName").value("Jane Doe"))
+            .andExpect(jsonPath("$.profile.currentLevel").value("B1"))
+            .andExpect(jsonPath("$.profile.goal").value("Career"))
+            .andExpect(jsonPath("$.profile.dailyMinutes").value(20))
+            .andExpect(jsonPath("$.profile.focusArea").value("SPEAKING"))
+            .andExpect(jsonPath("$.profile.preferences.preferredAccent").value("US"))
+            .andExpect(jsonPath("$.profile.preferences.defaultPlaybackSpeed").value(1.0));
+
+        learnerMvc.perform(get("/api/v1/learner/preferences")
+                .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(MOCK_JWT)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.preferredAccent").value("US"))
+            .andExpect(jsonPath("$.translation").value("AFTER_ATTEMPT"))
+            .andExpect(jsonPath("$.sentenceIpa").value("TAP_TO_SHOW"))
+            .andExpect(jsonPath("$.vocabularyNotes").value("AFTER_ATTEMPT"))
+            .andExpect(jsonPath("$.grammarNotes").value("AFTER_ATTEMPT"))
+            .andExpect(jsonPath("$.thoughtGroups").value(true))
+            .andExpect(jsonPath("$.karaokeHighlighting").value(true))
+            .andExpect(jsonPath("$.properNounHints").value(true))
+            .andExpect(jsonPath("$.defaultPlaybackSpeed").value(1.0));
+    }
+
+    @Test
+    void lexiconDetailAndSearchReturnExactWireShape() throws Exception {
+        UUID entryId = UUID.randomUUID();
+        UUID senseId = UUID.randomUUID();
+        UUID sourceId = UUID.randomUUID();
+
+        LexiconEntry entry = new LexiconEntry(
+            entryId,
+            "resilient",
+            "resilient",
+            LexiconEntry.EntryType.WORD,
+            "en",
+            List.of(new LexiconEntry.LexiconSense(
+                senseId,
+                "adjective",
+                "Able to withstand or recover quickly from difficult conditions.",
+                "kiên cường, có khả năng phục hồi",
+                LexiconEntry.TranslationStatus.VERIFIED,
+                sourceId
+            )),
+            List.of(new LexiconEntry.Pronunciation(
+                "US",
+                "/rɪˈzɪl.jənt/",
+                "https://audio.example.com/resilient.mp3",
+                "audio/lexicon/resilient_us.mp3",
+                sourceId
+            ))
+        );
+
+        when(lexiconSearchService.findById(entryId)).thenReturn(Optional.of(entry));
+        when(lexiconSearchService.search("resilient", 20)).thenReturn(List.of(entry));
+
+        lexiconMvc.perform(get("/api/v1/lexicon/" + entryId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(entryId.toString()))
+            .andExpect(jsonPath("$.canonicalForm").value("resilient"))
+            .andExpect(jsonPath("$.normalizedForm").value("resilient"))
+            .andExpect(jsonPath("$.type").value("WORD"))
+            .andExpect(jsonPath("$.language").value("en"))
+            .andExpect(jsonPath("$.senses[0].id").value(senseId.toString()))
+            .andExpect(jsonPath("$.senses[0].partOfSpeech").value("adjective"))
+            .andExpect(jsonPath("$.senses[0].definitionEn").value("Able to withstand or recover quickly from difficult conditions."))
+            .andExpect(jsonPath("$.senses[0].translationVi").value("kiên cường, có khả năng phục hồi"))
+            .andExpect(jsonPath("$.senses[0].translationStatus").value("VERIFIED"))
+            .andExpect(jsonPath("$.senses[0].sourceId").value(sourceId.toString()))
+            .andExpect(jsonPath("$.pronunciations[0].accent").value("US"))
+            .andExpect(jsonPath("$.pronunciations[0].ipa").value("/rɪˈzɪl.jənt/"))
+            .andExpect(jsonPath("$.pronunciations[0].cachedAudioObjectKey").value("audio/lexicon/resilient_us.mp3"));
+
+        lexiconMvc.perform(get("/api/v1/lexicon/search").param("q", "resilient"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].id").value(entryId.toString()))
+            .andExpect(jsonPath("$[0].canonicalForm").value("resilient"));
+    }
+
+    @Test
+    void standaloneJobReturnsExactWireShape() throws Exception {
+        UUID jobId = UUID.randomUUID();
+        when(backgroundJobService.findById(jobId)).thenReturn(Optional.of(new BackgroundJob(
+            jobId, "LESSON_BUILD", "lesson", UUID.randomUUID(),
+            BackgroundJobStatus.RUNNING, 10, "GENERATE_TEXT", 45,
+            1, 3, null, "worker-1", Instant.now().plusSeconds(60), null, null
+        )));
+
+        jobMvc.perform(get("/api/v1/jobs/" + jobId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(jobId.toString()))
+            .andExpect(jsonPath("$.jobType").value("LESSON_BUILD"))
+            .andExpect(jsonPath("$.status").value("RUNNING"))
+            .andExpect(jsonPath("$.currentStep").value("GENERATE_TEXT"))
+            .andExpect(jsonPath("$.progressPercent").value(45))
+            .andExpect(jsonPath("$.attemptCount").value(1))
+            .andExpect(jsonPath("$.maxAttempts").value(3));
     }
 }
