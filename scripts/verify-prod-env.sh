@@ -34,6 +34,13 @@ require_non_placeholder apps/core-service/.env MASTER_ENCRYPTION_KEY
 require_non_placeholder apps/core-service/.env AI_SERVICE_INTERNAL_TOKEN
 require_non_placeholder apps/ai-service/.env AI_SERVICE_INTERNAL_TOKEN
 
+core_ai_token=$(get_env apps/core-service/.env AI_SERVICE_INTERNAL_TOKEN)
+ai_service_token=$(get_env apps/ai-service/.env AI_SERVICE_INTERNAL_TOKEN)
+if [[ "$core_ai_token" != "$ai_service_token" ]]; then
+  echo 'ERROR: Core and AI internal service tokens do not match.' >&2
+  exit 1
+fi
+
 if [[ "$(get_env apps/core-service/.env SPRING_PROFILES_ACTIVE)" == "dev" ]]; then
   echo 'Production Core env must not use SPRING_PROFILES_ACTIVE=dev' >&2
   exit 1

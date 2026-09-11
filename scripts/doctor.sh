@@ -62,10 +62,10 @@ if [[ -f pnpm-lock.yaml ]]; then
     && grep -q '^  packages/i18n:' pnpm-lock.yaml; then
     ok 'pnpm-lock.yaml contains all workspace importers'
   else
-    warn 'pnpm-lock.yaml exists but is stale/incomplete for the current workspace; regenerate with pnpm install'
+    warn 'pnpm-lock.yaml exists but is stale/incomplete for the current workspace; restore committed lockfile or regenerate with pnpm install'
   fi
 else
-  warn 'pnpm-lock.yaml missing; generate/commit after first networked pnpm install'
+  warn 'pnpm-lock.yaml missing; restore committed lockfile from repository (checkout issue)'
 fi
 
 # The large Grammar/TOEIC dataset is not required to boot Core, but importer/TOEIC work should be

@@ -38,7 +38,7 @@ public class GrammarPracticeService {
 
     @Transactional(readOnly = true)
     public List<QuestionView> practice(
-        GrammarPracticeRepository.PracticeFilter filter,
+        GrammarPracticeFilter filter,
         Integer requestedLimit
     ) {
         int limit = requestedLimit == null

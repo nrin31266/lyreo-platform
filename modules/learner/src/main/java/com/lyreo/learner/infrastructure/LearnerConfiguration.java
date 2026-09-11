@@ -2,6 +2,7 @@ package com.lyreo.learner.infrastructure;
 
 import tools.jackson.databind.ObjectMapper;
 import com.lyreo.learner.application.LearnerProfileRepository;
+import com.lyreo.learner.application.LearnerProfileService;
 import com.lyreo.learner.application.OnboardingService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -15,6 +16,11 @@ public class LearnerConfiguration {
         ObjectMapper mapper
     ) {
         return new JdbcLearnerProfileRepository(jdbc, mapper);
+    }
+
+    @Bean
+    LearnerProfileService learnerProfileService(LearnerProfileRepository repository) {
+        return new LearnerProfileService(repository);
     }
 
     @Bean

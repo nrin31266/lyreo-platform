@@ -1,6 +1,6 @@
 package com.lyreo.grammar.api;
 
-import com.lyreo.grammar.application.GrammarPracticeRepository.PracticeFilter;
+import com.lyreo.grammar.application.GrammarPracticeFilter;
 import com.lyreo.grammar.application.GrammarPracticeService;
 import com.lyreo.identity.application.AppUserProvisioningService;
 import jakarta.validation.Valid;
@@ -40,7 +40,7 @@ public class GrammarPracticeController {
         @RequestParam(required = false) Integer limit
     ) {
         return practice.practice(
-            new PracticeFilter(topicId, subtopicId, bankSetId, difficulty),
+            new GrammarPracticeFilter(topicId, subtopicId, bankSetId, difficulty),
             limit
         ).stream().map(GrammarQuestionResponse::from).toList();
     }

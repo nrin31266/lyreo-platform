@@ -2,7 +2,6 @@ package com.lyreo.platform.web;
 
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.errors.StateConflictException;
-import com.lyreo.platform.jobs.application.BackgroundJobRepository;
 import com.lyreo.platform.jobs.application.BackgroundJobService;
 import com.lyreo.platform.jobs.application.CancellationResult;
 import java.util.UUID;
@@ -20,17 +19,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/jobs")
 @PreAuthorize("hasRole('ADMIN')")
 public class JobController {
-    private final BackgroundJobRepository repository;
     private final BackgroundJobService service;
 
-    public JobController(BackgroundJobRepository repository, BackgroundJobService service) {
-        this.repository = repository;
+    public JobController(BackgroundJobService service) {
         this.service = service;
     }
 
     @GetMapping("/{id}")
     public JobResponse get(@PathVariable UUID id) {
-        return repository.findById(id)
+        return service.findById(id)
             .map(job -> new JobResponse(
                 job.id(),
                 job.jobType(),

@@ -160,7 +160,7 @@ in [`AGENTS.md`](AGENTS.md#9-configuration-and-python-environments).
 For normal project work, use `uv` from inside the owning Python subproject:
 
 ```bash
-uv sync
+uv sync --locked
 uv run ...
 ```
 
@@ -310,7 +310,7 @@ First run, or after Python dependencies change:
 
 ```bash
 cd apps/ai-service
-uv sync --extra dev
+uv sync --locked --extra dev
 ```
 
 Run directly:
@@ -369,7 +369,7 @@ If OIDC/API URLs differ from local defaults, update `apps/admin-web/.env` using
 After:
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 ```
 
 run:
@@ -440,7 +440,7 @@ Prepare importer Python dependencies and load the importer env:
 
 ```bash
 cd tools/data-import
-uv sync --extra dev
+uv sync --locked --extra dev
 set -a; source .env; set +a
 ```
 

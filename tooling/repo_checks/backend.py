@@ -23,14 +23,39 @@ MODULE_PACKAGE = {
     "chat": "chat",
 }
 PACKAGE_TO_MODULE = {package: module for module, package in MODULE_PACKAGE.items()}
-PUBLIC_CROSS_MODULE_PREFIXES = (
-    "com.lyreo.ai.application.",
-    "com.lyreo.ai.domain.",
-    "com.lyreo.identity.application.",
+# Explicit allowlist of types that may be imported across business module boundaries.
+# Broad package prefixes are intentionally avoided so internal types like AiRoute or
+# AiRouteRepository cannot slip through by matching a package prefix.
+CROSS_MODULE_ALLOWED_TYPES: frozenset[str] = frozenset({
+    # AI module — public application service and result types only
+    "com.lyreo.ai.application.AiInvocationService",
+    "com.lyreo.ai.application.AiRoutingSnapshotService",
+    "com.lyreo.ai.application.AiExecutionResult",
+    "com.lyreo.ai.application.AiExecutionException",
+    "com.lyreo.ai.application.AiExecutionCommand",
+    # AI module — public capability vocabulary (NamedInterface("domain"))
+    "com.lyreo.ai.domain.AiCapability",
+    # Identity module — public provisioning service and result type only
+    "com.lyreo.identity.application.AppUserProvisioningService",
+    "com.lyreo.identity.application.ProvisionedUser",
+})
+# Any import from these prefixes that is NOT in the allowlist above is a violation.
+CROSS_MODULE_RESTRICTED_PREFIXES = (
+    "com.lyreo.ai.",
+    "com.lyreo.identity.",
 )
+
+# Regex for normal fully-qualified imports
 IMPORT_RE = re.compile(r"^import\s+([\w.]+);", re.MULTILINE)
+# Regex for wildcard imports: import com.lyreo.ai.infrastructure.*;
+WILDCARD_IMPORT_RE = re.compile(r"^import\s+([\w.]+)\.\*\s*;", re.MULTILINE)
+# Regex for static imports: import static com.lyreo.ai.infrastructure.SomeType.CONSTANT;
+STATIC_IMPORT_RE = re.compile(r"^import\s+static\s+([\w.]+)\.[A-Z_][A-Z_0-9]*\s*;", re.MULTILINE)
 JACKSON2_DATABIND_RE = re.compile(r"^import\s+com\.fasterxml\.jackson\.databind\.", re.MULTILINE)
 PLATFORM_INFRASTRUCTURE_RE = re.compile(r"^com\.lyreo\.platform\.[a-z0-9_]+\.infrastructure\b")
+
+# SQL tokens owned exclusively by platform/jobs. No business module may reference them directly.
+JOBS_OWNED_SQL_TOKENS = frozenset({"background_job"})
 
 
 def check_forbidden_pom_dependencies(root: Path, errors: list[str]) -> None:
@@ -75,6 +100,43 @@ def check_fastapi_boundaries(root: Path, errors: list[str]) -> None:
                 errors.append(f"FastAPI must not own business persistence dependency: {token}")
 
 
+def _check_import(
+    imported: str,
+    package_name: str,
+    relative: Path,
+    is_main_java: bool,
+    errors: list[str],
+    import_label: str = "",
+) -> None:
+    """Check a single resolved import token for platform-infra and cross-module violations."""
+    label = f" ({import_label})" if import_label else ""
+
+    # Guard business code from platform infrastructure internals.
+    if is_main_java and PLATFORM_INFRASTRUCTURE_RE.match(imported):
+        errors.append(
+            f"business module must not import platform infrastructure internals: {relative}: {imported}{label}"
+        )
+
+    # No business module may couple to another module's infrastructure.
+    match = re.match(r"com\.lyreo\.([a-z][a-z0-9]*)\.infrastructure\.", imported)
+    if match and match.group(1) != package_name:
+        errors.append(f"cross-module infrastructure import in {relative}: {imported}{label}")
+
+    # Cross-module public surface: only explicitly allowed types may be imported.
+    business = re.match(r"com\.lyreo\.([a-z][a-z0-9]*)\.", imported)
+    if not business:
+        return
+    imported_package = business.group(1)
+    if imported_package not in PACKAGE_TO_MODULE or imported_package == package_name:
+        return
+    if not imported.startswith(CROSS_MODULE_RESTRICTED_PREFIXES):
+        return
+    if imported not in CROSS_MODULE_ALLOWED_TYPES:
+        errors.append(
+            f"cross-module import must use a named/public interface or event: {relative}: {imported}{label}"
+        )
+
+
 def check_clean_architecture_and_boundaries(root: Path, errors: list[str]) -> None:
     """Verify Clean/Hexagonal boundaries inside and between business modules."""
     for module_name, package_name in MODULE_PACKAGE.items():
@@ -101,27 +163,33 @@ def check_clean_architecture_and_boundaries(root: Path, errors: list[str]) -> No
                 if "org.springframework.data." in text or "jakarta.persistence." in text:
                     errors.append(f"persistence framework leaked into inner layer: {relative}")
 
+            # Normal imports
             for imported in IMPORT_RE.findall(text):
-                # Guard business code from platform infrastructure internals (WS5).
-                if is_main_java and PLATFORM_INFRASTRUCTURE_RE.match(imported):
-                    errors.append(
-                        f"business module must not import platform infrastructure internals: {relative}: {imported}"
-                    )
+                _check_import(imported, package_name, relative, is_main_java, errors)
 
-                # No business module may couple to another module's infrastructure.
-                match = re.match(r"com\.lyreo\.([a-z][a-z0-9]*)\.infrastructure\.", imported)
-                if match and match.group(1) != package_name:
-                    errors.append(f"cross-module infrastructure import in {relative}: {imported}")
+            # Wildcard imports (e.g. import com.lyreo.ai.infrastructure.*;)
+            for pkg in WILDCARD_IMPORT_RE.findall(text):
+                _check_import(pkg + "._wildcard_", package_name, relative, is_main_java, errors, "wildcard")
 
-                business = re.match(r"com\.lyreo\.([a-z][a-z0-9]*)\.", imported)
-                if not business:
-                    continue
-                imported_package = business.group(1)
-                if imported_package not in PACKAGE_TO_MODULE or imported_package == package_name:
-                    continue
-                if not imported.startswith(PUBLIC_CROSS_MODULE_PREFIXES):
+            # Static imports (e.g. import static com.lyreo.ai.infrastructure.Type.CONST;)
+            for class_fqn in STATIC_IMPORT_RE.findall(text):
+                _check_import(class_fqn, package_name, relative, is_main_java, errors, "static")
+
+
+def check_cross_owner_sql(root: Path, errors: list[str]) -> None:
+    """Ensure business modules do not reference jobs-owned SQL tokens."""
+    for module_name in MODULE_PACKAGE:
+        module_root = root / "modules" / module_name
+        if not module_root.exists():
+            continue
+        for path in repo_files(module_root, "*", root):
+            if path.suffix not in (".sql", ".java"):
+                continue
+            text = path.read_text(encoding="utf-8").lower()
+            for token in JOBS_OWNED_SQL_TOKENS:
+                if token in text:
                     errors.append(
-                        f"cross-module import must use a named/public interface or event: {relative}: {imported}"
+                        f"business module references jobs-owned SQL token `{token}`: {path.relative_to(root)}"
                     )
 
 
@@ -221,6 +289,7 @@ def check_backend(root: Path, errors: list[str], warnings: list[str]) -> None:
     check_forbidden_pom_dependencies(root, errors)
     check_fastapi_boundaries(root, errors)
     check_clean_architecture_and_boundaries(root, errors)
+    check_cross_owner_sql(root, errors)
     check_platform_dependencies(root, errors)
     check_transactional_targets(root, errors)
     check_flyway_and_modulith_migrations(root, errors)
