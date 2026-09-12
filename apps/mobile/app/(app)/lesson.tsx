@@ -2,8 +2,8 @@ import { Link } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../src/components/ui/button';
-import { Text } from '../src/components/ui/text';
+import { Button } from '@/components/ui/button';
+import { Text } from '@/components/ui/text';
 
 /**
  * Representative Shadowing screen, not the final player implementation.

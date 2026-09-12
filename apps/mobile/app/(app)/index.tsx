@@ -1,25 +1,12 @@
-import { Link, Redirect } from 'expo-router';
-import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
+import { Link } from 'expo-router';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Card } from '../src/components/ui/card';
-import { Text } from '../src/components/ui/text';
-import { useAuth } from '../src/auth';
-import { useAppTheme } from '../src/providers/AppThemeProvider';
+import { Card } from '@/components/ui/card';
+import { Text } from '@/components/ui/text';
+import { AccountSummary } from '@/features/account/account-summary';
 
 export default function HomeScreen() {
-  const auth = useAuth();
-  const { colors } = useAppTheme();
   const { t } = useTranslation('mobile');
-
-  if (auth.loading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color={colors.primary} />
-      </View>
-    );
-  }
-
-  if (!auth.authenticated) return <Redirect href="/login" />;
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerStyle={{ padding: 24, paddingTop: 56, paddingBottom: 60, gap: 14 }}>
@@ -34,6 +21,8 @@ export default function HomeScreen() {
           <Text className="font-bold text-secondary-foreground">💎 240</Text>
         </View>
       </View>
+
+      <AccountSummary />
 
       <View className="mt-4 flex-row items-end justify-between">
         <View>

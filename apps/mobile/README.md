@@ -23,6 +23,9 @@ Default addresses in `apps/mobile/.env`:
 - **Android Emulator**: Reaches host services via `10.0.2.2` (Core: `10.0.2.2:8080`, Keycloak: `10.0.2.2:8081`).
 - **Physical device**: Set `EXPO_PUBLIC_API_BASE_URL` and `EXPO_PUBLIC_KEYCLOAK_URL` to your machine's LAN IP, or use a development tunnel (`npx expo start --tunnel`).
 
+All four `EXPO_PUBLIC_*` values in `.env.example` are required. Mobile validates them at startup;
+they are public endpoint/client metadata and must never contain secrets.
+
 ---
 
 ## 2. Android Development (Linux CLI / No Android Studio needed)
@@ -113,10 +116,23 @@ make mobile
 - **Continuous Native Generation (CNG)**: `apps/mobile/android/` and `apps/mobile/ios/` are **generated build artifacts** derived from `app.json` and `package.json`. They are intentionally git-ignored. Do not commit manual edits inside those folders; declare native changes via Expo config plugins instead.
 - **UI Foundation**: Uses NativeWind v4 (Tailwind v3.4), consuming semantic light/dark tokens from `@lyreo/design-system`.
 - **Internationalization**: Uses `@lyreo/i18n` for shared EN/VI resources.
-- **Security & Storage**: Authentication tokens (Access, Refresh, ID) use `expo-secure-store`. Ordinary preferences (theme, locale) use `AsyncStorage`.
+- **Navigation**: Expo Router route groups separate public and authenticated screens. Root
+  `Stack.Protected` guards derive only from `SessionProvider` status.
+- **Security & Storage**: The access token stays in memory. Refresh and ID token material use
+  `expo-secure-store`; a stored refresh token is validated through OIDC during app bootstrap.
+  Ordinary preferences (theme, locale) use `AsyncStorage`.
+- **API**: Feature code uses the shared authenticated client in `src/api`. It refreshes once and
+  retries once on `401`, then invalidates the session. Core RFC 9457 errors are normalized with
+  their stable code, field violations and correlation ID.
+- **OIDC callback**: The Development Build returns to `lyreo://auth/callback`. Run
+  `make keycloak-seed` after pulling callback configuration changes so an existing realm is updated.
 - **Typecheck**:
   ```bash
   pnpm --filter @lyreo/mobile typecheck
+  ```
+- **Foundation tests**:
+  ```bash
+  pnpm --filter @lyreo/mobile test
   ```
 
 ---

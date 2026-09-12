@@ -1,7 +1,7 @@
 import { Link } from 'expo-router';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Text } from '../src/components/ui/text';
+import { Text } from '@/components/ui/text';
 
 const skills = [
   ['listening', 72],
