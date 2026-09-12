@@ -1,6 +1,7 @@
 .PHONY: help init-env doctor setup deps deps-java data-fetch data-check dev-infra dev-config keycloak-seed down core ai admin mobile \
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
+        ai-local lesson-prep test-lesson-prep clean-prep clean-cache \
         test-java test-ai test-importers test-docs test-tooling typecheck build-frontend validate-docs validate check prod-config verify-prod-env down-v
 
 help:
@@ -54,6 +55,7 @@ deps-java:
 deps: deps-java
 	cd apps/ai-service && uv sync --locked --extra dev
 	cd tools/data-import && uv sync --locked --extra dev
+	cd tools/lesson-prep && uv sync --locked --extra dev
 	pnpm install --frozen-lockfile
 
 setup:
@@ -91,6 +93,17 @@ core: deps-java
 
 ai:
 	cd apps/ai-service && set -a && . ./.env && set +a && uv run uvicorn app.main:app --reload --port 8000
+
+# Local Qwen runtime: requires GPU/model availability. qwen + kokoro extras both live here
+# because the Lesson Prep Tool may call STT/alignment AND Kokoro TTS in one session.
+ai-local:
+	cd apps/ai-service && set -a && . ./.env && set +a && AI_RUNTIME_MODE=local uv run --extra qwen --extra kokoro uvicorn app.main:app --reload --port 8000
+
+# Lesson Prep Tool. Requires: make core (Core), make ai (AI service), make dev-infra +
+# keycloak-seed (Keycloak realm with the lyreo-lesson-prep client), and ffmpeg on PATH.
+lesson-prep:
+	@[ -f tools/lesson-prep/.env ] || { echo 'tools/lesson-prep/.env missing — run make init-env first'; exit 1; }
+	cd tools/lesson-prep && set -a && . ./.env && set +a && uv run --locked python -m lesson_prep.ui_app
 
 admin:
 	pnpm --filter @lyreo/admin-web dev
@@ -156,6 +169,19 @@ test-ai:
 test-importers:
 	cd tools/data-import && uv run --locked --extra dev python -m pytest
 
+test-lesson-prep:
+	cd tools/lesson-prep && uv run --locked --extra dev python -m pytest
+
+clean-prep:
+	rm -rf tools/lesson-prep/.work/* tools/lesson-prep/.pytest_cache
+	@echo "Cleaned lesson-prep temporary files."
+
+clean-cache:
+	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
+	rm -rf tools/lesson-prep/.work/*
+	@echo "Cleaned all Python caches and temporary work directories."
+
 typecheck:
 	pnpm typecheck
 
@@ -177,6 +203,8 @@ validate:
 	  PYTHONPYCACHEPREFIX="$$tmp" python3 -m compileall -q \
 	    apps/ai-service/app \
 	    apps/ai-service/tests \
+	    tools/lesson-prep/lesson_prep \
+	    tools/lesson-prep/tests \
 	    tools/data-import/import_grammar.py \
 	    tools/data-import/import_toeic.py \
 	    tools/data-import/import_lexicon.py \

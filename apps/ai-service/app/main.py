@@ -1,4 +1,5 @@
-from __future__ import annotations
+import os
+os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -8,6 +9,7 @@ from .config import settings
 from .providers.gemini import GeminiProvider
 from .providers.groq import GroqProvider
 from .providers.openai_compatible import OpenAICompatibleProvider
+from .runtime.kokoro import KokoroRuntime
 from .runtime.mock import MockRuntime
 from .runtime.nlp import LightweightNlpRuntime
 from .runtime.qwen import QwenRuntime
@@ -17,6 +19,7 @@ from .security import verify_internal_token
 cfg = settings()
 mock = MockRuntime()
 qwen = QwenRuntime(cfg)
+kokoro = KokoroRuntime(cfg)
 nlp_runtime = LightweightNlpRuntime()
 groq = GroqProvider(cfg.groq_base_url)
 gemini = GeminiProvider(cfg.gemini_base_url)
@@ -63,6 +66,17 @@ async def provider_http_error_handler(_: Request, error: httpx.HTTPStatusError):
             'detail': 'upstream AI provider request failed',
             'provider_status': error.response.status_code,
         },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(_: Request, error: Exception):
+    import logging
+    import traceback
+    logging.error("Unhandled exception in AI service: %s\n%s", error, traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={'detail': f'{type(error).__name__}: {str(error)}'},
     )
 
 
@@ -116,11 +130,23 @@ async def tts(
     if is_mock():
         return await mock.tts(req)
     provider = req.provider.upper()
+    if provider in {'LOCAL_KOKORO', 'KOKORO'}:
+        return await kokoro.tts(req)
     if provider == 'GEMINI':
         return await gemini.tts(req, _require_provider_credential(x_lyreo_provider_credential))
     if provider == 'GROQ':
         return await groq.tts(req, _require_provider_credential(x_lyreo_provider_credential))
     raise HTTPException(501, f'TTS provider {req.provider} is not implemented')
+
+
+@app.get('/v1/tts/voices', dependencies=[Depends(verify_internal_token)])
+async def tts_voices():
+    """Voice discovery for the local TTS runtime.
+
+    Static metadata only — no model load. The Lesson Prep Tool uses this list so it
+    never hard-codes Kokoro voices.
+    """
+    return {'voices': kokoro.voices()}
 
 
 @app.post('/v1/nlp/analyze', response_model=ExecuteResponse, dependencies=[Depends(verify_internal_token)])

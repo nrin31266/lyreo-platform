@@ -121,3 +121,37 @@ def test_gemini_pcm_is_wrapped_as_valid_wav():
         assert wav_file.getframerate() == 24_000
         assert wav_file.readframes(wav_file.getnframes()) == pcm
 
+
+
+def test_voice_discovery_requires_internal_token():
+    response = client.get("/v1/tts/voices")
+    assert response.status_code == 401
+
+
+def test_voice_discovery_lists_local_kokoro_voices():
+    response = client.get("/v1/tts/voices", headers=AUTH)
+    assert response.status_code == 200
+    voices = response.json()["voices"]
+    assert voices
+    by_id = {voice["voice_id"]: voice for voice in voices}
+    assert all(voice["provider"] == "LOCAL_KOKORO" for voice in voices)
+    assert by_id["af_heart"]["accent"] == "US"
+    assert by_id["bf_emma"]["accent"] == "UK"
+
+
+def test_mock_tts_local_kokoro_contract():
+    response = client.post(
+        "/v1/tts",
+        headers=AUTH,
+        json=request(
+            provider="LOCAL_KOKORO",
+            model="hexgrad/Kokoro-82M",
+            input={"text": "Hello there."},
+            options={"voice": "af_heart", "accent": "US", "speed": 1.0},
+        ),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["output"]["audio_base64"]
+    assert body["metadata"]["runtime"] == "mock"
+    assert body["metadata"]["voice"] == "af_heart"

@@ -313,7 +313,10 @@ Docker and Keycloak bootstrap envs. Core runtime does not receive that secret un
 implements a Keycloak Admin API client.
 
 Frontend applications receive only realm URL + public client ID. Mobile/Admin use Authorization
-Code + PKCE.
+Code + PKCE. The Lesson Prep Tool is an additional public client `lyreo-lesson-prep`
+(PKCE S256, redirect `http://localhost:7860/oidc/callback`, no embedded client secret): it logs in
+as ADMIN with the normal Keycloak realm flow so it can call the authenticated media upload API.
+Existing realms pick the new client up on the next `--import-realm` start of the Keycloak container.
 
 ## 10. What must stay in code?
 

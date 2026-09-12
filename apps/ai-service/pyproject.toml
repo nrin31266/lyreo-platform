@@ -2,7 +2,7 @@
 name = "lyreo-ai-service"
 version = "0.1.0"
 description = "AI capability runtime for Lyreo. No business orchestration lives here."
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi>=0.120,<1",
   "uvicorn[standard]>=0.35,<1",
@@ -13,6 +13,7 @@ dependencies = [
 
 [project.optional-dependencies]
 qwen = ["qwen-asr==0.0.6", "torch>=2.7"]
+kokoro = ["kokoro>=0.9,<1", "torch>=2.7"]
 dev = ["pytest>=8.4,<9", "pytest-asyncio>=1.1,<2"]
 
 [tool.pytest.ini_options]

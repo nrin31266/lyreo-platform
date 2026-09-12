@@ -43,6 +43,20 @@ is available.
 Use the AI subproject environment managed by `uv`; runtime-mode behavior is described in
 [AI runtime modes](#5-ai-runtime-modes).
 
+### Lesson Prep Tool
+
+Operator UI (Gradio on `http://localhost:7860`) for prepared lesson sources:
+
+```bash
+make lesson-prep   # requires .env via make init-env; see tools/lesson-prep/README.md
+```
+
+Prerequisites: Core + AI Service running, Keycloak dev realm with the `lyreo-lesson-prep`
+public PKCE client (bootstrap once: `make dev-infra && make keycloak-seed`; existing realms
+re-import `infra/keycloak/import/lyreo-realm.json` on `make dev-infra` restart), and `ffmpeg`
+on PATH for YouTube audio normalization. Login uses Authorization Code + PKCE; no static
+admin secret is created for the tool.
+
 ### Admin Web
 
 Run the Vite dev process separately from Core so frontend reload/debug does not restart the backend.
@@ -92,10 +106,16 @@ responses without GPU/model downloads or provider billing.
 ### `local`
 
 FastAPI loads the Qwen runtime for local STT/alignment capability execution. Local mode requires the
-Qwen optional dependencies and a machine/runtime appropriate for the selected model/device.
+Qwen optional dependencies and a machine/runtime appropriate for the selected model/device
+(`make ai-local` sets `AI_RUNTIME_MODE=local`).
 
 Docker GPU is a packaging/deployment option; a developer with a suitable GPU may run the Python
 runtime directly on the host.
+
+Kokoro local TTS is independent of `AI_RUNTIME_MODE`: callers request `LOCAL_KOKORO` on
+`/v1/tts` after installing the `kokoro` optional group and the `espeak-ng` system package
+(Fedora: `sudo dnf install espeak-ng`; Ubuntu/Debian: `sudo apt-get install espeak-ng`;
+macOS: `brew install espeak-ng`). CPU is the sensible default.
 
 External SaaS providers such as Groq/Gemini/DeepSeek are selected through Core capability routing.
 They are independent from `AI_RUNTIME_MODE` and do not constitute a third runtime mode.

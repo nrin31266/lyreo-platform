@@ -58,6 +58,26 @@
       }
     },
     {
+      "clientId": "lyreo-lesson-prep",
+      "name": "Lyreo Lesson Prep Tool",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:7860/oidc/callback",
+        "http://127.0.0.1:7860/oidc/callback",
+        "http://localhost:7860/*"
+      ],
+      "webOrigins": [
+        "http://localhost:7860",
+        "http://127.0.0.1:7860"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
       "clientId": "lyreo-core-service",
       "name": "Lyreo Core Service",
       "enabled": true,

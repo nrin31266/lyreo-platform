@@ -51,7 +51,8 @@ for path in \
   apps/ai-service/.env \
   apps/admin-web/.env \
   apps/mobile/.env \
-  tools/data-import/.env; do
+  tools/data-import/.env \
+  tools/lesson-prep/.env; do
   if [[ -f "$path" ]]; then ok "$path exists"; else warn "$path missing (run ./scripts/init-dev-env.sh)"; fi
 done
 

@@ -35,3 +35,6 @@ data/generated/
 # OS
 .DS_Store
 .data/
+
+# Personal AI assistant conventions
+CLAUDE.local.md

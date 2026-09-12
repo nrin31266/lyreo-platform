@@ -6,6 +6,7 @@ import com.lyreo.ai.application.AiRoutingSnapshotService;
 import com.lyreo.lesson.application.CreateLessonBuildService;
 import com.lyreo.lesson.application.DictationScoringPolicy;
 import com.lyreo.lesson.application.LessonActivityWriter;
+import com.lyreo.lesson.application.LessonMediaUploadService;
 import com.lyreo.lesson.application.LessonBuildJobHandler;
 import com.lyreo.lesson.application.LessonBuildPlanner;
 import com.lyreo.lesson.application.LessonBuildStateRepository;
@@ -91,6 +92,20 @@ public class LessonConfiguration {
         ObjectMapper mapper
     ) {
         return new JdbcLessonEnrichmentWriter(jdbc, mapper);
+    }
+
+    @Bean
+    LessonMediaUploadService lessonMediaUploadService(
+        ObjectStoragePort storage,
+        @Value("${lyreo.lesson.media.max-audio-bytes:104857600}") long maxAudioBytes,
+        @Value("${lyreo.lesson.media.max-image-bytes:10485760}") long maxImageBytes
+    ) {
+        return new LessonMediaUploadService(
+            storage,
+            maxAudioBytes,
+            maxImageBytes,
+            Duration.ofMinutes(15)
+        );
     }
 
     @Bean
