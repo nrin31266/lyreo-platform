@@ -2,9 +2,36 @@
   "auth": {
     "signIn": "Đăng nhập",
     "signOut": "Đăng xuất",
+    "preparing": "Đang chuẩn bị đăng nhập an toàn…",
+    "authenticationFailed": "Không thể hoàn tất đăng nhập. Vui lòng thử lại.",
+    "identityUnavailable": "Dịch vụ định danh hiện không khả dụng. Hãy kiểm tra kết nối và thử lại.",
+    "sessionExpired": "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
     "name": "Nghe. Nhận biết. Nói.",
     "copy": "Xây dựng khả năng nghe với bài học có cấu trúc, dictation, shadowing, từ vựng, ngữ pháp và luyện TOEIC.",
     "note": "Đăng nhập dùng Keycloak Authorization Code + PKCE. Lịch sử học và tùy chọn của bạn được gắn với tài khoản."
+  },
+  "states": {
+    "error": {
+      "title": "Đã xảy ra lỗi",
+      "message": "Không thể tải nội dung. Vui lòng thử lại."
+    },
+    "empty": {
+      "title": "Chưa có nội dung",
+      "message": "Nội dung sẽ xuất hiện tại đây khi sẵn sàng."
+    }
+  },
+  "notFound": {
+    "title": "Không tìm thấy trang",
+    "message": "Màn hình này không tồn tại hoặc không còn khả dụng.",
+    "action": "Về trang chủ"
+  },
+  "account": {
+    "eyebrow": "HỒ SƠ CORE ĐÃ XÁC THỰC",
+    "title": "Tài khoản của bạn",
+    "loading": "Đang tải tài khoản Lyreo…",
+    "loadFailed": "Không thể tải tài khoản của bạn từ Lyreo Core.",
+    "noEmail": "Tài khoản đã xác thực hiện chưa có địa chỉ email.",
+    "coreVerified": "Được tải an toàn từ GET /api/v1/me"
   },
   "home": {
     "eyebrow": "CHÀO BUỔI TỐI",

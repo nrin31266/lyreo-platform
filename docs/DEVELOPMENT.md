@@ -68,6 +68,11 @@ The full first-time setup, SDK installation, emulator options, KVM, networking (
 `10.0.2.2` to reach host `localhost`), rebuild triggers, and daily workflow are documented in
 `apps/mobile/README.md`.
 
+Mobile startup validates its public Core/Keycloak configuration, restores a persisted OIDC session
+by refreshing it, and keeps authenticated routes unavailable until bootstrap completes. The native
+callback is `lyreo://auth/callback`; rerun `make keycloak-seed` after pulling redirect changes so an
+existing development realm is reconciled without manual Admin Console edits.
+
 ## 4. Recommended start order
 
 ```text

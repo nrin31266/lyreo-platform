@@ -18,12 +18,27 @@ done
 
 # The realm JSON contains topology. The real local confidential secret comes from env and is
 # synchronized with Core Service by scripts/init-dev-env.sh.
-CLIENT_UUID=$(
+CORE_CLIENT_UUID=$(
   kcadm get clients -r "$REALM" -q clientId=lyreo-core-service --fields id --format csv --noquotes \
     | head -n1 || true
 )
-if [[ -n "$CLIENT_UUID" && -n "${LYREO_CORE_CLIENT_SECRET:-}" ]]; then
-  kcadm update "clients/$CLIENT_UUID" -r "$REALM" -s "secret=$LYREO_CORE_CLIENT_SECRET" >/dev/null
+if [[ -n "$CORE_CLIENT_UUID" && -n "${LYREO_CORE_CLIENT_SECRET:-}" ]]; then
+  kcadm update "clients/$CORE_CLIENT_UUID" -r "$REALM" -s "secret=$LYREO_CORE_CLIENT_SECRET" >/dev/null
 fi
 
-echo "Lyreo Keycloak topology verified: realm=$REALM roles=ADMIN,LEARNER"
+# Keep the installed development realm aligned with the exact native callback used by AuthSession.
+# Realm import only runs on first initialization, so existing developer databases need reconciliation.
+MOBILE_CLIENT_UUID=$(
+  kcadm get clients -r "$REALM" -q clientId=lyreo-mobile --fields id --format csv --noquotes \
+    | head -n1 || true
+)
+if [[ -z "$MOBILE_CLIENT_UUID" ]]; then
+  echo "ERROR: lyreo-mobile client is missing from realm=$REALM" >&2
+  exit 1
+fi
+kcadm update "clients/$MOBILE_CLIENT_UUID" -r "$REALM" \
+  -s 'redirectUris=["lyreo://auth/callback"]' \
+  -s 'attributes={"pkce.code.challenge.method":"S256","post.logout.redirect.uris":"lyreo://auth/callback"}' \
+  >/dev/null
+
+echo "Lyreo Keycloak topology verified: realm=$REALM roles=ADMIN,LEARNER mobileRedirect=lyreo://auth/callback"
