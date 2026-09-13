@@ -21,9 +21,20 @@ _FORBIDDEN_VALUE_PATTERNS = [
     re.compile(r"base64,"),
 ]
 
-_SECRET_KEY_PATTERN = re.compile(
-    r"(secret|password|api[_-]?key|credential|token)", re.IGNORECASE
-)
+_FORBIDDEN_SENSITIVE_KEYS = {
+    "apikey",
+    "api_key",
+    "password",
+    "secret",
+    "credential",
+    "credentials",
+    "authtoken",
+    "auth_token",
+    "accesstoken",
+    "access_token",
+    "refreshtoken",
+    "refresh_token",
+}
 
 _OBSOLETE_KEYS = {
     "canonicalAudioObjectKey",
@@ -84,6 +95,10 @@ def validate_export(source: PreparedSource | dict[str, Any]) -> list[str]:
         problems.append("media.audio.durationMs must be positive")
 
     if source.media.thumbnail is not None:
+        if source.media.thumbnail.path == source.media.audio.path:
+            problems.append(
+                f"media.thumbnail.path ({source.media.thumbnail.path!r}) must not be identical to media.audio.path"
+            )
         problems.extend(_validate_media_path("media.thumbnail.path", source.media.thumbnail.path))
         if not source.media.thumbnail.content_type.startswith("image/"):
             problems.append(f"media.thumbnail.contentType must be an image MIME type, got {source.media.thumbnail.content_type!r}")
@@ -124,8 +139,10 @@ def _scan_document(document: Any) -> list[str]:
                 break
 
     for key in _iter_keys(document):
-        if _SECRET_KEY_PATTERN.search(str(key)):
-            problems.append(f"exported file contains a secret-like field: {key}")
+        k_str = str(key).lower()
+        k_norm = re.sub(r"[_\-]", "", k_str)
+        if k_str in _FORBIDDEN_SENSITIVE_KEYS or k_norm in _FORBIDDEN_SENSITIVE_KEYS:
+            problems.append(f"exported file contains a forbidden sensitive field: {key}")
     return problems
 
 

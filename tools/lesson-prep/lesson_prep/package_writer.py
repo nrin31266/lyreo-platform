@@ -89,11 +89,14 @@ def write_lesson_package(
 
 def verify_package(zip_path: Path) -> PreparedSource:
     """Verifies a lesson source package:
-    1. Valid ZIP archive.
+    1. Valid ZIP archive with strictly expected member set (no undeclared files or duplicates).
     2. Contains lesson-source.json.
     3. Valid schema and passes validate_export.
     4. All declared media items exist in the ZIP with matching size and SHA-256.
-    5. No path traversal or forbidden paths.
+    5. No path traversal, absolute paths, or symlink entries.
+
+    Note: Full hostile ZIP ingestion/sandboxing for untrusted third-party uploads
+    belongs to the future Core importer service.
     """
     if not zip_path.is_file():
         raise PackageWriterError(f"Package file not found: {zip_path}")
@@ -102,10 +105,18 @@ def verify_package(zip_path: Path) -> PreparedSource:
         with zipfile.ZipFile(zip_path, "r") as zf:
             namelist = zf.namelist()
 
-            # Path traversal check
-            for name in namelist:
+            # Duplicate member check
+            if len(namelist) != len(set(namelist)):
+                raise PackageWriterError("ZIP contains duplicate member names")
+
+            # Path traversal and symlink check
+            for info in zf.infolist():
+                name = info.filename
                 if name.startswith("/") or "\\" in name or ".." in name.split("/"):
                     raise PackageWriterError(f"ZIP contains unsafe path: {name}")
+                # Check for UNIX symlink attribute (S_IFLNK = 0o120000)
+                if (info.external_attr >> 16) & 0o170000 == 0o120000:
+                    raise PackageWriterError(f"ZIP contains forbidden symlink entry: {name}")
 
             if "lesson-source.json" not in namelist:
                 raise PackageWriterError("ZIP is missing 'lesson-source.json'")
@@ -121,6 +132,15 @@ def verify_package(zip_path: Path) -> PreparedSource:
                 raise PackageWriterError(f"Manifest validation failed: {'; '.join(problems)}")
 
             source = PreparedSource.model_validate(manifest_dict, by_alias=True)
+
+            # Strict member set validation: only declared manifest members allowed
+            expected_members = {"lesson-source.json", source.media.audio.path}
+            if source.media.thumbnail is not None:
+                expected_members.add(source.media.thumbnail.path)
+
+            unexpected = set(namelist) - expected_members
+            if unexpected:
+                raise PackageWriterError(f"ZIP contains undeclared extra members: {sorted(unexpected)}")
 
             # Verify audio in ZIP
             audio_path = source.media.audio.path

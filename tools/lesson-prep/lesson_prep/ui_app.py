@@ -240,19 +240,49 @@ def new_service() -> LessonPrepService:
 # ------------------------------------------------------------------- dynamic voice discovery
 
 
+_FALLBACK_KOKORO_VOICES: dict[str, str] = {
+    "af_heart": "US",
+    "af_alloy": "US",
+    "af_aoede": "US",
+    "af_bella": "US",
+    "af_jessica": "US",
+    "af_kore": "US",
+    "af_nicole": "US",
+    "af_nova": "US",
+    "af_river": "US",
+    "af_sarah": "US",
+    "af_sky": "US",
+    "am_adam": "US",
+    "am_echo": "US",
+    "am_eric": "US",
+    "am_fenrir": "US",
+    "am_liam": "US",
+    "am_michael": "US",
+    "am_onyx": "US",
+    "am_puck": "US",
+    "am_santa": "US",
+    "bf_alice": "UK",
+    "bf_emma": "UK",
+    "bf_isabella": "UK",
+    "bf_lily": "UK",
+    "bm_daniel": "UK",
+    "bm_fable": "UK",
+    "bm_george": "UK",
+    "bm_lewis": "UK",
+}
+
+
 def _fetch_voice_list() -> list[dict[str, Any]]:
     try:
         return ai.voices()
     except Exception:
-        from app.runtime.kokoro import KOKORO_VOICES
-
         return [
             {
                 "voice_id": vid,
                 "accent": acc,
                 "display": {"name": vid.replace("_", " ").title(), "accent": acc},
             }
-            for vid, acc in KOKORO_VOICES.items()
+            for vid, acc in _FALLBACK_KOKORO_VOICES.items()
         ]
 
 
@@ -559,7 +589,6 @@ def make_prepare_pipeline(
         youtube_url_val: str,
         youtube_title: str,
         existing_transcript: str,
-        export_dir_str: str,
     ):
         mode = MODE_KEYS.get(mode_input, "tts")
         mode_label = MODE_DISPLAY_LABELS.get(mode, "Text to Speech (TTS)")
@@ -772,7 +801,7 @@ def make_prepare_pipeline(
                 _render_status_banner(banner_status, banner_text),
                 _render_log(lines),
                 audio_file_path,
-                transcript_value,
+                gr.update(value=transcript_value, interactive=True),
                 resolved_title,
                 _render_metrics_table(svc),
                 _sentence_rows(svc),
@@ -795,7 +824,7 @@ def make_prepare_pipeline(
                 _render_status_banner("error", f"Pipeline Error: {err_msg}"),
                 _render_log(lines),
                 audio_file_path if audio_file_path else gr.skip(),
-                transcript_value if transcript_value else gr.skip(),
+                gr.update(value=transcript_value, interactive=True) if transcript_value else gr.skip(),
                 resolved_title if resolved_title else gr.skip(),
                 gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
                 gr.update(interactive=True),
@@ -813,7 +842,7 @@ def make_prepare_pipeline(
                 _render_status_banner("error", f"System Error: {err_msg}"),
                 _render_log(lines),
                 audio_file_path if audio_file_path else gr.skip(),
-                transcript_value if transcript_value else gr.skip(),
+                gr.update(value=transcript_value, interactive=True) if transcript_value else gr.skip(),
                 resolved_title if resolved_title else gr.skip(),
                 gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
                 gr.update(interactive=True),
@@ -844,7 +873,6 @@ def run_realign(
     svc: LessonPrepService,
     edited_text: str,
     title_text: str,
-    export_dir_str: str,
 ):
     lines: list[str] = []
     lines.append("[Realign] Synchronizing word timestamps with edited transcript...")
@@ -923,30 +951,26 @@ def run_realign(
 
 def run_export(
     svc: LessonPrepService,
-    export_dir_str: str,
 ):
-    """Exports the primary portable package: *.lesson-source.zip."""
+    """Exports the primary portable package into the session workspace for browser download."""
     ready, problems = svc.export_readiness()
     if not ready:
         msg = f"[ERROR] Export blocked: {'; '.join(problems)}"
         return None, _render_status_banner("error", f"Export failed: {'; '.join(problems)}"), _render_log([msg])
 
     try:
-        raw_dir = export_dir_str.strip() or str(cfg.tool_export_dir)
-        dest_dir = Path(raw_dir).expanduser().resolve()
-        dest_dir.mkdir(parents=True, exist_ok=True)
-
-        package_path = svc.export_package(dest_dir)
+        package_path = svc.export_package()
 
         msg = (
             f"[EXPORT SUCCESS]\n"
             f"Package Archive: {package_path.name}\n"
-            f"Directory: {package_path.parent}\n"
-            f"Size: {package_path.stat().st_size} bytes"
+            f"Staged in Workspace: {package_path.parent}\n"
+            f"Size: {package_path.stat().st_size} bytes\n"
+            f"Click 'Download Package' to save to your local Downloads folder."
         )
         return (
             str(package_path),
-            _render_status_banner("success", f"Package exported successfully: {package_path.name}"),
+            _render_status_banner("success", f"Package ready for download: {package_path.name}"),
             _render_log([msg]),
         )
     except (PrepError, OSError) as exc:
@@ -954,10 +978,12 @@ def run_export(
         return None, _render_status_banner("error", f"Export error: {exc}"), _render_log([msg])
 
 
-def run_clear():
+def run_clear(svc: LessonPrepService | None = None):
     """Resets workspace state, purges temporary files on disk, and resets outputs."""
+    deleted = 0
+    if isinstance(svc, LessonPrepService):
+        deleted = svc.clear_work_dir()
     fresh_svc = new_service()
-    deleted = fresh_svc.clear_work_dir()
     msg = f"[RESET] Workspace cleared. Purged {deleted} temporary file(s) from disk."
     return (
         fresh_svc,
@@ -990,7 +1016,6 @@ def run_clear():
 
 def build_ui() -> gr.Blocks:
     us_choices, us_default = _get_voice_choices("US")
-    detected_export_path = str(cfg.tool_export_dir)
 
     with gr.Blocks(title="Lyreo Lesson Studio", css=CUSTOM_CSS, fill_width=True) as demo:
         # Header Row
@@ -1049,13 +1074,6 @@ def build_ui() -> gr.Blocks:
                         youtube_title = gr.Textbox(label="Title (Optional)", placeholder="Inferred from YouTube if blank")
 
                 with gr.Row():
-                    export_dir_input = gr.Textbox(
-                        label="Export Destination Folder",
-                        value=detected_export_path,
-                        scale=4,
-                    )
-
-                with gr.Row():
                     prepare_button = gr.Button(
                         "⚡ Process Source Audio",
                         variant="primary",
@@ -1109,7 +1127,14 @@ def build_ui() -> gr.Blocks:
                     )
                     export_file = gr.File(label="Download Package", interactive=False, scale=2)
 
-        state = gr.State(new_service)
+        def _dispose_service_state(svc: Any) -> None:
+            if isinstance(svc, LessonPrepService):
+                try:
+                    svc.clear_work_dir()
+                except Exception:
+                    pass
+
+        state = gr.State(new_service, delete_callback=_dispose_service_state)
 
         # Tab Selection State
         tab_tts.select(lambda: "tts", outputs=[mode_state])
@@ -1120,8 +1145,8 @@ def build_ui() -> gr.Blocks:
         youtube_url.change(on_youtube_url_change, inputs=[youtube_url], outputs=[youtube_preview_html])
         status_refresh.click(on_status_refresh, inputs=[state], outputs=[status_box])
 
-        # Transcript editing invalidates alignment
-        transcript_box.change(
+        # Transcript editing invalidates alignment (user input event only)
+        transcript_box.input(
             on_transcript_change,
             inputs=[state, transcript_box],
             outputs=[status_banner, realign_btn, export_btn],
@@ -1162,7 +1187,6 @@ def build_ui() -> gr.Blocks:
                 youtube_url,
                 youtube_title,
                 transcript_box,
-                export_dir_input,
             ],
             outputs=[
                 prepare_button,
@@ -1188,7 +1212,7 @@ def build_ui() -> gr.Blocks:
 
         realign_btn.click(
             run_realign,
-            inputs=[state, transcript_box, title_resolved, export_dir_input],
+            inputs=[state, transcript_box, title_resolved],
             outputs=[
                 realign_btn,
                 prepare_button,
@@ -1208,14 +1232,14 @@ def build_ui() -> gr.Blocks:
 
         export_btn.click(
             run_export,
-            inputs=[state, export_dir_input],
+            inputs=[state],
             outputs=[export_file, status_banner, log],
             show_progress="hidden",
         )
 
         clear_button.click(
             run_clear,
-            inputs=[],
+            inputs=[state],
             outputs=[
                 state,
                 source_tabs,
@@ -1250,13 +1274,11 @@ demo = build_ui()
 
 if __name__ == "__main__":
     cfg.tool_work_dir.resolve().mkdir(parents=True, exist_ok=True)
-    cfg.tool_export_dir.resolve().mkdir(parents=True, exist_ok=True)
     demo.launch(
         server_name="127.0.0.1",
         server_port=7860,
         allowed_paths=[
             str(cfg.tool_work_dir.resolve()),
-            str(cfg.tool_export_dir.resolve()),
         ],
         show_error=True,
     )

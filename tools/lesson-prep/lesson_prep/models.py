@@ -21,18 +21,18 @@ AUDIO_ORIGINS = ("UPLOAD", "TTS_GENERATED")
 VIDEO_ORIGINS = ("YOUTUBE",)
 
 
-class Word(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+class StrictModel(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
+
+class Word(StrictModel):
     position: int
     text: str
     start_ms: int = Field(alias="startMs")
     end_ms: int = Field(alias="endMs")
 
 
-class Sentence(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class Sentence(StrictModel):
     position: int
     text: str
     start_ms: int | None = Field(default=None, alias="startMs")
@@ -40,9 +40,7 @@ class Sentence(BaseModel):
     words: list[Word] = Field(default_factory=list)
 
 
-class SourceBlock(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class SourceBlock(StrictModel):
     kind: str
     origin: str
     external_id: str | None = Field(default=None, alias="externalId")
@@ -51,9 +49,7 @@ class SourceBlock(BaseModel):
     channel: str | None = None
 
 
-class AudioMediaItem(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class AudioMediaItem(StrictModel):
     path: str
     content_type: str = Field(alias="contentType")
     size_bytes: int = Field(alias="sizeBytes")
@@ -61,48 +57,36 @@ class AudioMediaItem(BaseModel):
     duration_ms: int = Field(alias="durationMs")
 
 
-class ThumbnailMediaItem(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class ThumbnailMediaItem(StrictModel):
     path: str
     content_type: str = Field(alias="contentType")
     size_bytes: int = Field(alias="sizeBytes")
     sha256: str
 
 
-class MediaBlock(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class MediaBlock(StrictModel):
     audio: AudioMediaItem
     thumbnail: ThumbnailMediaItem | None = None
 
 
-class ContentBlock(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class ContentBlock(StrictModel):
     text: str
     sentences: list[Sentence]
 
 
-class SttPrep(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class SttPrep(StrictModel):
     provider: str
     model: str
 
 
-class AlignPrep(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class AlignPrep(StrictModel):
     provider: str
     model: str
     normalized: bool | None = None
     repaired_word_count: int | None = Field(default=None, alias="repairedWordCount")
 
 
-class TtsPrep(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class TtsPrep(StrictModel):
     provider: str
     model: str
     voice: str | None = None
@@ -110,17 +94,13 @@ class TtsPrep(BaseModel):
     speed: float | None = None
 
 
-class PreparationBlock(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class PreparationBlock(StrictModel):
     stt: SttPrep | None = None
     alignment: AlignPrep | None = None
     tts: TtsPrep | None = None
 
 
-class PreparedSource(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class PreparedSource(StrictModel):
     schemaVersion: int = SCHEMA_VERSION
     source: SourceBlock
     media: MediaBlock

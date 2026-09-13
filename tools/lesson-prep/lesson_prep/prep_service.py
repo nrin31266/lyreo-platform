@@ -45,7 +45,62 @@ from .youtube import (
     sniff_image_type,
 )
 
-_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+_SENTENCE_BOUNDARY_PATTERN = re.compile(r'([.!?]["\'”’\)\]}]*)\s+')
+
+_HONORIFICS = {"mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st"}
+_ABBREVIATIONS = {"e.g", "i.e", "vs", "etc"}
+
+
+def split_into_sentences(transcript: str) -> list[str]:
+    """Splits a transcript into individual sentence texts.
+
+    Correctly handles:
+    - Terminal punctuation followed by closing quotes or parentheses (e.g., 'said, "Fine." Next...')
+    - Common abbreviations and titles (e.g., 'Dr. Smith', 'e.g. apples', '8:30 a.m. sharp')
+    - Terminal abbreviation at sentence boundary (e.g., 'before 8:30 a.m. First, she...')
+    """
+    text = (transcript or "").strip()
+    if not text:
+        return []
+
+    splits: list[tuple[int, int]] = []
+    last_idx = 0
+
+    for m in _SENTENCE_BOUNDARY_PATTERN.finditer(text):
+        punct_with_closing = m.group(1)
+        punct = punct_with_closing[0]
+        end_punct = m.end(1)
+        next_start = m.end()
+
+        rest = text[next_start:]
+        whitespace = text[end_punct:next_start]
+
+        preceding = text[last_idx:m.start()].rstrip()
+        word_match = re.search(r"([A-Za-z0-9.]+)$", preceding)
+        word = word_match.group(1).lower() if word_match else ""
+
+        rest_stripped = rest.lstrip("\"'“”‘’([{")
+
+        if punct == ".":
+            if word in _HONORIFICS:
+                continue
+            if word in _ABBREVIATIONS:
+                continue
+            if len(word) == 1 and word.isalpha():
+                continue
+            if word in {"a.m", "p.m"}:
+                if "\n" not in whitespace and rest_stripped and rest_stripped[0].islower():
+                    continue
+
+        if "\n" not in whitespace and rest_stripped and rest_stripped[0].islower():
+            continue
+
+        splits.append((last_idx, end_punct))
+        last_idx = next_start
+
+    splits.append((last_idx, len(text)))
+    sentences = [text[start:end].strip() for start, end in splits]
+    return [s for s in sentences if s]
 
 
 class PrepError(RuntimeError):
@@ -100,24 +155,22 @@ class LessonPrepService:
         self.work_dir = work_dir.resolve()
         self.run_id = run_id or uuid.uuid4().hex[:12]
         self.run_dir = self.work_dir / self.run_id
-        self.run_dir.mkdir(parents=True, exist_ok=True)
         self.max_duration_seconds = max_duration_seconds
         self.state = PrepState()
+
+    def ensure_run_dir(self) -> Path:
+        """Lazily creates and returns the isolated run workspace directory."""
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        return self.run_dir
 
     def clear_work_dir(self) -> int:
         """Purges ONLY this service instance's owned run directory and resets state."""
         deleted_count = 0
         if self.run_dir.exists():
-            for p in list(self.run_dir.iterdir()):
+            for p in self.run_dir.rglob("*"):
                 if p.is_file():
-                    try:
-                        p.unlink()
-                        deleted_count += 1
-                    except OSError:
-                        pass
-                elif p.is_dir():
-                    shutil.rmtree(p, ignore_errors=True)
                     deleted_count += 1
+            shutil.rmtree(self.run_dir, ignore_errors=True)
         self.state = PrepState()
         return deleted_count
 
@@ -140,7 +193,8 @@ class LessonPrepService:
             raise PrepError(
                 f"Audio duration ({duration_ms / 1000:.1f}s) exceeds the maximum supported "
                 f"alignment limit of {self.max_duration_seconds}s (5 minutes). "
-                f"Please provide an audio clip under 5 minutes."
+                f"This is the maximum duration of one prepared/aligned lesson source in the "
+                f"current foundation. Please provide an audio clip under 5 minutes."
             )
 
         meta = AudioMetadata(
@@ -160,6 +214,7 @@ class LessonPrepService:
         if not source.is_file():
             raise PrepError(f"Audio file not found: {source}")
 
+        self.ensure_run_dir()
         target = self.run_dir / f"uploaded{source.suffix}"
         shutil.copyfile(source, target)
         self.state = PrepState(mode="upload")
@@ -175,6 +230,7 @@ class LessonPrepService:
             raise PrepError("Text is empty; nothing to synthesize")
 
         result = self.ai.tts(text, voice=voice, accent=accent, speed=speed)
+        self.ensure_run_dir()
         target = self.run_dir / "tts-generated.wav"
         target.write_bytes(result["audio_bytes"])
 
@@ -197,6 +253,7 @@ class LessonPrepService:
             raise PrepError("Invalid YouTube URL; expected an 11-character video ID")
 
         meta = fetch_metadata(normalized)
+        self.ensure_run_dir()
         audio = extract_audio(normalized, self.run_dir)
         self.inspect_audio(audio)
 
@@ -366,13 +423,19 @@ class LessonPrepService:
             raise PrepError("Export validation failed: " + "; ".join(problems))
         return source_model
 
-    def export_package(self, export_dir: Path) -> Path:
-        """Exports the primary portable artifact: a verified *.lesson-source.zip package."""
+    def export_package(self, export_dir: Path | None = None) -> Path:
+        """Exports the primary portable artifact: a verified *.lesson-source.zip package.
+
+        If export_dir is None, stages the package inside the session workspace:
+        .work/<run-id>/export/<name>.lesson-source.zip
+        """
         source = self.build_export()
+        target_dir = export_dir if export_dir is not None else (self.ensure_run_dir() / "export")
+        target_dir.mkdir(parents=True, exist_ok=True)
         return write_lesson_package(
             source=source,
             local_audio_path=self.state.local_audio_path,
-            export_dir=export_dir,
+            export_dir=target_dir,
             local_thumbnail_path=self.state.thumbnail_path,
         )
 
@@ -466,8 +529,7 @@ def build_sentences_with_monotonic_mapping(
     Groups mapped tokens into sentences and applies bounded timestamp repair.
     Returns (sentences, total_repaired_word_count).
     """
-    raw_sentences = _SENTENCE_END.split(transcript.strip())
-    sentence_texts = [s.strip() for s in raw_sentences if s.strip()] or [transcript.strip()]
+    sentence_texts = split_into_sentences(transcript) or [transcript.strip()]
 
     # Collect all display tokens across all sentences with sentence indices
     token_entries: list[tuple[int, str]] = []

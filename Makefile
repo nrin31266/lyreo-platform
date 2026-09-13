@@ -1,7 +1,7 @@
 .PHONY: help init-env doctor setup deps deps-java data-fetch data-check dev-infra dev-config keycloak-seed down core ai admin mobile \
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
-        ai-local lesson-prep test-lesson-prep clean-prep clean-cache \
+        ai-local lesson-prep test-lesson-prep clean-prep clean-cache clean \
         test-java test-ai test-importers test-docs test-tooling typecheck build-frontend validate-docs validate check prod-config verify-prod-env down-v
 
 help:
@@ -18,6 +18,8 @@ help:
 	  '  make keycloak-seed               Verify realm/client/roles and seed dev users' \
 	  '  make core                        Run Spring Boot locally' \
 	  '  make ai                          Run FastAPI locally' \
+	  '  make ai-local                    Run FastAPI locally with local Qwen/Kokoro weights' \
+	  '  make lesson-prep                 Run local Lesson Prep Gradio workstation' \
 	  '  make admin                       Run Admin Vite dev server' \
 	  '  make mobile                      Run Expo Metro bundler (requires Dev Build installed on device/emulator)' \
 	  '  make mobile-ios-device-register  Register a physical iOS device with EAS (run once per device)' \
@@ -28,7 +30,11 @@ help:
 	  '  make mobile-android-install      Build and install Android Dev Build into running emulator/device' \
 	  '  make validate                    Offline repository/syntax guardrails' \
 	  '  make validate-docs               Offline Markdown link/anchor/ID/path guardrails' \
+	  '  make test-lesson-prep            Run lesson-prep test suite' \
 	  '  make check                       Run available Java/Python/importer/frontend checks' \
+	  '  make clean-prep                  Clean temporary lesson-prep session workspaces' \
+	  '  make clean-cache                 Clean Python bytecode and test caches' \
+	  '  make clean                       Aggregate cleanup: clean-cache + clean-prep' \
 	  '  make dev-config                  Validate compose.dev.yml syntax/resolution' \
 	  '  make prod-config                 Validate compose.prod.yml syntax/resolution' \
 	  '' \
@@ -92,12 +98,12 @@ core: deps-java
 	cd apps/core-service && set -a && . ./.env && set +a && ../../mvnw spring-boot:run
 
 ai:
-	cd apps/ai-service && set -a && . ./.env && set +a && uv run uvicorn app.main:app --reload --port 8000
+	cd apps/ai-service && set -a && . ./.env && set +a && uv run --locked uvicorn app.main:app --reload --port 8000
 
 # Local Qwen runtime: requires GPU/model availability. qwen + kokoro extras both live here
 # because the Lesson Prep Tool may call STT/alignment AND Kokoro TTS in one session.
 ai-local:
-	cd apps/ai-service && set -a && . ./.env && set +a && AI_RUNTIME_MODE=local uv run --extra qwen --extra kokoro uvicorn app.main:app --reload --port 8000
+	cd apps/ai-service && set -a && . ./.env && set +a && AI_RUNTIME_MODE=local uv run --locked --extra qwen --extra kokoro uvicorn app.main:app --reload --port 8000
 
 # Lesson Prep Tool. Requires: make ai (AI service), and ffmpeg/ffprobe on PATH.
 # Does NOT require Core, Keycloak, or PostgreSQL.
@@ -179,8 +185,10 @@ clean-prep:
 clean-cache:
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
-	rm -rf tools/lesson-prep/.work/*
-	@echo "Cleaned all Python caches and temporary work directories."
+	@echo "Cleaned Python bytecode and test caches."
+
+clean: clean-cache clean-prep
+	@echo "All caches and temporary workspaces cleaned."
 
 typecheck:
 	pnpm typecheck
@@ -214,7 +222,7 @@ validate:
 	bash -n scripts/*.sh infra/keycloak/scripts/*.sh infra/postgres/init/*.sh
 	python3 tooling/validate_repo.py
 
-check: validate test-tooling test-java test-ai test-importers typecheck build-frontend
+check: validate test-tooling test-java test-ai test-importers test-lesson-prep typecheck build-frontend
 
 verify-prod-env:
 	./scripts/verify-prod-env.sh

@@ -27,7 +27,10 @@ portable artifact that can be stored offline, shared, or imported anywhere.
 The exported zip package contains:
 - `lesson-source.json` — Versioned manifest (`schemaVersion: 1`) with source metadata, audio duration,
   SHA-256 hashes, sentence boundaries, and word-level alignment timestamps.
-- `media/audio.<ext>` — Exact prepared canonical audio bytes (e.g. `media/audio.wav`).
+- `media/audio.<ext>` — The packaged audio bytes are the exact prepared local audio bytes used for STT/alignment for that workflow:
+  - `AUDIO / UPLOAD`: original source bytes and format preserved (e.g. `.mp3`, `.m4a`, `.wav`).
+  - `AUDIO / TTS_GENERATED`: Kokoro native 24kHz mono WAV (`tts-generated.wav`).
+  - `VIDEO / YOUTUBE`: prepared 16kHz mono WAV produced by ffmpeg (`canonical-audio.wav`).
 - `media/thumbnail.<ext>` (optional) — Thumbnail image bytes for video sources (e.g. `media/thumbnail.webp`).
 
 The package never leaks:
@@ -71,18 +74,25 @@ VIDEO (YouTube)     URL -> validate -> fetch metadata -> download thumbnail (Web
 ```
 
 ### Safety & Invariants
+- **Exact Audio Invariant**: The packaged audio bytes are the exact prepared local audio bytes used
+  for STT/alignment for that specific workflow without subsequent re-encoding or transcoding.
 - **Sentence & Word Alignment**: Uses monotonic lexical token stream mapping across all sentences,
   preventing word misalignment when punctuation or hyphenated words (`ice-cream`) are processed.
 - **Timestamp Repair**: Zero-duration word intervals are repaired monotonically, and repair counts
   are audited in `preparation.alignment.repairedWordCount`.
-- **Max Duration Limit**: Audio length is validated against a 5-minute (300 seconds) ceiling,
-  matching the official capability boundary of `Qwen3-ForcedAligner-0.6B`.
+- **Max Duration Limit**: Audio length is validated against a 5-minute (300 seconds) ceiling.
+  This is the maximum duration of one prepared/aligned lesson source in the current foundation,
+  matching the official capability boundary of `Qwen3-ForcedAligner-0.6B`. It does not restrict
+  future long-media raw acquisition pipelines.
 - **Stale State Invalidation**: Any edit to the transcript immediately marks alignment stale and
   blocks export until re-aligned.
-- **Workspace Isolation**: Each run executes in an isolated directory (`.work/<run-id>/`), and
-  clearing a run will never delete another operator's files.
-- **Filesystem Security**: Gradio `allowed_paths` is strictly constrained to the tool's own working
-  and export directories.
+- **Workspace Isolation & Staging Lifecycle**: Each run executes in an isolated directory (`.work/<run-id>/`),
+  created lazily only when actual preparation begins. Export files inside `.work` are temporary staging
+  artifacts. The downloaded `.lesson-source.zip` is the portable artifact the operator keeps. Resetting
+  or closing the session purges `.work/<run-id>/` completely, including the staged archive, while never
+  deleting another operator's session workspace.
+- **Filesystem Security**: Gradio local filesystem exposure / overly broad `allowed_paths` mitigation:
+  `allowed_paths` is strictly constrained to the tool's own working directory (`.work`).
 
 ## Tests
 
@@ -92,4 +102,14 @@ make test-lesson-prep
 
 # Or from tools/lesson-prep:
 uv run --locked --extra dev python -m pytest
+```
+
+## Cleanup
+
+```bash
+# Clean temporary lesson-prep session workspaces:
+make clean-prep
+
+# Or clean all Python bytecode caches and temporary workspaces:
+make clean
 ```

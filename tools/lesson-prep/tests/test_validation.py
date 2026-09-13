@@ -148,7 +148,49 @@ def test_rejects_secret_like_fields():
     exported = base_source().export_dict()
     exported["apiKey"] = "hidden"
     problems = validate_export(exported)
-    assert any("secret-like" in p for p in problems)
+    assert any("forbidden sensitive field" in p for p in problems)
+
+
+def test_rejects_explicit_forbidden_sensitive_fields():
+    for field in ("authToken", "auth_token", "apiKey", "api_key", "password", "secret", "credential"):
+        exported = base_source().export_dict()
+        exported[field] = "sensitive-value"
+        problems = validate_export(exported)
+        assert any("forbidden sensitive field" in p for p in problems), f"Field {field} was not rejected"
+
+
+def test_allows_innocent_token_vocabulary():
+    """Innocent words containing 'token' (e.g. tokenCount) must not be rejected by name."""
+    from lesson_prep.validation import _scan_document
+    # Ensure _scan_document does not reject innocent token vocabulary
+    data = {"title": "Lesson with tokenCount", "tokenCount": 100, "tokens": ["hello", "world"]}
+    problems = _scan_document(data)
+    assert not any("forbidden sensitive field" in p for p in problems)
+
+
+def test_rejects_arbitrary_unknown_fields_in_schema():
+    """StrictModel extra='forbid' must reject arbitrary unknown fields."""
+    exported = base_source().export_dict()
+    exported["unknownField"] = "unexpected_data"
+    problems = validate_export(exported)
+    assert any("does not match the schema" in p for p in problems)
+    assert any("extra" in p.lower() for p in problems)
+
+
+def test_rejects_identical_audio_and_thumbnail_paths():
+    source = base_source(
+        source=SourceBlock(kind="VIDEO", origin="YOUTUBE", externalId="dQw4w9WgXcQ",
+                           originalUrl="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                           title="Video lesson"),
+        media=MediaBlock(
+            audio=AudioMediaItem(path="media/audio.wav", contentType="audio/wav", sizeBytes=100,
+                                 sha256=VALID_SHA, durationMs=1000),
+            thumbnail=ThumbnailMediaItem(path="media/audio.wav", contentType="image/jpeg",
+                                         sizeBytes=100, sha256=VALID_THUMB_SHA),
+        ),
+    )
+    problems = validate_export(source)
+    assert any("must not be identical" in p for p in problems)
 
 
 def test_rejects_malformed_document():
