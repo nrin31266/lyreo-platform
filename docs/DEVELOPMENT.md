@@ -45,17 +45,15 @@ Use the AI subproject environment managed by `uv`; runtime-mode behavior is desc
 
 ### Lesson Prep Tool
 
-Operator UI (Gradio on `http://localhost:7860`) for prepared lesson sources:
+Operator UI (Gradio on `http://127.0.0.1:7860`) for preparing portable lesson source packages:
 
 ```bash
 make lesson-prep   # requires .env via make init-env; see tools/lesson-prep/README.md
 ```
 
-Prerequisites: Core + AI Service running, Keycloak dev realm with the `lyreo-lesson-prep`
-public PKCE client (bootstrap once: `make dev-infra && make keycloak-seed`; existing realms
-re-import `infra/keycloak/import/lyreo-realm.json` on `make dev-infra` restart), and `ffmpeg`
-on PATH for YouTube audio normalization. Login uses Authorization Code + PKCE; no static
-admin secret is created for the tool.
+Prerequisites: AI Service running (`make ai` or `make ai-local`), `ffmpeg` and `ffprobe` on PATH.
+The tool runs fully standalone without Core, Keycloak, PostgreSQL, or R2, and exports portable
+`*.lesson-source.zip` packages.
 
 ### Admin Web
 

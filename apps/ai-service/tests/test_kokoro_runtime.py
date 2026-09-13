@@ -102,3 +102,34 @@ def test_alignment_result_flattening_handles_wrapped_and_flat_shapes():
     assert len(_flatten_alignment_results(wrapped)) == 2
     assert len(_flatten_alignment_results(flat)) == 2
     assert len(_flatten_alignment_results([])) == 0
+
+
+def test_chunking_splits_single_sentence_longer_than_limit():
+    long_sentence = (
+        "This is an extraordinarily long sentence designed to test the word-boundary chunking "
+        "logic when a single sentence without punctuation exceeds the configured limit. "
+    ) * 10
+    chunks = chunk_text(long_sentence, limit=200)
+    assert len(chunks) > 1
+    for chunk in chunks:
+        assert len(chunk) <= 200
+    reconstructed_words = " ".join(chunks).split()
+    assert reconstructed_words == long_sentence.split()
+
+
+def test_kokoro_voice_catalog_integrity(runtime):
+    voices = runtime.voices()
+    assert len(voices) == 28
+    ids = {v["voice_id"] for v in voices}
+    # Stale/invalid voices must not be in the catalog
+    assert "am_emma" not in ids
+    assert "am_isa" not in ids
+    assert "am_george" not in ids
+    # Correct voices must be present
+    assert {"af_heart", "af_alloy", "af_bella", "am_adam", "am_echo", "bf_alice", "bm_daniel"} <= ids
+    # Accent matches prefix
+    for v in voices:
+        if v["voice_id"].startswith("a"):
+            assert v["accent"] == "US"
+        elif v["voice_id"].startswith("b"):
+            assert v["accent"] == "UK"

@@ -1,6 +1,10 @@
-"""Versioned prepared lesson source models (schemaVersion 1).
+"""Versioned prepared lesson source models (schemaVersion 1) for portable packages.
 
-The exported JSON is the single final artifact an operator keeps/imports.
+The primary artifact is a portable *.lesson-source.zip containing:
+- lesson-source.json
+- media/audio.<ext>
+- media/thumbnail.<ext> (optional)
+
 It never contains base64 media, signed URLs, local absolute paths or secrets.
 """
 
@@ -44,14 +48,33 @@ class SourceBlock(BaseModel):
     external_id: str | None = Field(default=None, alias="externalId")
     original_url: str | None = Field(default=None, alias="originalUrl")
     title: str
+    channel: str | None = None
+
+
+class AudioMediaItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    path: str
+    content_type: str = Field(alias="contentType")
+    size_bytes: int = Field(alias="sizeBytes")
+    sha256: str
+    duration_ms: int = Field(alias="durationMs")
+
+
+class ThumbnailMediaItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    path: str
+    content_type: str = Field(alias="contentType")
+    size_bytes: int = Field(alias="sizeBytes")
+    sha256: str
 
 
 class MediaBlock(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    canonical_audio_object_key: str = Field(alias="canonicalAudioObjectKey")
-    canonical_audio_sha256: str | None = Field(default=None, alias="canonicalAudioSha256")
-    thumbnail_object_key: str | None = Field(default=None, alias="thumbnailObjectKey")
+    audio: AudioMediaItem
+    thumbnail: ThumbnailMediaItem | None = None
 
 
 class ContentBlock(BaseModel):
@@ -62,16 +85,24 @@ class ContentBlock(BaseModel):
 
 
 class SttPrep(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     provider: str
     model: str
 
 
 class AlignPrep(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     provider: str
     model: str
+    normalized: bool | None = None
+    repaired_word_count: int | None = Field(default=None, alias="repairedWordCount")
 
 
 class TtsPrep(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     provider: str
     model: str
     voice: str | None = None
@@ -80,6 +111,8 @@ class TtsPrep(BaseModel):
 
 
 class PreparationBlock(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     stt: SttPrep | None = None
     alignment: AlignPrep | None = None
     tts: TtsPrep | None = None

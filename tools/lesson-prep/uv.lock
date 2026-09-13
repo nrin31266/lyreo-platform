@@ -301,12 +301,10 @@ name = "lyreo-lesson-prep"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "fastapi" },
     { name = "gradio" },
     { name = "httpx" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "python-multipart" },
     { name = "yt-dlp" },
 ]
 
@@ -317,13 +315,11 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastapi", specifier = ">=0.120,<1" },
     { name = "gradio", specifier = ">=5,<6" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "pydantic", specifier = ">=2.10,<3" },
     { name = "pydantic-settings", specifier = ">=2.10,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4,<10" },
-    { name = "python-multipart", specifier = ">=0.0.20,<1" },
     { name = "yt-dlp", specifier = ">=2025.1" },
 ]
 provides-extras = ["dev"]

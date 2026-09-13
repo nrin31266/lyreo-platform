@@ -99,8 +99,8 @@ ai:
 ai-local:
 	cd apps/ai-service && set -a && . ./.env && set +a && AI_RUNTIME_MODE=local uv run --extra qwen --extra kokoro uvicorn app.main:app --reload --port 8000
 
-# Lesson Prep Tool. Requires: make core (Core), make ai (AI service), make dev-infra +
-# keycloak-seed (Keycloak realm with the lyreo-lesson-prep client), and ffmpeg on PATH.
+# Lesson Prep Tool. Requires: make ai (AI service), and ffmpeg/ffprobe on PATH.
+# Does NOT require Core, Keycloak, or PostgreSQL.
 lesson-prep:
 	@[ -f tools/lesson-prep/.env ] || { echo 'tools/lesson-prep/.env missing — run make init-env first'; exit 1; }
 	cd tools/lesson-prep && set -a && . ./.env && set +a && uv run --locked python -m lesson_prep.ui_app

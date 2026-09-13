@@ -76,7 +76,7 @@ async def unhandled_exception_handler(_: Request, error: Exception):
     logging.error("Unhandled exception in AI service: %s\n%s", error, traceback.format_exc())
     return JSONResponse(
         status_code=500,
-        content={'detail': f'{type(error).__name__}: {str(error)}'},
+        content={'detail': 'Internal server error'},
     )
 
 

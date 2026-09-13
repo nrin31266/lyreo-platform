@@ -40,6 +40,17 @@ def normalize_youtube_url(url: str) -> str | None:
     return f"https://www.youtube.com/watch?v={video_id}"
 
 
+def sniff_image_type(data: bytes) -> tuple[str, str]:
+    """Sniffs image type from magic bytes. Returns (contentType, extension_with_dot)."""
+    if len(data) >= 3 and data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg", ".jpg"
+    if len(data) >= 8 and data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png", ".png"
+    if len(data) >= 12 and data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        return "image/webp", ".webp"
+    return "image/jpeg", ".jpg"
+
+
 def fetch_metadata(url: str) -> YoutubeMeta:
     try:
         import yt_dlp
@@ -70,7 +81,7 @@ def fetch_metadata(url: str) -> YoutubeMeta:
     )
 
 
-def extract_audio(url: str, work_dir: Path, sample_rate: int = 16000) -> Path:
+def extract_audio(url: str, run_dir: Path, sample_rate: int = 16000) -> Path:
     """Downloads the best audio-only stream with yt-dlp and normalizes it to mono
     WAV with ffmpeg (deterministic STT input)."""
     try:
@@ -78,8 +89,22 @@ def extract_audio(url: str, work_dir: Path, sample_rate: int = 16000) -> Path:
     except ImportError as exc:
         raise YoutubeError("yt-dlp is not installed; run: uv sync") from exc
 
-    work_dir.mkdir(parents=True, exist_ok=True)
-    raw_template = str(work_dir / "youtube-source.%(ext)s")
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Purge any previous download candidates in this run directory to avoid stale files
+    for old_file in list(run_dir.glob("youtube-source.*")):
+        try:
+            old_file.unlink()
+        except OSError:
+            pass
+    old_wav = run_dir / "canonical-audio.wav"
+    if old_wav.exists():
+        try:
+            old_wav.unlink()
+        except OSError:
+            pass
+
+    raw_template = str(run_dir / "youtube-source.%(ext)s")
     options = {
         "quiet": True,
         "no_warnings": True,
@@ -90,14 +115,14 @@ def extract_audio(url: str, work_dir: Path, sample_rate: int = 16000) -> Path:
     try:
         with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(url, download=True)
-        requested = ydl.prepare_filename(info)
+            requested = ydl.prepare_filename(info)
     except Exception as exc:
         raise YoutubeError(f"Unable to download YouTube audio: {_safe(exc)}") from exc
 
     source = Path(requested)
     if not source.exists():
         candidates = sorted(
-            work_dir.glob("youtube-source.*"),
+            run_dir.glob("youtube-source.*"),
             key=lambda path: path.stat().st_size,
             reverse=True,
         )
@@ -105,24 +130,36 @@ def extract_audio(url: str, work_dir: Path, sample_rate: int = 16000) -> Path:
             raise YoutubeError("yt-dlp completed but produced no audio artifact")
         source = candidates[0]
 
-    wav = work_dir / "canonical-audio.wav"
+    wav = run_dir / "canonical-audio.wav"
     _ffmpeg_to_wav(source, wav, sample_rate)
     if not wav.exists() or wav.stat().st_size == 0:
         raise YoutubeError("ffmpeg produced no usable WAV audio; install ffmpeg and retry")
     return wav
 
 
-def download_thumbnail(meta: YoutubeMeta, work_dir: Path) -> Path | None:
+def download_thumbnail(meta: YoutubeMeta, run_dir: Path) -> tuple[Path, str] | None:
+    """Downloads thumbnail, inspects bytes for correct image format, and saves with proper extension.
+    Returns (path, content_type) or None."""
     if not meta.thumbnail_url:
         return None
-    work_dir.mkdir(parents=True, exist_ok=True)
-    target = work_dir / "thumbnail.jpg"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clean old thumbnail artifacts
+    for old_thumb in list(run_dir.glob("thumbnail.*")):
+        try:
+            old_thumb.unlink()
+        except OSError:
+            pass
+
     try:
         response = httpx.get(meta.thumbnail_url, timeout=60, follow_redirects=True)
         response.raise_for_status()
-        target.write_bytes(response.content)
-        return target
-    except httpx.HTTPError:
+        data = response.content
+        content_type, ext = sniff_image_type(data)
+        target = run_dir / f"thumbnail{ext}"
+        target.write_bytes(data)
+        return target, content_type
+    except (httpx.HTTPError, OSError):
         return None
 
 

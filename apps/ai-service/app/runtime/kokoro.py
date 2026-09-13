@@ -11,15 +11,41 @@ from typing import Any
 from ..config import Settings
 from ..schemas import ExecuteRequest, ExecuteResponse
 
-# Standard Kokoro-82M voice set. Voice prefix encodes accent: 'a*' = American English,
-# 'b*' = British English. This is the exact set supported by the configured local model.
+# Standard Kokoro-82M English voice catalog from official VOICES.md.
+# Voice prefix encodes accent: 'a*' = American English, 'b*' = British English.
 KOKORO_VOICES: dict[str, str] = {
-    'af_heart': 'US', 'af_bella': 'US', 'af_nicole': 'US', 'af_aoede': 'US',
-    'af_kore': 'US', 'af_sarah': 'US', 'af_nova': 'US', 'af_sky': 'US',
-    'am_adam': 'US', 'am_michael': 'US', 'am_emma': 'US', 'am_isa': 'US',
-    'am_eric': 'US', 'am_george': 'US', 'am_liam': 'US',
-    'bf_alice': 'UK', 'bf_emma': 'UK', 'bf_isabella': 'UK', 'bf_lily': 'UK',
-    'bm_daniel': 'UK', 'bm_fable': 'UK', 'bm_george': 'UK', 'bm_lewis': 'UK',
+    # American English - Female (11)
+    'af_heart': 'US',
+    'af_alloy': 'US',
+    'af_aoede': 'US',
+    'af_bella': 'US',
+    'af_jessica': 'US',
+    'af_kore': 'US',
+    'af_nicole': 'US',
+    'af_nova': 'US',
+    'af_river': 'US',
+    'af_sarah': 'US',
+    'af_sky': 'US',
+    # American English - Male (9)
+    'am_adam': 'US',
+    'am_echo': 'US',
+    'am_eric': 'US',
+    'am_fenrir': 'US',
+    'am_liam': 'US',
+    'am_michael': 'US',
+    'am_onyx': 'US',
+    'am_puck': 'US',
+    'am_santa': 'US',
+    # British English - Female (4)
+    'bf_alice': 'UK',
+    'bf_emma': 'UK',
+    'bf_isabella': 'UK',
+    'bf_lily': 'UK',
+    # British English - Male (4)
+    'bm_daniel': 'UK',
+    'bm_fable': 'UK',
+    'bm_george': 'UK',
+    'bm_lewis': 'UK',
 }
 
 _ACCEPTED_SPEED_RANGE = (0.5, 2.0)
@@ -155,13 +181,38 @@ class KokoroRuntime:
 
 
 def chunk_text(text: str, limit: int) -> list[str]:
-    """Deterministic sentence-aware chunking; never splits a word mid-way."""
+    """Deterministic sentence-aware chunking; never splits a word mid-way.
+
+    If a single sentence exceeds the character limit, it is split greedily at word boundaries.
+    """
     if limit < 32:
         limit = 32
     raw = re.split(r'(?<=[.!?;:])\s+', text.strip())
-    sentences = [part.strip() for part in raw if part.strip()]
-    if not sentences:
+    raw_sentences = [part.strip() for part in raw if part.strip()]
+    if not raw_sentences:
         return []
+
+    # Break any sentences longer than limit at word boundaries
+    sentences: list[str] = []
+    for s in raw_sentences:
+        if len(s) <= limit:
+            sentences.append(s)
+        else:
+            words = s.split()
+            current_piece = ''
+            for w in words:
+                if len(w) > limit:
+                    raise ValueError(f"Single word exceeds chunk limit of {limit} characters: {w[:30]}...")
+                if not current_piece:
+                    current_piece = w
+                elif len(current_piece) + 1 + len(w) <= limit:
+                    current_piece = f"{current_piece} {w}"
+                else:
+                    sentences.append(current_piece)
+                    current_piece = w
+            if current_piece:
+                sentences.append(current_piece)
+
     chunks: list[str] = []
     current = ''
     for sentence in sentences:

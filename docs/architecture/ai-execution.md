@@ -11,8 +11,9 @@ capabilities: STT, alignment, TTS, NLP, generic LLM and multimodal judge. It has
 or endpoints named after Lesson/Curriculum/Reward workflows.
 
 The **Lesson Prep Tool** (`tools/lesson-prep`) is a separate local operator tool that calls AI
-Service over HTTP for source preparation (STT/alignment/TTS) and Core over HTTP for canonical
-media upload. It exports one versioned `*.lesson-source.json` file; it does not persist lessons.
+Service over HTTP for source preparation (STT/alignment/TTS) via local file references (`file:///...`).
+It exports one portable `*.lesson-source.zip` package containing `lesson-source.json` and prepared
+media bytes; it does not depend on Core, Keycloak, PostgreSQL, or R2, and does not persist lessons.
 AI Service must never receive YouTube URLs or business Lesson DTOs — only usable audio references
 and text. YouTube acquisition in the Tool is tool-local; AI Service receives only the extracted
 canonical audio reference.

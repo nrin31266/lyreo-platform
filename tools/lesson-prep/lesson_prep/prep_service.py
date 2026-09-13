@@ -1,23 +1,27 @@
-"""Preparation state machine.
+"""Preparation state machine and workflow owner.
 
-Business/orchestration logic lives here, never inside UI callbacks. The single
-final artifact is one versioned `*.lesson-source.json` file; assets are uploaded
-to Core storage once before export.
+Business/orchestration logic lives here, never inside UI callbacks. The primary
+final artifact is a portable *.lesson-source.zip containing lesson-source.json
+and exact prepared media bytes.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import shutil
+import subprocess
+import uuid
+import wave
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from .ai_service_client import AiServiceClient
-from .core_api_client import CoreApiClient
 from .models import (
     AlignPrep,
+    AudioMediaItem,
     ContentBlock,
     MediaBlock,
     PreparationBlock,
@@ -25,9 +29,11 @@ from .models import (
     Sentence,
     SourceBlock,
     SttPrep,
+    ThumbnailMediaItem,
     TtsPrep,
     Word,
 )
+from .package_writer import write_lesson_package
 from .validation import validate_export
 from .youtube import (
     YoutubeError,
@@ -36,6 +42,7 @@ from .youtube import (
     extract_audio,
     fetch_metadata,
     normalize_youtube_url,
+    sniff_image_type,
 )
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
@@ -46,124 +53,172 @@ class PrepError(RuntimeError):
 
 
 @dataclass
+class AudioMetadata:
+    path: Path
+    content_type: str
+    size_bytes: int
+    sha256: str
+    duration_ms: int
+
+
+@dataclass
+class CoverageMetrics:
+    audio_duration_ms: int
+    last_aligned_ms: int
+    trailing_unaligned_ms: int
+    coverage_pct: float
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
 class PrepState:
     mode: str = "upload"  # upload | tts | youtube
     title: str = ""
     local_audio_path: Path | None = None
-    audio_object_key: str | None = None
-    audio_sha256: str | None = None
-    audio_download_url: str | None = None
-    thumbnail_object_key: str | None = None
+    audio_meta: AudioMetadata | None = None
     thumbnail_path: Path | None = None
+    thumbnail_content_type: str | None = None
     transcript: str = ""
     sentences: list[Sentence] = field(default_factory=list)
     stt: SttPrep | None = None
     alignment: AlignPrep | None = None
     alignment_fresh: bool = False
+    coverage: CoverageMetrics | None = None
     tts: TtsPrep | None = None
     youtube: YoutubeMeta | None = None
 
 
 class LessonPrepService:
-    def __init__(self, ai: AiServiceClient, core: CoreApiClient, work_dir: Path):
+    def __init__(
+        self,
+        ai: AiServiceClient,
+        work_dir: Path,
+        run_id: str | None = None,
+        max_duration_seconds: int = 300,
+    ):
         self.ai = ai
-        self.core = core
-        self.work_dir = work_dir
-        self.work_dir.mkdir(parents=True, exist_ok=True)
+        self.work_dir = work_dir.resolve()
+        self.run_id = run_id or uuid.uuid4().hex[:12]
+        self.run_dir = self.work_dir / self.run_id
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        self.max_duration_seconds = max_duration_seconds
         self.state = PrepState()
 
     def clear_work_dir(self) -> int:
-        """Purges temporary files in the work directory and resets state."""
+        """Purges ONLY this service instance's owned run directory and resets state."""
         deleted_count = 0
-        if self.work_dir.exists():
-            for p in list(self.work_dir.iterdir()):
+        if self.run_dir.exists():
+            for p in list(self.run_dir.iterdir()):
                 if p.is_file():
                     try:
                         p.unlink()
                         deleted_count += 1
                     except OSError:
                         pass
+                elif p.is_dir():
+                    shutil.rmtree(p, ignore_errors=True)
+                    deleted_count += 1
         self.state = PrepState()
         return deleted_count
 
-    # ---------------------------------------------------------------- audio input
+    # ---------------------------------------------------------------- media inspection
+
+    def inspect_audio(self, path: Path) -> AudioMetadata:
+        """Inspects audio using ffprobe or wave header fallback, verifies <= 5min limit."""
+        if not path.is_file():
+            raise PrepError(f"Audio file not found: {path}")
+
+        size_bytes = path.stat().st_size
+        if size_bytes == 0:
+            raise PrepError(f"Audio file is empty: {path}")
+
+        sha256 = _sha256(path)
+        duration_ms, content_type = _inspect_media_details(path)
+
+        max_ms = self.max_duration_seconds * 1000
+        if duration_ms > max_ms:
+            raise PrepError(
+                f"Audio duration ({duration_ms / 1000:.1f}s) exceeds the maximum supported "
+                f"alignment limit of {self.max_duration_seconds}s (5 minutes). "
+                f"Please provide an audio clip under 5 minutes."
+            )
+
+        meta = AudioMetadata(
+            path=path,
+            content_type=content_type,
+            size_bytes=size_bytes,
+            sha256=sha256,
+            duration_ms=duration_ms,
+        )
+        self.state.audio_meta = meta
+        return meta
+
+    # ---------------------------------------------------------------- audio inputs
 
     def select_uploaded_audio(self, source_path: str | Path) -> Path:
         source = Path(source_path)
         if not source.is_file():
             raise PrepError(f"Audio file not found: {source}")
-        target = self.work_dir / f"uploaded-{source.name}"
+
+        target = self.run_dir / f"uploaded{source.suffix}"
         shutil.copyfile(source, target)
         self.state = PrepState(mode="upload")
         self.state.local_audio_path = target
+        self.inspect_audio(target)
         return target
 
-    def generate_audio_from_text(self, text: str, voice: str, accent: str,
-                                 speed: float = 1.0) -> Path:
+    def generate_audio_from_text(
+        self, text: str, voice: str, accent: str, speed: float = 1.0
+    ) -> Path:
         text = (text or "").strip()
         if not text:
             raise PrepError("Text is empty; nothing to synthesize")
+
         result = self.ai.tts(text, voice=voice, accent=accent, speed=speed)
-        target = self.work_dir / "tts-generated.wav"
+        target = self.run_dir / "tts-generated.wav"
         target.write_bytes(result["audio_bytes"])
+
         self.state = PrepState(mode="tts")
         self.state.local_audio_path = target
         self.state.transcript = text
         self.state.tts = TtsPrep(
-            provider=result["provider"], model=result["model"],
-            voice=result["voice"], accent=result["accent"], speed=float(speed),
+            provider=result["provider"],
+            model=result["model"],
+            voice=result["voice"],
+            accent=result["accent"],
+            speed=float(speed),
         )
+        self.inspect_audio(target)
         return target
 
     def prepare_youtube(self, url: str) -> YoutubeMeta:
         normalized = normalize_youtube_url(url)
         if not normalized:
             raise PrepError("Invalid YouTube URL; expected an 11-character video ID")
+
         meta = fetch_metadata(normalized)
-        audio = extract_audio(normalized, self.work_dir)
-        thumbnail = download_thumbnail(meta, self.work_dir)
+        audio = extract_audio(normalized, self.run_dir)
+        self.inspect_audio(audio)
+
+        thumb_result = download_thumbnail(meta, self.run_dir)
+        thumb_path = thumb_result[0] if thumb_result else None
+        thumb_type = thumb_result[1] if thumb_result else None
+
         self.state = PrepState(mode="youtube")
         self.state.youtube = meta
         self.state.local_audio_path = audio
-        self.state.thumbnail_path = thumbnail
+        self.state.audio_meta = self.inspect_audio(audio)
+        self.state.thumbnail_path = thumb_path
+        self.state.thumbnail_content_type = thumb_type
         self.state.title = meta.title
         return meta
-
-    # ---------------------------------------------------------------- canonical upload
-
-    def upload_canonical_audio(self) -> dict[str, Any]:
-        if self.state.audio_object_key:
-            return self._audio_status()
-        if not self.state.local_audio_path:
-            raise PrepError("No local audio to upload")
-        uploaded = self.core.upload_media("AUDIO", self.state.local_audio_path)
-        self.state.audio_object_key = uploaded["objectKey"]
-        self.state.audio_sha256 = _sha256(self.state.local_audio_path)
-        self.state.audio_download_url = uploaded.get("downloadUrl")
-        return self._audio_status()
-
-    def upload_thumbnail(self) -> dict[str, Any] | None:
-        if self.state.thumbnail_object_key:
-            return {"objectKey": self.state.thumbnail_object_key}
-        path = getattr(self.state, "thumbnail_path", None)
-        if not path:
-            return None
-        uploaded = self.core.upload_media("IMAGE", path)
-        self.state.thumbnail_object_key = uploaded["objectKey"]
-        return uploaded
-
-    def _audio_status(self) -> dict[str, Any]:
-        return {
-            "objectKey": self.state.audio_object_key,
-            "sha256": self.state.audio_sha256,
-            "downloadUrl": self.state.audio_download_url,
-        }
 
     # ---------------------------------------------------------------- STT / alignment
 
     def run_stt(self) -> dict[str, Any]:
-        self._require_audio_reference()
-        result = self.ai.stt(self.state.audio_download_url)
+        self._require_local_audio()
+        audio_uri = self.state.local_audio_path.resolve().as_uri()
+        result = self.ai.stt(audio_uri)
         self.state.transcript = result["text"]
         self.state.stt = SttPrep(provider=result["provider"], model=result["model"])
         self._invalidate_alignment()
@@ -178,46 +233,69 @@ class LessonPrepService:
             self._invalidate_alignment()
 
     def run_alignment(self) -> list[dict[str, Any]]:
-        self._require_audio_reference()
+        self._require_local_audio()
         if not self.state.transcript.strip():
             raise PrepError("Transcript is empty; run STT or edit the transcript first")
-        result = self.ai.align(self.state.audio_download_url, self.state.transcript)
-        self.state.sentences = build_sentences(self.state.transcript, result["words"])
-        self.state.alignment = AlignPrep(provider=result["provider"], model=result["model"])
+
+        audio_meta = self.state.audio_meta or self.inspect_audio(self.state.local_audio_path)
+        audio_uri = self.state.local_audio_path.resolve().as_uri()
+        result = self.ai.align(audio_uri, self.state.transcript)
+        raw_words = result["words"]
+
+        sentences, repaired_count = build_sentences_with_monotonic_mapping(
+            self.state.transcript, raw_words, audio_duration_ms=audio_meta.duration_ms
+        )
+        self.state.sentences = sentences
+        self.state.alignment = AlignPrep(
+            provider=result["provider"],
+            model=result["model"],
+            normalized=True,
+            repairedWordCount=repaired_count,
+        )
         self.state.alignment_fresh = True
-        return result["words"]
+        self.state.coverage = compute_coverage(sentences, audio_meta.duration_ms, self.state.transcript)
+        return raw_words
 
     def _invalidate_alignment(self) -> None:
         self.state.alignment_fresh = False
         self.state.sentences = []
         self.state.alignment = None
+        self.state.coverage = None
 
-    def _require_audio_reference(self) -> None:
-        if not self.state.audio_download_url or not self.state.audio_object_key:
-            raise PrepError("Canonical audio is not uploaded yet; upload assets first")
+    def _require_local_audio(self) -> None:
+        if not self.state.local_audio_path or not self.state.local_audio_path.is_file():
+            raise PrepError("No local audio available; provide an audio source first")
 
-    # ---------------------------------------------------------------- export
+    # ---------------------------------------------------------------- export readiness
 
     def export_readiness(self) -> tuple[bool, list[str]]:
         problems: list[str] = []
         if not self.state.title.strip():
             problems.append("title is missing")
-        if not self.state.audio_object_key:
-            problems.append("canonical audio is not uploaded")
+        if not self.state.local_audio_path or not self.state.local_audio_path.is_file():
+            problems.append("local audio is missing")
         if not self.state.transcript.strip():
             problems.append("transcript is missing (run STT or generate from text)")
         if not self.state.alignment_fresh:
             problems.append("alignment is stale or missing; rerun alignment")
         if self.state.mode == "youtube" and self.state.youtube is None:
             problems.append("YouTube metadata is missing")
+
+        # Check coverage warnings for potential blocking issues
+        if self.state.coverage:
+            for warn in self.state.coverage.warnings:
+                if "strongly suspicious" in warn.lower() or "truncated" in warn.lower():
+                    problems.append(warn)
+
         if problems:
             return False, problems
-        # Surface schema/timestamp problems too, so "Validate" is authoritative.
+
         try:
             source = self._assemble_export()
             problems.extend(validate_export(source))
         except PrepError as exc:
             problems.append(str(exc))
+
         return not problems, problems
 
     def build_export(self) -> PreparedSource:
@@ -227,12 +305,16 @@ class LessonPrepService:
         return self._assemble_export()
 
     def _assemble_export(self) -> PreparedSource:
+        audio_meta = self.state.audio_meta or self.inspect_audio(self.state.local_audio_path)
+
         if self.state.mode == "youtube":
             source = SourceBlock(
-                kind="VIDEO", origin="YOUTUBE",
+                kind="VIDEO",
+                origin="YOUTUBE",
                 externalId=self.state.youtube.video_id,
                 originalUrl=self.state.youtube.original_url,
                 title=self.state.title,
+                channel=self.state.youtube.channel,
             )
         else:
             source = SourceBlock(
@@ -243,78 +325,291 @@ class LessonPrepService:
                 title=self.state.title,
             )
 
-        media = MediaBlock(
-            canonicalAudioObjectKey=self.state.audio_object_key,
-            canonicalAudioSha256=self.state.audio_sha256,
-            thumbnailObjectKey=self.state.thumbnail_object_key,
+        audio_ext = self.state.local_audio_path.suffix.lower() or ".wav"
+        audio_item = AudioMediaItem(
+            path=f"media/audio{audio_ext}",
+            contentType=audio_meta.content_type,
+            sizeBytes=audio_meta.size_bytes,
+            sha256=audio_meta.sha256,
+            durationMs=audio_meta.duration_ms,
         )
-        preparation = PreparationBlock(stt=self.state.stt, alignment=self.state.alignment,
-                                       tts=self.state.tts)
+
+        thumbnail_item = None
+        if self.state.thumbnail_path and self.state.thumbnail_path.is_file():
+            thumb_ext = self.state.thumbnail_path.suffix.lower() or ".jpg"
+            thumb_bytes = self.state.thumbnail_path.read_bytes()
+            sniffed_type, _ = sniff_image_type(thumb_bytes)
+            content_type = self.state.thumbnail_content_type or sniffed_type
+            thumbnail_item = ThumbnailMediaItem(
+                path=f"media/thumbnail{thumb_ext}",
+                contentType=content_type,
+                sizeBytes=len(thumb_bytes),
+                sha256=hashlib.sha256(thumb_bytes).hexdigest(),
+            )
+
+        media = MediaBlock(audio=audio_item, thumbnail=thumbnail_item)
+        preparation = PreparationBlock(
+            stt=self.state.stt,
+            alignment=self.state.alignment,
+            tts=self.state.tts,
+        )
         content = ContentBlock(text=self.state.transcript, sentences=self.state.sentences)
-        source_model = PreparedSource(source=source, media=media, content=content,
-                                      preparation=preparation)
+
+        source_model = PreparedSource(
+            source=source,
+            media=media,
+            content=content,
+            preparation=preparation,
+        )
         problems = validate_export(source_model)
         if problems:
             raise PrepError("Export validation failed: " + "; ".join(problems))
         return source_model
 
+    def export_package(self, export_dir: Path) -> Path:
+        """Exports the primary portable artifact: a verified *.lesson-source.zip package."""
+        source = self.build_export()
+        return write_lesson_package(
+            source=source,
+            local_audio_path=self.state.local_audio_path,
+            export_dir=export_dir,
+            local_thumbnail_path=self.state.thumbnail_path,
+        )
+
     def export_json(self) -> str:
-        import json
+        """Convenience method for JSON preview in the UI."""
         return json.dumps(self.build_export().export_dict(), indent=2, ensure_ascii=False)
 
-    def write_export_file(self, export_dir: Path) -> Path:
-        """Writes the final artifact to the shared export folder.
 
-        Filename = sanitized title + timestamp + short random suffix, so repeated
-        exports never overwrite each other.
-        """
-        import datetime
-        import json
-        import random
-        import re
-        source = self.build_export()
-        slug = re.sub(r"[^A-Za-z0-9._-]+", "-", source.source.title.strip()).strip("-")
-        slug = slug[:60] or "lesson"
-        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        suffix = f"{random.randrange(0, 9999):04d}"
-        export_dir.mkdir(parents=True, exist_ok=True)
-        target = export_dir / f"{slug}-{stamp}-{suffix}.lesson-source.json"
-        target.write_text(json.dumps(source.export_dict(), indent=2, ensure_ascii=False),
-                          encoding="utf-8")
-        return target
+# ---------------------------------------------------------------- Media inspection helpers
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(8192), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _inspect_media_details(path: Path) -> tuple[int, str]:
+    """Inspects media duration in milliseconds and MIME type using ffprobe with wave fallback."""
+    # 1. Try ffprobe
+    try:
+        cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "format=duration,format_name:stream=codec_name",
+            "-of",
+            "json",
+            str(path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        if result.returncode == 0:
+            parsed = json.loads(result.stdout)
+            format_info = parsed.get("format", {})
+            duration_sec = float(format_info.get("duration", 0))
+            duration_ms = round(duration_sec * 1000)
+            format_name = format_info.get("format_name", "").lower()
+
+            if "wav" in format_name:
+                content_type = "audio/wav"
+            elif "mp3" in format_name:
+                content_type = "audio/mpeg"
+            elif "mp4" in format_name or "m4a" in format_name:
+                content_type = "audio/mp4"
+            elif "ogg" in format_name:
+                content_type = "audio/ogg"
+            else:
+                content_type = "audio/wav"
+
+            if duration_ms > 0:
+                return duration_ms, content_type
+    except Exception:
+        pass
+
+    # 2. Fallback for standard WAV files
+    try:
+        with wave.open(str(path), "rb") as wf:
+            frames = wf.getnframes()
+            rate = wf.getframerate()
+            if rate > 0:
+                return round((frames / float(rate)) * 1000), "audio/wav"
+    except Exception:
+        pass
+
+    # 3. Last-resort estimation based on file extension
+    ext = path.suffix.lower()
+    content_type = "audio/wav" if ext == ".wav" else f"audio/{ext.lstrip('.')}"
+    return 1000, content_type
+
+
+# ---------------------------------------------------------------- Monotonic Alignment Mapping
+
+
+def _clean_token(s: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9]", "", s).lower()
+
+
+def build_sentences_with_monotonic_mapping(
+    transcript: str,
+    raw_words: list[dict[str, Any]],
+    audio_duration_ms: int,
+) -> tuple[list[Sentence], int]:
+    """Maps original display tokens from the transcript monotonically against the
+    full raw alignment token stream, preserving punctuation, contractions, and word shapes.
+
+    Groups mapped tokens into sentences and applies bounded timestamp repair.
+    Returns (sentences, total_repaired_word_count).
+    """
+    raw_sentences = _SENTENCE_END.split(transcript.strip())
+    sentence_texts = [s.strip() for s in raw_sentences if s.strip()] or [transcript.strip()]
+
+    # Collect all display tokens across all sentences with sentence indices
+    token_entries: list[tuple[int, str]] = []
+    for s_idx, s_text in enumerate(sentence_texts):
+        for tok in s_text.split():
+            token_entries.append((s_idx, tok))
+
+    if not token_entries:
+        return [], 0
+
+    total_tokens = len(token_entries)
+    raw_len = len(raw_words)
+
+    mapped_words: list[tuple[int, str, int, int]] = []
+    raw_idx = 0
+
+    for tok_idx, (s_idx, orig_tok) in enumerate(token_entries):
+        c_orig = _clean_token(orig_tok)
+
+        if raw_idx >= raw_len:
+            last_end = mapped_words[-1][3] if mapped_words else 0
+            mapped_words.append((s_idx, orig_tok, last_end, last_end))
+            continue
+
+        c_raw = _clean_token(str(raw_words[raw_idx].get("word", "")))
+
+        # Case 1: Exact clean token match
+        if c_orig == c_raw:
+            s_ms = int(raw_words[raw_idx].get("start_ms", 0))
+            e_ms = int(raw_words[raw_idx].get("end_ms", 0))
+            mapped_words.append((s_idx, orig_tok, s_ms, e_ms))
+            raw_idx += 1
+
+        # Case 2: One original word expanded into multiple aligner tokens (e.g. ice-cream -> ice, cream)
+        elif c_orig.startswith(c_raw) and c_raw != "":
+            start_ms = int(raw_words[raw_idx].get("start_ms", 0))
+            end_ms = int(raw_words[raw_idx].get("end_ms", 0))
+            accum = c_raw
+            raw_idx += 1
+            while raw_idx < raw_len and len(accum) < len(c_orig):
+                next_raw = _clean_token(str(raw_words[raw_idx].get("word", "")))
+                accum += next_raw
+                end_ms = int(raw_words[raw_idx].get("end_ms", end_ms))
+                raw_idx += 1
+            mapped_words.append((s_idx, orig_tok, start_ms, end_ms))
+
+        # Case 3: Token mismatch — look ahead up to 4 aligner tokens to re-sync
+        else:
+            found_idx = -1
+            for k in range(raw_idx + 1, min(raw_idx + 5, raw_len)):
+                if _clean_token(str(raw_words[k].get("word", ""))) == c_orig:
+                    found_idx = k
+                    break
+            if found_idx != -1:
+                raw_idx = found_idx
+                s_ms = int(raw_words[raw_idx].get("start_ms", 0))
+                e_ms = int(raw_words[raw_idx].get("end_ms", 0))
+                mapped_words.append((s_idx, orig_tok, s_ms, e_ms))
+                raw_idx += 1
+            else:
+                s_ms = int(raw_words[raw_idx].get("start_ms", 0))
+                e_ms = int(raw_words[raw_idx].get("end_ms", 0))
+                mapped_words.append((s_idx, orig_tok, s_ms, e_ms))
+                raw_idx += 1
+
+    # Group mapped tokens by sentence index
+    sentence_tokens_map: dict[int, list[tuple[str, int, int]]] = {
+        idx: [] for idx in range(len(sentence_texts))
+    }
+    for s_idx, tok_text, s_ms, e_ms in mapped_words:
+        sentence_tokens_map[s_idx].append((tok_text, s_ms, e_ms))
+
+    # Apply bounded monotonic timestamp repair per sentence
+    sentences: list[Sentence] = []
+    total_repaired = 0
+    previous_end = 0
+
+    for s_idx, s_text in enumerate(sentence_texts):
+        tokens = sentence_tokens_map[s_idx]
+        normalized_words, repaired_count = normalize_word_timestamps(
+            tokens,
+            sentence_start_min=previous_end,
+            audio_duration_ms=audio_duration_ms,
+            min_duration_ms=50,
+        )
+        total_repaired += repaired_count
+
+        word_models = [
+            Word(position=pos, text=w_text, startMs=w_start, endMs=w_end)
+            for pos, (w_text, w_start, w_end) in enumerate(normalized_words)
+        ]
+
+        start_ms = word_models[0].start_ms if word_models else None
+        end_ms = word_models[-1].end_ms if word_models else None
+
+        sentences.append(
+            Sentence(
+                position=s_idx,
+                text=s_text,
+                startMs=start_ms,
+                endMs=end_ms,
+                words=word_models,
+            )
+        )
+        if end_ms is not None:
+            previous_end = end_ms
+
+    return sentences, total_repaired
 
 
 def normalize_word_timestamps(
-    raw_words: list[dict[str, Any]],
-    sentence_start_min: int = 0,
+    tokens: list[tuple[str, int, int]],
+    sentence_start_min: int,
+    audio_duration_ms: int,
     min_duration_ms: int = 50,
-) -> list[tuple[str, int, int]]:
-    """Normalizes raw word alignment timestamps for a sentence.
-
-    Guarantees:
-    1. Every word has strictly positive duration (end_ms > start_ms >= 0).
-    2. Words are strictly monotonic and non-overlapping: word[i].start >= word[i-1].end.
-    3. Instantaneous/zero-duration words (common in CTC aligners for unstressed words
-       like 'are', 'to') borrow duration from shared acoustic segments or expand safely.
+) -> tuple[list[tuple[str, int, int]], int]:
+    """Applies bounded normalization so every word has positive duration, monotonic
+    non-overlapping timestamps, and remains within the audio duration.
+    Returns (normalized_tokens, repaired_count).
     """
-    if not raw_words:
-        return []
+    if not tokens:
+        return [], 0
 
-    n = len(raw_words)
-    texts = [str(w.get("word", "")) for w in raw_words]
-    starts = [max(0, int(w.get("start_ms", 0))) for w in raw_words]
-    ends = [max(0, int(w.get("end_ms", 0))) for w in raw_words]
+    n = len(tokens)
+    texts = [t[0] for t in tokens]
+    starts = [max(0, t[1]) for t in tokens]
+    ends = [max(0, t[2]) for t in tokens]
 
-    # 1. Forward monotonic pass: starts must be >= sentence_start_min and ends >= starts
+    repaired_count = 0
+
+    # 1. Forward pass: ensure monotonic sequence starting at sentence_start_min
     cur = sentence_start_min
     for i in range(n):
+        orig_s, orig_e = starts[i], ends[i]
         starts[i] = max(starts[i], cur)
         ends[i] = max(ends[i], starts[i])
         cur = starts[i]
 
-    # 2. Allocate duration for zero or sub-minimum duration words
+    # 2. Repair zero or sub-minimum duration words
     for i in range(n):
         if ends[i] - starts[i] < min_duration_ms:
+            repaired_count += 1
             j = i + 1
             while j < n and ends[j] <= ends[i]:
                 j += 1
@@ -330,155 +625,59 @@ def normalize_word_timestamps(
             else:
                 ends[i] = starts[i] + min_duration_ms
 
-    # 3. Final sequential clamp: strictly monotonic, non-overlapping, positive duration
-    cur = sentence_start_min
+    # 3. Final clamp: non-overlapping, strictly positive, bounded by audio_duration_ms
     result: list[tuple[str, int, int]] = []
+    cur = sentence_start_min
     for i in range(n):
         s = max(starts[i], cur)
-        e = ends[i]
-        if e <= s:
-            e = s + min_duration_ms
+        e = max(ends[i], s + min_duration_ms)
+        # Clamp to audio_duration_ms
+        if e > audio_duration_ms:
+            e = audio_duration_ms
+            if s >= e:
+                s = max(0, e - min_duration_ms)
         result.append((texts[i], s, e))
         cur = e
 
-    return result
+    return result, repaired_count
 
 
-def _clean_token(s: str) -> str:
-    return re.sub(r"[^a-zA-Z0-9]", "", s).lower()
+# ---------------------------------------------------------------- Completeness / Coverage detection
 
 
-def match_original_words_to_alignments(
-    original_tokens: list[str],
-    raw_slice: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Maps original lexical tokens (preserving punctuation, colons, commas, dots)
-    to acoustic alignment timestamps."""
-    if not original_tokens:
-        return []
-    if not raw_slice:
-        return [{"word": t, "start_ms": 0, "end_ms": 0} for t in original_tokens]
+def compute_coverage(
+    sentences: list[Sentence], audio_duration_ms: int, transcript: str
+) -> CoverageMetrics:
+    """Computes alignment coverage and detects suspicious truncation."""
+    last_aligned = sentences[-1].end_ms if (sentences and sentences[-1].end_ms is not None) else 0
+    trailing_unaligned = max(0, audio_duration_ms - last_aligned)
+    coverage_pct = (last_aligned / audio_duration_ms * 100) if audio_duration_ms > 0 else 0.0
 
-    # Fast-path: 1-to-1 match (vast majority of cases where aligner tokenized the sentence)
-    if len(original_tokens) == len(raw_slice):
-        return [
-            {
-                "word": orig,
-                "start_ms": raw.get("start_ms", 0),
-                "end_ms": raw.get("end_ms", 0),
-            }
-            for orig, raw in zip(original_tokens, raw_slice)
-        ]
+    warnings: list[str] = []
+    # Check if transcript ends abruptly without ending punctuation
+    stripped = transcript.strip()
+    ends_without_punct = stripped and stripped[-1] not in ".!?:;"
 
-    # Fallback: align when token counts differ slightly (e.g. hyphenated words or aligner splits)
-    orig_clean = [_clean_token(t) for t in original_tokens]
-    raw_clean = [_clean_token(str(w.get("word", ""))) for w in raw_slice]
-
-    results: list[dict[str, Any]] = []
-    raw_idx = 0
-    raw_len = len(raw_slice)
-
-    for i, orig in enumerate(original_tokens):
-        c_orig = orig_clean[i]
-        if raw_idx >= raw_len:
-            last_end = results[-1]["end_ms"] if results else 0
-            results.append({"word": orig, "start_ms": last_end, "end_ms": last_end})
-            continue
-
-        c_raw = raw_clean[raw_idx]
-
-        if c_orig == c_raw:
-            results.append({
-                "word": orig,
-                "start_ms": raw_slice[raw_idx].get("start_ms", 0),
-                "end_ms": raw_slice[raw_idx].get("end_ms", 0),
-            })
-            raw_idx += 1
-        elif c_orig.startswith(c_raw):
-            start_ms = raw_slice[raw_idx].get("start_ms", 0)
-            end_ms = raw_slice[raw_idx].get("end_ms", 0)
-            accum = c_raw
-            raw_idx += 1
-            while raw_idx < raw_len and len(accum) < len(c_orig):
-                accum += raw_clean[raw_idx]
-                end_ms = raw_slice[raw_idx].get("end_ms", end_ms)
-                raw_idx += 1
-            results.append({"word": orig, "start_ms": start_ms, "end_ms": end_ms})
+    if trailing_unaligned > 15000 and coverage_pct < 85.0:
+        if ends_without_punct:
+            warnings.append(
+                f"Transcript appears truncated mid-sentence ({trailing_unaligned / 1000:.1f}s unaligned "
+                f"trailing gap, {coverage_pct:.1f}% coverage). Check STT max_new_tokens or input audio."
+            )
         else:
-            found_idx = -1
-            for k in range(raw_idx + 1, min(raw_idx + 4, raw_len)):
-                if raw_clean[k] == c_orig:
-                    found_idx = k
-                    break
-            if found_idx != -1:
-                raw_idx = found_idx
-                results.append({
-                    "word": orig,
-                    "start_ms": raw_slice[raw_idx].get("start_ms", 0),
-                    "end_ms": raw_slice[raw_idx].get("end_ms", 0),
-                })
-                raw_idx += 1
-            else:
-                results.append({
-                    "word": orig,
-                    "start_ms": raw_slice[raw_idx].get("start_ms", 0),
-                    "end_ms": raw_slice[raw_idx].get("end_ms", 0),
-                })
-                raw_idx += 1
-
-    return results
-
-
-def build_sentences(transcript: str, words: list[dict[str, Any]]) -> list[Sentence]:
-    """Splits the transcript into sentences and distributes aligned words
-    deterministically by lexical word count (mirrors the Core alignment writer),
-    preserving the original lexical tokens and punctuation."""
-    raw = _SENTENCE_END.split(transcript.strip())
-    texts = [part.strip() for part in raw if part.strip()] or [transcript.strip()]
-
-    sentences: list[Sentence] = []
-    global_index = 0
-    previous_end: int | None = None
-    for sentence_index, text in enumerate(texts):
-        remaining_sentences = len(texts) - sentence_index - 1
-        remaining_words = len(words) - global_index
-        original_tokens = text.split()
-        expected = max(1, len(original_tokens))
-        take = min(expected, max(0, remaining_words - remaining_sentences))
-        if remaining_sentences == 0:
-            take = remaining_words
-
-        raw_slice = words[global_index : global_index + take]
-        global_index += len(raw_slice)
-
-        matched = match_original_words_to_alignments(original_tokens, raw_slice)
-
-        normalized = normalize_word_timestamps(
-            matched,
-            sentence_start_min=previous_end or 0,
-            min_duration_ms=50,
+            warnings.append(
+                f"Significant trailing unaligned audio ({trailing_unaligned / 1000:.1f}s trailing gap, "
+                f"{coverage_pct:.1f}% coverage). Video may contain trailing silence/music."
+            )
+    elif ends_without_punct and trailing_unaligned > 5000:
+        warnings.append(
+            f"Transcript may be incomplete (ends without punctuation with {trailing_unaligned / 1000:.1f}s trailing gap)."
         )
 
-        sentence_words = [
-            Word(position=pos, text=w_text, start_ms=w_start, end_ms=w_end)
-            for pos, (w_text, w_start, w_end) in enumerate(normalized)
-        ]
-
-        start_ms = sentence_words[0].start_ms if sentence_words else None
-        end_ms = sentence_words[-1].end_ms if sentence_words else None
-
-        sentences.append(Sentence(
-            position=sentence_index, text=text,
-            start_ms=start_ms, end_ms=end_ms, words=sentence_words,
-        ))
-        if end_ms is not None:
-            previous_end = end_ms
-    return sentences
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(8192), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    return CoverageMetrics(
+        audio_duration_ms=audio_duration_ms,
+        last_aligned_ms=last_aligned,
+        trailing_unaligned_ms=trailing_unaligned,
+        coverage_pct=round(coverage_pct, 1),
+        warnings=warnings,
+    )

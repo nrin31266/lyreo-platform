@@ -1,23 +1,21 @@
 """Gradio operator UI for the Lesson Prep Tool.
 
-A modern, clean developer workbench for media ingestion, speech synthesis,
-word-level alignment, and schema-compliant package export.
+A clean developer workbench for media ingestion, speech synthesis,
+word-level alignment, and portable lesson package export (*.lesson-source.zip).
 """
 
 from __future__ import annotations
 
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
 import gradio as gr
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
 
 from .ai_service_client import AiServiceClient, AiServiceError
 from .config import settings
-from .core_api_client import CoreApiClient, CoreApiError, OidcClient
 from .prep_service import LessonPrepService, PrepError
 from .youtube import YoutubeError
 
@@ -28,14 +26,6 @@ ai = AiServiceClient(
     cfg.ai_service_internal_token,
     timeout=cfg.ai_timeout_seconds,
 )
-oidc = OidcClient(
-    cfg.keycloak_issuer_uri,
-    cfg.lesson_prep_client_id,
-    cfg.lesson_prep_redirect_uri,
-)
-core = CoreApiClient(cfg.core_api_url, oidc, timeout=cfg.ai_timeout_seconds)
-
-fastapi_app = FastAPI(title="Lyreo Lesson Prep Studio")
 
 MODE_KEYS = {
     "tts": "tts",
@@ -98,150 +88,139 @@ CUSTOM_CSS = """
     white-space: nowrap;
 }
 
-/* Compact Service Status Table in Header */
+/* Status Table */
 .service-status-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.73rem;
+    font-size: 0.75rem;
+    margin: 0;
     background: #ffffff;
-    border: 1px solid #cbd5e1;
 }
 .service-status-table th {
     background: #f1f5f9;
     color: #475569;
-    padding: 3px 7px;
     font-weight: 700;
-    border: 1px solid #cbd5e1;
-    text-align: left;
-    font-size: 0.69rem;
     text-transform: uppercase;
-    letter-spacing: 0.02em;
+    font-size: 0.68rem;
+    padding: 3px 8px;
+    border: 1px solid #e2e8f0;
+    text-align: left;
 }
 .service-status-table td {
-    padding: 3px 7px;
+    padding: 4px 8px;
     border: 1px solid #e2e8f0;
-    color: #1e293b;
-    line-height: 1.2;
+    vertical-align: middle;
 }
-.service-status-table code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.70rem;
-    background: #f8fafc;
-    padding: 1px 4px;
-    border: 1px solid #e2e8f0;
-}
-
 .status-indicator {
     display: inline-flex;
     align-items: center;
+    gap: 5px;
     font-weight: 700;
     font-size: 0.72rem;
+    padding: 1px 6px;
+    border-radius: 2px !important;
 }
 .status-indicator.online {
+    background-color: #dcfce7;
     color: #15803d;
+    border: 1px solid #86efac;
 }
 .status-indicator.offline {
+    background-color: #fee2e2;
     color: #b91c1c;
+    border: 1px solid #fca5a5;
 }
 .status-indicator.warning {
+    background-color: #fef3c7;
     color: #b45309;
+    border: 1px solid #fde68a;
 }
-
 .static-dot {
     display: inline-block;
     width: 6px;
     height: 6px;
     border-radius: 50% !important;
-    margin-right: 5px;
 }
-.static-dot.green { background-color: #16a34a; }
-.static-dot.red { background-color: #dc2626; }
-.static-dot.amber { background-color: #d97706; }
+.static-dot.green { background-color: #22c55e; }
+.static-dot.red { background-color: #ef4444; }
+.static-dot.amber { background-color: #f59e0b; }
 
-/* Status Banners / Alerts */
+/* Status Banner */
 .admin-alert {
-    padding: 6px 12px;
+    padding: 8px 12px;
     font-size: 0.82rem;
-    font-weight: 500;
-    border: 1px solid #cbd5e1;
+    border-left: 4px solid;
     margin-bottom: 8px;
-    border-radius: 2px !important;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 .admin-alert.running {
-    background: #eff6ff;
-    border-color: #93c5fd;
-    color: #1e40af;
+    border-color: #0284c7;
+    background-color: #f0f9ff;
+    color: #0369a1;
 }
 .admin-alert.success {
-    background: #f0fdf4;
-    border-color: #86efac;
-    color: #166534;
+    border-color: #16a34a;
+    background-color: #f0fdf4;
+    color: #15803d;
 }
 .admin-alert.error {
-    background: #fef2f2;
-    border-color: #fca5a5;
-    color: #991b1b;
+    border-color: #dc2626;
+    background-color: #fef2f2;
+    color: #b91c1c;
 }
 .admin-alert.idle {
-    background: #f8fafc;
-    border-color: #cbd5e1;
-    color: #475569;
+    border-color: #64748b;
+    background-color: #f8fafc;
+    color: #334155;
 }
 
-/* Data Tables */
+/* Metric / Summary Data Table */
 .admin-data-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.80rem;
+    font-size: 0.78rem;
     background: #ffffff;
     border: 1px solid #cbd5e1;
     margin-bottom: 6px;
 }
 .admin-data-table th {
-    background: #f1f5f9;
-    color: #475569;
-    padding: 5px 8px;
-    font-weight: 700;
+    background: #f8fafc;
     border: 1px solid #cbd5e1;
-    text-align: left;
-    font-size: 0.72rem;
+    padding: 4px 8px;
+    font-weight: 700;
+    font-size: 0.70rem;
     text-transform: uppercase;
-    letter-spacing: 0.02em;
+    color: #475569;
 }
 .admin-data-table td {
-    padding: 5px 8px;
-    border: 1px solid #e2e8f0;
-    color: #0f172a;
+    border: 1px solid #cbd5e1;
+    padding: 4px 8px;
 }
 
-/* Suppress Gradio event loading progress overlays on components (never touch audio/media players) */
-.progress-level,
-.meta-text,
-.eta-bar,
-div.status-tracker,
-div.progress-text {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-    height: 0 !important;
+/* Review Tabs */
+.review-subtabs .tab-nav button {
+    font-size: 0.76rem !important;
+    padding: 4px 10px !important;
+    font-weight: 600 !important;
 }
 
-/* Prevent inputs/components from fading or graying out when running */
-.wrap.translucent, .translucent {
-    opacity: 1 !important;
-    filter: none !important;
+/* Buttons */
+.btn-primary-action {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    border: none !important;
+}
+.btn-primary-action:hover {
+    background-color: #1e293b !important;
 }
 """
 
 
-def extract_youtube_id(url: str) -> str | None:
-    if not url:
-        return None
-    url = url.strip()
+def _extract_youtube_id(url: str) -> str | None:
     patterns = [
-        r"(?:youtu\.be/|youtube\.com/(?:watch\?(?:.*&)?v=|embed/|v/|shorts/))([a-zA-Z0-9_-]{11})",
-        r"^([a-zA-Z0-9_-]{11})$",
+        r"(?:v=|/v/|youtu\.be/|/embed/|/shorts/|/live/)([a-zA-Z0-9_-]{11})",
     ]
     for p in patterns:
         m = re.search(p, url)
@@ -251,62 +230,59 @@ def extract_youtube_id(url: str) -> str | None:
 
 
 def new_service() -> LessonPrepService:
-    return LessonPrepService(ai, core, cfg.tool_work_dir)
-
-
-@fastapi_app.get("/oidc/callback")
-def oidc_callback(code: str | None = None, state: str | None = None, error: str | None = None):
-    if error:
-        return HTMLResponse(
-            f"<h3>Login was cancelled</h3><p>error={error}</p>"
-            "<p>Close this tab and return to the Lesson Prep Workspace.</p>"
-        )
-    if not code or not state:
-        return HTMLResponse(
-            "<h3>Callback is missing parameters</h3><p>Close this tab and try again.</p>"
-        )
-    try:
-        oidc.complete(code, state)
-        message = "Authentication successful"
-    except CoreApiError as exc:
-        message = f"Authentication failed: {exc}"
-    return HTMLResponse(
-        f"<h3>{message}</h3><p>You may close this tab and return to the Lesson Prep Workspace.</p>"
-        "<script>setTimeout(function(){ window.close(); }, 800);</script>"
+    return LessonPrepService(
+        ai=ai,
+        work_dir=cfg.tool_work_dir,
+        max_duration_seconds=cfg.max_audio_duration_seconds,
     )
 
 
 # ------------------------------------------------------------------- dynamic voice discovery
 
-def _fetch_voices() -> list[dict[str, Any]]:
-    """Dynamically fetches supported voices from AI service API (GET /v1/tts/voices)."""
+
+def _fetch_voice_list() -> list[dict[str, Any]]:
     try:
-        remote = ai.voices()
-        if remote and isinstance(remote, list):
-            return remote
+        return ai.voices()
     except Exception:
-        pass
-    return []
+        from app.runtime.kokoro import KOKORO_VOICES
+
+        return [
+            {
+                "voice_id": vid,
+                "accent": acc,
+                "display": {"name": vid.replace("_", " ").title(), "accent": acc},
+            }
+            for vid, acc in KOKORO_VOICES.items()
+        ]
 
 
-def _get_voice_choices(accent: str = "US") -> tuple[list[str], str]:
-    """Filters dynamically retrieved voices by accent."""
-    voices = _fetch_voices()
-    target_accent = (accent or "US").upper()
-    filtered = [
-        str(v["voice_id"])
-        for v in voices
-        if str(v.get("accent", "")).upper() == target_accent and v.get("voice_id")
-    ]
+def _get_voice_choices(accent: str) -> tuple[list[tuple[str, str]], str]:
+    all_voices = _fetch_voice_list()
+    filtered = [v for v in all_voices if v.get("accent", "US") == accent]
     if not filtered:
-        filtered = [str(v["voice_id"]) for v in voices if v.get("voice_id")]
-    filtered = sorted(set(filtered))
-    default_voice = DEFAULT_US_VOICE if target_accent == "US" else DEFAULT_UK_VOICE
-    value = default_voice if default_voice in filtered else (filtered[0] if filtered else "af_heart")
-    return filtered, value
+        filtered = all_voices
+
+    choices = [
+        (
+            f"{v.get('display', {}).get('name', v['voice_id'])} ({v['voice_id']})",
+            v["voice_id"],
+        )
+        for v in filtered
+    ]
+    default_voice = (
+        DEFAULT_UK_VOICE
+        if accent == "UK"
+        else DEFAULT_US_VOICE
+    )
+    valid_keys = [c[1] for c in choices]
+    if default_voice not in valid_keys and valid_keys:
+        default_voice = valid_keys[0]
+
+    return choices, default_voice
 
 
-# ------------------------------------------------------------------- service status
+# ---------------------------------------------------------------- status bar
+
 
 def connection_status() -> str:
     ai_ok = False
@@ -320,46 +296,27 @@ def connection_status() -> str:
         s = str(exc)
         ai_detail = f"Offline ({s[:28]}...)" if len(s) > 28 else f"Offline ({s})"
 
-    core_ok = False
-    core_detail = "Storage & Lesson API"
-    try:
-        core_ok = core.health()
-        if not core_ok:
-            core_detail = "Core API unreachable"
-        else:
-            core_detail = "Storage & Lesson API ready"
-    except Exception as exc:
-        core_ok = False
-        s = str(exc)
-        core_detail = f"Offline ({s[:28]}...)" if len(s) > 28 else f"Offline ({s})"
-
-    auth_ok = bool(oidc._access_token)
-    auth_detail = "Token Active (Role: ADMIN)" if auth_ok else "Not authenticated (Click 'Login (PKCE)')"
+    ffmpeg_available = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
+    ffmpeg_detail = "Installed on system PATH" if ffmpeg_available else "ffmpeg/ffprobe not found"
 
     ai_dot = "green" if ai_ok else "red"
     ai_status = "ONLINE" if ai_ok else "OFFLINE"
     ai_cls = "online" if ai_ok else "offline"
 
-    core_dot = "green" if core_ok else "red"
-    core_status = "ONLINE" if core_ok else "OFFLINE"
-    core_cls = "online" if core_ok else "offline"
-
-    auth_dot = "green" if auth_ok else "amber"
-    auth_status = "ADMIN" if auth_ok else "UNAUTHENTICATED"
-    auth_cls = "online" if auth_ok else "warning"
+    ffmpeg_dot = "green" if ffmpeg_available else "amber"
+    ffmpeg_status = "READY" if ffmpeg_available else "MISSING"
+    ffmpeg_cls = "online" if ffmpeg_available else "warning"
 
     ai_url = cfg.ai_service_url
-    core_url = cfg.core_api_url
-    auth_url = cfg.keycloak_issuer_uri
 
     return f"""
     <table class="service-status-table">
       <thead>
         <tr>
-          <th style="width: 20%;">Component</th>
-          <th style="width: 32%;">Target Endpoint URL</th>
-          <th style="width: 18%;">Status</th>
-          <th style="width: 30%;">Details</th>
+          <th style="width: 25%;">Component</th>
+          <th style="width: 35%;">Endpoint / Command</th>
+          <th style="width: 15%;">Status</th>
+          <th style="width: 25%;">Details</th>
         </tr>
       </thead>
       <tbody>
@@ -370,40 +327,18 @@ def connection_status() -> str:
           <td style="color: #64748b; font-size: 0.70rem;">{ai_detail}</td>
         </tr>
         <tr>
-          <td><strong>Core API</strong></td>
-          <td><code>{core_url}</code></td>
-          <td><span class="status-indicator {core_cls}"><span class="static-dot {core_dot}"></span>{core_status}</span></td>
-          <td style="color: #64748b; font-size: 0.70rem;">{core_detail}</td>
-        </tr>
-        <tr>
-          <td><strong>Keycloak OIDC</strong></td>
-          <td><code>{auth_url}</code></td>
-          <td><span class="status-indicator {auth_cls}"><span class="static-dot {auth_dot}"></span>{auth_status}</span></td>
-          <td style="color: #64748b; font-size: 0.70rem;">{auth_detail}</td>
+          <td><strong>Media Tools</strong></td>
+          <td><code>ffmpeg / ffprobe</code></td>
+          <td><span class="status-indicator {ffmpeg_cls}"><span class="static-dot {ffmpeg_dot}"></span>{ffmpeg_status}</span></td>
+          <td style="color: #64748b; font-size: 0.70rem;">{ffmpeg_detail}</td>
         </tr>
       </tbody>
     </table>
     """
 
 
-def do_login() -> str:
-    try:
-        if oidc.login():
-            return "Logged in to Core as ADMIN (JWT token acquired via PKCE)"
-        return "Login did not complete within timeout (tab closed or cancelled)"
-    except CoreApiError as exc:
-        return str(exc)
-
-
-def on_login(svc: LessonPrepService) -> tuple[str, str, Any]:
-    msg = do_login()
-    auth_ok = bool(oidc._access_token)
-    return f"```text\n{msg}\n```", connection_status(), gr.update(interactive=auth_ok)
-
-
-def on_status_refresh(svc: LessonPrepService) -> tuple[str, Any]:
-    auth_ok = bool(oidc._access_token)
-    return connection_status(), gr.update(interactive=auth_ok)
+def on_status_refresh(svc: LessonPrepService) -> str:
+    return connection_status()
 
 
 def on_accent_change(selected_accent: str):
@@ -411,38 +346,42 @@ def on_accent_change(selected_accent: str):
     return gr.update(choices=choices, value=value)
 
 
-def on_refresh_voices(svc: LessonPrepService, accent: str):
-    choices, value = _get_voice_choices(accent)
-    return gr.update(choices=choices, value=value)
-
-
+# ---------------------------------------------------------------- youtube live preview
 
 
 def on_youtube_url_change(url: str) -> str:
-    vid = extract_youtube_id(url)
-    if vid:
-        return f"""
-        <div style="border: 1px solid #cbd5e1; padding: 8px 10px; background: #ffffff; margin-top: 4px; border-radius: 2px;">
-          <div style="font-size: 0.72rem; font-weight: 700; color: #2563eb; margin-bottom: 4px; text-transform: uppercase;">
-            YouTube Preview
-          </div>
-          <div style="display: flex; gap: 10px; align-items: center;">
-            <img src="https://img.youtube.com/vi/{vid}/hqdefault.jpg" style="height: 60px; width: 80px; object-fit: cover; border-radius: 2px; border: 1px solid #cbd5e1;" alt="Thumbnail" />
-            <div style="font-size: 0.78rem; color: #1e293b;">
-              <div><strong>Video ID:</strong> <code style="font-family:monospace; background:#f1f5f9; padding:1px 5px; border:1px solid #cbd5e1;">{vid}</code></div>
-              <div style="margin-top: 2px; color: #64748b; font-size: 0.74rem;">Audio and thumbnail will be extracted upon processing.</div>
-            </div>
-          </div>
+    cleaned = (url or "").strip()
+    if not cleaned:
+        return """
+        <div style="border: 1px dashed #cbd5e1; padding: 12px; text-align: center; color: #64748b; background: #ffffff; font-size: 0.75rem;">
+          <em>Enter a YouTube URL above to preview video metadata.</em>
         </div>
         """
-    return """
-    <div style="border: 1px dashed #cbd5e1; padding: 6px 10px; background: #ffffff; margin-top: 4px; font-size: 0.76rem; color: #64748b; border-radius: 2px;">
-      <em>Paste a valid YouTube link above to preview video thumbnail.</em>
+
+    video_id = _extract_youtube_id(cleaned)
+    if not video_id:
+        return """
+        <div style="border: 1px dashed #f87171; padding: 10px; color: #dc2626; background: #fef2f2; font-size: 0.75rem;">
+          Invalid YouTube URL format. Expected standard URL, shortlink or embed.
+        </div>
+        """
+
+    thumb_url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+    return f"""
+    <div style="border: 1px solid #cbd5e1; padding: 8px; background: #ffffff; font-size: 0.75rem;">
+      <div style="display: flex; gap: 10px; align-items: flex-start;">
+        <img src="{thumb_url}" style="width: 140px; height: 80px; object-fit: cover; border: 1px solid #e2e8f0;" />
+        <div>
+          <div style="font-weight: 700; color: #0f172a;">YouTube Video ID: <code>{video_id}</code></div>
+          <div style="color: #64748b; margin-top: 4px; font-size: 0.70rem;">Thumbnail: {thumb_url}</div>
+        </div>
+      </div>
     </div>
     """
 
 
 # ---------------------------------------------------------------- status banner
+
 
 def _render_status_banner(state: str, text: str) -> str:
     if state == "running":
@@ -473,6 +412,7 @@ def _render_status_banner(state: str, text: str) -> str:
 
 # ---------------------------------------------------------------- review helpers
 
+
 def _render_metrics_empty() -> str:
     return """
     <div style="border: 1px dashed #cbd5e1; padding: 10px; text-align: center; color: #64748b; background: #ffffff; font-size: 0.80rem;">
@@ -493,31 +433,42 @@ def _render_metrics_table(svc: LessonPrepService) -> str:
     wpm = round((total_words / (duration_s / 60.0))) if duration_s > 0.5 else 0
     ready, problems = svc.export_readiness()
 
-    status_tag = '<span style="color:#16a34a; font-weight:700;">● VALID (PASSED)</span>' if ready else f'<span style="color:#dc2626; font-weight:700;">● ERROR ({len(problems)} issues)</span>'
-    audio_key = svc.state.audio_object_key or "not_uploaded"
-    sha = svc.state.audio_sha256 or "none"
+    status_tag = (
+        '<span style="color:#16a34a; font-weight:700;">● VALID & READY</span>'
+        if ready
+        else f'<span style="color:#dc2626; font-weight:700;">● BLOCKED ({len(problems)} issues)</span>'
+    )
+
+    audio_meta = svc.state.audio_meta
+    audio_dur_s = (audio_meta.duration_ms / 1000.0) if audio_meta else duration_s
+    sha = audio_meta.sha256[:16] + "..." if audio_meta else "none"
     mode_str = (svc.state.mode or "unknown").upper()
+
+    cov = svc.state.coverage
+    cov_str = f"{cov.coverage_pct}%" if cov else "N/A"
+    gap_str = f"{cov.trailing_unaligned_ms / 1000.0:.1f}s" if cov else "N/A"
+    repaired_str = str(svc.state.alignment.repaired_word_count) if (svc.state.alignment and svc.state.alignment.repaired_word_count is not None) else "0"
 
     return f"""
     <div>
       <table class="admin-data-table">
         <thead>
           <tr>
-            <th style="width: 16%;">Duration</th>
+            <th style="width: 16%;">Audio Length</th>
             <th style="width: 16%;">Total Words</th>
             <th style="width: 16%;">Sentences</th>
-            <th style="width: 16%;">Reading Speed</th>
-            <th style="width: 18%;">Source Mode</th>
+            <th style="width: 16%;">Coverage</th>
+            <th style="width: 18%;">Trailing Gap</th>
             <th style="width: 18%;">Schema Status</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td><strong>{duration_s:.2f}s</strong></td>
+            <td><strong>{audio_dur_s:.2f}s</strong></td>
             <td><strong>{total_words} words</strong></td>
             <td><strong>{total_sentences} sentences</strong></td>
-            <td><strong>{wpm} WPM</strong></td>
-            <td><code>{mode_str}</code></td>
+            <td><strong>{cov_str}</strong></td>
+            <td><strong>{gap_str}</strong></td>
             <td>{status_tag}</td>
           </tr>
         </tbody>
@@ -525,10 +476,10 @@ def _render_metrics_table(svc: LessonPrepService) -> str:
       <table class="admin-data-table" style="margin-top:-2px;">
         <tbody>
           <tr>
-            <td style="width: 20%; background:#f8fafc; font-weight:600;">Object Key:</td>
-            <td style="width: 30%;"><code>{audio_key}</code></td>
             <td style="width: 18%; background:#f8fafc; font-weight:600;">SHA-256 Digest:</td>
             <td style="width: 32%;"><code>{sha}</code></td>
+            <td style="width: 18%; background:#f8fafc; font-weight:600;">Repaired Words:</td>
+            <td style="width: 32%;"><code>{repaired_str}</code></td>
           </tr>
         </tbody>
       </table>
@@ -575,6 +526,7 @@ def _render_log(lines: list[str]) -> str:
 
 # ---------------------------------------------------------------- unified pipeline
 
+
 def make_prepare_pipeline(
     prepare_btn,
     clear_btn,
@@ -616,13 +568,13 @@ def make_prepare_pipeline(
         transcript_value: str = ""
         resolved_title: str = ""
 
-        # Step 0: Lock controls and disable form inputs immediately
+        # Step 0: Lock controls
         yield (
             gr.update(value="⏳ Processing...", interactive=False),
             gr.update(interactive=False),
             gr.update(interactive=False),
             gr.update(interactive=False),
-            _render_status_banner("running", "Initializing pipeline and validating service connections..."),
+            _render_status_banner("running", "Initializing preparation pipeline..."),
             _render_log(lines),
             gr.skip(),
             gr.update(interactive=False),
@@ -637,53 +589,7 @@ def make_prepare_pipeline(
             gr.update(interactive=False),
         )
 
-        # -------------------------------------------------- Precondition Checks
-        if not oidc._access_token:
-            lines.append("[ERROR] Not logged in to Core. Click 'Login (PKCE)' above.")
-            yield (
-                gr.update(value="⚡ Process Source Audio", interactive=True),
-                gr.update(interactive=True),
-                gr.update(interactive=False),
-                gr.update(interactive=False),
-                _render_status_banner("error", "Not logged in to Core backend. Click 'Login (PKCE)' above."),
-                _render_log(lines),
-                gr.skip(),
-                gr.update(interactive=False),
-                gr.skip(),
-                gr.skip(),
-                gr.skip(),
-                gr.skip(),
-                gr.skip(),
-                gr.skip(),
-                gr.update(interactive=True),
-                gr.update(interactive=True),
-                gr.update(interactive=True),
-            )
-            return
-
-        if not core.health():
-            lines.append(f"[ERROR] Core backend unreachable at {cfg.core_api_url}. Start with 'make core'.")
-            yield (
-                gr.update(value="⚡ Process Source Audio", interactive=True),
-                gr.update(interactive=True),
-                gr.update(interactive=False),
-                gr.update(interactive=False),
-                _render_status_banner("error", f"Core backend unreachable at {cfg.core_api_url}."),
-                _render_log(lines),
-                gr.skip(),
-                gr.update(interactive=False),
-                gr.skip(),
-                gr.skip(),
-                gr.skip(),
-                gr.skip(),
-                gr.skip(),
-                gr.skip(),
-                gr.update(interactive=True),
-                gr.update(interactive=True),
-                gr.update(interactive=True),
-            )
-            return
-
+        # Precondition: Check AI Service
         ai_live = False
         try:
             ai.voices()
@@ -692,7 +598,7 @@ def make_prepare_pipeline(
             ai_live = False
 
         if not ai_live:
-            lines.append(f"[ERROR] AI service unreachable at {cfg.ai_service_url}. Start with 'make ai'.")
+            lines.append(f"[ERROR] AI service unreachable at {cfg.ai_service_url}. Start with 'make ai' or 'make ai-local'.")
             yield (
                 gr.update(value="⚡ Process Source Audio", interactive=True),
                 gr.update(interactive=True),
@@ -729,10 +635,10 @@ def make_prepare_pipeline(
 
         try:
             # -------------------------------------------------- Step 1: Acquire source
-            lines.append(f"[Step 1/5] Acquiring source audio ({mode_label})...")
+            lines.append(f"[Step 1/3] Acquiring source audio ({mode_label})...")
             yield (
                 gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-                _render_status_banner("running", f"Step 1/5: Acquiring source audio ({mode_label})..."),
+                _render_status_banner("running", f"Step 1/3: Acquiring source audio ({mode_label})..."),
                 _render_log(lines),
                 gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
                 gr.skip(), gr.skip(), gr.skip(),
@@ -768,52 +674,24 @@ def make_prepare_pipeline(
             audio_file_path = str(Path(local_audio).resolve())
             svc.state.title = resolved_title or "Lesson"
 
-            # AUDIO READY -> update audio preview immediately so user can listen right away!
-            lines.append("  [OK] Audio acquisition complete.")
+            lines.append(f"  [OK] Audio ready: {audio_file_path}")
+            lines.append(f"  -> Duration: {svc.state.audio_meta.duration_ms / 1000.0:.2f}s")
             yield (
                 gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-                _render_status_banner("running", "Step 1/5 complete. Audio acquired. Proceeding to Step 2/5 (Storage Upload)..."),
+                _render_status_banner("running", "Step 1/3 complete. Audio acquired. Proceeding to Step 2/3 (Speech Transcription)..."),
                 _render_log(lines),
-                audio_file_path,  # audio_preview updates here
+                audio_file_path,
                 transcript_value if transcript_value else gr.skip(),
                 resolved_title,
                 gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
                 gr.skip(), gr.skip(), gr.skip(),
             )
 
-            # -------------------------------------------------- Step 2: Upload canonical assets
-            lines.append("[Step 2/5] Uploading canonical media to Core storage...")
+            # -------------------------------------------------- Step 2: Transcription (STT)
+            lines.append("[Step 2/3] Transcribing speech with Qwen ASR...")
             yield (
                 gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-                _render_status_banner("running", "Step 2/5: Uploading canonical media to Core storage..."),
-                _render_log(lines),
-                audio_file_path,
-                gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-                gr.skip(), gr.skip(), gr.skip(),
-            )
-
-            audio_status = svc.upload_canonical_audio()
-            lines.append(f"  -> Object Key: {audio_status['objectKey']}")
-            lines.append(f"  -> SHA-256: {audio_status['sha256']}")
-            if svc.state.thumbnail_path:
-                thumb = svc.upload_thumbnail()
-                if thumb:
-                    lines.append(f"  -> Thumbnail Key: {thumb['objectKey']}")
-            lines.append("  [OK] Canonical storage upload complete.")
-            yield (
-                gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-                _render_status_banner("running", "Step 2/5 complete. Proceeding to Step 3/5 (Speech Transcription)..."),
-                _render_log(lines),
-                audio_file_path,
-                gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-                gr.skip(), gr.skip(), gr.skip(),
-            )
-
-            # -------------------------------------------------- Step 3: Transcription (STT)
-            lines.append("[Step 3/5] Loading / transcribing speech...")
-            yield (
-                gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-                _render_status_banner("running", "Step 3/5: Loading / transcribing speech with Qwen ASR..."),
+                _render_status_banner("running", "Step 2/3: Transcribing speech with Qwen ASR..."),
                 _render_log(lines),
                 audio_file_path,
                 gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
@@ -827,222 +705,181 @@ def make_prepare_pipeline(
                 transcript_value = stt_res["text"]
                 lines.append(f"  -> Transcribed with Qwen ASR ({len(transcript_value.split())} words).")
 
-            # TRANSCRIPT READY -> update transcript_box & title_resolved
             lines.append("  [OK] Transcript ready.")
             yield (
                 gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-                _render_status_banner("running", "Step 3/5 complete. Proceeding to Step 4/5 (Forced Alignment)..."),
-                _render_log(lines),
-                audio_file_path,
-                transcript_value,  # transcript_box updates here
-                resolved_title,    # title_resolved updates here
-                gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-                gr.skip(), gr.skip(), gr.skip(),
-            )
-
-            # -------------------------------------------------- Step 4: Forced Alignment
-            lines.append("[Step 4/5] Running forced alignment for word timestamps with Qwen...")
-            yield (
-                gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-                _render_status_banner("running", "Step 4/5: Running Qwen forced alignment for word-level timestamps..."),
-                _render_log(lines),
-                audio_file_path,
-                gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-                gr.skip(), gr.skip(), gr.skip(),
-            )
-
-            svc.set_transcript(transcript_value)
-            words = svc.run_alignment()
-            lines.append(f"  -> Aligned {len(words)} words across {len(svc.state.sentences)} sentences.")
-
-            # TIMELINE READY -> update metrics & rows, enable realign_btn
-            lines.append("  [OK] Alignment complete.")
-            yield (
-                gr.skip(),
-                gr.skip(),
-                gr.update(interactive=True),  # realign_btn enabled
-                gr.skip(),
-                _render_status_banner("running", "Step 4/5 complete. Proceeding to Step 5/5 (Validation)..."),
+                _render_status_banner("running", "Step 2/3 complete. Proceeding to Step 3/3 (Forced Alignment)..."),
                 _render_log(lines),
                 audio_file_path,
                 transcript_value,
                 resolved_title,
-                _render_metrics_table(svc),  # metrics_table updates here
-                _sentence_rows(svc),         # review_rows updates here
-                gr.skip(), gr.skip(), gr.skip(),
+                gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
                 gr.skip(), gr.skip(), gr.skip(),
             )
 
-            # -------------------------------------------------- Step 5: Validate (No auto-export)
-            lines.append("[Step 5/5] Validating schema compliance...")
+            # -------------------------------------------------- Step 3: Forced Alignment
+            lines.append("[Step 3/3] Running forced alignment with Qwen ForcedAligner...")
             yield (
                 gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-                _render_status_banner("running", "Step 5/5: Validating package schema compliance..."),
+                _render_status_banner("running", "Step 3/3: Running Qwen forced alignment for word timestamps..."),
                 _render_log(lines),
                 audio_file_path,
                 gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
                 gr.skip(), gr.skip(), gr.skip(),
             )
 
+            aligned_words = svc.run_alignment()
+            lines.append(f"  -> Received {len(aligned_words)} word timestamps from Qwen aligner.")
+            lines.append(f"  -> Distributed across {len(svc.state.sentences)} sentence(s) with monotonic mapping.")
+            if svc.state.alignment and svc.state.alignment.repaired_word_count:
+                lines.append(f"  -> Repaired {svc.state.alignment.repaired_word_count} sub-minimum duration word(s).")
+            lines.append("  [OK] Forced alignment complete.")
+
+            # Check coverage
+            if svc.state.coverage and svc.state.coverage.warnings:
+                for w in svc.state.coverage.warnings:
+                    lines.append(f"  [WARN] {w}")
+
+            # Verification
+            lines.append("[Validation] Validating portable manifest...")
             ready, problems = svc.export_readiness()
-            if not ready:
-                raise PrepError("Export validation failed: " + "; ".join(problems))
+
+            if ready:
+                lines.append("  [OK] Portable manifest validation PASSED.")
+            else:
+                lines.append(f"  [WARN] Verification issues: {'; '.join(problems)}")
 
             preview_dict = _export_preview(svc)
-            preview_code_str = (
+            preview_code = (
                 json.dumps(preview_dict, indent=2, ensure_ascii=False)
                 if preview_dict
                 else ""
             )
 
-            lines.append("  [OK] Schema validation PASSED.")
-            lines.append("")
-            lines.append("[COMPLETE] Source prepared and verified.")
-            lines.append("-> Review audio player, sentence breakdown, and JSON preview on the right.")
-            lines.append("-> Click 'Export Package' below to write package to disk.")
+            # Determine banner status
+            if ready:
+                banner_status = "success"
+                banner_text = "Source preparation complete! Ready to export package."
+            else:
+                banner_status = "error"
+                banner_text = f"Preparation complete with warnings: {'; '.join(problems)}"
 
-            target_folder = export_dir_str.strip() or str(cfg.tool_export_dir)
             yield (
                 gr.update(value="⚡ Process Source Audio", interactive=True),
                 gr.update(interactive=True),
                 gr.update(interactive=True),
-                gr.update(interactive=True),  # export_btn enabled!
-                _render_status_banner("success", f"Source prepared and validated successfully! Ready to export to {target_folder}."),
+                gr.update(interactive=ready),  # export_btn enabled if valid
+                _render_status_banner(banner_status, banner_text),
                 _render_log(lines),
                 audio_file_path,
-                gr.update(value=transcript_value, interactive=True),  # transcript_box editable
+                transcript_value,
                 resolved_title,
                 _render_metrics_table(svc),
                 _sentence_rows(svc),
-                preview_code_str,
+                preview_code,
                 preview_dict,
-                None,  # export_file
-                gr.update(interactive=True),  # tts_text
-                gr.update(interactive=True),  # audio_file
-                gr.update(interactive=True),  # youtube_url
+                None,
+                gr.update(interactive=True),
+                gr.update(interactive=True),
+                gr.update(interactive=True),
             )
 
-        except (PrepError, AiServiceError, CoreApiError, YoutubeError, ValueError) as exc:
+        except (PrepError, AiServiceError, YoutubeError, ValueError) as exc:
             err_msg = str(exc) or exc.__class__.__name__
             lines.append(f"[ERROR] {err_msg}")
             yield (
                 gr.update(value="⚡ Process Source Audio", interactive=True),
                 gr.update(interactive=True),
-                gr.update(interactive=bool(svc.state.sentences)),
                 gr.update(interactive=False),
-                _render_status_banner("error", f"Processing Error: {err_msg}"),
+                gr.update(interactive=False),
+                _render_status_banner("error", f"Pipeline Error: {err_msg}"),
                 _render_log(lines),
                 audio_file_path if audio_file_path else gr.skip(),
-                gr.update(interactive=bool(transcript_value)),
+                transcript_value if transcript_value else gr.skip(),
                 resolved_title if resolved_title else gr.skip(),
-                gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-                None,
+                gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
                 gr.update(interactive=True),
                 gr.update(interactive=True),
                 gr.update(interactive=True),
             )
-            return
         except Exception as exc:
-            err_msg = f"Unexpected error ({type(exc).__name__}): {exc}"
+            err_msg = f"Unexpected error: {exc}"
             lines.append(f"[ERROR] {err_msg}")
             yield (
                 gr.update(value="⚡ Process Source Audio", interactive=True),
                 gr.update(interactive=True),
-                gr.update(interactive=bool(svc.state.sentences)),
                 gr.update(interactive=False),
-                _render_status_banner("error", f"Unexpected System Error: {err_msg}"),
+                gr.update(interactive=False),
+                _render_status_banner("error", f"System Error: {err_msg}"),
                 _render_log(lines),
                 audio_file_path if audio_file_path else gr.skip(),
-                gr.update(interactive=bool(transcript_value)),
+                transcript_value if transcript_value else gr.skip(),
                 resolved_title if resolved_title else gr.skip(),
-                gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-                None,
+                gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
                 gr.update(interactive=True),
                 gr.update(interactive=True),
                 gr.update(interactive=True),
             )
-            return
 
     return prepare_pipeline
 
 
+# ---------------------------------------------------------------- transcript edit & realign
+
+
+def on_transcript_change(svc: LessonPrepService, current_text: str):
+    """When the user edits the transcript, mark alignment stale and disable export."""
+    text = (current_text or "").strip()
+    if text != (svc.state.transcript or "").strip():
+        svc.set_transcript(text)
+        status_html = _render_status_banner(
+            "idle",
+            "Transcript modified. Alignment is now stale. Click '🔄 Re-align Transcript' to synchronize.",
+        )
+        return status_html, gr.update(interactive=True), gr.update(interactive=False)
+    return gr.skip(), gr.skip(), gr.skip()
+
+
 def run_realign(
     svc: LessonPrepService,
-    editor_text: str,
-    title: str,
+    edited_text: str,
+    title_text: str,
     export_dir_str: str,
 ):
-    """Re-runs alignment with user's edited transcript (does not re-TTS, audio stays intact)."""
     lines: list[str] = []
-    target_folder = export_dir_str.strip() or str(cfg.tool_export_dir)
+    lines.append("[Realign] Synchronizing word timestamps with edited transcript...")
 
-    cleaned_text = (editor_text or "").strip()
-    if not cleaned_text:
-        lines.append("[ERROR] Re-alignment blocked: Transcript text cannot be empty.")
-        yield (
-            gr.update(value="🔄 Sync Timestamps with Transcript", interactive=True),
-            gr.update(interactive=True),
-            gr.update(interactive=True),
-            gr.update(interactive=False),
-            _render_status_banner("error", "Transcript text cannot be empty."),
-            _render_log(lines),
-            gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-            gr.update(interactive=True),
-        )
-        return
-
-    if not svc.state.local_audio_path or not svc.state.audio_object_key:
-        lines.append("[ERROR] Re-alignment blocked: No canonical audio loaded. Process source first.")
-        yield (
-            gr.update(value="🔄 Sync Timestamps with Transcript", interactive=True),
-            gr.update(interactive=True),
-            gr.update(interactive=True),
-            gr.update(interactive=False),
-            _render_status_banner("error", "No canonical audio loaded yet. Please process a source first."),
-            _render_log(lines),
-            gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-            gr.update(interactive=True),
-        )
-        return
+    yield (
+        gr.update(value="⏳ Aligning...", interactive=False),
+        gr.update(interactive=False),
+        gr.update(interactive=False),
+        gr.update(interactive=False),
+        _render_status_banner("running", "Re-running Qwen forced alignment with edited text..."),
+        _render_log(lines),
+        gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
+        gr.update(interactive=False),
+    )
 
     try:
-        # Lock buttons
-        yield (
-            gr.update(value="⏳ Syncing...", interactive=False),
-            gr.update(interactive=False),
-            gr.update(interactive=False),
-            gr.update(interactive=False),
-            _render_status_banner("running", "Computing updated timestamps for edited transcript..."),
-            _render_log(lines),
-            gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-            gr.update(interactive=False),
-        )
+        svc.set_transcript(edited_text)
+        if title_text.strip():
+            svc.state.title = title_text.strip()
 
-        lines.append(f"[Re-align] Reading updated transcript ({len(cleaned_text.split())} words)...")
-        cleaned_title = (title or "").strip()
-        if cleaned_title:
-            svc.state.title = cleaned_title
-
-        lines.append("[Re-align] Running Qwen acoustic alignment (Audio preserved 100% intact, NO TTS)...")
-        svc.set_transcript(cleaned_text)
-        words = svc.run_alignment()
-        lines.append(f"  -> Computed timestamps for {len(words)} words across {len(svc.state.sentences)} sentences.")
+        aligned_words = svc.run_alignment()
+        lines.append(f"  -> Aligned {len(aligned_words)} word timestamps.")
+        lines.append(f"  -> Distributed across {len(svc.state.sentences)} sentence(s).")
+        if svc.state.alignment and svc.state.alignment.repaired_word_count:
+            lines.append(f"  -> Repaired {svc.state.alignment.repaired_word_count} sub-minimum duration word(s).")
 
         ready, problems = svc.export_readiness()
-        if not ready:
-            err = "; ".join(problems)
-            lines.append(f"[ERROR] Validation failed: {err}")
-            yield (
-                gr.update(value="🔄 Sync Timestamps with Transcript", interactive=True),
-                gr.update(interactive=True),
-                gr.update(interactive=True),
-                gr.update(interactive=False),
-                _render_status_banner("error", f"Validation failed: {err}"),
-                _render_log(lines),
-                gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-                gr.update(interactive=True),
-            )
-            return
+        if ready:
+            lines.append("  [OK] Portable manifest validation PASSED.")
+            banner_status = "success"
+            banner_text = "Timestamps synchronized successfully! Ready to export package."
+        else:
+            lines.append(f"  [WARN] Verification issues: {'; '.join(problems)}")
+            banner_status = "error"
+            banner_text = f"Alignment updated with issues: {'; '.join(problems)}"
 
         preview_dict = _export_preview(svc)
         preview_code = (
@@ -1051,57 +888,44 @@ def run_realign(
             else ""
         )
 
-        lines.append("  [OK] Word timestamps synchronized successfully with edited text.")
-        lines.append("  [OK] Schema compliance PASS. Ready for export.")
-
         yield (
-            gr.update(value="🔄 Sync Timestamps with Transcript", interactive=True),
+            gr.update(value="🔄 Re-align Transcript", interactive=True),
             gr.update(interactive=True),
             gr.update(interactive=True),
-            gr.update(interactive=True),  # export_btn is enabled
-            _render_status_banner("success", f"Timestamps synchronized successfully with edited text! Ready to export to {target_folder}."),
+            gr.update(interactive=ready),
+            _render_status_banner(banner_status, banner_text),
             _render_log(lines),
-            _render_metrics_table(svc),  # metrics_table updates here
-            _sentence_rows(svc),         # review_rows updates here
-            preview_code,                # review_code updates here
-            preview_dict,                # review_json updates here
-            None,                        # export_file
-            gr.update(interactive=True), # transcript_box
+            _render_metrics_table(svc),
+            _sentence_rows(svc),
+            preview_code,
+            preview_dict,
+            None,
+            gr.update(interactive=True),
         )
 
-    except (PrepError, AiServiceError, CoreApiError, ValueError) as exc:
+    except (PrepError, AiServiceError, ValueError) as exc:
         err_msg = str(exc) or exc.__class__.__name__
         lines.append(f"[ERROR] {err_msg}")
         yield (
-            gr.update(value="🔄 Sync Timestamps with Transcript", interactive=True),
+            gr.update(value="🔄 Re-align Transcript", interactive=True),
             gr.update(interactive=True),
             gr.update(interactive=True),
             gr.update(interactive=False),
-            _render_status_banner("error", f"Sync Error: {err_msg}"),
+            _render_status_banner("error", f"Realign Error: {err_msg}"),
             _render_log(lines),
             gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
             gr.update(interactive=True),
         )
-    except Exception as exc:
-        err_msg = f"Unexpected error: {exc}"
-        lines.append(f"[ERROR] {err_msg}")
-        yield (
-            gr.update(value="🔄 Sync Timestamps with Transcript", interactive=True),
-            gr.update(interactive=True),
-            gr.update(interactive=True),
-            gr.update(interactive=False),
-            _render_status_banner("error", f"System Error: {err_msg}"),
-            _render_log(lines),
-            gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
-            gr.update(interactive=True),
-        )
+
+
+# ---------------------------------------------------------------- package export
 
 
 def run_export(
     svc: LessonPrepService,
     export_dir_str: str,
 ):
-    """Explicit export button to write the artifact to disk on demand."""
+    """Exports the primary portable package: *.lesson-source.zip."""
     ready, problems = svc.export_readiness()
     if not ready:
         msg = f"[ERROR] Export blocked: {'; '.join(problems)}"
@@ -1112,15 +936,19 @@ def run_export(
         dest_dir = Path(raw_dir).expanduser().resolve()
         dest_dir.mkdir(parents=True, exist_ok=True)
 
-        target = svc.write_export_file(dest_dir)
+        package_path = svc.export_package(dest_dir)
 
         msg = (
             f"[EXPORT SUCCESS]\n"
-            f"File: {target.name}\n"
-            f"Destination: {target.parent}\n"
-            f"Size: {target.stat().st_size} bytes"
+            f"Package Archive: {package_path.name}\n"
+            f"Directory: {package_path.parent}\n"
+            f"Size: {package_path.stat().st_size} bytes"
         )
-        return str(target), _render_status_banner("success", f"Package exported successfully to {target.name}!"), _render_log([msg])
+        return (
+            str(package_path),
+            _render_status_banner("success", f"Package exported successfully: {package_path.name}"),
+            _render_log([msg]),
+        )
     except (PrepError, OSError) as exc:
         msg = f"[EXPORT ERROR] {exc}"
         return None, _render_status_banner("error", f"Export error: {exc}"), _render_log([msg])
@@ -1133,56 +961,55 @@ def run_clear():
     msg = f"[RESET] Workspace cleared. Purged {deleted} temporary file(s) from disk."
     return (
         fresh_svc,
-        gr.update(selected="tts"),  # source_tabs
-        "tts",                      # mode_state
-        None,                       # audio_file
-        "",                         # upload_title
-        "",                         # tts_text
-        "",                         # tts_title
-        "",                         # youtube_url
-        "",                         # youtube_title
-        on_youtube_url_change(""),  # youtube_preview_html
+        gr.update(selected="tts"),
+        "tts",
+        None,
+        "",
+        "",
+        "",
+        "",
+        "",
+        on_youtube_url_change(""),
         _render_status_banner("idle", "Workspace reset. Select a source on the left to begin."),
-        _render_log([msg]),         # log
-        None,                       # audio_preview
-        gr.update(value="", interactive=False),  # transcript_box
-        "",                         # title_resolved
-        _render_metrics_empty(),    # metrics_table
-        [],                         # review_rows
-        "",                         # review_code
-        None,                       # review_json
-        None,                       # export_file
-        gr.update(interactive=False),  # realign_btn
-        gr.update(interactive=False),  # export_btn
+        _render_log([msg]),
+        None,
+        gr.update(value="", interactive=False),
+        "",
+        _render_metrics_empty(),
+        [],
+        "",
+        None,
+        None,
+        gr.update(interactive=False),
+        gr.update(interactive=False),
     )
 
 
 # ---------------------------------------------------------------- UI Builder
 
+
 def build_ui() -> gr.Blocks:
     us_choices, us_default = _get_voice_choices("US")
-    detected_downloads_path = str(cfg.tool_export_dir)
-    auth_initial = bool(oidc._access_token)
+    detected_export_path = str(cfg.tool_export_dir)
 
     with gr.Blocks(title="Lyreo Lesson Studio", css=CUSTOM_CSS, fill_width=True) as demo:
-        # Flat Top App Bar with Branding and Services Status Table
+        # Header Row
         with gr.Row(elem_classes=["admin-header-row"]):
             with gr.Column(scale=3, min_width=240):
                 gr.HTML("""
                 <div class="brand-block">
                   <div class="brand-title">LYREO PREP WORKBENCH</div>
-                  <div class="brand-subtitle">Media Ingestion, TTS & Alignment</div>
+                  <div class="brand-subtitle">Source Acquisition & Portable Packaging</div>
                 </div>
                 """)
                 with gr.Row():
-                    login_button = gr.Button("🔑 Login (PKCE)", variant="primary", size="sm", scale=2)
-                    status_refresh = gr.Button("⟳ Check", variant="secondary", size="sm", scale=1)
+                    status_refresh = gr.Button("⟳ Refresh Status", variant="secondary", size="sm")
             with gr.Column(scale=7, min_width=520):
                 status_box = gr.HTML(connection_status())
 
-        # Main 2-Column Studio Layout (Equal 50/50 split)
+        # Main 2-Column Layout
         with gr.Row(equal_height=False):
-            # ------------------------------------------------ Left Column: Ingestion & Controls (50%)
+            # Left Column: Ingestion & Controls
             with gr.Column(scale=1, min_width=420):
                 gr.Markdown("### 1. Source & Configuration")
                 mode_state = gr.Textbox(value="tts", visible=False)
@@ -1198,177 +1025,130 @@ def build_ui() -> gr.Blocks:
                             voice_dd = gr.Dropdown(
                                 choices=us_choices,
                                 value=us_default,
-                                allow_custom_value=True,
                                 label="Kokoro Voice",
                                 scale=2,
                             )
-                            speed_sl = gr.Slider(0.5, 2.0, value=1.0, step=0.1, label="Speed", scale=2)
-                            refresh_voices_btn = gr.Button("⟳ Voice", scale=0, size="sm")
-                        tts_title = gr.Textbox(
-                            label="Lesson Title (Optional)",
-                            placeholder="Default: First line of text if left blank",
-                        )
+                        with gr.Row():
+                            speed_slider = gr.Slider(0.5, 2.0, value=1.0, step=0.05, label="Speed")
+                        tts_title = gr.Textbox(label="Title (Optional)", placeholder="Auto-generated if blank")
 
-                    with gr.Tab("📁 Upload Audio File", id="upload") as tab_upload:
-                        audio_file = gr.Audio(
+                    with gr.Tab("📁 Upload Audio", id="upload") as tab_upload:
+                        audio_file = gr.File(
+                            label="Audio File (.wav, .mp3, .m4a)",
+                            file_types=["audio"],
                             type="filepath",
-                            sources=["upload"],
-                            label="Audio File * (WAV, MP3, M4A, OGG, FLAC)",
                         )
-                        upload_title = gr.Textbox(
-                            label="Lesson Title (Optional)",
-                            placeholder="Default: File name if left blank",
-                        )
+                        upload_title = gr.Textbox(label="Title (Optional)", placeholder="Inferred from filename if blank")
 
-                    with gr.Tab("▶️ YouTube Video", id="youtube") as tab_youtube:
+                    with gr.Tab("▶️ YouTube Video", id="youtube") as tab_yt:
                         youtube_url = gr.Textbox(
                             label="YouTube URL *",
                             placeholder="https://www.youtube.com/watch?v=...",
                         )
                         youtube_preview_html = gr.HTML(on_youtube_url_change(""))
-                        youtube_title = gr.Textbox(
-                            label="Lesson Title (Optional)",
-                            placeholder="Default: YouTube video title if left blank",
-                        )
+                        youtube_title = gr.Textbox(label="Title (Optional)", placeholder="Inferred from YouTube if blank")
 
-                gr.Markdown("### 2. Pipeline Execution")
-                status_banner = gr.HTML(_render_status_banner("idle", "Ready. Select a source above and click Process."))
-                with gr.Row():
-                    prepare_button = gr.Button("⚡ Process Source Audio", variant="primary", size="lg", scale=3, interactive=auth_initial)
-                    clear_button = gr.Button("🗑️ Reset Workspace", variant="secondary", size="lg", scale=2)
-
-                with gr.Accordion("Execution Details Log", open=True):
-                    log = gr.Markdown(_render_log([]))
-
-            # ------------------------------------------------ Right Column: Inspection & Package (50%)
-            with gr.Column(scale=1, min_width=420):
-                gr.Markdown("### 3. Review & Alignment")
-
-                # Metrics summary row (Table format)
-                metrics_table = gr.HTML(_render_metrics_empty())
-
-                # Canonical audio player
-                audio_preview = gr.Audio(
-                    type="filepath",
-                    interactive=False,
-                    label="Canonical Audio Player",
-                    show_download_button=True,
-                )
-
-                # Lesson Title
-                title_resolved = gr.Textbox(
-                    label="Lesson Title",
-                    lines=1,
-                    placeholder="Lesson title will appear here after processing...",
-                )
-
-                # Editable transcript (initially disabled until transcript is loaded)
-                transcript_box = gr.Textbox(
-                    label="Transcript (Editable)",
-                    lines=5,
-                    interactive=False,
-                    placeholder="Transcript text will appear here after processing. You can correct words and click Sync below.",
-                )
-
-                # Re-align Button & Helper Note (initially disabled until alignment finishes)
-                realign_btn = gr.Button(
-                    "🔄 Sync Timestamps with Transcript",
-                    variant="secondary",
-                    interactive=False,
-                )
-                gr.HTML(
-                    '<div style="font-size:0.76rem; color:#64748b; margin-top:1px;">'
-                    '💡 <em>Audio is preserved 100% (NO TTS re-synthesis). Only word timestamps are re-aligned.</em>'
-                    '</div>'
-                )
-
-                # Inspection Tabs: Timeline, Tree View, Formatted JSON
-                with gr.Tabs():
-                    with gr.TabItem("📋 Sentence Timeline"):
-                        review_rows = gr.Dataframe(
-                            headers=["No.", "Sentence Text", "Start", "End", "Duration", "Words"],
-                            datatype=["number", "str", "str", "str", "str", "number"],
-                            interactive=False,
-                            wrap=True,
-                        )
-                    with gr.TabItem("🌲 JSON Tree View"):
-                        review_json = gr.JSON(label="Interactive Tree View")
-                    with gr.TabItem("📄 Formatted JSON"):
-                        review_code = gr.Code(
-                            language="json",
-                            label="Formatted *.lesson-source.json",
-                            lines=16,
-                        )
-
-                gr.Markdown("### 4. Package Export")
                 with gr.Row():
                     export_dir_input = gr.Textbox(
-                        label="Export Directory",
-                        value=detected_downloads_path,
-                        scale=8,
+                        label="Export Destination Folder",
+                        value=detected_export_path,
+                        scale=4,
                     )
-                    export_btn = gr.Button("💾 Export Package (.json)", variant="primary", scale=4, interactive=False)
 
-                export_file = gr.File(label="Download Package (.json)", interactive=False)
+                with gr.Row():
+                    prepare_button = gr.Button(
+                        "⚡ Process Source Audio",
+                        variant="primary",
+                        elem_classes=["btn-primary-action"],
+                        scale=3,
+                    )
+                    clear_button = gr.Button("🗑️ Reset", variant="secondary", scale=1)
+
+                gr.Markdown("### Execution Log")
+                log = gr.Markdown(_render_log([]))
+
+            # Right Column: Review & Export
+            with gr.Column(scale=1, min_width=420):
+                gr.Markdown("### 2. Audio Preview & Transcript")
+                audio_preview = gr.Audio(label="Acquired Audio Preview", interactive=False, type="filepath")
+
+                with gr.Row():
+                    title_resolved = gr.Textbox(label="Source Title", interactive=True, scale=3)
+                    realign_btn = gr.Button("🔄 Re-align Transcript", variant="secondary", interactive=False, scale=2)
+
+                transcript_box = gr.Textbox(
+                    label="Editable Transcript (Editing marks alignment stale)",
+                    lines=5,
+                    interactive=False,
+                )
+
+                status_banner = gr.HTML(_render_status_banner("idle", "Configure source on the left to begin."))
+
+                gr.Markdown("### Alignment Metrics")
+                metrics_table = gr.HTML(_render_metrics_empty())
+
+                with gr.Tabs(elem_classes=["review-subtabs"]):
+                    with gr.Tab("Sentence Breakdown"):
+                        review_rows = gr.Dataframe(
+                            headers=["#", "Sentence Text", "Start", "End", "Duration", "Words"],
+                            datatype=["number", "str", "str", "str", "str", "number"],
+                            interactive=False,
+                        )
+                    with gr.Tab("Manifest Code Preview"):
+                        review_code = gr.Code(label="lesson-source.json", language="json", interactive=False)
+                    with gr.Tab("JSON Tree"):
+                        review_json = gr.JSON(label="Parsed Manifest")
+
+                with gr.Row():
+                    export_btn = gr.Button(
+                        "📦 Export Lesson Source Package (*.zip)",
+                        variant="primary",
+                        elem_classes=["btn-primary-action"],
+                        interactive=False,
+                        scale=2,
+                    )
+                    export_file = gr.File(label="Download Package", interactive=False, scale=2)
 
         state = gr.State(new_service)
 
-        # Event Handlers with show_progress="hidden" to suppress all loading overlays
-        tab_tts.select(lambda: "tts", outputs=mode_state, show_progress="hidden")
-        tab_upload.select(lambda: "upload", outputs=mode_state, show_progress="hidden")
-        tab_youtube.select(lambda: "youtube", outputs=mode_state, show_progress="hidden")
+        # Tab Selection State
+        tab_tts.select(lambda: "tts", outputs=[mode_state])
+        tab_upload.select(lambda: "upload", outputs=[mode_state])
+        tab_yt.select(lambda: "youtube", outputs=[mode_state])
 
-        youtube_url.change(
-            on_youtube_url_change,
-            inputs=[youtube_url],
-            outputs=[youtube_preview_html],
-            show_progress="hidden",
+        accent_dd.change(on_accent_change, inputs=[accent_dd], outputs=[voice_dd])
+        youtube_url.change(on_youtube_url_change, inputs=[youtube_url], outputs=[youtube_preview_html])
+        status_refresh.click(on_status_refresh, inputs=[state], outputs=[status_box])
+
+        # Transcript editing invalidates alignment
+        transcript_box.change(
+            on_transcript_change,
+            inputs=[state, transcript_box],
+            outputs=[status_banner, realign_btn, export_btn],
         )
-        accent_dd.change(
-            on_accent_change,
-            inputs=[accent_dd],
-            outputs=[voice_dd],
-            show_progress="hidden",
-        )
-        login_button.click(
-            on_login,
-            inputs=[state],
-            outputs=[log, status_box, prepare_button],
-            show_progress="hidden",
-        )
-        status_refresh.click(
-            on_status_refresh,
-            inputs=[state],
-            outputs=[status_box, prepare_button],
-            show_progress="hidden",
-        )
-        refresh_voices_btn.click(
-            on_refresh_voices,
-            inputs=[state, accent_dd],
-            outputs=[voice_dd],
-            show_progress="hidden",
+
+        pipeline_fn = make_prepare_pipeline(
+            prepare_button,
+            clear_button,
+            realign_btn,
+            export_btn,
+            status_banner,
+            log,
+            audio_preview,
+            transcript_box,
+            title_resolved,
+            metrics_table,
+            review_rows,
+            review_code,
+            review_json,
+            export_file,
+            tts_text,
+            audio_file,
+            youtube_url,
         )
 
         prepare_button.click(
-            make_prepare_pipeline(
-                prepare_button,
-                clear_button,
-                realign_btn,
-                export_btn,
-                status_banner,
-                log,
-                audio_preview,
-                transcript_box,
-                title_resolved,
-                metrics_table,
-                review_rows,
-                review_code,
-                review_json,
-                export_file,
-                tts_text,
-                audio_file,
-                youtube_url,
-            ),
+            pipeline_fn,
             inputs=[
                 state,
                 mode_state,
@@ -1377,7 +1157,7 @@ def build_ui() -> gr.Blocks:
                 tts_text,
                 voice_dd,
                 accent_dd,
-                speed_sl,
+                speed_slider,
                 tts_title,
                 youtube_url,
                 youtube_title,
@@ -1466,21 +1246,17 @@ def build_ui() -> gr.Blocks:
     return demo
 
 
-repo_root = Path(__file__).resolve().parents[2]
 demo = build_ui()
-app = gr.mount_gradio_app(
-    fastapi_app,
-    demo,
-    path="/",
-    allowed_paths=[
-        str(Path.home()),
-        "/tmp",
-        str(cfg.tool_work_dir.resolve()),
-        str(cfg.tool_export_dir.resolve()),
-        str(repo_root),
-    ],
-)
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=7860, timeout_graceful_shutdown=1)
+    cfg.tool_work_dir.resolve().mkdir(parents=True, exist_ok=True)
+    cfg.tool_export_dir.resolve().mkdir(parents=True, exist_ok=True)
+    demo.launch(
+        server_name="127.0.0.1",
+        server_port=7860,
+        allowed_paths=[
+            str(cfg.tool_work_dir.resolve()),
+            str(cfg.tool_export_dir.resolve()),
+        ],
+        show_error=True,
+    )

@@ -22,6 +22,7 @@ class QwenRuntime:
         self._asr = None
         self._aligner = None
         self._load_lock = asyncio.Lock()
+        self._inference_lock = asyncio.Lock()
 
     def _dtype(self):
         import torch
@@ -84,71 +85,73 @@ class QwenRuntime:
         return self._aligner
 
     async def stt(self, request: ExecuteRequest) -> ExecuteResponse:
-        audio = _normalize_audio_source(
-            request.input.get('audio') or request.input.get('audio_url')
-        )
-        if not audio:
-            raise ValueError('STT requires input.audio or input.audio_url')
-
-        language = request.options.get('language', 'English')
-        model = await self._load_asr()
-        import torch
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        try:
-            results = await asyncio.to_thread(
-                model.transcribe,
-                audio=audio,
-                language=language,
-                context=request.options.get('context'),
-                return_time_stamps=False,
+        async with self._inference_lock:
+            audio = _normalize_audio_source(
+                request.input.get('audio') or request.input.get('audio_url')
             )
-        finally:
+            if not audio:
+                raise ValueError('STT requires input.audio or input.audio_url')
+
+            language = request.options.get('language', 'English')
+            model = await self._load_asr()
+            import torch
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-        if not results:
-            raise ValueError('Qwen ASR returned no transcription result')
+            try:
+                results = await asyncio.to_thread(
+                    model.transcribe,
+                    audio=audio,
+                    language=language,
+                    context=request.options.get('context'),
+                    return_time_stamps=False,
+                )
+            finally:
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            if not results:
+                raise ValueError('Qwen ASR returned no transcription result')
 
-        result = results[0]
-        text = str(getattr(result, 'text', '') or '')
-        resolved_language = getattr(result, 'language', language)
-        timestamps: list[dict[str, Any]] = []
+            result = results[0]
+            text = str(getattr(result, 'text', '') or '')
+            resolved_language = getattr(result, 'language', language)
+            timestamps: list[dict[str, Any]] = []
 
-        if bool(request.options.get('timestamps', False)) and text.strip():
-            timestamps = await self._align_words(audio, text, resolved_language)
+            if bool(request.options.get('timestamps', False)) and text.strip():
+                timestamps = await self._align_words(audio, text, resolved_language)
 
-        return ExecuteResponse(
-            output={
-                'text': text,
-                'language': resolved_language,
-                'timestamps': timestamps,
-            },
-            metadata={
-                'runtime': 'qwen',
-                'model': self.cfg.qwen_asr_model,
-            },
-        )
+            return ExecuteResponse(
+                output={
+                    'text': text,
+                    'language': resolved_language,
+                    'timestamps': timestamps,
+                },
+                metadata={
+                    'runtime': 'qwen',
+                    'model': self.cfg.qwen_asr_model,
+                },
+            )
 
     async def align(self, request: ExecuteRequest) -> ExecuteResponse:
-        audio = _normalize_audio_source(
-            request.input.get('audio') or request.input.get('audio_url')
-        )
-        text = request.input.get('text')
-        if not audio or not text:
-            raise ValueError('Alignment requires audio/audio_url and text')
+        async with self._inference_lock:
+            audio = _normalize_audio_source(
+                request.input.get('audio') or request.input.get('audio_url')
+            )
+            text = request.input.get('text')
+            if not audio or not text:
+                raise ValueError('Alignment requires audio/audio_url and text')
 
-        words = await self._align_words(
-            audio,
-            str(text),
-            request.options.get('language', 'English'),
-        )
-        return ExecuteResponse(
-            output={'words': words},
-            metadata={
-                'runtime': 'qwen',
-                'model': self.cfg.qwen_aligner_model,
-            },
-        )
+            words = await self._align_words(
+                audio,
+                str(text),
+                request.options.get('language', 'English'),
+            )
+            return ExecuteResponse(
+                output={'words': words},
+                metadata={
+                    'runtime': 'qwen',
+                    'model': self.cfg.qwen_aligner_model,
+                },
+            )
 
     async def _align_words(self, audio: Any, text: str, language: Any) -> list[dict[str, Any]]:
         model = await self._load_aligner()
