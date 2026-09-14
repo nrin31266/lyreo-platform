@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -246,7 +247,7 @@ export function LessonBuilder() {
                   <strong>{t('lessonBuilder.accepted')}</strong>
                   <div>{t('lessonBuilder.lessonId')}: {accepted.lessonId}</div>
                   <div>{t('lessonBuilder.jobId')}: {accepted.jobId}</div>
-                  <a href={`/jobs?job=${accepted.jobId}`}>{t('lessonBuilder.inspectJob')} →</a>
+                  <Link to={`/jobs?job=${accepted.jobId}`}>{t('lessonBuilder.inspectJob')} →</Link>
                 </div>
               ) : null}
             </form>

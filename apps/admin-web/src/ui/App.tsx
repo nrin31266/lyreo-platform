@@ -1,9 +1,10 @@
-import { lyreoBrand, type ThemePreference } from '@lyreo/design-system';
+import type { ThemePreference } from '@lyreo/design-system';
 import { normalizeLocale, supportedLocales, type SupportedLocale } from '@lyreo/i18n';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { userManager } from '../auth';
+import { ProtectedRoute } from '../components/ProtectedRoute';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -17,40 +18,44 @@ import { Overview } from './Overview';
 function Callback() {
   const navigate = useNavigate();
   const { t } = useTranslation('admin');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    userManager.signinRedirectCallback().then(() => navigate('/'));
-  }, [navigate]);
+    let active = true;
+    userManager
+      .signinRedirectCallback()
+      .then(() => {
+        if (active) navigate('/');
+      })
+      .catch((cause: unknown) => {
+        if (active) {
+          setError(cause instanceof Error ? cause.message : t('signInFailed'));
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [navigate, t]);
+
+  if (error) {
+    return (
+      <div className="center gap-4 p-6">
+        <p className="danger">{error}</p>
+        <Button variant="secondary" onClick={() => void userManager.signinRedirect()}>
+          {t('signIn')}
+        </Button>
+      </div>
+    );
+  }
 
   return <div className="center">{t('completingSignIn')}</div>;
-}
-
-function Login() {
-  const { t } = useTranslation('admin');
-  return (
-    <div className="login">
-      <div className="brand-mark">〰</div>
-      <h1>{lyreoBrand.name}</h1>
-      <p>{t('workspace')} · {lyreoBrand.tagline}</p>
-      <Button variant="secondary" size="lg" onClick={() => void userManager.signinRedirect()}>
-        {t('signIn')}
-      </Button>
-    </div>
-  );
 }
 
 function Shell() {
   const location = useLocation();
   const { t, i18n } = useTranslation(['admin', 'common']);
   const { preference, setPreference } = useAppTheme();
-  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    userManager.getUser().then(user => setAuthenticated(Boolean(user && !user.expired)));
-  }, []);
-
-  if (authenticated === null) return <div className="center">{t('admin:loading')}</div>;
-  if (!authenticated) return <Login />;
 
   const links = [
     ['/', t('admin:nav.overview')],
@@ -169,7 +174,15 @@ export function App() {
   return (
     <Routes>
       <Route path="/auth/callback" element={<Callback />} />
-      <Route path="/*" element={<Shell />} />
+      <Route
+        path="/*"
+        element={
+          <ProtectedRoute>
+            <Shell />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   );
 }
+

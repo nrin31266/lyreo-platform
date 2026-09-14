@@ -28,10 +28,12 @@ type Route = {
 };
 
 export function AiSettings() {
-  const { t } = useTranslation('admin');
+  const { t } = useTranslation(['admin', 'common']);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const [providerCode, setProviderCode] = useState('GROQ');
   const [displayName, setDisplayName] = useState('Groq');
@@ -40,6 +42,7 @@ export function AiSettings() {
   const [enabled, setEnabled] = useState(true);
 
   async function load() {
+    setLoading(true);
     try {
       const [providerRows, routeRows] = await Promise.all([
         api<Provider[]>('/api/v1/admin/ai/providers'),
@@ -50,6 +53,8 @@ export function AiSettings() {
       setError('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -59,6 +64,8 @@ export function AiSettings() {
 
   async function saveProvider(event: FormEvent) {
     event.preventDefault();
+    setSaving(true);
+    setError('');
     try {
       await api(`/api/v1/admin/ai/providers/${providerCode}`, {
         method: 'PUT',
@@ -73,6 +80,8 @@ export function AiSettings() {
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -85,70 +94,96 @@ export function AiSettings() {
       {error ? (
         <Card className="mt-6">
           <CardHeader><CardTitle>{t('aiSettings.apiError')}</CardTitle></CardHeader>
-          <CardContent><p className="muted">{error}</p></CardContent>
+          <CardContent><p className="danger text-sm">{error}</p></CardContent>
         </Card>
       ) : null}
 
       <Card className="mt-6">
         <CardHeader><CardTitle>{t('aiSettings.providers')}</CardTitle></CardHeader>
         <CardContent>
-          <table>
-            <thead>
-              <tr>
-                <th>{t('aiSettings.table.provider')}</th>
-                <th>{t('aiSettings.table.endpoint')}</th>
-                <th>{t('aiSettings.table.credential')}</th>
-                <th>{t('aiSettings.table.status')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {providers.map(provider => (
-                <tr key={provider.id}>
-                  <td>
-                    <strong>{provider.code}</strong>
-                    <br />
-                    <span className="muted">{provider.display_name}</span>
-                  </td>
-                  <td>{provider.base_url || t('aiSettings.internalRuntime')}</td>
-                  <td>
-                    {provider.configured
-                      ? `•••• ${provider.key_last4 || ''}`
-                      : t('aiSettings.notConfigured')}
-                  </td>
-                  <td>{provider.enabled ? provider.connection_status : t('aiSettings.disabled')}</td>
+          {loading ? (
+            <p className="muted py-4 text-center">{t('common:status.loading')}</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>{t('aiSettings.table.provider')}</th>
+                  <th>{t('aiSettings.table.endpoint')}</th>
+                  <th>{t('aiSettings.table.credential')}</th>
+                  <th>{t('aiSettings.table.status')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {providers.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="muted py-4 text-center">
+                      {t('aiSettings.notConfigured')}
+                    </td>
+                  </tr>
+                ) : (
+                  providers.map(provider => (
+                    <tr key={provider.id}>
+                      <td>
+                        <strong>{provider.code}</strong>
+                        <br />
+                        <span className="muted">{provider.display_name}</span>
+                      </td>
+                      <td>{provider.base_url || t('aiSettings.internalRuntime')}</td>
+                      <td>
+                        {provider.configured
+                          ? `•••• ${provider.key_last4 || ''}`
+                          : t('aiSettings.notConfigured')}
+                      </td>
+                      <td>{provider.enabled ? provider.connection_status : t('aiSettings.disabled')}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
         </CardContent>
       </Card>
 
       <Card className="mt-6">
         <CardHeader><CardTitle>{t('aiSettings.routes')}</CardTitle></CardHeader>
         <CardContent>
-          <table>
-            <thead>
-              <tr>
-                <th>{t('aiSettings.table.capability')}</th>
-                <th>{t('aiSettings.table.provider')}</th>
-                <th>{t('aiSettings.table.model')}</th>
-                <th>{t('aiSettings.table.priority')}</th>
-                <th>{t('aiSettings.table.fallback')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {routes.map(route => (
-                <tr key={route.id}>
-                  <td>{route.capability}</td>
-                  <td>{route.provider}</td>
-                  <td>{route.model}</td>
-                  <td>{route.priority}</td>
-                  <td>{route.is_fallback ? t('common:yes') : t('common:no')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="muted">{t('aiSettings.modelNamesNote')}</p>
+          {loading ? (
+            <p className="muted py-4 text-center">{t('common:status.loading')}</p>
+          ) : (
+            <>
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t('aiSettings.table.capability')}</th>
+                    <th>{t('aiSettings.table.provider')}</th>
+                    <th>{t('aiSettings.table.model')}</th>
+                    <th>{t('aiSettings.table.priority')}</th>
+                    <th>{t('aiSettings.table.fallback')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {routes.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="muted py-4 text-center">
+                        {t('aiSettings.notConfigured')}
+                      </td>
+                    </tr>
+                  ) : (
+                    routes.map(route => (
+                      <tr key={route.id}>
+                        <td>{route.capability}</td>
+                        <td>{route.provider}</td>
+                        <td>{route.model}</td>
+                        <td>{route.priority}</td>
+                        <td>{route.is_fallback ? t('common:yes') : t('common:no')}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+              <p className="muted">{t('aiSettings.modelNamesNote')}</p>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -183,7 +218,9 @@ export function AiSettings() {
                 <Switch checked={enabled} onCheckedChange={setEnabled} />
               </label>
             </div>
-            <Button className="mt-[22px]" type="submit">{t('aiSettings.save')}</Button>
+            <Button className="mt-[22px]" disabled={saving} type="submit">
+              {saving ? t('common:status.saving') : t('aiSettings.save')}
+            </Button>
             <p className="muted">{t('aiSettings.encryptionNote')}</p>
           </form>
         </CardContent>
