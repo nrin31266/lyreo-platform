@@ -209,8 +209,7 @@ acceptance, endpoint/schema, configuration, or roadmap tables.
 - workflow behavior → `docs/features/`; architecture/decisions → `docs/ARCHITECTURE.md`,
   `docs/architecture/`, `docs/DECISIONS.md`;
 - configuration/data/operations → their existing canonical docs;
-- evidence status → `docs/requirements/traceability.md`; unresolved items → `gaps.md`;
-- `docs/LYREO_PLATFORM_SPEC.md` is compatibility navigation, not a competing owner.
+- evidence status → `docs/requirements/traceability.md`; unresolved items → `gaps.md`.
 
 ## 14. Testing and completion
 

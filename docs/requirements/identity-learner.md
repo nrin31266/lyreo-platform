@@ -1,7 +1,7 @@
 # Yêu cầu Identity và Learner
 
 Nguồn migration: đặc tả Lyreo trước khi tách owner; engineering security authority thuộc
-[`AGENTS.md`](../../AGENTS.md#11-security-authority). Stories: [identity/learner](stories/identity-learner.md).
+[`AGENTS.md`](../../AGENTS.md#11-security-authority). Chi tiết cấu hình realm/client: [`infra/keycloak/README.md`](../../infra/keycloak/README.md).
 
 ### FR-IDN-001 — Đăng nhập bắt buộc
 
@@ -38,3 +38,36 @@ preferences không dùng SecureStore. Precedence chi tiết: [Configuration](../
 
 Status: inherited. Settings được nhóm General, Audio & Playback, Shadowing, Dictation, Vocabulary &
 Grammar, Pronunciation, Notifications và Accessibility; không gom thành một danh sách toggle phẳng.
+
+## User Stories & Acceptance Criteria
+
+<a id="us-idn-001--đăng-nhập-an-toàn"></a>
+### US-IDN-001 — Đăng nhập an toàn
+
+Là learner/admin, tôi muốn đăng nhập qua identity provider để dùng đúng dữ liệu và quyền của mình.
+
+#### AC-IDN-001 — Session hợp lệ
+
+Given OIDC session hợp lệ, when app gọi Core, then JWT được xác thực, app-user được provision nếu
+cần, và resource/role được kiểm tra phía server.
+
+#### AC-IDN-002 — Session không hợp lệ
+
+Given không có session hợp lệ, when mở app protected, then người dùng được đưa tới login/register;
+không có guest progress tạm được tạo.
+
+<a id="us-idn-002--onboarding-và-preferences"></a>
+### US-IDN-002 — Onboarding và preferences
+
+Là learner lần đầu, tôi muốn khai báo mục tiêu và cách hiển thị để nhận đường học ban đầu và trải
+nghiệm phù hợp trên các thiết bị.
+
+#### AC-IDN-003 — Onboarding result
+
+Given learner hợp lệ, when gửi level/target/daily minutes/focus hợp lệ, then profile lưu persistent
+state và trả initial rule-based suggestion.
+
+#### AC-IDN-004 — Preference precedence
+
+Given persistent preference và session override, when render practice, then session override áp dụng
+cho phiên hiện tại; chỉ lựa chọn lưu mặc định mới cập nhật persistent preference.

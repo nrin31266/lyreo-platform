@@ -17,7 +17,8 @@ import gradio as gr
 from .ai_service_client import AiServiceClient, AiServiceError
 from .config import settings
 from .prep_service import LessonPrepService, PrepError
-from .youtube import YoutubeError
+from .youtube import YoutubeError, extract_youtube_id
+
 
 cfg = settings()
 
@@ -218,17 +219,6 @@ CUSTOM_CSS = """
 """
 
 
-def _extract_youtube_id(url: str) -> str | None:
-    patterns = [
-        r"(?:v=|/v/|youtu\.be/|/embed/|/shorts/|/live/)([a-zA-Z0-9_-]{11})",
-    ]
-    for p in patterns:
-        m = re.search(p, url)
-        if m:
-            return m.group(1)
-    return None
-
-
 def new_service() -> LessonPrepService:
     return LessonPrepService(
         ai=ai,
@@ -388,7 +378,7 @@ def on_youtube_url_change(url: str) -> str:
         </div>
         """
 
-    video_id = _extract_youtube_id(cleaned)
+    video_id = extract_youtube_id(cleaned)
     if not video_id:
         return """
         <div style="border: 1px dashed #f87171; padding: 10px; color: #dc2626; background: #fef2f2; font-size: 0.75rem;">

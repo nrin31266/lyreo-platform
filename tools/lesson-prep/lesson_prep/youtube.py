@@ -14,7 +14,7 @@ from pathlib import Path
 import httpx
 
 _YOUTUBE_ID_PATTERN = re.compile(
-    r"(?:v=|/shorts/|youtu\.be/|/embed/|/live/)([A-Za-z0-9_-]{11})"
+    r"(?:v=|/v/|/shorts/|youtu\.be/|/embed/|/live/)([A-Za-z0-9_-]{11})"
 )
 
 
@@ -31,13 +31,19 @@ class YoutubeError(RuntimeError):
     pass
 
 
-def normalize_youtube_url(url: str) -> str | None:
+def extract_youtube_id(url: str) -> str | None:
     """Extracts the 11-char video ID or returns None for invalid input."""
-    match = _YOUTUBE_ID_PATTERN.search(url or "")
-    if not match:
+    match = _YOUTUBE_ID_PATTERN.search((url or "").strip())
+    return match.group(1) if match else None
+
+
+def normalize_youtube_url(url: str) -> str | None:
+    """Normalizes any valid YouTube URL variant to canonical watch form, or None."""
+    video_id = extract_youtube_id(url)
+    if not video_id:
         return None
-    video_id = match.group(1)
     return f"https://www.youtube.com/watch?v={video_id}"
+
 
 
 def sniff_image_type(data: bytes) -> tuple[str, str]:

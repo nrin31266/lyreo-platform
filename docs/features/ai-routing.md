@@ -1,7 +1,8 @@
 # FEAT-AI-ROUTING — AI Provider Routing and Audit
 
-Requirements: [AI](../requirements/ai.md); story [US-AI-001/002](../requirements/stories/ai.md).
+Requirements: [AI](../requirements/ai.md); story [US-AI-001/002](../requirements/ai.md#us-ai-001--quản-lý-route-provider).
 Configuration semantics: [Admin runtime policy](../CONFIGURATION.md#3-admin-runtime-policy).
+
 
 ## Admin flow
 

@@ -38,6 +38,7 @@ class ValidateRepoTest(unittest.TestCase):
 
         self.assertTrue(any("missing required lockfile: apps/ai-service/uv.lock" in err for err in errors))
         self.assertTrue(any("missing required lockfile: tools/data-import/uv.lock" in err for err in errors))
+        self.assertTrue(any("missing required lockfile: tools/lesson-prep/uv.lock" in err for err in errors))
 
     def test_legacy_jackson2_production_import_fails(self) -> None:
         """Production Java code importing Jackson 2 databind must be rejected."""
@@ -91,6 +92,7 @@ class ValidateRepoTest(unittest.TestCase):
             ),
             "apps/ai-service/uv.lock": "version = 1\n",
             "tools/data-import/uv.lock": "version = 1\n",
+            "tools/lesson-prep/uv.lock": "version = 1\n",
             "modules/lesson/src/main/java/com/lyreo/lesson/package-info.java": "package com.lyreo.lesson;\n",
             "modules/lesson/src/main/java/com/lyreo/lesson/application/LessonService.java": (
                 "package com.lyreo.lesson.application;\n"

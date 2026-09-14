@@ -53,8 +53,8 @@ Qwen **không bắt buộc Docker**. Developer GPU có thể chạy Python local
 
 ### Kokoro TTS (provider `LOCAL_KOKORO`)
 
-Local TTS runtime, lazy-loaded on first `/v1/tts` call. Long text is chunked deterministically
-and concatenated with a fixed silence gap; output is a normalized mono WAV.
+Local TTS runtime, lazy-loaded on first `/v1/tts` call. Long text is streamed via
+Kokoro's native phoneme chunking; output is a normalized mono WAV.
 
 ```bash
 uv sync --extra kokoro

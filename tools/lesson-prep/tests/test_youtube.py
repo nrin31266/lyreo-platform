@@ -8,6 +8,7 @@ from lesson_prep.youtube import (
     YoutubeMeta,
     download_thumbnail,
     extract_audio,
+    extract_youtube_id,
     normalize_youtube_url,
     sniff_image_type,
 )
@@ -28,6 +29,15 @@ def test_normalize_youtube_url_variants():
     )
     assert normalize_youtube_url("not a url") is None
     assert normalize_youtube_url("") is None
+
+
+def test_extract_youtube_id_variants():
+    assert extract_youtube_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+    assert extract_youtube_id("https://youtu.be/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+    assert extract_youtube_id("https://www.youtube.com/embed/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+    assert extract_youtube_id("https://www.youtube.com/v/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+    assert extract_youtube_id("not a url") is None
+
 
 
 def test_sniff_image_type():
