@@ -2,6 +2,25 @@
 
 Large datasets are first-class product assets, not Flyway seed blobs. Every importer follows dry-run → validate → checksum/version → apply → import audit.
 
+## 0. Lesson Prep Tool acquisition (tool-local, not a Core pipeline)
+
+The Lesson Prep Tool (`tools/lesson-prep`) prepares lesson source candidates locally and
+exports one portable `*.lesson-source.zip` package containing `lesson-source.json` and prepared
+media bytes. Its acquisition steps are tool-local and do not require Core, Keycloak, PostgreSQL,
+or R2:
+
+- AUDIO upload → local preparation → Qwen STT via local file reference → operator transcript
+  review → Qwen alignment → package export;
+- text → `LOCAL_KOKORO` TTS → Qwen alignment → package export;
+- YouTube → validate/normalize URL → `yt-dlp` metadata + best-audio extraction → `ffmpeg`
+  normalization → thumbnail → STT → review → alignment → package export.
+
+The prepared media bytes packaged into the ZIP are the exact audio used for alignment, ensuring
+full portability without environment-specific object keys or URLs. Package persistence/import into
+Core is not implemented in this phase (deferred to a later phase). Requires local tooling only:
+`yt-dlp` (Python dependency) + `ffmpeg`/`ffprobe` on PATH. No YouTube API key, no paid service
+registration. Core's existing `YOUTUBE_MEDIA_TOOL_*` build-time materialization is unchanged.
+
 ## 1. Dataset import contract
 
 Every importer should support:

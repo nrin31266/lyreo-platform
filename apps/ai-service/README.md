@@ -28,6 +28,7 @@ GET  /health
 POST /v1/stt
 POST /v1/align
 POST /v1/tts
+GET  /v1/tts/voices
 POST /v1/nlp/analyze
 POST /v1/multimodal/judge
 POST /v1/llm/generate
@@ -49,6 +50,19 @@ Import package Python `qwen-asr` trực tiếp và lazy-load:
 - Qwen3-ForcedAligner.
 
 Qwen **không bắt buộc Docker**. Developer GPU có thể chạy Python local. `Dockerfile.gpu` chỉ đóng gói CUDA/runtime reproducibly.
+
+### Kokoro TTS (provider `LOCAL_KOKORO`)
+
+Local TTS runtime, lazy-loaded on first `/v1/tts` call. Long text is chunked deterministically
+and concatenated with a fixed silence gap; output is a normalized mono WAV.
+
+```bash
+uv sync --extra kokoro
+# Phonemization also needs the 'espeak-ng' system package (see .env.example for per-OS commands)
+```
+
+Voice discovery `GET /v1/tts/voices` returns the supported voice set (static metadata, no model
+load) so the Lesson Prep Tool never hard-codes voices.
 
 ## Local development
 
