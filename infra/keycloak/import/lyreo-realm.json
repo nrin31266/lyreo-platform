@@ -49,12 +49,12 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "redirectUris": [
-        "lyreo://*",
-        "exp+lyreo://*"
+        "lyreo://auth/callback"
       ],
       "webOrigins": [],
       "attributes": {
-        "pkce.code.challenge.method": "S256"
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "lyreo://auth/callback"
       }
     },
     {

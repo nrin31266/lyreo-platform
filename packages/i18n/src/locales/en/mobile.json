@@ -2,9 +2,36 @@
   "auth": {
     "signIn": "Sign in",
     "signOut": "Sign out",
+    "preparing": "Preparing secure sign-in…",
+    "authenticationFailed": "Sign-in could not be completed. Please try again.",
+    "identityUnavailable": "The identity service is unavailable. Check your connection and try again.",
+    "sessionExpired": "Your session expired. Please sign in again.",
     "name": "Listen. Notice. Speak.",
     "copy": "Build listening confidence with structured lessons, dictation, shadowing, vocabulary, grammar, and TOEIC practice.",
     "note": "Authentication uses Keycloak Authorization Code + PKCE. Your learning history and preferences stay attached to your account."
+  },
+  "states": {
+    "error": {
+      "title": "Something went wrong",
+      "message": "The content could not be loaded. Please try again."
+    },
+    "empty": {
+      "title": "Nothing here yet",
+      "message": "Content will appear here when it is available."
+    }
+  },
+  "notFound": {
+    "title": "Page not found",
+    "message": "This screen does not exist or is no longer available.",
+    "action": "Go home"
+  },
+  "account": {
+    "eyebrow": "AUTHENTICATED CORE PROFILE",
+    "title": "Your account",
+    "loading": "Loading your Lyreo account…",
+    "loadFailed": "We could not load your account from Lyreo Core.",
+    "noEmail": "Your authenticated account does not currently include an email address.",
+    "coreVerified": "Loaded securely from GET /api/v1/me"
   },
   "home": {
     "eyebrow": "GOOD EVENING",

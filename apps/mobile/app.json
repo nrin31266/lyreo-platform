@@ -5,7 +5,6 @@
     "scheme": "lyreo",
     "version": "0.1.0",
     "orientation": "portrait",
-    "newArchEnabled": true,
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.lyreo.mobile",
