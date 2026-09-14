@@ -78,6 +78,20 @@ This is not a requirement that every table must have a JPA entity.
 
 Qwen3-ASR/ForcedAligner are loaded via Python package/runtime. Docker GPU is packaging/deployment convenience, not a requirement for the Python code itself.
 
+## Kokoro-82M for offline TTS
+
+Kokoro-82M (`hexgrad/Kokoro-82M`) is selected as the local, offline TTS capability engine in `apps/ai-service`.
+It provides 24 kHz mono WAV output, 82M parameters (efficient CPU/GPU inference), natural speech quality,
+and multiple American and British voices without external API usage costs or network dependencies. The runtime
+lazy-loads the model and voices on first invocation, streaming multi-segment audio via Kokoro's native phoneme chunking.
+
+## Gradio and yt-dlp for Lesson Prep Workstation
+
+`tools/lesson-prep` uses Gradio 5.x as an operator UI. It provides out-of-the-box audio playback, wave inspection,
+interactive editing, and file download mechanisms for local developer/author workstations without needing a full
+frontend build cycle or persistent server deployment. `yt-dlp` and `ffmpeg` provide local YouTube audio acquisition
+and normalization (16 kHz mono WAV) directly on the operator host without cloud credentials or paid extraction services.
+
 ## Mobile: Development Build, not Expo Go-only
 
 Audio recording/playback and future native integrations require an escape hatch. Development Build keeps Expo tooling without treating Expo Go as the production runtime constraint.

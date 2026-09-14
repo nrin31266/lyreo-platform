@@ -1,14 +1,15 @@
 import io
 import wave
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from app.config import Settings
 from app.runtime.kokoro import (
     KOKORO_VOICES,
     KokoroRuntime,
-    chunk_text,
-    concatenate_wav,
+    _to_wav,
 )
 
 
@@ -56,65 +57,57 @@ def test_invalid_speed_is_rejected_before_model_load():
         _normalize_speed('fast')
 
 
-def test_chunking_is_deterministic_and_keeps_words_whole():
-    text = (
-        'First sentence of a reasonable length. '
-        + 'Second sentence that should join the first when short. '
-        + 'Third.'
+def test_synthesize_combines_multiple_pipeline_results_in_order(runtime):
+    class FakeResult:
+        def __init__(self, audio_data):
+            self.audio = MagicMock()
+            self.audio.detach.return_value.cpu.return_value.numpy.return_value.reshape.return_value.tolist.return_value = audio_data
+
+    seg_a = [0.1, 0.2]
+    seg_b = [0.3, 0.4]
+    seg_c = [0.5, 0.6]
+
+    fake_pipeline = MagicMock()
+    fake_pipeline.return_value = [FakeResult(seg_a), FakeResult(seg_b), FakeResult(seg_c)]
+
+    samples, count = runtime._synthesize(fake_pipeline, "voice", "text", 1.0)
+    assert count == 3
+    expected = [round(v * 32767) for v in seg_a + seg_b + seg_c]
+    assert samples == expected
+    assert len(samples) == len(seg_a) + len(seg_b) + len(seg_c)
+
+    wav = _to_wav(samples, sample_rate=24000)
+    with wave.open(io.BytesIO(wav), "rb") as w:
+        assert w.getnchannels() == 1
+        assert w.getsampwidth() == 2
+        assert w.getframerate() == 24000
+        assert w.getnframes() == len(expected)
+
+
+def test_synthesize_single_pipeline_result(runtime):
+    class FakeResult:
+        def __init__(self, audio_data):
+            self.audio = MagicMock()
+            self.audio.detach.return_value.cpu.return_value.numpy.return_value.reshape.return_value.tolist.return_value = audio_data
+
+    fake_pipeline = MagicMock()
+    fake_pipeline.return_value = [FakeResult([0.1, -0.2])]
+
+    samples, count = runtime._synthesize(fake_pipeline, "voice", "text", 1.0)
+    assert count == 1
+    assert samples == [round(0.1 * 32767), round(-0.2 * 32767)]
+
+
+@pytest.mark.asyncio
+async def test_tts_rejects_blank_input(runtime):
+    from app.schemas import ExecuteRequest
+
+    req = ExecuteRequest(
+        invocation_id="1", provider="LOCAL_KOKORO", model="kokoro",
+        input={"text": "   "}, options={},
     )
-    assert chunk_text(text, 200) == chunk_text(text, 200)
-    for chunk in chunk_text(text, 60):
-        assert len(chunk) <= 60
-
-
-def test_chunking_returns_single_chunk_for_short_text():
-    assert chunk_text('Short text.', 450) == ['Short text.']
-
-
-def test_chunking_handles_blank_text():
-    assert chunk_text('   ', 450) == []
-
-
-def test_concatenate_wav_is_valid_mono_wav_with_gap():
-    first = [100, 200, 300]
-    second = [400, 500]
-    data = concatenate_wav([first, second], sample_rate=1000, gap_ms=100)
-    with wave.open(io.BytesIO(data), 'rb') as wav:
-        assert wav.getnchannels() == 1
-        assert wav.getsampwidth() == 2
-        assert wav.getframerate() == 1000
-        # one 100 ms silence gap at 1000 Hz = 100 zero samples
-        assert wav.getnframes() == len(first) + len(second) + 100
-
-
-def test_alignment_result_flattening_handles_wrapped_and_flat_shapes():
-    from app.runtime.qwen import _flatten_alignment_results
-
-    wrapped = [{"items": [
-        {"text": "Good", "start_time": 0.32, "end_time": 0.48},
-        {"text": "morning", "start_time": 0.48, "end_time": 0.88},
-    ]}]
-    flat = [
-        {"word": "Good", "start_ms": 320, "end_ms": 480},
-        {"word": "morning", "start_ms": 480, "end_ms": 880},
-    ]
-
-    assert len(_flatten_alignment_results(wrapped)) == 2
-    assert len(_flatten_alignment_results(flat)) == 2
-    assert len(_flatten_alignment_results([])) == 0
-
-
-def test_chunking_splits_single_sentence_longer_than_limit():
-    long_sentence = (
-        "This is an extraordinarily long sentence designed to test the word-boundary chunking "
-        "logic when a single sentence without punctuation exceeds the configured limit. "
-    ) * 10
-    chunks = chunk_text(long_sentence, limit=200)
-    assert len(chunks) > 1
-    for chunk in chunks:
-        assert len(chunk) <= 200
-    reconstructed_words = " ".join(chunks).split()
-    assert reconstructed_words == long_sentence.split()
+    with pytest.raises(ValueError, match="Kokoro TTS requires input.text"):
+        await runtime.tts(req)
 
 
 def test_kokoro_voice_catalog_integrity(runtime):

@@ -26,7 +26,7 @@ implementation status.
 
 Mục tiêu là actors/terms/boundaries và FR/BR/NFR nguyên tử có ID. AI hỗ trợ phân loại nội dung legacy,
 đối chiếu ownership/code path và tạo links; con người duyệt business policy, thresholds, privacy và
-provenance. Kết quả chuẩn: [Analysis](../requirements/analysis.md) và các area files được index tại đó.
+provenance. Kết quả chuẩn: [Domain requirements](../README.md#chọn-tài-liệu-theo-task) và các area files được index tại đó.
 
 Nhận xét: trạng thái `inherited` bảo toàn ý cũ nhưng không giả định approval. Evidence status được tách
 sang [Traceability](../requirements/traceability.md).
@@ -35,7 +35,7 @@ sang [Traceability](../requirements/traceability.md).
 
 Mục tiêu là diễn đạt giá trị actor và kết quả có thể quan sát, gồm happy path, invalid/permission/
 state branches có ý nghĩa. AI hỗ trợ draft story/AC và nối IDs; con người cần kiểm tra ngôn ngữ,
-policy và độ phù hợp với người dùng. Kết quả chuẩn: [Stories index](../requirements/user-stories.md).
+policy và độ phù hợp với người dùng. Kết quả chuẩn: [Domain requirements (colocated)](../README.md#chọn-tài-liệu-theo-task).
 
 Nhận xét: AC không viết “đã code xong/test pass”; command và kết quả chạy thuộc traceability.
 

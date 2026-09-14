@@ -45,8 +45,9 @@ edited through the Admin UI.
 | R2 | endpoint/access key/secret | `apps/core-service/.env` | No |
 | AI internal auth | Core↔FastAPI token | Core + AI `.env` | No |
 | Encryption root key | `MASTER_ENCRYPTION_KEY` | Core `.env` | No |
-| Runtime | Qwen model/device/dtype | AI `.env` | No |
+| Runtime | Qwen model/device/dtype, Kokoro TTS model/device | AI `.env` | No |
 | Data import | dataset path/source/checksum, importer DB/R2 settings | `tools/data-import/.env` | No |
+| Lesson Prep | AI client, work dir, duration limit | `tools/lesson-prep/.env` | No |
 
 ### 2.1 No root `.env`
 
@@ -60,6 +61,7 @@ apps/ai-service/.env          FastAPI/model runtime
 apps/admin-web/.env           browser-public build/dev config
 apps/mobile/.env              EXPO_PUBLIC_* only
 tools/data-import/.env        importer DB/R2/data paths
+tools/lesson-prep/.env        operator workstation settings
 ```
 
 `./scripts/init-dev-env.sh` copies the `.env.example` files and synchronizes local secrets that must
@@ -99,6 +101,22 @@ used only by the developer/bootstrap helper when the local dataset is missing. T
 optional until the team records the canonical archive SHA-256; once populated, a mismatch is a hard
 bootstrap failure. Raw data remains outside Git. Exact importer-facing dataset semantics live in
 `DATA_PIPELINES.md`.
+
+### 2.4 Lesson Prep Tool configuration
+
+`tools/lesson-prep/.env` owns configuration for the standalone operator workstation:
+
+```dotenv
+AI_SERVICE_URL=http://127.0.0.1:8000
+AI_SERVICE_INTERNAL_TOKEN=change-me-local-internal-token
+TOOL_WORK_DIR=.work
+MAX_AUDIO_DURATION_SECONDS=300
+```
+
+- `AI_SERVICE_URL` / `AI_SERVICE_INTERNAL_TOKEN`: Connection to the FastAPI AI capability boundary.
+- `TOOL_WORK_DIR`: Base directory for session scratch spaces (`.work/<run-id>`). Cleaned on session reset/close via UI and developer targets (`make clean-prep`, `make clean`).
+- `MAX_AUDIO_DURATION_SECONDS`: Hard safety ceiling for single lesson audio (default: 300s / 5 minutes).
+- The Gradio operator workstation binds to local `127.0.0.1:7860`.
 
 ## 3. Admin runtime policy
 

@@ -15,29 +15,21 @@ from urllib.parse import unquote
 
 PROJECT_REQUIRED = (
     "AGENTS.md", "README.md", "docs/README.md", "docs/documentation.md",
-    "docs/product/discovery.md", "docs/product/prd.md", "docs/requirements/analysis.md",
-    "docs/requirements/non-functional.md", "docs/requirements/user-stories.md",
+    "docs/product/discovery.md", "docs/product/prd.md",
+    "docs/requirements/non-functional.md",
     "docs/requirements/traceability.md", "docs/requirements/gaps.md", "docs/ARCHITECTURE.md",
     "docs/requirements/identity-learner.md", "docs/requirements/lesson.md",
     "docs/requirements/ai.md", "docs/requirements/lexicon-vocabulary.md",
     "docs/requirements/grammar-toeic.md", "docs/requirements/curriculum-gamification.md",
     "docs/requirements/analytics-notification-chat.md",
-    "docs/requirements/stories/identity-learner.md", "docs/requirements/stories/lesson.md",
-    "docs/requirements/stories/ai.md", "docs/requirements/stories/lexicon-vocabulary.md",
-    "docs/requirements/stories/grammar-toeic.md",
-    "docs/requirements/stories/curriculum-gamification.md",
-    "docs/requirements/stories/analytics-notification-chat.md",
     "docs/features/lesson-build.md", "docs/features/dictation.md", "docs/features/shadowing.md",
-    "docs/features/ai-routing.md", "docs/features/auth-onboarding.md",
-    "docs/features/vocabulary-srs.md", "docs/features/grammar-practice.md",
-    "docs/features/toeic-attempts.md", "docs/features/curriculum-progress.md",
-    "docs/features/rewards-analytics.md",
+    "docs/features/ai-routing.md",
     "docs/architecture/background-jobs.md", "docs/architecture/ai-execution.md",
     "docs/architecture/frontend-conventions.md", "docs/architecture/http-api-contract.md",
     "docs/CONFIGURATION.md",
     "docs/DATA_PIPELINES.md", "docs/DEVELOPMENT.md", "docs/OPERATIONS.md",
     "docs/TECH_CHOICES.md", "docs/DECISIONS.md", "docs/coursework/chapter-03.md",
-    "docs/coursework/ai-usage-log.md", "docs/LYREO_PLATFORM_SPEC.md",
+    "docs/coursework/ai-usage-log.md",
 )
 SKIP_PARTS = {
     ".git", ".agents", ".codex", ".venv", "node_modules", "build", "dist", "target",
@@ -200,9 +192,10 @@ def _check_concrete_evidence_paths(root: Path, texts: dict[Path, str], errors: l
 
 
 def _check_legacy_owner_references(root: Path, texts: dict[Path, str], errors: list[str]) -> None:
-    allowed = {root / "docs/LYREO_PLATFORM_SPEC.md", root / "README.md", root / "AGENTS.md",
+    allowed = {root / "README.md", root / "AGENTS.md",
                root / "AGENT.md", root / "CLAUDE.md", root / "GEMINI.md", root / "docs/README.md",
                root / "docs/documentation.md"}
+
     for path, text in texts.items():
         if path not in allowed and "LYREO_PLATFORM_SPEC.md" in without_fences(text):
             errors.append(f"{path.relative_to(root).as_posix()}: legacy master referenced as a current owner")

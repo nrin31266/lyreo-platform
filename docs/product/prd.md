@@ -1,8 +1,9 @@
 # PRD — Lyreo Platform
 
 Mục đích: owner của mục tiêu, giá trị, scope, ưu tiên và non-goals. Nghĩa vụ chi tiết nằm trong
-[requirements](../requirements/analysis.md), workflow nằm trong [`features/`](../features/lesson-build.md),
+[requirements](../README.md#chọn-tài-liệu-theo-task), workflow nằm trong [`features/`](../features/lesson-build.md),
 và trạng thái implementation nằm trong [traceability](../requirements/traceability.md).
+
 
 ## 1. Tóm tắt
 

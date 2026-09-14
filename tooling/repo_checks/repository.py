@@ -46,8 +46,8 @@ def repo_files(base: Path, pattern: str, root: Path | None = None):
 REQUIRED_FILES = (
     "README.md",
     "AGENTS.md",
-    "docs/LYREO_PLATFORM_SPEC.md",
     "docs/ARCHITECTURE.md",
+
     "docs/TECH_CHOICES.md",
     "docs/DATA_PIPELINES.md",
     "docs/DECISIONS.md",
@@ -73,6 +73,8 @@ REQUIRED_FILES = (
     "tools/data-import/import_toeic.py",
     "tools/data-import/import_lexicon.py",
     "tools/data-import/.env.example",
+    "tools/lesson-prep/.env.example",
+    "tools/lesson-prep/README.md",
     "packages/design-system/package.json",
     "packages/design-system/src/semantic.ts",
     "packages/i18n/package.json",
@@ -97,6 +99,7 @@ REQUIRED_LOCKFILES = (
     "pnpm-lock.yaml",
     "apps/ai-service/uv.lock",
     "tools/data-import/uv.lock",
+    "tools/lesson-prep/uv.lock",
 )
 
 ENV_OWNER_SCOPES = {
@@ -105,6 +108,7 @@ ENV_OWNER_SCOPES = {
     "infra/docker/.env.example": ("compose.dev.yml", "compose.prod.yml", "compose.gpu.yml", "scripts/init-dev-env.sh"),
     "infra/keycloak/.env.example": ("infra/keycloak/scripts", "scripts/init-dev-env.sh"),
     "tools/data-import/.env.example": ("tools/data-import", "scripts/fetch-data.sh", "scripts/init-dev-env.sh", "scripts/doctor.sh"),
+    "tools/lesson-prep/.env.example": ("tools/lesson-prep", "scripts/init-dev-env.sh", "scripts/doctor.sh"),
 }
 
 IMPLICIT_ENV_KEYS = {

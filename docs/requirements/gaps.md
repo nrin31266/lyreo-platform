@@ -95,3 +95,17 @@ intent vẫn ở owner requirement/spec; status ở đây không tự thay đổ
 - Evidence: CI và Makefile hiện đồng bộ sử dụng `pnpm install --frozen-lockfile` và `uv sync --locked`.
 - Impact: CI phát hiện lock drift chính xác theo policy local.
 - Next: duy trì frozen/locked install trong mọi pipeline.
+
+## GAP-011 — Ingestion của Portable Lesson Source Packages vào Core và Admin Web
+
+- Type/status: `implementation-gap` / `open`.
+- Sources: [`docs/DATA_PIPELINES.md`](../DATA_PIPELINES.md#0-lesson-prep-tool-acquisition-tool-local-not-a-core-pipeline),
+  [`docs/architecture/ai-execution.md`](../architecture/ai-execution.md#boundary),
+  `tools/lesson-prep/README.md`.
+- Evidence: `tools/lesson-prep` đã xuất gói `*.lesson-source.zip` thành công và được xác thực tự động (60/60 tests);
+  tuy nhiên Core Service hiện chưa có endpoint tiếp nhận multipart file upload `*.lesson-source.zip`,
+  chưa có dịch vụ giải nén, xác thực SHA-256 media, đẩy media lên R2/local storage và tạo bản ghi
+  `lesson_source` / `lesson_content`. Admin Web cũng chưa có modal upload gói zip.
+- Impact: Bài học được operator chuẩn bị chưa thể import vào Core để học viên truy cập luyện tập.
+- Next: Thiết kế API `POST /api/v1/admin/lessons/import-source` trong Core với storage adapter, kèm modal upload
+  trên Admin Web trong task tích hợp riêng.

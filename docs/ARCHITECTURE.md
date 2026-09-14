@@ -94,9 +94,10 @@ platform/security
 platform/observability
 ```
 
-Detailed product/domain ownership is defined in the routed area requirements from
-[`requirements/analysis.md`](requirements/analysis.md). Enforceable module ownership rules are
+Detailed product/domain ownership is defined in the routed domain requirements indexed in
+[`docs/README.md`](README.md#chọn-tài-liệu-theo-task). Enforceable module ownership rules are
 defined in [`AGENTS.md`](../AGENTS.md#4-domain-ownership).
+
 
 Frontend shared-package boundaries:
 

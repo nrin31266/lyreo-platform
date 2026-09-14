@@ -50,16 +50,14 @@ KOKORO_VOICES: dict[str, str] = {
 
 _ACCEPTED_SPEED_RANGE = (0.5, 2.0)
 
-_SENTENCE_END = re.compile(r'(?<=[.!?;:])\s+')
-
 
 class KokoroRuntime:
     """Lazy local Kokoro TTS runtime.
 
     The pipeline and model are loaded only when a TTS call actually arrives; voice
     discovery and option validation never import the heavy runtime. Long text is
-    chunked deterministically and concatenated with a fixed silence gap so callers
-    never submit an unbounded single generation request.
+    streamed via Kokoro's native phoneme chunking; all yielded audio segments are
+    combined in order into a single mono WAV.
     """
 
     def __init__(self, cfg: Settings):
@@ -89,24 +87,21 @@ class KokoroRuntime:
             str(request.options.get('accent') or '').strip().upper(),
         )
         speed = _normalize_speed(request.options.get('speed'))
-        chunks = chunk_text(text, self.cfg.kokoro_chunk_limit_chars)
 
         pipeline = await self._load(accent)
         voice = await self._load_voice(accent, voice_id)
 
-        segments: list[list[int]] = []
-        for chunk in chunks:
-            samples = await asyncio.to_thread(self._synthesize, pipeline, voice, chunk, speed)
-            segments.append(samples)
+        samples, segment_count = await asyncio.to_thread(
+            self._synthesize, pipeline, voice, text, speed
+        )
 
-        wav = concatenate_wav(segments, sample_rate=self.cfg.kokoro_sample_rate,
-                              gap_ms=self.cfg.kokoro_chunk_gap_ms)
+        wav = _to_wav(samples, sample_rate=self.cfg.kokoro_sample_rate)
         return ExecuteResponse(
             output={
                 'audio_base64': base64.b64encode(wav).decode(),
                 'mime_type': 'audio/wav',
                 'sample_rate': self.cfg.kokoro_sample_rate,
-                'chunks': len(chunks),
+                'chunks': segment_count,
             },
             metadata={
                 'runtime': 'kokoro',
@@ -169,75 +164,20 @@ class KokoroRuntime:
                 ) from exc
         return self._voices[key]
 
-    def _synthesize(self, pipeline, voice, text: str, speed: float) -> list[int]:
+    def _synthesize(self, pipeline, voice, text: str, speed: float) -> tuple[list[int], int]:
         try:
             generator = pipeline(text, voice=voice, speed=speed)
             samples: list[int] = []
+            segment_count = 0
             for result in generator:
-                samples.extend(_tensor_to_int16(result.audio))
-            return samples
+                if result is not None and getattr(result, 'audio', None) is not None:
+                    converted = _tensor_to_int16(result.audio)
+                    if converted:
+                        samples.extend(converted)
+                        segment_count += 1
+            return samples, segment_count
         except Exception as exc:
             raise ValueError(f'Kokoro synthesis failed: {_safe(exc)}') from exc
-
-
-def chunk_text(text: str, limit: int) -> list[str]:
-    """Deterministic sentence-aware chunking; never splits a word mid-way.
-
-    If a single sentence exceeds the character limit, it is split greedily at word boundaries.
-    """
-    if limit < 32:
-        limit = 32
-    raw = re.split(r'(?<=[.!?;:])\s+', text.strip())
-    raw_sentences = [part.strip() for part in raw if part.strip()]
-    if not raw_sentences:
-        return []
-
-    # Break any sentences longer than limit at word boundaries
-    sentences: list[str] = []
-    for s in raw_sentences:
-        if len(s) <= limit:
-            sentences.append(s)
-        else:
-            words = s.split()
-            current_piece = ''
-            for w in words:
-                if len(w) > limit:
-                    raise ValueError(f"Single word exceeds chunk limit of {limit} characters: {w[:30]}...")
-                if not current_piece:
-                    current_piece = w
-                elif len(current_piece) + 1 + len(w) <= limit:
-                    current_piece = f"{current_piece} {w}"
-                else:
-                    sentences.append(current_piece)
-                    current_piece = w
-            if current_piece:
-                sentences.append(current_piece)
-
-    chunks: list[str] = []
-    current = ''
-    for sentence in sentences:
-        if not current:
-            current = sentence
-        elif len(current) + 1 + len(sentence) <= limit:
-            current = f'{current} {sentence}'
-        else:
-            if len(current) > 0:
-                chunks.append(current)
-            current = sentence
-    if current:
-        chunks.append(current)
-    return chunks
-
-
-def concatenate_wav(segments: list[list[int]], sample_rate: int, gap_ms: int) -> bytes:
-    """Concatenate mono int16 segments deterministically with a fixed silence gap."""
-    gap_samples = max(0, int(sample_rate * gap_ms / 1000))
-    merged: list[int] = []
-    for index, segment in enumerate(segments):
-        if index > 0 and gap_samples:
-            merged.extend([0] * gap_samples)
-        merged.extend(segment)
-    return _to_wav(merged, sample_rate)
 
 
 def _to_wav(samples: list[int], sample_rate: int) -> bytes:

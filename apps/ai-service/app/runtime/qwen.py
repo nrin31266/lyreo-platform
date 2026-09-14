@@ -8,6 +8,16 @@ from ..config import Settings
 from ..schemas import ExecuteRequest, ExecuteResponse
 
 
+def _empty_cuda_cache() -> None:
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except (ImportError, AttributeError):
+        pass
+
+
 class QwenRuntime:
     """Lazy official `qwen-asr` runtime for local/self-host inference.
 
@@ -43,9 +53,7 @@ class QwenRuntime:
                     self._aligner = None
                     import gc
                     gc.collect()
-                    import torch
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
+                    _empty_cuda_cache()
 
                 from qwen_asr import Qwen3ASRModel
 
@@ -70,9 +78,7 @@ class QwenRuntime:
                     self._asr = None
                     import gc
                     gc.collect()
-                    import torch
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
+                    _empty_cuda_cache()
 
                 from qwen_asr import Qwen3ForcedAligner
 
@@ -94,9 +100,7 @@ class QwenRuntime:
 
             language = request.options.get('language', 'English')
             model = await self._load_asr()
-            import torch
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            _empty_cuda_cache()
             try:
                 results = await asyncio.to_thread(
                     model.transcribe,
@@ -106,8 +110,7 @@ class QwenRuntime:
                     return_time_stamps=False,
                 )
             finally:
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
+                _empty_cuda_cache()
             if not results:
                 raise ValueError('Qwen ASR returned no transcription result')
 
@@ -155,9 +158,7 @@ class QwenRuntime:
 
     async def _align_words(self, audio: Any, text: str, language: Any) -> list[dict[str, Any]]:
         model = await self._load_aligner()
-        import torch
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        _empty_cuda_cache()
         try:
             results = await asyncio.to_thread(
                 model.align,
@@ -166,8 +167,7 @@ class QwenRuntime:
                 language=language,
             )
         finally:
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            _empty_cuda_cache()
 
         # Official API returns a list per input sample. Lyreo sends one sample/request.
         # qwen-asr wraps the ForcedAligner output in ForcedAlignResult(items=[...]),

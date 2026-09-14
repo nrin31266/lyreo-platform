@@ -1,7 +1,8 @@
 # FEAT-LESSON-BUILD — Lesson Build
 
 Mục đích: hợp đồng hành vi từ Admin request tới Lesson đã finalize. Requirements:
-[FR-LSN-001–004, BR-LSN-001–002](../requirements/lesson.md); story [US-LSN-001](../requirements/stories/lesson.md#us-lsn-001--tao-lesson-theo-option).
+[FR-LSN-001–004, BR-LSN-001–002](../requirements/lesson.md); story [US-LSN-001](../requirements/lesson.md#us-lsn-001--tao-lesson-theo-option).
+
 
 ## Actor, quyền và input
 

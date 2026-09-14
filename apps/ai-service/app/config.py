@@ -20,8 +20,6 @@ class Settings(BaseSettings):
     kokoro_default_voice: str = 'af_heart'
     kokoro_device: str = 'cpu'
     kokoro_sample_rate: int = 24000
-    kokoro_chunk_limit_chars: int = 450
-    kokoro_chunk_gap_ms: int = 250
 
     groq_base_url: str = 'https://api.groq.com/openai/v1'
     deepseek_base_url: str = 'https://api.deepseek.com'

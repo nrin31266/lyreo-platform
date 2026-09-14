@@ -229,3 +229,12 @@ def test_qwen_inference_lock_serializes_execution():
         ["start_stt", "end_stt", "start_align", "end_align"],
         ["start_align", "end_align", "start_stt", "end_stt"],
     )
+
+
+def test_empty_cuda_cache_safely_handles_missing_torch(monkeypatch):
+    import sys
+    from app.runtime.qwen import _empty_cuda_cache
+
+    monkeypatch.setitem(sys.modules, "torch", None)
+    # Must not raise ModuleNotFoundError or any exception when torch is missing
+    _empty_cuda_cache()
