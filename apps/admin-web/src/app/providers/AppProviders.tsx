@@ -1,8 +1,8 @@
 import type { PropsWithChildren } from 'react';
 import { I18nextProvider } from 'react-i18next';
-import { i18n } from '../i18n';
+import { AuthProvider } from '@/app/auth';
+import { i18n } from '@/i18n';
 import { AppThemeProvider } from './AppThemeProvider';
-import { AuthProvider } from './AuthProvider';
 
 export function AppProviders({ children }: PropsWithChildren) {
   return (
@@ -13,4 +13,3 @@ export function AppProviders({ children }: PropsWithChildren) {
     </I18nextProvider>
   );
 }
-

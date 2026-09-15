@@ -4,7 +4,7 @@ import { createContext, type PropsWithChildren, useContext, useEffect, useLayout
 const STORAGE_KEY = 'lyreo.theme';
 const QUERY = '(prefers-color-scheme: dark)';
 
-type ThemeContextValue = {
+export type ThemeContextValue = {
   preference: ThemePreference;
   mode: ThemeMode;
   setPreference: (preference: ThemePreference) => void;

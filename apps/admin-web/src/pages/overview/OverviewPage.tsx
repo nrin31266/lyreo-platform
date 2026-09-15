@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-export function Overview() {
+export function OverviewPage() {
   const { t } = useTranslation('admin');
   const stats = [
     [t('overview.stats.lessons.label'), '—', t('overview.stats.lessons.note')],

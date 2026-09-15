@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
-import { api } from '../api';
-import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -11,22 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '../components/ui/dialog';
-import { Input } from '../components/ui/input';
-
-type Job = {
-  id: string;
-  jobType: string;
-  status: string;
-  currentStep?: string;
-  progressPercent: number;
-  attemptCount: number;
-  maxAttempts: number;
-};
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { cancelJob, fetchJob } from './jobs.api';
+import type { Job } from './jobs.types';
 
 const cancellable = new Set(['QUEUED', 'RUNNING', 'RETRY_WAIT']);
 
-export function Jobs() {
+export function JobsPage() {
   const { t } = useTranslation(['admin', 'common']);
   const [searchParams] = useSearchParams();
   const [id, setId] = useState(searchParams.get('job') ?? '');
@@ -46,7 +37,7 @@ export function Jobs() {
     setLoading(true);
     try {
       setError('');
-      setJob(await api<Job>(`/api/v1/jobs/${normalized}`));
+      setJob(await fetchJob(normalized));
     } catch (cause) {
       setJob(null);
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -59,7 +50,7 @@ export function Jobs() {
     if (!job) return;
     setCancelling(true);
     try {
-      await api(`/api/v1/jobs/${job.id}/cancel`, { method: 'POST' });
+      await cancelJob(job.id);
       setConfirmOpen(false);
       await load(job.id);
     } catch (cause) {

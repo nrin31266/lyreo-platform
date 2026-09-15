@@ -1,33 +1,13 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api } from '../api';
-import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Switch } from '../components/ui/switch';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { fetchAiProviders, fetchAiRoutes, saveAiProvider } from './ai-settings.api';
+import type { Provider, Route } from './ai-settings.types';
 
-type Provider = {
-  id: string;
-  code: string;
-  display_name: string;
-  base_url?: string;
-  enabled: boolean;
-  connection_status: string;
-  key_last4?: string;
-  configured: boolean;
-};
-
-type Route = {
-  id: string;
-  capability: string;
-  provider: string;
-  model: string;
-  priority: number;
-  is_fallback: boolean;
-  enabled: boolean;
-};
-
-export function AiSettings() {
+export function AiSettingsPage() {
   const { t } = useTranslation(['admin', 'common']);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
@@ -45,8 +25,8 @@ export function AiSettings() {
     setLoading(true);
     try {
       const [providerRows, routeRows] = await Promise.all([
-        api<Provider[]>('/api/v1/admin/ai/providers'),
-        api<Route[]>('/api/v1/admin/ai/routes'),
+        fetchAiProviders(),
+        fetchAiRoutes(),
       ]);
       setProviders(providerRows);
       setRoutes(routeRows);
@@ -62,19 +42,16 @@ export function AiSettings() {
     void load();
   }, []);
 
-  async function saveProvider(event: FormEvent) {
+  async function handleSaveProvider(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
     setError('');
     try {
-      await api(`/api/v1/admin/ai/providers/${providerCode}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          displayName,
-          baseUrl,
-          apiKey: apiKey || null,
-          enabled,
-        }),
+      await saveAiProvider(providerCode, {
+        displayName,
+        baseUrl,
+        apiKey: apiKey || null,
+        enabled,
       });
       setApiKey('');
       await load();
@@ -190,7 +167,7 @@ export function AiSettings() {
       <Card className="mt-6">
         <CardHeader><CardTitle>{t('aiSettings.configure')}</CardTitle></CardHeader>
         <CardContent>
-          <form className="form" onSubmit={saveProvider}>
+          <form className="form" onSubmit={handleSaveProvider}>
             <div className="form-grid">
               <label>
                 {t('aiSettings.fields.code')}
