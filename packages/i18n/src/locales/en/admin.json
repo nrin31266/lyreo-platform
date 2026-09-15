@@ -1,8 +1,13 @@
 {
   "workspace": "Admin workspace",
   "signIn": "Sign in with Keycloak",
+  "signInFailed": "Sign-in failed",
   "completingSignIn": "Completing sign-in…",
   "loading": "Loading Lyreo…",
+  "unauthorized": {
+    "title": "Access Denied",
+    "message": "Your account does not have administrator privileges required to access this workspace."
+  },
   "nav": {
     "overview": "Overview",
     "lessonBuilder": "Lesson Builder",
