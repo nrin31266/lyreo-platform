@@ -1,5 +1,5 @@
-import { accessToken } from './auth';
-import { env } from './env';
+import { env } from '@/config/env';
+import { accessToken } from '@/lib/oidc/client';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -65,4 +65,3 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!text) return undefined as T;
   return JSON.parse(text) as T;
 }
-

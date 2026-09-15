@@ -7,9 +7,10 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
-import { isAdminUser, userManager } from '../auth';
+import { userManager } from '@/lib/oidc/client';
+import { isAdminUser } from './roles';
 
-type AuthContextValue = {
+export type AuthContextValue = {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;

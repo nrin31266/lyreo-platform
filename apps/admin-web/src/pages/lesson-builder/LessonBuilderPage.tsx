@@ -1,11 +1,12 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { api } from '../api';
-import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Textarea } from '../components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { requestLessonBuild } from './lesson-builder.api';
+import type { BuildAccepted, SourceType } from './lesson-builder.types';
 
 const activityOptions = [
   'DICTATION',
@@ -51,11 +52,9 @@ const presets = {
   },
 } as const;
 
-type SourceType = 'TEXT' | 'AUDIO' | 'YOUTUBE';
-type BuildAccepted = { lessonId: string; jobId: string };
 type PresetName = keyof typeof presets;
 
-export function LessonBuilder() {
+export function LessonBuilderPage() {
   const { t } = useTranslation('admin');
   const [preset, setPreset] = useState<PresetName>('STANDARD');
   const [activities, setActivities] = useState<string[]>([...presets.STANDARD.activities]);
@@ -95,7 +94,7 @@ export function LessonBuilder() {
       : [...current, item]);
   }
 
-  async function submit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     setError('');
@@ -110,18 +109,15 @@ export function LessonBuilder() {
         throw new Error(t('lessonBuilder.validation.referenceRequired'));
       }
 
-      const response = await api<BuildAccepted>('/api/v1/admin/lessons/build', {
-        method: 'POST',
-        body: JSON.stringify({
-          title: title.trim(),
-          sourceType: source,
-          sourceText: source === 'TEXT' ? text.trim() : null,
-          sourceReference: source === 'TEXT' ? null : sourceReference.trim(),
-          activities,
-          annotations,
-          accent,
-          pronunciationStrategy,
-        }),
+      const response = await requestLessonBuild({
+        title: title.trim(),
+        sourceType: source,
+        sourceText: source === 'TEXT' ? text.trim() : null,
+        sourceReference: source === 'TEXT' ? null : sourceReference.trim(),
+        activities,
+        annotations,
+        accent,
+        pronunciationStrategy,
       });
       setAccepted(response);
     } catch (cause) {
@@ -140,7 +136,7 @@ export function LessonBuilder() {
       <div className="two">
         <Card className="mt-6">
           <CardContent className="pt-6">
-            <form className="form" onSubmit={submit}>
+            <form className="form" onSubmit={handleSubmit}>
               <label>
                 {t('lessonBuilder.fields.title')}
                 <Input

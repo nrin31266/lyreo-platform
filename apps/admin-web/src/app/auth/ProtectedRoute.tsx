@@ -1,8 +1,8 @@
 import { lyreoBrand } from '@lyreo/design-system';
 import type { PropsWithChildren } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../providers/AuthProvider';
-import { Button } from './ui/button';
+import { Button } from '@/components/ui/button';
+import { useAuth } from './AuthProvider';
 
 export function Login() {
   const { t } = useTranslation('admin');
