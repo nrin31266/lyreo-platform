@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { userManager } from '@/lib/oidc/client';
@@ -8,22 +8,22 @@ export function AuthCallbackPage() {
   const navigate = useNavigate();
   const { t } = useTranslation('admin');
   const [error, setError] = useState<string | null>(null);
+  const handled = useRef(false);
 
   useEffect(() => {
-    let active = true;
+    if (handled.current) {
+      return;
+    }
+    handled.current = true;
+
     userManager
       .signinRedirectCallback()
       .then(() => {
-        if (active) navigate('/');
+        navigate('/', { replace: true });
       })
       .catch((cause: unknown) => {
-        if (active) {
-          setError(cause instanceof Error ? cause.message : t('signInFailed'));
-        }
+        setError(cause instanceof Error ? cause.message : t('signInFailed'));
       });
-    return () => {
-      active = false;
-    };
   }, [navigate, t]);
 
   if (error) {
