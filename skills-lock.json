@@ -7,12 +7,6 @@
       "skillPath": "skills/305-frameworks-spring-boot-modulith/SKILL.md",
       "computedHash": "a62b3648ee535c1ccf0585952f3363fd9b15c5947865393ac826340e899d2da9"
     },
-    "create-prd": {
-      "source": "phuryn/pm-skills",
-      "sourceType": "github",
-      "skillPath": "pm-execution/skills/create-prd/SKILL.md",
-      "computedHash": "5c242d3abb9508f59021ed22936230e555971feab690cbf2a90142e06d10e7ae"
-    },
     "expo-dev-client": {
       "source": "expo/skills",
       "sourceType": "github",
@@ -30,6 +24,12 @@
       "sourceType": "github",
       "skillPath": "fastapi/.agents/skills/fastapi/SKILL.md",
       "computedHash": "e85d9e223fbc3183b1a599bbe8b02d2edf275d046ff5bcfd14352c92cdff52b3"
+    },
+    "review-pull-request": {
+      "source": "b-mendoza/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/review-pull-request/SKILL.md",
+      "computedHash": "1ad3b553018267608cc4e265119aa9d3d5d7434b90095e8049d95acf19b3b8e4"
     },
     "shadcn": {
       "source": "shadcn-ui/ui",
