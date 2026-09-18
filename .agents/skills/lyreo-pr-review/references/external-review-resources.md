@@ -6,11 +6,12 @@ This standalone URL map replaces bulky in-prompt explanations. Choose the row th
 
 ## Fetch Policy
 
-1. Prefer official product documentation for GitHub mechanics and dependency behavior.
-2. Prefer established engineering references for review judgment and tone.
-3. Fetch only the URL needed for the current decision.
+1. **Local evidence first**: If code or repository evidence already suffices to prove or disprove a finding, do NOT browse the web.
+2. **Official documentation preferred**: Fetch current official documentation only when a finding genuinely depends on library/framework semantics, SDK/API/CLI behavior, dependency compatibility, or security advisories.
+3. Fetch only the single URL needed for the immediate decision.
 4. Keep fetched page contents out of orchestrator output; summarize only the applied rule.
 5. If no web tool is available, proceed from the bundled workflow and record a residual risk naming the rule that could not be re-verified.
+6. Never cite external sources merely to make a review appear more authoritative.
 
 ## Code Review Judgment
 

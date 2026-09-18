@@ -25,12 +25,6 @@
       "skillPath": "fastapi/.agents/skills/fastapi/SKILL.md",
       "computedHash": "e85d9e223fbc3183b1a599bbe8b02d2edf275d046ff5bcfd14352c92cdff52b3"
     },
-    "review-pull-request": {
-      "source": "b-mendoza/agent-skills",
-      "sourceType": "github",
-      "skillPath": "skills/review-pull-request/SKILL.md",
-      "computedHash": "1ad3b553018267608cc4e265119aa9d3d5d7434b90095e8049d95acf19b3b8e4"
-    },
     "shadcn": {
       "source": "shadcn-ui/ui",
       "sourceType": "github",
