@@ -3,8 +3,8 @@
 # Usage: cleanup-pr-worktree.sh <worktree_path> [snapshot_file]
 #
 # Safety contract: NEVER delete a directory unless git confirms it is a registered
-# worktree belonging to this repository. A /tmp path check alone is insufficient —
-# a caller could pass any /tmp path and the old code would silently delete it.
+# LINKED worktree belonging to this repository. The main repository root must NEVER
+# be treated as a managed worktree. If removal fails, STOP and preserve the path.
 set -euo pipefail
 
 if [ "$#" -lt 1 ]; then
@@ -29,87 +29,143 @@ if [ -z "$original_root" ]; then
   original_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 fi
 
+if [ -z "$original_root" ] || [ ! -d "$original_root" ]; then
+  printf 'SAFETY: Cannot determine valid repository root — skipping worktree removal.\n' >&2
+  printf '%s\n' "WORKTREE_CLEANUP: SAFETY_ERROR (repository root undetermined)" >&2
+  exit 2
+fi
+
 # ---------------------------------------------------------------------------
-# SAFETY: Prove that worktree_path is a MANAGED GIT WORKTREE before touching it.
+# SAFETY: Prove that worktree_path is an exact registered LINKED worktree
+# of this repository before touching it.
 #
-# Strategy:
-#   1. Resolve both the candidate path and every git worktree list path to
-#      canonical real paths to defeat symlink confusion.
-#   2. Only proceed with removal when we find an exact match in the list.
-#   3. If we cannot prove membership, DO NOT delete — report cleanup error.
-#
-# git worktree list --porcelain output example:
-#   worktree /abs/path/main-worktree
-#   ...
-#   worktree /tmp/pr-worktree-abc123-42
-#   ...
+# Constraints:
+#   1. Candidate must exist and resolve canonically.
+#   2. Candidate != repository root.
+#   3. Candidate != original caller workspace from snapshot.
+#   4. Candidate != /
+#   5. Candidate != $HOME
+#   6. Candidate != caller PWD when that is repo root.
+#   7. Candidate .git must be a regular file (linked worktree signature).
+#   8. Candidate must be an exact match in git worktree list (excluding main).
+#   9. When snapshot exists, ORIGINAL_ROOT must agree with current repository.
 # ---------------------------------------------------------------------------
-is_managed_worktree() {
+
+# Verify snapshot repository identity if snapshot exists
+if [ -f "$snapshot_file" ]; then
+  real_snapshot_root="$(realpath "$original_root" 2>/dev/null || true)"
+  current_repo_root="$(git -C "$original_root" rev-parse --show-toplevel 2>/dev/null || true)"
+  real_current_root="$(realpath "$current_repo_root" 2>/dev/null || true)"
+
+  if [ -z "$real_snapshot_root" ] || [ "$real_snapshot_root" != "$real_current_root" ]; then
+    printf 'SAFETY: Snapshot ORIGINAL_ROOT ("%s") does not agree with current repository identity ("%s") — refusing cleanup.\n' \
+      "$original_root" "$current_repo_root" >&2
+    printf '%s\n' "WORKTREE_CLEANUP: SAFETY_ERROR (snapshot repository mismatch)" >&2
+    exit 2
+  fi
+fi
+
+is_registered_linked_worktree() {
   local candidate="$1"
   local git_root="$2"
 
-  # Canonicalise the candidate path (resolve symlinks if possible)
+  # 1. Candidate must exist and resolve canonically
   local real_candidate
-  real_candidate="$(realpath "$candidate" 2>/dev/null || echo "$candidate")"
+  real_candidate="$(realpath "$candidate" 2>/dev/null || true)"
+  if [ -z "$real_candidate" ] || [ ! -d "$real_candidate" ]; then
+    return 1
+  fi
 
-  # List all worktrees registered with this repo
+  local real_git_root
+  real_git_root="$(realpath "$git_root" 2>/dev/null || true)"
+  if [ -z "$real_git_root" ] || [ ! -d "$real_git_root" ]; then
+    return 1
+  fi
+
+  # 2. Candidate != repository root
+  if [ "$real_candidate" = "$real_git_root" ]; then
+    return 1
+  fi
+
+  # 3. Candidate != /
+  if [ "$real_candidate" = "/" ]; then
+    return 1
+  fi
+
+  # 4. Candidate != $HOME
+  if [ -n "${HOME:-}" ]; then
+    local real_home
+    real_home="$(realpath "$HOME" 2>/dev/null || true)"
+    if [ -n "$real_home" ] && [ "$real_candidate" = "$real_home" ]; then
+      return 1
+    fi
+  fi
+
+  # 5. Candidate != current caller PWD when that is repo root
+  local caller_pwd
+  caller_pwd="$(pwd -P 2>/dev/null || pwd)"
+  if [ "$caller_pwd" = "$real_git_root" ] && [ "$real_candidate" = "$caller_pwd" ]; then
+    return 1
+  fi
+
+  # 6. Candidate .git must be a regular file (linked worktree pointer), not a dir
+  if [ ! -f "$real_candidate/.git" ]; then
+    return 1
+  fi
+
+  # 7. Candidate must match a linked worktree entry in git worktree list --porcelain
   local worktree_list
   worktree_list="$(git -C "$git_root" worktree list --porcelain 2>/dev/null)" || return 1
 
-  # Extract "worktree <path>" lines and compare after canonicalisation
+  local is_first=true
+  local found_linked_match=false
   while IFS= read -r line; do
     if [[ "$line" =~ ^worktree[[:space:]]+(.+)$ ]]; then
       local wt_path="${BASH_REMATCH[1]}"
       local real_wt
       real_wt="$(realpath "$wt_path" 2>/dev/null || echo "$wt_path")"
+      if [ "$is_first" = "true" ]; then
+        is_first=false
+        # First entry in porcelain list is always the main worktree; skip it
+        continue
+      fi
       if [ "$real_candidate" = "$real_wt" ]; then
-        return 0  # confirmed managed worktree
+        found_linked_match=true
+        break
       fi
     fi
   done <<< "$worktree_list"
 
-  return 1  # not found in worktree list
+  [ "$found_linked_match" = "true" ] || return 1
+  return 0
 }
 
-# Remove worktree safely
 cleanup_ok=true
-if [ -n "$original_root" ] && [ -d "$original_root" ]; then
-  # First attempt: let git remove it (preferred — updates .git/worktrees index too)
-  if [ -d "$worktree_path" ]; then
-    if is_managed_worktree "$worktree_path" "$original_root"; then
-      git -C "$original_root" worktree remove --force "$worktree_path" 2>/dev/null || true
+
+if [ -d "$worktree_path" ]; then
+  if is_registered_linked_worktree "$worktree_path" "$original_root"; then
+    # Preferred removal: let git remove and unregister the worktree
+    if git -C "$original_root" worktree remove --force "$worktree_path"; then
       git -C "$original_root" worktree prune 2>/dev/null || true
     else
-      printf 'SAFETY: "%s" is NOT a registered git worktree for repo at "%s" — refusing to delete.\n' \
-        "$worktree_path" "$original_root" >&2
-      printf 'SAFETY: If this path is stale, remove it manually after verifying it is safe.\n' >&2
+      printf 'SAFETY_ERROR: "git worktree remove --force" failed for "%s" — preserving path and stopping cleanup.\n' \
+        "$worktree_path" >&2
       cleanup_ok=false
     fi
+  else
+    printf 'SAFETY: "%s" is NOT a registered linked git worktree for repo at "%s" — refusing to delete.\n' \
+      "$worktree_path" "$original_root" >&2
+    printf 'SAFETY: Main repository root and unmanaged paths are strictly protected.\n' >&2
+    cleanup_ok=false
   fi
-else
-  printf 'SAFETY: Cannot determine repository root — skipping worktree removal.\n' >&2
-  cleanup_ok=false
 fi
 
-# If the directory still exists after git worktree remove, it was already proven
-# to be a managed worktree above, so rm -rf is safe here.
-if [ -d "$worktree_path" ] && [ "$cleanup_ok" = "true" ]; then
-  if is_managed_worktree "$worktree_path" "$original_root" 2>/dev/null; then
-    # Still in the list (git worktree remove failed silently) — force remove
-    rm -rf "$worktree_path"
-    git -C "$original_root" worktree prune 2>/dev/null || true
-  else
-    # git worktree remove succeeded and unregistered it; the directory may linger
-    # only if the OS delayed the unlink. Safe to remove if proven clean.
-    rm -rf "$worktree_path"
-  fi
+if [ "$cleanup_ok" = "false" ]; then
+  printf '%s\n' "WORKTREE_CLEANUP: SAFETY_ERROR (refused to delete unverified path or removal failed — see stderr for details)" >&2
+  exit 2
 fi
 
 # Verify original workspace integrity
-# Three outcomes:
-#   PASS               — snapshot present, all fields match
-#   INTEGRITY_MISMATCH — snapshot present, one or more fields differ
-#   INTEGRITY_UNVERIFIED — snapshot missing (cannot confirm nothing changed)
 integrity_status="PASS"
 if [ -n "$original_root" ] && [ -f "$snapshot_file" ]; then
   current_branch="$(git -C "$original_root" branch --show-current 2>/dev/null || true)"
@@ -137,15 +193,8 @@ if [ -n "$original_root" ] && [ -f "$snapshot_file" ]; then
   fi
 elif [ -n "$original_root" ]; then
   # Snapshot file was not found — cannot verify workspace integrity.
-  # This could mean prepare-pr-worktree.sh did not record a snapshot, or it was
-  # already removed by a prior cleanup run. Either way: report honestly.
   printf 'WORKSPACE_INTEGRITY_UNVERIFIED: snapshot file not found at "%s" — cannot confirm workspace is unchanged.\n' "$snapshot_file" >&2
   integrity_status="UNVERIFIED"
-fi
-
-if [ "$cleanup_ok" = "false" ]; then
-  printf '%s\n' "WORKTREE_CLEANUP: SAFETY_ERROR (refused to delete unverified path — see stderr for details)" >&2
-  exit 2
 fi
 
 case "$integrity_status" in

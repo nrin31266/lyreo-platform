@@ -17,11 +17,14 @@
 7. **Generic project-profile routing**: Context collector reads `references/project-profile.md` for project identity, default language, and context-routing entry points. Profile is thin — no architecture rules embedded. Core files remain project-agnostic.
 8. **One canonical review body**: Review posts as one GitHub review event (one body, zero per-suggestion inline threads). Path/line evidence remains in Markdown. Self-review detection before preview (COMMENT event fallback).
 9. **Generic verification**: Discovers commands from CI config and repo instructions — does not hardcode project-specific commands. Distinguishes TEST/BUILD/TYPECHECK/LINT/GUARDRAIL/SYNTAX/REPRODUCTION and PASS/FAIL/NOT RUN/REPRODUCED.
-10. **Generic tracking markers**: New reviews use `<!-- agent-pr-review fingerprint: ... reviewed-head: ... -->`. Legacy `<!-- lyreo-review ... -->` markers are recognized on read for backward compatibility; new reviews never create new `lyreo-*` markers.
+10. **Generic tracking markers**: New reviews embed a global tracking marker `<!-- agent-pr-review reviewed-head: <sha> findings: <fingerprints> -->` at the end of `CANONICAL_BODY`, and per-finding markers `<!-- agent-pr-finding fingerprint: <fp> severity: <sev> path: <path> line: <line> title: <title> -->` for BLOCKER and IMPORTANT findings. Legacy `<!-- lyreo-review ... -->` markers are recognized on read for backward compatibility; new reviews never create new `lyreo-*` markers.
 
 ## Tracking Marker
 
-New reviews: `<!-- agent-pr-review fingerprint: <fp> reviewed-head: <sha> -->`
+New reviews:
+- Global marker (end of body): `<!-- agent-pr-review reviewed-head: <sha> findings: <fingerprints> -->`
+- Per-finding marker: `<!-- agent-pr-finding fingerprint: <fp> severity: <sev> path: <path> line: <line> title: <title> -->`
+
 Legacy (read-only): `<!-- lyreo-review ... -->`
 
 ## Portability Answer

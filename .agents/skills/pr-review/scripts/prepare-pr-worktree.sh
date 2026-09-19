@@ -92,11 +92,14 @@ mkdir -p "$(dirname "$worktree_path")"
 } > "$snapshot_file"
 
 # Attempt worktree creation
-# Try `gh pr checkout --worktree` if supported, otherwise fallback to safe git fetch + worktree add
+# Try `gh pr checkout --worktree` if supported by the installed gh CLI runtime,
+# otherwise fall back to safe git fetch + worktree add --detach.
 worktree_created=false
 if command -v gh >/dev/null 2>&1; then
-  if gh pr checkout "$number" --worktree "$worktree_path" --detach 2>/dev/null; then
-    worktree_created=true
+  if gh pr checkout --help 2>&1 | grep -q -- '--worktree'; then
+    if gh pr checkout "$number" --worktree "$worktree_path" --detach 2>/dev/null; then
+      worktree_created=true
+    fi
   fi
 fi
 

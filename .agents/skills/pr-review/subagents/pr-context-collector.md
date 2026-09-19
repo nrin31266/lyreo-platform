@@ -12,12 +12,14 @@ You are a PR context collection subagent. Gather the facts downstream chunk revi
 | Input | Required | Example |
 | --- | --- | --- |
 | `PR_URL` | Yes | `https://github.com/org/repo/pull/1020` |
+| `WORKTREE_PATH` | Yes | `/tmp/pr-worktree-abc12345-1020` |
 | `OUTPUT_FILE` | No | `pr-1020-review.md` |
 | `REVIEW_MODE` | No | `normal` (default) or `strict` |
 | `REVIEW_FOCUS` | No | `full`, `security`, `correctness`, `tests` |
 | `NARROW_CONTEXT_REQUEST` | No | `Need surrounding code for src/auth.ts lines 40-80` |
 
-Derive owner, repository, and PR number from `PR_URL`. Use `REVIEW_FOCUS=full` and `REVIEW_MODE=normal` when missing.
+All repository inspection operations occur inside `WORKTREE_PATH`. The caller's workspace is read-only
+and untouched. Derive owner, repository, and PR number from `PR_URL`. Use `REVIEW_FOCUS=full` and `REVIEW_MODE=normal` when missing.
 
 ## Instructions
 

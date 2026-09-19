@@ -35,10 +35,11 @@ if ! command -v jq > /dev/null 2>&1; then
   exit 2
 fi
 
-# Collect paginated responses. --paginate with gh api returns one JSON array per page.
+# Collect paginated responses. --paginate --slurp with gh api wraps all pages in an array.
+# Flatten arrays deterministically; never mix stderr (2>&1) into the JSON stdout pipe.
 collect_paginated() {
   local endpoint="$1"
-  gh api --paginate "$endpoint" 2>&1 | jq -s '[.[][]]'
+  gh api --paginate --slurp "$endpoint" | jq 'if type == "array" then (if length == 0 then [] elif (.[0] | type) == "array" then (add // []) else . end) else [] end'
 }
 
 reviews_json="$(collect_paginated "repos/${owner}/${repo}/pulls/${number}/reviews")"
@@ -87,7 +88,8 @@ jq -n \
       ($latest_review.body // "") as $b |
       [
         # Matches: <!-- agent-pr-finding fingerprint: <fp> severity: <sev> path: <path> line: <line> title: <title> -->
-        $b | scan("<!-- agent-pr-finding fingerprint: ([^\\s>]+) severity: ([^\\s>]+)(?: path: ([^\\s>]+))?(?: line: ([0-9]+))?(?: title: ([^>]+))? -->")
+        # Uses non-greedy title match to safely capture titles containing >, ->, quotes, &, etc.
+        $b | scan("<!-- agent-pr-finding fingerprint: ([^\\s>]+) severity: ([^\\s>]+)(?: path: ([^\\s>]+))?(?: line: ([0-9]+))?(?: title: (.*?))?\\s*-->")
         | {
             fingerprint: .[0],
             severity: .[1],

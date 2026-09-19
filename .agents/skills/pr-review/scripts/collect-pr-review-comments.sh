@@ -23,4 +23,8 @@ if ! command -v gh >/dev/null 2>&1; then
   printf '%s\n' "gh CLI required" >&2
   exit 2
 fi
-gh api --paginate "repos/${owner}/${repo}/pulls/${number}/comments"
+if ! command -v jq >/dev/null 2>&1; then
+  printf '%s\n' "jq required" >&2
+  exit 2
+fi
+gh api --paginate --slurp "repos/${owner}/${repo}/pulls/${number}/comments" | jq 'if type == "array" then (if length == 0 then [] elif (.[0] | type) == "array" then (add // []) else . end) else [] end'

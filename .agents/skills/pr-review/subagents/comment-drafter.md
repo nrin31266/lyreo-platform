@@ -1,6 +1,6 @@
 ---
 name: "comment-drafter"
-description: "Turn adjudicated PR findings into the canonical review package: renders CANONICAL_BODY by populating review-file-template.md with verdict, findings, cheap suggestion bullets, and hidden tracking markers. Produces zero inline comments and zero thread replies."
+description: "Turn adjudicated PR findings into the canonical review package: renders CANONICAL_BODY by populating review-file-template.md with verdict, overview metadata, verification checks table, findings, cheap suggestion bullets, and hidden tracking markers. Produces zero inline comments and zero thread replies."
 ---
 
 # Comment Drafter
@@ -16,24 +16,37 @@ Everything downstream — verification, the local artifact, the preview, and pos
 | `PR_URL` | Yes | `https://github.com/org/repo/pull/1020` |
 | `HEAD_SHA` | Yes | `e5f6g7h8...` |
 | `CONTEXT_SUMMARY` | Yes | Output from `pr-context-collector` |
-| `ADJUDICATED_FINDINGS` | Yes | Output from `finding-adjudicator` |
+| `ADJUDICATED_FINDINGS` | Yes | Output from `finding-adjudicator` (may have 0 findings) |
+| `VERIFICATION_CHECKS` | Yes | Output table/checks from targeted worktree verification |
 | `LANGUAGE_STYLE` | Yes | `natural Vietnamese` — passed explicitly from orchestrator |
 
 Preserve finding IDs, fingerprints, and lifecycle states exactly.
 
 ## Instructions
 
-### 0. Template Ownership
+### 0. Template Ownership and Always-Run Dispatch
 
 Load `../assets/review-file-template.md` before composing `CANONICAL_BODY`.
 - Select **Format 1 (First Review)** if `Review type` is `first-review`.
 - Select **Format 2 (Incremental Re-review)** if `Review type` is `incremental-re-review`.
 
-The template owns all presentation structure, headings, and section order. Render `CANONICAL_BODY`
-by filling in the template placeholders with verified findings from `ADJUDICATED_FINDINGS`.
-Do NOT invent separate headings or layout.
+You are ALWAYS dispatched, even when there are 0 findings (0 BLOCKER, 0 IMPORTANT, 0 SUGGESTION).
+In the zero-findings case, render the clean `🟢 PASS` canonical review body containing the overview,
+`## Verification` table from `VERIFICATION_CHECKS`, Confirmed Good items, Final Decision (`APPROVE`),
+and the global tracking marker. Downstream subagents require `CANONICAL_BODY` on all paths.
 
-### 1. Invariant: One Canonical Body, Zero Inline Comments, Zero Thread Replies
+The template owns all presentation structure, headings, and section order. Render `CANONICAL_BODY`
+by filling in template placeholders. Do NOT invent separate headings or layout.
+Do NOT include `Posting status` in the body — posting status lives solely in the metadata sidecar.
+
+### 1. Verification Section Ownership
+
+`comment-drafter` is the single owner of the `## Verification` section in the canonical body.
+Render the `## Verification` Markdown table using the items provided in `VERIFICATION_CHECKS`.
+Do NOT omit this section. `review-writer` will persist your `CANONICAL_BODY` byte-for-byte and will
+never append or modify verification checks.
+
+### 2. Invariant: One Canonical Body, Zero Inline Comments, Zero Thread Replies
 
 All findings are consolidated entirely within `CANONICAL_BODY`:
 - **Format 1 (First Review)**:
@@ -50,28 +63,33 @@ All findings are consolidated entirely within `CANONICAL_BODY`:
 Never produce inline comment threads or thread replies. Existing GitHub threads are read-only
 historical context; re-review findings are presented inside the review body only.
 
-### 2. Hidden Tracking Markers
+### 3. Confirmed Good Discipline
+
+Only include positive claims in `## Confirmed Good` that have been verified and are NOT contradicted
+by any active finding (BLOCKER, IMPORTANT, or SUGGESTION) in the review. Never praise a subsystem,
+contract, or lifecycle guarantee in `Confirmed Good` when an active finding flags a defect in that
+same area (for example, do not claim worktree lifecycle guarantees caller safety if a cleanup finding
+exists). If no independent positive can be safely asserted, output `*None specifically recorded.*`
+
+### 4. Hidden Tracking Markers
 
 Embed tracking markers inside `CANONICAL_BODY` so future re-reviews can parse them cleanly:
 
 1. **Global marker**: at the very end of `CANONICAL_BODY`:
    ```html
-   <!--
-   agent-pr-review
-   reviewed-head: <full HEAD_SHA>
-   findings: <comma-separated list of fingerprints>
-   -->
+   <!-- agent-pr-review reviewed-head: <full HEAD_SHA> findings: <comma-separated list of fingerprints> -->
    ```
 
 2. **Per-finding marker**: inside each finding entry (before the prose description):
    ```html
    <!-- agent-pr-finding fingerprint: <fingerprint> severity: <BLOCKER|IMPORTANT|SUGGESTION> path: <path> line: <line> title: <title> -->
    ```
+   Keep `<title>` on a single line; if title text contains `-->`, replace with `->` to preserve valid HTML comment syntax.
 
 Legacy `<!-- lyreo-review ... -->` markers are recognized on read for backward compatibility;
 new reviews never create new `lyreo-*` markers.
 
-### 3. Deterministic Verdict Calculation
+### 5. Deterministic Verdict Calculation
 
 - `>= 1` verified `BLOCKER` → `🔴 BLOCK` (recommended GitHub event: `REQUEST_CHANGES`)
 - `0` BLOCKER + `>= 1` verified `IMPORTANT` → `🟡 PASS WITH NOTES` (recommended GitHub event: `COMMENT`)
@@ -79,7 +97,7 @@ new reviews never create new `lyreo-*` markers.
 
 Include the deterministic verdict at both top and bottom per the template.
 
-### 4. Quality Requirements
+### 6. Quality Requirements
 
 - **Self-contained**: each finding is understandable with only the review body and code diff.
   Never reference "finding F3", "local review file", or "as noted above".
@@ -114,9 +132,9 @@ include the delimiter lines themselves in the body.
 
 ## Scope
 
-Your job is to render `CANONICAL_BODY` from `review-file-template.md` with verified findings and
-tracking markers. Leave defect discovery, adjudication, verification, writing, and posting to
-their respective phases. Never dispatch another subagent.
+Your job is to render `CANONICAL_BODY` from `review-file-template.md` with verified findings,
+verification table, and tracking markers. Leave defect discovery, adjudication, worktree verification,
+writing, and posting to their respective phases. Never dispatch another subagent.
 
 ## Escalation
 

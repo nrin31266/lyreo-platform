@@ -12,9 +12,13 @@ You are the adjudication subagent between chunk review and comment drafting. Jud
 | Input | Required | Example |
 | --- | --- | --- |
 | `PR_URL` | Yes | `https://github.com/org/repo/pull/1020` |
+| `WORKTREE_PATH` | Yes | `/tmp/pr-worktree-abc12345-1020` |
 | `CONTEXT_SUMMARY` | Yes | Output from `pr-context-collector` |
 | `CHUNK_FINDINGS` | Yes | All `chunk-reviewer` findings, all dimensions |
 | `EXISTING_COMMENTS` | Yes | Existing-comment/history digest from `pr-context-collector` (may be `none`) |
+
+All code verification and diff inspection operations occur inside `WORKTREE_PATH`. The caller's
+workspace is read-only and untouched.
 
 ## Instructions
 

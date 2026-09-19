@@ -1,6 +1,6 @@
 ---
 name: "review-verifier"
-description: "Validate the canonical review package — evidence, severity vocabulary, verdict calculation, cheap suggestions, hidden markers in review body, CANONICAL_BODY equality, self-containment, sourcing, dedup dispositions, and worktree verification — before writing or posting."
+description: "Validate the canonical review package — evidence, severity vocabulary, verdict calculation, cheap suggestions, hidden markers in review body, CANONICAL_BODY presence, verification table ownership, Confirmed Good discipline, self-containment, sourcing, dedup dispositions, and worktree checks — before writing or posting."
 ---
 
 # Review Verifier
@@ -14,20 +14,19 @@ rewriting the package yourself.
 | Input | Required | Example |
 | --- | --- | --- |
 | `PR_URL` | Yes | `https://github.com/org/repo/pull/1020` |
-| `WORKTREE_PATH` | No | `/tmp/pr-worktree-abc12345-1020` |
+| `WORKTREE_PATH` | Yes | `/tmp/pr-worktree-abc12345-1020` |
 | `CONTEXT_SUMMARY` | Yes | Output from `pr-context-collector` |
-| `REVIEW_PACKAGE` | No | Output from `comment-drafter` |
-| `REVIEW_DECISION_CANDIDATE` | No | `approve` or `comment` on the no-findings path |
-| `VERIFICATION_CHECKS` | No | List of targeted tests/checks run in worktree |
+| `REVIEW_PACKAGE` | Yes | Output from `comment-drafter` (contains `CANONICAL_BODY`) |
+| `VERIFICATION_CHECKS` | Yes | List of targeted tests/checks run in worktree |
 | `OUTPUT_FILE` | No | `pr-1020-review.md` |
 | `LANGUAGE_STYLE` | No | `natural Vietnamese` |
 
-`REVIEW_PACKAGE` is absent only on the no-findings path; then `REVIEW_DECISION_CANDIDATE` is
-required so verification confirms the final decision instead of deriving it implicitly.
+All repository inspection and diff verification checks run inside `WORKTREE_PATH`. The caller's
+original workspace is read-only and untouched.
 
 ## Instructions
 
-1. Verify, against the PR diff and repository context:
+1. Verify, against the PR diff in `WORKTREE_PATH` and repository context:
 
    - **Evidence** — each finding's cited evidence holds; code-local claims cite `path:line`.
 
@@ -47,9 +46,17 @@ required so verification confirms the final decision instead of deriving it impl
    - **Cheap suggestions enforcement** — verify that `SUGGESTION` findings appear only as bullets
      in the `## Suggestions` body section. Fail if a suggestion has a separate inline thread.
 
-   - **CANONICAL_BODY present** — verify that `REVIEW_PACKAGE` contains a non-empty
+   - **CANONICAL_BODY present and clean** — verify that `REVIEW_PACKAGE` contains a non-empty
      `CANONICAL_BODY` block (between `--- CANONICAL_BODY START ---` and `--- CANONICAL_BODY END ---`).
-     Fail if the block is absent, empty, or contains unexpanded placeholders.
+     Fail if the block is absent, empty, or contains unexpanded placeholders. Confirm that
+     `Posting status` is NOT present in the Markdown body (it belongs in the metadata sidecar only).
+
+   - **Verification section ownership** — verify that `CANONICAL_BODY` contains exactly one
+     `## Verification` table populated from `VERIFICATION_CHECKS`. Fail if missing or duplicated.
+
+   - **Confirmed Good discipline** — verify that statements in `## Confirmed Good` only cite verified
+     sound behaviors and are NOT contradicted by any active finding in the review. Fail if `Confirmed Good`
+     asserts safety or correctness of a subsystem that an active finding flags as defective.
 
    - **Review body tracking marker** — verify that `CANONICAL_BODY` contains the
      `<!-- agent-pr-review reviewed-head: <sha> findings: ... -->` tracking marker. Fail if absent.
@@ -72,20 +79,15 @@ required so verification confirms the final decision instead of deriving it impl
 
    - **Language** — style matches `LANGUAGE_STYLE` throughout `CANONICAL_BODY`.
 
-2. If `REVIEW_DECISION_CANDIDATE` is present, reject mismatches explicitly: `approve` fails when
-   residual risks block approval; `comment` fails when no findings or blocking residual risks
-   remain. Use `Fix target: orchestrator-decision` for that candidate-only repair.
-
-3. Load `../references/external-review-resources.md` only when an exact rule is uncertain. Fetch
+2. Load `../references/external-review-resources.md` only when an exact rule is uncertain. Fetch
    one URL at a time and cite only applied URLs.
 
-4. On failure, name exactly one `Fix target` — the earliest affected owner:
-   - `orchestrator-decision`: candidate-only decision defects.
+3. On failure, name exactly one `Fix target` — the earliest affected owner:
    - `pr-context-collector`: context/evidence-packet gaps.
    - `finding-adjudicator`: adjudication defects (wrong severity, wrong lifecycle, missed
      duplicate, bad merge, `NEW_THREAD` disposition).
    - `comment-drafter`: body or metadata defects (missing marker, wrong verdict, cheap suggestions
-     violation, missing source URL, missing CANONICAL_BODY, placeholder text).
+     violation, missing source URL, missing CANONICAL_BODY, placeholder text, duplicate verification section, Confirmed Good contradiction).
    `Fix target` is never `none` on a `FAIL`.
 
 ## Output Format
@@ -102,6 +104,8 @@ Checks:
 - No inline comments or thread replies: <pass | fail> - <summary — count of inline comments / thread replies found: must be 0>
 - Cheap suggestions: <pass | fail | not applicable> - <summary>
 - CANONICAL_BODY present: <pass | fail> - <summary>
+- Verification section single ownership: <pass | fail> - <summary>
+- Confirmed Good discipline: <pass | fail | not applicable> - <summary>
 - Review body tracking marker: <pass | fail> - <summary>
 - Per-finding markers: <pass | fail | not applicable> - <summary>
 - External sources: <pass | fail | not applicable> - <summary>
@@ -124,7 +128,7 @@ Issues:
 - <issue or none>
 
 References fetched: <URLs used, or none>
-Fix target: orchestrator-decision | pr-context-collector | finding-adjudicator | comment-drafter | none (only when status is not FAIL)
+Fix target: pr-context-collector | finding-adjudicator | comment-drafter | none (only when status is not FAIL)
 Reason: none | <why status is not PASS>
 ```
 
