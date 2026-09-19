@@ -87,15 +87,16 @@ jq -n \
     if $latest_review != null then
       ($latest_review.body // "") as $b |
       [
-        # Matches: <!-- agent-pr-finding fingerprint: <fp> severity: <sev> path: <path> line: <line> title: <title> -->
-        # Uses non-greedy title match to safely capture titles containing >, ->, quotes, &, etc.
-        $b | scan("<!-- agent-pr-finding fingerprint: ([^\\s>]+) severity: ([^\\s>]+)(?: path: ([^\\s>]+))?(?: line: ([0-9]+))?(?: title: (.*?))?\\s*-->")
+        # Matches: <!-- agent-pr-finding fingerprint: <fp> severity: <sev>(?: lifecycle: <lc>)? path: <path> line: <line> title: <title> -->
+        # Supports optional lifecycle (defaulting to NEW if absent) and non-greedy title
+        $b | scan("<!-- agent-pr-finding fingerprint: ([^\\s>]+) severity: ([^\\s>]+)(?: lifecycle: ([^\\s>]+))?(?: path: ([^\\s>]+))?(?: line: ([0-9]+))?(?: title: (.*?))?\\s*-->")
         | {
             fingerprint: .[0],
             severity: .[1],
-            path: (.[2] // "unknown"),
-            line: (if .[3] != null and .[3] != "" then (.[3] | tonumber) else 0 end),
-            title: (.[4] // "" | sub("^ +"; "") | sub(" +$"; "")),
+            lifecycle: (.[2] // "NEW"),
+            path: (.[3] // "unknown"),
+            line: (if .[4] != null and .[4] != "" then (.[4] | tonumber) else 0 end),
+            title: (.[5] // "" | sub("^ +"; "") | sub(" +$"; "")),
             reviewed_head: parse_marker($latest_review.body).reviewed_head
           }
       ]

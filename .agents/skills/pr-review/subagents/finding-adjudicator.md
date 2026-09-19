@@ -35,10 +35,10 @@ workspace is read-only and untouched.
 6. Reconcile lifecycle states by evaluating the structured `previous_findings` from `EXISTING_COMMENTS` / history digest:
    Each previous finding has `fingerprint`, `severity`, `path`, `line`, `title`, and `reviewed_head`.
    Adjudicate each previous finding independently against the current code in `WORKTREE_PATH`:
-   - `RESOLVED` — current code proves the previous finding is fixed (e.g. guard added, flaw eliminated).
-   - `STILL_OPEN` — previous finding remains unaddressed or current fix is incomplete. (Verify author-claimed fixes against code; developer replies are evidence to check, not ground truth.)
-   - `WITHDRAWN` — previous finding was incorrect upon re-checking fresh evidence.
-   - `OBSOLETE` — the targeted code/feature was removed; finding is no longer applicable.
+   - `RESOLVED` — finding cũ là defect hợp lệ và code mới đã sửa nó thành công (ví dụ: guard added, flaw eliminated). CHỈ dùng khi defect ban đầu là có thật và code mới đã sửa.
+   - `STILL_OPEN` — finding cũ vẫn còn tồn tại hoặc bản sửa chưa triệt để. (Verify author-claimed fixes against code; developer replies are evidence to check, not ground truth.)
+   - `WITHDRAWN` — finding cũ không còn được reviewer bảo vệ vì evidence ban đầu sai, hiểu lầm, hoặc là false-positive (ví dụ: cờ CLI thực tế có tồn tại và được hỗ trợ). TUYỆT ĐỐI KHÔNG đánh dấu là `RESOLVED` đối với false-positives được rút lại.
+   - `OBSOLETE` — mã nguồn hoặc tính năng liên quan đã bị refactor/xoá bỏ hoàn toàn khỏi dự án, finding không còn đối tượng áp dụng.
    For candidate findings from chunk reviewers in the new delta:
    - If a candidate matches a previous finding's fingerprint, combine them into that finding's `STILL_OPEN` record.
    - If a candidate is genuinely new to this review, mark lifecycle `NEW`.

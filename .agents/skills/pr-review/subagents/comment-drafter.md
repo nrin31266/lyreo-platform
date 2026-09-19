@@ -81,9 +81,20 @@ Embed tracking markers inside `CANONICAL_BODY` so future re-reviews can parse th
    ```
 
 2. **Per-finding marker**: inside each finding entry (before the prose description):
-   ```html
-   <!-- agent-pr-finding fingerprint: <fingerprint> severity: <BLOCKER|IMPORTANT|SUGGESTION> path: <path> line: <line> title: <title> -->
-   ```
+   - **First Review (Format 1)**:
+     ```html
+     <!-- agent-pr-finding fingerprint: <fingerprint> severity: <BLOCKER|IMPORTANT|SUGGESTION> path: <path> line: <line> title: <title> -->
+     ```
+   - **Incremental Re-review (Format 2)**:
+     - In `## Previous Findings`, embed for every reconciled previous finding:
+       ```html
+       <!-- agent-pr-finding fingerprint: <fingerprint> severity: <severity> lifecycle: <RESOLVED|STILL_OPEN|WITHDRAWN|OBSOLETE> path: <path> line: <line> title: <title> -->
+       ```
+     - In `## New Findings in Delta`, embed for each new finding:
+       ```html
+       <!-- agent-pr-finding fingerprint: <fingerprint> severity: <BLOCKER|IMPORTANT|SUGGESTION> lifecycle: NEW path: <path> line: <line> title: <title> -->
+       ```
+     This guarantees every consolidated re-review body is a complete, self-contained machine-readable snapshot, ensuring multi-turn review chains (round 3+) never lose historical findings.
    Keep `<title>` on a single line; if title text contains `-->`, replace with `->` to preserve valid HTML comment syntax.
 
 Legacy `<!-- lyreo-review ... -->` markers are recognized on read for backward compatibility;

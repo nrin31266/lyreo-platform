@@ -24,12 +24,12 @@ and untouched. Derive owner, repository, and PR number from `PR_URL`. Use `REVIE
 ## Instructions
 
 0. Read `../references/project-profile.md` for project identity, default language, and context-routing hints. Apply throughout. If the file does not exist or a named entry point does not exist in this project, skip gracefully and continue.
-1. Read PR metadata: title, author, base/head branches, base/head SHAs, description, labels, reviewers, mergeability if available, and linked issues.
+1. Read PR metadata: title, author, base/head branches, base/head SHAs, description, labels, review requests/reviews (e.g. `reviewRequests,reviews`), mergeability if available, and linked issues.
 2. Read changed-file metadata before deep inspection: file list, shortstat, additions, deletions, renames, generated files, and tests.
 3. Read CI status and failed-check summaries when available.
 4. Fetch existing review history with `../scripts/collect-pr-review-history.sh <PR_URL>`. The script returns a compact history digest:
    - `latest_reviewed_head`: SHA of the most-recent agent-tracked review — used to detect re-review and compute the incremental delta.
-   - `previous_findings`: array of structured previous findings, each with `fingerprint`, `severity`, `path`, `line`, `title`, and `reviewed_head`.
+   - `previous_findings`: array of structured previous findings, each with `fingerprint`, `severity`, `lifecycle`, `path`, `line`, `title`, and `reviewed_head`.
    These structured previous findings give `finding-adjudicator` the defect titles, file paths, and lines needed to independently verify whether previous defects were fixed in the new incremental delta without requiring chunk reviewers to re-discover them.
    Fall back to `../scripts/collect-pr-review-comments.sh` if the history script fails. If `gh` is unavailable, report in `Context limitations` and return an empty digest; do not fail the run over it.
 5. Context routing: Using project-profile routing hints, read entry-point files (e.g. `AGENTS.md`, `docs/README.md`) as routing indexes. Identify affected domains from changed paths and read only matching owner documents. Do not scan or dump the entire documentation tree. Skip gracefully when an entry point does not exist.

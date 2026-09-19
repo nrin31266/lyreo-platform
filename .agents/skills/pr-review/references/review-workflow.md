@@ -132,7 +132,8 @@ Every subagent must return its documented status block. When a reply is missing 
 
 ### 10. Review Posting & Read-Back Verification
 
-20. On approval, dispatch `review-poster` with `BODY_FILE`, `BODY_SHA256`, `EFFECTIVE_EVENT`, `PREVIEW_APPROVED=true`, `APPROVED_BODY_SHA256`, and `APPROVED_HEAD_SHA`.
+20. On approval, dispatch `review-poster` with `PR_URL`, `BODY_FILE="${WORKTREE_PATH}/${OUTPUT_FILE}"` (absolute path to exact review file), `BODY_SHA256`, `EFFECTIVE_EVENT`, `PREVIEW_APPROVED=true`, `APPROVED_BODY_SHA256`, and `APPROVED_HEAD_SHA`.
+    - `review-poster` reads `BODY_FILE` directly via its absolute path; it does not need `WORKTREE_PATH`.
     - Before posting, `review-poster` verifies: `sha256(BODY_FILE) == APPROVED_BODY_SHA256`, current PR head == `APPROVED_HEAD_SHA`, and effective event matches. If any check fails, it stops with `POST: PREVIEW_REQUIRED` without posting.
     - Posts ONE atomic review event: exact `BODY_FILE` as review body, `comments: []` (empty array, zero inline comments), and zero thread replies.
     - Reads back the created review to verify: body matches `BODY_FILE`, commit matches expected, 0 inline comments created, 0 thread replies created.
@@ -150,9 +151,13 @@ A re-review is triggered when `pr-context-collector` detects a previous reviewed
 
 In a re-review:
 - Provide incremental diff (`previous_head...current_head`) to chunk reviewers.
-- Each surviving previous finding carries a lifecycle state: `STILL_OPEN`, `RESOLVED`, `WITHDRAWN`, or `OBSOLETE`.
+- Each surviving previous finding carries a lifecycle state:
+  - `RESOLVED`: valid defect fixed by new code in delta. Only used when original defect was real.
+  - `STILL_OPEN`: defect still unaddressed or fix incomplete.
+  - `WITHDRAWN`: withdrawn by reviewer because initial evidence was invalid, misunderstood, or false-positive (e.g. `--worktree` flag support). Never mark false positives as `RESOLVED`.
+  - `OBSOLETE`: targeted code/feature was removed/refactored out.
 - `finding-adjudicator` verifies developer-claimed fixes against current code in `WORKTREE_PATH` before marking `RESOLVED`; developer replies are evidence to verify, not ground truth.
-- `comment-drafter` produces one `CANONICAL_BODY` using **Format 2 (Incremental Re-review)** from `review-file-template.md`: containing `## Previous Findings` (reconciled lifecycle), `## New Findings in Delta`, `## Suggestions`, `## Confirmed Good`, `## Final Decision`, and the global tracking marker.
+- `comment-drafter` produces one `CANONICAL_BODY` using **Format 2 (Incremental Re-review)** from `review-file-template.md`: containing `## Previous Findings` (with per-finding markers including `lifecycle`), `## New Findings in Delta` (with per-finding markers including `lifecycle: NEW`), `## Suggestions`, `## Confirmed Good`, `## Final Decision`, and the global tracking marker. This ensures every re-review is a complete machine-readable snapshot and multi-turn chains (round 3+) preserve all history.
 - Post ONE review event: `CANONICAL_BODY` as review body, `comments[]` always empty, zero thread replies. Existing GitHub inline threads are strictly read-only history.
 
 ### 13. Worktree Cleanup & Caller Integrity Check

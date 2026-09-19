@@ -27,12 +27,15 @@ to existing threads.
 | Input | Required | Example |
 | --- | --- | --- |
 | `PR_URL` | Yes | `https://github.com/org/repo/pull/1020` |
-| `BODY_FILE` | Yes | `pr-1020-review.md` (exact canonical body file) |
+| `BODY_FILE` | Yes | `/tmp/pr-worktree-1020/pr-1020-review.md` (absolute path to exact review file) |
 | `BODY_SHA256` | Yes | SHA-256 hash of `BODY_FILE` |
 | `EFFECTIVE_EVENT` | Yes | `COMMENT`, `REQUEST_CHANGES`, or `APPROVE` |
 | `PREVIEW_APPROVED` | Yes | `true` |
 | `APPROVED_BODY_SHA256` | Yes | Exact body SHA-256 approved by user |
 | `APPROVED_HEAD_SHA` | Yes | Current PR head SHA approved by user |
+
+`BODY_FILE` is passed as an absolute path (e.g. `${WORKTREE_PATH}/${OUTPUT_FILE}`). `review-poster`
+does not need `WORKTREE_PATH` because it reads `BODY_FILE` directly from the filesystem.
 
 ## Instructions
 

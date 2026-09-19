@@ -117,10 +117,10 @@ The review file must stand alone without chat context. It is findings first, con
 
 ## Previous Findings
 
-- ✅ **RESOLVED** [`<fingerprint>`]: <description> (verified in `<short_sha>`)
-- ⚠️ **STILL OPEN** [`<fingerprint>`]: <description> (still unresolved because `<evidence>`)
-- ↩️ **WITHDRAWN** [`<fingerprint>`]: <description> (withdrawn: `<reason>`)
-- 🗑️ **OBSOLETE** [`<fingerprint>`]: <description> (code refactored/removed)
+- <!-- agent-pr-finding fingerprint: <fingerprint> severity: <severity> lifecycle: RESOLVED path: <path> line: <line> title: <finding title> -->✅ **RESOLVED** [`<fingerprint>`]: <description> (verified in `<short_sha>`)
+- <!-- agent-pr-finding fingerprint: <fingerprint> severity: <severity> lifecycle: STILL_OPEN path: <path> line: <line> title: <finding title> -->⚠️ **STILL OPEN** [`<fingerprint>`]: <description> (still unresolved because `<evidence>`)
+- <!-- agent-pr-finding fingerprint: <fingerprint> severity: <severity> lifecycle: WITHDRAWN path: <path> line: <line> title: <finding title> -->↩️ **WITHDRAWN** [`<fingerprint>`]: <description> (withdrawn: <reason>)
+- <!-- agent-pr-finding fingerprint: <fingerprint> severity: <severity> lifecycle: OBSOLETE path: <path> line: <line> title: <finding title> -->🗑️ **OBSOLETE** [`<fingerprint>`]: <description> (code refactored/removed)
 
 (or: *None*)
 
@@ -130,7 +130,7 @@ The review file must stand alone without chat context. It is findings first, con
 
 ### 1. [<path>:<line>] <finding title>
 
-<!-- agent-pr-finding fingerprint: <fingerprint> severity: <BLOCKER | IMPORTANT> path: <path> line: <line> title: <finding title> -->
+<!-- agent-pr-finding fingerprint: <fingerprint> severity: <BLOCKER | IMPORTANT> lifecycle: NEW path: <path> line: <line> title: <finding title> -->
 - **Issue**: <concise description>
 - **Impact**: <why this matters>
 - **Fix direction**: <guidance>

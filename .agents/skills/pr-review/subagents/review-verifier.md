@@ -60,8 +60,9 @@ original workspace is read-only and untouched.
 
    - **Review body tracking marker** — verify that `CANONICAL_BODY` contains the
      `<!-- agent-pr-review reviewed-head: <sha> findings: ... -->` tracking marker. Fail if absent.
-     Per-finding `<!-- agent-pr-finding fingerprint: <fp> severity: <sev> path: <path> line: <line> title: <title> -->`
-     markers must be present for every BLOCKER and IMPORTANT finding.
+     Per-finding `<!-- agent-pr-finding fingerprint: <fp> severity: <sev> ... -->` markers must be present
+     for every BLOCKER and IMPORTANT finding (in Format 1) and for both reconciled previous findings and
+     new findings (in Format 2) to ensure machine-readable continuity across review turns.
 
    - **Sources** — every comment whose claim rests on an external fact (API behavior, version
      changes, deprecations, CVEs) includes a verifiable source URL. Fail source-less external claims.
