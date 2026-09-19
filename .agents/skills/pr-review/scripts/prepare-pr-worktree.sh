@@ -38,6 +38,24 @@ if [ -z "$original_root" ]; then
   exit 2
 fi
 
+# Validate PR URL belongs to current repository (when owner/repo are known)
+if [ -n "$owner" ] && [ -n "$repo" ]; then
+  remote="origin"
+  if ! git -C "$original_root" remote get-url "$remote" >/dev/null 2>&1; then
+    remote="$(git -C "$original_root" remote | head -n 1)"
+  fi
+  if [ -n "$remote" ]; then
+    remote_url="$(git -C "$original_root" remote get-url "$remote" 2>/dev/null || true)"
+    # Normalize remote URL: remove trailing .git and leading protocol+host
+    remote_slug="$(printf '%s' "$remote_url" | sed 's/\.git$//' | grep -oE '[^/:]+/[^/:]+$' || true)"
+    pr_slug="${owner}/${repo}"
+    if [ -n "$remote_slug" ] && [ "$remote_slug" != "$pr_slug" ]; then
+      printf 'PR URL repository (%s) does not match current repository (%s)\n' "$pr_slug" "$remote_slug" >&2
+      exit 66
+    fi
+  fi
+fi
+
 original_branch="$(git -C "$original_root" branch --show-current 2>/dev/null || true)"
 original_head="$(git -C "$original_root" rev-parse HEAD 2>/dev/null || true)"
 
@@ -55,8 +73,9 @@ fi
 if [ "$#" -ge 2 ] && [ -n "$2" ]; then
   worktree_path="$2"
 else
-  random_id="$(date +%s)_$RANDOM"
-  worktree_path="/tmp/lyreo-pr-worktree-${number}-${random_id}"
+  # Deterministic path: based on repo root hash + PR number, no random suffix
+  root_hash="$(printf '%s' "$original_root" | sha1sum | cut -c1-8)"
+  worktree_path="/tmp/pr-worktree-${root_hash}-${number}"
 fi
 
 snapshot_file="${worktree_path}.snapshot"
