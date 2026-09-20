@@ -142,20 +142,20 @@ is_registered_linked_worktree() {
 
 cleanup_ok=true
 
-if [ -d "$worktree_path" ]; then
-  if is_registered_linked_worktree "$worktree_path" "$original_root"; then
+if [ -e "$worktree_path" ] || [ -L "$worktree_path" ]; then
+  if [ -d "$worktree_path" ] && [ ! -L "$worktree_path" ] && is_registered_linked_worktree "$worktree_path" "$original_root"; then
     # Preferred removal: let git remove and unregister the worktree
     if git -C "$original_root" worktree remove --force "$worktree_path"; then
-      git -C "$original_root" worktree prune 2>/dev/null || true
+      git -C "$original_root" worktree prune --expire now 2>/dev/null || git -C "$original_root" worktree prune 2>/dev/null || true
     else
       printf 'SAFETY_ERROR: "git worktree remove --force" failed for "%s" — preserving path and stopping cleanup.\n' \
         "$worktree_path" >&2
       cleanup_ok=false
     fi
   else
-    printf 'SAFETY: "%s" is NOT a registered linked git worktree for repo at "%s" — refusing to delete.\n' \
+    printf 'SAFETY: "%s" is not a registered linked git worktree directory for repo at "%s" — refusing to delete.\n' \
       "$worktree_path" "$original_root" >&2
-    printf 'SAFETY: Main repository root and unmanaged paths are strictly protected.\n' >&2
+    printf 'SAFETY: Main repository root, regular files, symlinks, and unmanaged paths are strictly protected.\n' >&2
     cleanup_ok=false
   fi
 fi
@@ -168,6 +168,11 @@ fi
 # In stale-recovery mode (used when preparing a new worktree to clean up interrupted runs),
 # the linked worktree has been safely removed and verified; no snapshot integrity check is needed.
 if [ "$snapshot_file" = "--stale-recovery" ]; then
+  if [ -e "$worktree_path" ] || [ -L "$worktree_path" ]; then
+    printf 'SAFETY: Target path "%s" still exists after recovery attempt — refusing to continue.\n' "$worktree_path" >&2
+    printf '%s\n' "WORKTREE_CLEANUP: SAFETY_ERROR (path still exists)" >&2
+    exit 2
+  fi
   rm -f "${worktree_path}.snapshot"
   printf '%s\n' "WORKTREE_CLEANUP: PASS (stale linked worktree recovered)"
   exit 0

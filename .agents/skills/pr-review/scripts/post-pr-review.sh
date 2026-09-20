@@ -32,7 +32,7 @@ fi
 api_args=(
   api --method POST "repos/${repo_path}/pulls/${number}/reviews"
   -f event="$event"
-  -f body="$(cat "$body_file")"
+  -F body=@"$body_file"
 )
 if [ -n "$commit_id" ]; then
   api_args+=(-f commit_id="$commit_id")

@@ -115,13 +115,6 @@ References fetched: <URLs used, or none>
 Reason: none | <why status is not PASS>
 Next step: none | <smallest recovery action>
 ```
-Inline finding comments posted: 0  ← must always be 0
-Thread replies posted: 0  ← must always be 0
-Read-back verified: <yes | no | partial>
-References fetched: <URLs used, or none>
-Reason: none | <why status is not PASS>
-Next step: none | <smallest recovery action>
-```
 
 ## Scope
 

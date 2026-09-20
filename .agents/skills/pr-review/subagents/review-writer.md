@@ -111,7 +111,7 @@ Sidecar path: <path to .meta.json>
 Body SHA-256: <sha256 hash of CANONICAL_BODY>
 Review verdict: <🔴 BLOCK | 🟡 PASS WITH NOTES | 🟢 PASS>
 Review decision: <comment | request changes | approve>
-Posting status: <draft | posted | cancelled | failed>
+Posting status: <draft | posted | cancelled | failed | stale_head>
 Canonical body byte length: <number — confirms byte-for-byte parity>
 Reason: none | <why status is ERROR>
 ```

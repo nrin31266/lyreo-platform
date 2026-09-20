@@ -81,7 +81,7 @@ fi
 # Harden interrupted worktree recovery:
 # If target path already exists, safely recover it if Git confirms it is a registered
 # linked worktree of this repository. Otherwise, refuse to touch unverified paths.
-if [ -e "$worktree_path" ]; then
+if [ -e "$worktree_path" ] || [ -L "$worktree_path" ]; then
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   cleanup_script="${script_dir}/cleanup-pr-worktree.sh"
   if [ -x "$cleanup_script" ]; then
@@ -107,6 +107,9 @@ mkdir -p "$(dirname "$worktree_path")"
   git -C "$original_root" status --porcelain
   printf '=== STATUS_END ===\n'
 } > "$snapshot_file"
+
+# Safely clear any orphaned worktree registrations (e.g. if worktree directory was removed externally or by reboot)
+git -C "$original_root" worktree prune --expire now 2>/dev/null || git -C "$original_root" worktree prune 2>/dev/null || true
 
 # Attempt worktree creation
 # Try `gh pr checkout --worktree` if supported by the installed gh CLI runtime,

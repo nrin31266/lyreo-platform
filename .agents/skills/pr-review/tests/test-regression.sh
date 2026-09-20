@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Regression tests for /pr-review critical safety logic:
-# 1. Worktree isolation, caller workspace protection, refusal of unsafe paths, and stale recovery.
+# 1. Worktree isolation, caller workspace protection, refusal of unsafe paths, non-directory safety, orphan recovery.
 # 2. Review history parsing calling real collect-pr-review-history.sh via shimmed gh API.
-# 3. Posting script execution calling real post-pr-review.sh via shimmed gh API (verifying event, body, commit_id).
+# 3. Posting script execution calling real post-pr-review.sh via shimmed gh API (direct file body, trailing newlines, commit_id).
 #
 # Tests actual production primitives directly without duplicating logic into test code.
 set -euo pipefail
@@ -15,6 +15,7 @@ POST_SCRIPT="${SKILL_DIR}/scripts/post-pr-review.sh"
 
 TOTAL_TESTS=0
 PASSED_TESTS=0
+FAILED_TESTS=0
 
 assert_eq() {
   local expected="$1"
@@ -26,7 +27,7 @@ assert_eq() {
     PASSED_TESTS=$((PASSED_TESTS + 1))
   else
     printf '  [FAIL] %s (expected: "%s", got: "%s")\n' "$desc" "$expected" "$actual" >&2
-    return 1
+    FAILED_TESTS=$((FAILED_TESTS + 1))
   fi
 }
 
@@ -40,7 +41,7 @@ assert_exit() {
     PASSED_TESTS=$((PASSED_TESTS + 1))
   else
     printf '  [FAIL] %s (expected exit %d, got %d)\n' "$desc" "$expected_code" "$actual_code" >&2
-    return 1
+    FAILED_TESTS=$((FAILED_TESTS + 1))
   fi
 }
 
@@ -55,7 +56,7 @@ mkdir -p "$SHIM_BIN"
 export PATH="${SHIM_BIN}:${PATH}"
 
 # ---------------------------------------------------------------------------
-# TEST SUITE 1: Worktree Safety & Isolation
+# TEST SUITE 1: Worktree Safety, Isolation & Recovery
 # ---------------------------------------------------------------------------
 printf '1. Testing Worktree Safety & Workspace Integrity...\n'
 
@@ -99,17 +100,20 @@ assert_eq "$CALLER_BRANCH_BEFORE" "$(git branch --show-current)" "caller branch 
 assert_eq "$CALLER_HEAD_BEFORE" "$(git rev-parse HEAD)" "caller HEAD remains unchanged"
 assert_eq "$CALLER_STATUS_BEFORE" "$(git status --porcelain)" "caller staged/unstaged/untracked state preserved"
 
-# Test safety refusals
+# Test safety refusals: repository main root
 set +e
 "$CLEANUP_SCRIPT" "${TEST_SANDBOX}/local" >/dev/null 2>&1
 RC_REPO_ROOT=$?
+set -e
 assert_exit 2 "$RC_REPO_ROOT" "cleanup refuses repository main root"
 
+# Test safety refusals: arbitrary unverified path
 mkdir -p "${TEST_SANDBOX}/arbitrary_dir"
+set +e
 "$CLEANUP_SCRIPT" "${TEST_SANDBOX}/arbitrary_dir" >/dev/null 2>&1
 RC_ARBITRARY=$?
-assert_exit 2 "$RC_ARBITRARY" "cleanup refuses arbitrary unverified path"
 set -e
+assert_exit 2 "$RC_ARBITRARY" "cleanup refuses arbitrary unverified directory"
 
 # Test stale recovery: target worktree already exists (simulate interrupted run)
 "$PREPARE_SCRIPT" "https://github.com/testowner/testrepo/pull/42" "$TARGET_WT" >/dev/null
@@ -119,6 +123,43 @@ assert_eq "true" "$([ -d "$TARGET_WT" ] && echo true || echo false)" "stale link
 "$CLEANUP_SCRIPT" "$TARGET_WT" "${TARGET_WT}.snapshot" >/dev/null
 assert_eq "false" "$([ -d "$TARGET_WT" ] && echo true || echo false)" "cleanup removes verified linked worktree"
 assert_eq "$CALLER_STATUS_BEFORE" "$(git status --porcelain)" "caller workspace intact after cleanup"
+
+# Case A: Regular file occupies worktree path
+TARGET_FILE_WT="${TEST_SANDBOX}/worktree-regular-file"
+echo "not a directory" > "$TARGET_FILE_WT"
+
+set +e
+"$PREPARE_SCRIPT" "https://github.com/testowner/testrepo/pull/42" "$TARGET_FILE_WT" >/dev/null 2>&1
+RC_FILE_WT=$?
+set -e
+assert_exit 67 "$RC_FILE_WT" "prepare-pr-worktree safely refuses when target path is a regular file"
+assert_eq "true" "$([ -f "$TARGET_FILE_WT" ] && grep -q "not a directory" "$TARGET_FILE_WT" && echo true || echo false)" "existing regular file remains untouched"
+
+set +e
+"$CLEANUP_SCRIPT" "$TARGET_FILE_WT" >/dev/null 2>&1
+RC_CLEANUP_FILE=$?
+set -e
+assert_exit 2 "$RC_CLEANUP_FILE" "cleanup safely refuses regular file"
+
+set +e
+"$CLEANUP_SCRIPT" "$TARGET_FILE_WT" --stale-recovery >/dev/null 2>&1
+RC_CLEANUP_STALE_FILE=$?
+set -e
+assert_exit 2 "$RC_CLEANUP_STALE_FILE" "cleanup stale-recovery safely refuses regular file"
+
+# Case B: Orphaned Git worktree registration (directory disappeared externally)
+ORPHAN_WT="${TEST_SANDBOX}/worktree-orphan"
+"$PREPARE_SCRIPT" "https://github.com/testowner/testrepo/pull/42" "$ORPHAN_WT" >/dev/null
+assert_eq "true" "$([ -d "$ORPHAN_WT" ] && echo true || echo false)" "orphan test: worktree created initially"
+
+# Simulate external directory removal (e.g. system reboot or /tmp cleanup) leaving Git metadata
+rm -rf "$ORPHAN_WT"
+assert_eq "false" "$([ -d "$ORPHAN_WT" ] && echo true || echo false)" "orphan test: directory removed externally"
+
+# Calling prepare again must prune the orphaned registration and create the worktree afresh
+"$PREPARE_SCRIPT" "https://github.com/testowner/testrepo/pull/42" "$ORPHAN_WT" >/dev/null
+assert_eq "true" "$([ -d "$ORPHAN_WT" ] && echo true || echo false)" "prepare-pr-worktree successfully recovers when registration was orphaned"
+"$CLEANUP_SCRIPT" "$ORPHAN_WT" "${ORPHAN_WT}.snapshot" >/dev/null
 
 # ---------------------------------------------------------------------------
 # TEST SUITE 2: Review History Parsing (Calling Real collect-pr-review-history.sh)
@@ -130,7 +171,6 @@ cat << 'EOF' > "${SHIM_BIN}/gh"
 #!/usr/bin/env bash
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ "${1:-}" = "api" ]; then
-  # Record the API invocation
   printf '%s\n' "$@" > "${BASE_DIR}/last_gh_api_call.txt"
   for arg in "$@"; do
     case "$arg" in
@@ -154,7 +194,6 @@ if [ "${1:-}" = "api" ]; then
   done
   exit 0
 fi
-# Pass-through if gh is called for other commands
 exec /usr/bin/gh "$@"
 EOF
 chmod +x "${SHIM_BIN}/gh"
@@ -171,7 +210,6 @@ cat << 'EOF' > "${TEST_SANDBOX}/mock_reviews.json"
 EOF
 echo "[]" > "${TEST_SANDBOX}/mock_comments.json"
 
-# Call the actual production script!
 OUTPUT_MODERN="$("$HISTORY_SCRIPT" "https://github.com/testowner/testrepo/pull/42")"
 
 assert_eq "1a2b3c4d" "$(echo "$OUTPUT_MODERN" | jq -r .latest_reviewed_head)" "real script recovers latest_reviewed_head from agent-pr-review"
@@ -202,7 +240,6 @@ cat << 'EOF' > "${TEST_SANDBOX}/mock_comments.json"
 ]
 EOF
 
-# Call the actual production script for legacy markers!
 OUTPUT_LEGACY="$("$HISTORY_SCRIPT" "https://github.com/testowner/testrepo/pull/42")"
 
 assert_eq "9z8y7x6w" "$(echo "$OUTPUT_LEGACY" | jq -r .latest_reviewed_head)" "real script recovers reviewed-head from legacy lyreo-review marker"
@@ -215,21 +252,23 @@ assert_eq "BLOCKER" "$(echo "$OUTPUT_LEGACY" | jq -r '.previous_findings[0].seve
 printf '\n3. Testing Posting Script Execution (Executing Real post-pr-review.sh)...\n'
 
 DUMMY_BODY="${TEST_SANDBOX}/body.md"
-printf '# Canonical Review Body\nVerified PASS content.\n' > "$DUMMY_BODY"
+printf '# Canonical Review Body\nVerified PASS content.\nLine ending with newline.\n' > "$DUMMY_BODY"
 
 # Test 3.1: Rejection of invalid event
 set +e
 "$POST_SCRIPT" "testowner/testrepo" 42 "INVALID_EVENT" "$DUMMY_BODY" >/dev/null 2>&1
 RC_INVALID_EVENT=$?
+set -e
 assert_exit 65 "$RC_INVALID_EVENT" "post-pr-review rejects invalid review event"
 
 # Test 3.2: Rejection of missing body file
+set +e
 "$POST_SCRIPT" "testowner/testrepo" 42 "APPROVE" "${TEST_SANDBOX}/nonexistent.md" >/dev/null 2>&1
 RC_MISSING_BODY=$?
-assert_exit 66 "$RC_MISSING_BODY" "post-pr-review rejects missing body file"
 set -e
+assert_exit 66 "$RC_MISSING_BODY" "post-pr-review rejects missing body file"
 
-# Test 3.3: Execution with commit_id binding
+# Test 3.3: Execution with commit_id and direct-file body flag (-F body=@file)
 rm -f "${TEST_SANDBOX}/last_gh_api_call.txt"
 "$POST_SCRIPT" "testowner/testrepo" 42 "REQUEST_CHANGES" "$DUMMY_BODY" "feedbeef12345678" >/dev/null
 
@@ -238,7 +277,9 @@ assert_eq "true" "$(echo "$LAST_CALL" | grep -q "POST" && echo true || echo fals
 assert_eq "true" "$(echo "$LAST_CALL" | grep -q "repos/testowner/testrepo/pulls/42/reviews" && echo true || echo false)" "post-pr-review targets correct endpoint"
 assert_eq "true" "$(echo "$LAST_CALL" | grep -q "event=REQUEST_CHANGES" && echo true || echo false)" "post-pr-review sets event=REQUEST_CHANGES"
 assert_eq "true" "$(echo "$LAST_CALL" | grep -q "commit_id=feedbeef12345678" && echo true || echo false)" "post-pr-review binds commit_id to reviewed HEAD"
-assert_eq "true" "$(echo "$LAST_CALL" | grep -q "Canonical Review Body" && echo true || echo false)" "post-pr-review transmits exact canonical body"
+assert_eq "true" "$(echo "$LAST_CALL" | grep -q -- "-F" && echo true || echo false)" "post-pr-review uses -F direct-file field flag"
+assert_eq "true" "$(echo "$LAST_CALL" | grep -q -- "body=@${DUMMY_BODY}" && echo true || echo false)" "post-pr-review passes body file path directly without command substitution"
+assert_eq "true" "$(tail -c 1 "$DUMMY_BODY" | grep -q '^$' && echo true || echo false)" "body fixture preserves trailing newline"
 
 # Test 3.4: Execution without commit_id (backward-compatibility check)
 rm -f "${TEST_SANDBOX}/last_gh_api_call.txt"
@@ -249,5 +290,11 @@ assert_eq "true" "$(echo "$LAST_CALL_NO_COMMIT" | grep -q "event=APPROVE" && ech
 assert_eq "false" "$(echo "$LAST_CALL_NO_COMMIT" | grep -q "commit_id=" && echo true || echo false)" "post-pr-review omits commit_id flag when not supplied"
 
 printf '\n=======================================================\n'
-printf 'All regression tests passed: %d / %d tests\n' "$PASSED_TESTS" "$TOTAL_TESTS"
+printf 'Regression test summary: %d passed, %d failed (Total: %d)\n' "$PASSED_TESTS" "$FAILED_TESTS" "$TOTAL_TESTS"
 printf '=======================================================\n'
+
+# Hard failure gate: exit non-zero if any test failed or no tests ran
+if [ "$FAILED_TESTS" -gt 0 ] || [ "$PASSED_TESTS" -ne "$TOTAL_TESTS" ] || [ "$TOTAL_TESTS" -eq 0 ]; then
+  printf '\nTEST SUITE FAILED: %d failures detected!\n' "$FAILED_TESTS" >&2
+  exit 1
+fi
