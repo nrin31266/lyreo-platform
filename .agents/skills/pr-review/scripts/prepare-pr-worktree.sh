@@ -74,8 +74,25 @@ if [ "$#" -ge 2 ] && [ -n "$2" ]; then
   worktree_path="$2"
 else
   # Deterministic path: based on repo root hash + PR number, no random suffix
-  root_hash="$(printf '%s' "$original_root" | sha1sum | cut -c1-8)"
+  root_hash="$(printf '%s' "$original_root" | git hash-object --stdin | cut -c1-8)"
   worktree_path="/tmp/pr-worktree-${root_hash}-${number}"
+fi
+
+# Harden interrupted worktree recovery:
+# If target path already exists, safely recover it if Git confirms it is a registered
+# linked worktree of this repository. Otherwise, refuse to touch unverified paths.
+if [ -e "$worktree_path" ]; then
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  cleanup_script="${script_dir}/cleanup-pr-worktree.sh"
+  if [ -x "$cleanup_script" ]; then
+    if ! "$cleanup_script" "$worktree_path" --stale-recovery; then
+      printf 'SAFETY: Target worktree path "%s" exists but is not a verified linked worktree of this repository — refusing to touch.\n' "$worktree_path" >&2
+      exit 67
+    fi
+  else
+    printf 'SAFETY: Target worktree path "%s" exists and cleanup script not found — refusing to touch.\n' "$worktree_path" >&2
+    exit 67
+  fi
 fi
 
 snapshot_file="${worktree_path}.snapshot"

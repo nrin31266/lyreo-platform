@@ -8,6 +8,11 @@
 
 Natural Vietnamese. Use if `LANGUAGE_STYLE` is not explicitly provided.
 
+## Default Posting Mode
+
+`auto-post-verified`. Use if `POSTING_MODE` is not explicitly provided.
+(Resolution order: 1. explicit invocation input -> 2. project-profile default -> 3. generic safe fallback `post-after-confirmation`).
+
 ## Context Entry Points
 
 Read these files as routing indexes to find owner documents:

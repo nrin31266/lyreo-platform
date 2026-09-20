@@ -165,6 +165,14 @@ if [ "$cleanup_ok" = "false" ]; then
   exit 2
 fi
 
+# In stale-recovery mode (used when preparing a new worktree to clean up interrupted runs),
+# the linked worktree has been safely removed and verified; no snapshot integrity check is needed.
+if [ "$snapshot_file" = "--stale-recovery" ]; then
+  rm -f "${worktree_path}.snapshot"
+  printf '%s\n' "WORKTREE_CLEANUP: PASS (stale linked worktree recovered)"
+  exit 0
+fi
+
 # Verify original workspace integrity
 integrity_status="PASS"
 if [ -n "$original_root" ] && [ -f "$snapshot_file" ]; then
