@@ -12,17 +12,46 @@ export const lyreoBrand = {
  * `foreground`, `primary`, or `border` instead of reaching for these names.
  */
 export const primitiveColors = {
-  ink950: '#101714',
-  ink900: '#17201D',
-  ink700: '#4A5551',
-  ink500: '#75807C',
-  ink300: '#AEBAB5',
+  // Neutral ink
+  ink950: '#1B0E0B',
+  ink900: '#2B1813',
+  ink700: '#72594D',
+  ink500: '#9B8275',
+  ink300: '#C8A997',
 
-  paper50: '#F7F8F5',
-  paper100: '#EEF1EF',
-  paper200: '#DDE3DE',
+  // Neutral paper
+  paper50: '#FEF8F0',
+  paper100: '#F8EDE3',
+  paper200: '#E8D5C6',
   white: '#FFFFFF',
 
+  // Lyreo brand — inspired by the mascot
+  espresso950: '#1B0E0B',
+  espresso900: '#24130F',
+  chocolate800: '#2B1813',
+  chocolate700: '#3A2018',
+  brown600: '#4A2A20',
+  brown500: '#56271C',
+  chestnut500: '#86442C',
+
+  copper500: '#CD865B',
+  apricot400: '#EDB07C',
+  peach300: '#F2C69E',
+  cream200: '#F3D5B4',
+  ivory100: '#FEF6E6',
+
+  // Functional colours — intentionally independent from brand colours
+  success700: '#2E7D5B',
+  success400: '#6FD0A0',
+
+  warning700: '#A66A18',
+  warning400: '#E8B04A',
+
+  danger950: '#1A1111',
+  danger700: '#A64B47',
+  danger400: '#E07A74',
+
+  // Kept temporarily for backwards compatibility with possible consumers.
   forest950: '#0F1614',
   forest900: '#173E35',
   forest850: '#24312D',
@@ -39,14 +68,8 @@ export const primitiveColors = {
   gold300: '#E8BC62',
   gold100: '#F2E1B9',
 
-  success700: '#2E7D5B',
-  success400: '#6FD0A0',
-  danger950: '#1A1111',
-  danger700: '#A64B47',
-  danger400: '#E07A74',
-
-  overlayLight: 'rgba(15, 22, 20, 0.46)',
-  overlayDark: 'rgba(0, 0, 0, 0.62)',
+  overlayLight: 'rgba(43, 19, 15, 0.42)',
+  overlayDark: 'rgba(10, 5, 4, 0.68)',
 } as const;
 
 export const spacing = Object.freeze(foundation.spacing);

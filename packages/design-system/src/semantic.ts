@@ -26,45 +26,66 @@ export type ThemeColors = {
 
 export const semanticThemes: Record<ThemeMode, ThemeColors> = {
   light: {
-    background: primitiveColors.paper50,
-    foreground: primitiveColors.ink900,
+    background: primitiveColors.ivory100,
+    foreground: primitiveColors.espresso950,
+
     surface: primitiveColors.white,
-    surfaceElevated: primitiveColors.white,
-    primary: primitiveColors.forest900,
-    primaryForeground: primitiveColors.paper50,
-    secondary: primitiveColors.gold100,
-    secondaryForeground: primitiveColors.forest900,
+    surfaceElevated: primitiveColors.paper50,
+
+    primary: primitiveColors.brown500,
+    primaryForeground: primitiveColors.ivory100,
+
+    secondary: primitiveColors.cream200,
+    secondaryForeground: primitiveColors.brown500,
+
     muted: primitiveColors.paper100,
     mutedForeground: primitiveColors.ink700,
+
     border: primitiveColors.paper200,
     input: primitiveColors.paper200,
-    focusRing: primitiveColors.forest500,
+
+    focusRing: primitiveColors.copper500,
+
     success: primitiveColors.success700,
-    warning: primitiveColors.gold500,
+    warning: primitiveColors.warning700,
+
     destructive: primitiveColors.danger700,
     destructiveForeground: primitiveColors.white,
+
     overlay: primitiveColors.overlayLight,
   },
-  dark: {
-    background: primitiveColors.forest950,
-    foreground: primitiveColors.paper50,
-    surface: primitiveColors.forest800,
-    surfaceElevated: primitiveColors.forest700,
-    primary: primitiveColors.forest300,
-    primaryForeground: primitiveColors.forest950,
-    secondary: primitiveColors.gold950,
-    secondaryForeground: primitiveColors.gold100,
-    muted: primitiveColors.forest850,
-    mutedForeground: primitiveColors.ink300,
-    border: primitiveColors.forest650,
-    input: primitiveColors.forest650,
-    focusRing: primitiveColors.forest300,
-    success: primitiveColors.success400,
-    warning: primitiveColors.gold300,
-    destructive: primitiveColors.danger400,
-    destructiveForeground: primitiveColors.danger950,
-    overlay: primitiveColors.overlayDark,
-  },
+
+dark: {
+  background: '#2A1812',
+  foreground: '#FFF8EF',
+
+  surface: '#362119',
+  surfaceElevated: '#493025',
+
+  primary: '#493025',
+  primaryForeground: '#FFF8EF',
+
+  secondary: '#DB9466',
+  secondaryForeground: '#2A1812',
+
+  muted: '#56392D',
+  mutedForeground: '#DEC4B3',
+
+  border: '#765346',
+  input: '#765346',
+
+  focusRing: '#F0B986',
+
+  success: primitiveColors.success400,
+  warning: primitiveColors.warning400,
+
+  destructive: primitiveColors.danger400,
+  destructiveForeground: primitiveColors.danger950,
+
+  overlay: primitiveColors.overlayDark,
+},
 };
 
-export const semanticColorRoles = Object.freeze(Object.keys(semanticThemes.light) as (keyof ThemeColors)[]);
+export const semanticColorRoles = Object.freeze(
+  Object.keys(semanticThemes.light) as (keyof ThemeColors)[],
+);
