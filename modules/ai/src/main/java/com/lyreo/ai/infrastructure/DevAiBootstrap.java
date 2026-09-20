@@ -1,6 +1,6 @@
 package com.lyreo.ai.infrastructure;
 
-import com.lyreo.ai.application.AiAdminService;
+import com.lyreo.ai.application.admin.AiAdminService;
 import java.util.List;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;

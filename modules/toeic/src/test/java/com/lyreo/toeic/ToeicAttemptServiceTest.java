@@ -3,8 +3,8 @@ package com.lyreo.toeic;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent;
-import com.lyreo.toeic.application.ToeicAttemptRepository;
 import com.lyreo.toeic.application.ToeicAttemptService;
+import com.lyreo.toeic.application.port.ToeicAttemptRepository;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;

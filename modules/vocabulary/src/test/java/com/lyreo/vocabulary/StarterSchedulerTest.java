@@ -2,7 +2,7 @@ package com.lyreo.vocabulary;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.lyreo.vocabulary.application.SpacedRepetitionScheduler;
+import com.lyreo.vocabulary.application.port.SpacedRepetitionScheduler;
 import com.lyreo.vocabulary.domain.VocabularyCard;
 import com.lyreo.vocabulary.infrastructure.StarterFsrsCompatibleScheduler;
 import java.time.Instant;

@@ -2,6 +2,8 @@ package com.lyreo.vocabulary.application;
 
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.vocabulary.VocabularyReviewCompletedEvent;
+import com.lyreo.vocabulary.application.port.SpacedRepetitionScheduler;
+import com.lyreo.vocabulary.application.port.VocabularyRepository;
 import com.lyreo.vocabulary.domain.VocabularyCard;
 import java.time.Instant;
 import java.util.List;

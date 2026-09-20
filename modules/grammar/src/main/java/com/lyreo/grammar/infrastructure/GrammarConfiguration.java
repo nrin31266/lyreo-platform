@@ -1,8 +1,9 @@
 package com.lyreo.grammar.infrastructure;
 
-import com.lyreo.grammar.application.GrammarPracticeRepository;
 import com.lyreo.grammar.application.GrammarPracticeScorer;
 import com.lyreo.grammar.application.GrammarPracticeService;
+import com.lyreo.grammar.application.port.GrammarPracticeRepository;
+import com.lyreo.grammar.infrastructure.persistence.JdbcGrammarPracticeRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

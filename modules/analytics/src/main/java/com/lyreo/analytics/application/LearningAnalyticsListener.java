@@ -1,5 +1,6 @@
 package com.lyreo.analytics.application;
 
+import com.lyreo.analytics.application.port.AnalyticsProjectionRepository;
 import com.lyreo.contracts.grammar.GrammarQuestionAnsweredEvent;
 import com.lyreo.contracts.lesson.LessonActivityCompletedEvent;
 import com.lyreo.contracts.lesson.LessonCompletedEvent;

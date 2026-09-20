@@ -1,7 +1,8 @@
 package com.lyreo.identity.infrastructure;
 
 import com.lyreo.identity.application.AppUserProvisioningService;
-import com.lyreo.identity.application.AppUserRepository;
+import com.lyreo.identity.application.port.AppUserRepository;
+import com.lyreo.identity.infrastructure.persistence.JpaAppUserRepositoryAdapter;
 import com.lyreo.identity.infrastructure.persistence.SpringDataAppUserJpaRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

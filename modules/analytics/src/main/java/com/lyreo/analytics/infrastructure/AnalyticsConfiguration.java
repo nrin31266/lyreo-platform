@@ -1,6 +1,7 @@
 package com.lyreo.analytics.infrastructure;
 
-import com.lyreo.analytics.application.AnalyticsProjectionRepository;
+import com.lyreo.analytics.application.port.AnalyticsProjectionRepository;
+import com.lyreo.analytics.infrastructure.persistence.JdbcAnalyticsProjectionRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;

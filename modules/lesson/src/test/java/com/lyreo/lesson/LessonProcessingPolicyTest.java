@@ -3,11 +3,11 @@ package com.lyreo.lesson;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.lyreo.contracts.errors.StateConflictException;
-import com.lyreo.lesson.domain.LessonActivityType;
-import com.lyreo.lesson.domain.LessonAnnotationType;
-import com.lyreo.lesson.domain.LessonBuildOptions;
-import com.lyreo.lesson.domain.LessonProcessingPolicy;
-import com.lyreo.lesson.domain.LessonSourceType;
+import com.lyreo.lesson.domain.build.LessonBuildOptions;
+import com.lyreo.lesson.domain.build.LessonProcessingPolicy;
+import com.lyreo.lesson.domain.content.LessonActivityType;
+import com.lyreo.lesson.domain.content.LessonAnnotationType;
+import com.lyreo.lesson.domain.content.LessonSourceType;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 

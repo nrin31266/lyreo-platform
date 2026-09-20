@@ -5,7 +5,7 @@ import java.util.UUID;
 import org.springframework.modulith.NamedInterface;
 
 /** Public identity view returned to other modules; the internal AppUser aggregate stays private. */
-@NamedInterface("application")
+@NamedInterface(value = "application", propagate = false)
 public record ProvisionedUser(
     UUID id,
     String keycloakSubject,

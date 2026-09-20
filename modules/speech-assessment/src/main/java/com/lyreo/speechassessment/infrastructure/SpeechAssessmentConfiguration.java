@@ -1,11 +1,12 @@
 package com.lyreo.speechassessment.infrastructure;
 
 import tools.jackson.databind.ObjectMapper;
-import com.lyreo.ai.application.AiInvocationService;
+import com.lyreo.ai.application.execution.AiInvocationService;
 import com.lyreo.platform.storage.ObjectStoragePort;
-import com.lyreo.speechassessment.application.SpeechAssessmentRepository;
 import com.lyreo.speechassessment.application.SpeechAssessmentService;
 import com.lyreo.speechassessment.application.SpeechScoringPolicy;
+import com.lyreo.speechassessment.application.port.SpeechAssessmentRepository;
+import com.lyreo.speechassessment.infrastructure.persistence.JdbcSpeechAssessmentRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;

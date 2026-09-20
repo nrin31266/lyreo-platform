@@ -69,6 +69,16 @@ public contracts, or Spring Modulith events. Never import another module's repos
 or internal infrastructure, and never query another module's tables as a shortcut. Architecture
 tests and validators must protect these boundaries.
 
+Physical and package structure invariants:
+- `apps/*` are deployable/composition roots; Core Service assembles modules and does not own them.
+- `modules/*` are business capabilities; `platform/*` are reusable technical building blocks; `libs/*` are shared Java contracts.
+- Business modules use `api`, `application`, `domain`, `infrastructure` as stable top-level concerns.
+- Keep packages flat while cohesive; deeper packages must represent meaningful semantic/use-case/adapter responsibilities.
+- Outbound application abstractions go in `application/port`; JDBC/JPA implementations go in `infrastructure/persistence`.
+- Do not introduce generic common/utils/helpers/impl/misc buckets or empty architecture folders.
+- `api/` is inbound transport, not cross-module Java visibility; Spring Modulith Named Interfaces and events own cross-module exposure.
+- Detailed conventions and examples: [`docs/ARCHITECTURE.md#backend-module-package-structure`](docs/ARCHITECTURE.md#backend-module-package-structure).
+
 ## 4. Domain ownership
 
 - `identity`: Keycloak subject to app-user mapping and JIT provisioning.
@@ -194,7 +204,7 @@ Workflow: **owner/ID → compare intent with code → classify → decide if nee
 implementation/tests when in scope → traceability/evidence → link/route checks → handoff**.
 
 Requirement IDs are never reused for a new meaning. Retired requirements are marked superseded.
-Architecture decisions retain D-001–D-019 and meaningful new decisions go in `docs/DECISIONS.md`.
+Existing decision IDs are immutable. Append the next available D-NNN; never renumber or reuse an existing decision ID. Meaningful new decisions go in `docs/DECISIONS.md`.
 Documentation conventions are owned by `docs/documentation.md`.
 
 ## 13. Documentation and comments
