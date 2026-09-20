@@ -145,8 +145,11 @@ FastAPI. Provider credentials remain server-side. See `docs/architecture/ai-exec
 ## 8. Database, storage, and data
 
 Flyway owns schema evolution; every schema change needs a new migration, and an applied shared
-migration must not be edited. Hibernate validates mappings/schema and must not mutate schema.
-Large Lexicon/TOEIC/Grammar/Curriculum content belongs in importer tooling, not Flyway.
+migration must not be edited. V001–V003 are the frozen initial baseline after the testing foundation consolidation.
+After the baseline is established, evolve the database by appending the next Vxxx migration; do not edit
+established versioned migrations. Hibernate validates mappings/schema and must not mutate schema.
+Small stable reference/product defaults may live in Flyway. Large Lexicon/TOEIC/Grammar/Curriculum content
+and temporary development fixtures do not.
 
 Store durable/queryable normalized state in PostgreSQL and large immutable/debug artifacts in
 object storage. Persist object keys, not expiring URLs. Sensitive learner recordings are private by
@@ -223,10 +226,21 @@ acceptance, endpoint/schema, configuration, or roadmap tables.
 
 ## 14. Testing and completion
 
+Tests live with their owning Maven module (`src/test/java`). Core owns application-composition,
+cross-module, database-baseline, and HTTP contract tests, not ordinary tests of every business module.
+Behavior-changing backend code requires appropriate tests in the same change:
+- `*Test.java` = normal/fast test (Maven Surefire, `make test-java`);
+- `*IT.java` = integration test (Maven Failsafe, `make verify-java`).
+
+Use PostgreSQL Testcontainers for PostgreSQL-specific behavior. New or materially changed non-trivial
+business logic targets roughly >=80% line coverage for test-worthy code; below roughly 70% normally
+requires explicit justification. 100% is not a goal and trivial code (records, simple DTO accessors,
+constants, simple enums, package-info, configuration holders) must not be tested merely to inflate coverage.
+
 Run checks applicable to the changed area: Java and Modulith tests, Flyway startup/validation,
 Python tests/compile, importer tests/dry-run, TypeScript typecheck/build, shell/config validation, and
 secret/build-output sanity checks as appropriate. `make validate` is only the minimum offline
-guardrail.
+guardrail; `make check` provides full verification.
 
 Before claiming completion, use fresh evidence. If a required check cannot run, name it, explain
 why, and provide the exact command for developer/CI. An acceptable change preserves ownership and

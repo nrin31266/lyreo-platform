@@ -247,6 +247,15 @@ Inspect containers:
 docker compose   --env-file infra/docker/.env   -f compose.dev.yml   ps
 ```
 
+Database inspection and reset:
+
+```bash
+make db-shell   # Open psql inside container against lyreo_dev
+make db-reset   # Safe local reset of app database (preserves Keycloak)
+```
+
+Core startup (`make core`) automatically applies Flyway migrations. See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#7-database-workflow) for details.
+
 ---
 
 ## 7. Bootstrap Keycloak
@@ -503,12 +512,15 @@ Main checks can also be run separately:
 
 ```bash
 make validate-docs
-make test-java
+make test-java     # Fast Java unit tests (Surefire)
+make verify-java   # Full Java verification: unit + integration tests (Failsafe)
 make test-ai
 make test-lesson-prep
 pnpm typecheck
 pnpm build
 ```
+
+See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#9-testvalidation-loop) for the complete database and testing workflow.
 
 Python AI tests:
 
