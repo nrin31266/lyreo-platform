@@ -216,7 +216,7 @@ def check_transactional_targets(root: Path, errors: list[str]) -> None:
 def check_flyway_and_modulith_migrations(root: Path, errors: list[str]) -> None:
     """Verify Flyway migrations sorting, uniqueness, and Spring Modulith table schema."""
     modulith_migration = (
-        root / "apps/core-service/src/main/resources/db/migration/V001__platform_identity_learner.sql"
+        root / "apps/core-service/src/main/resources/db/migration/V001__baseline_schema.sql"
     )
     if modulith_migration.exists():
         migration_text = modulith_migration.read_text(encoding="utf-8").lower()

@@ -129,18 +129,55 @@ production bucket.
 
 ## 7. Database workflow
 
-### Schema changes
+### Local application startup
 
-For a schema change:
+```bash
+make dev-infra
+make core
+```
 
-1. create a new Flyway migration;
+Core connects to PostgreSQL, runs Flyway migrations, validates Hibernate mappings, and boots the modular monolith.
+
+### Schema changes and migrations
+
+The initial schema history is consolidated into a frozen baseline:
+- `V001__baseline_schema.sql` (schema tables, constraints, indexes)
+- `V002__reference_data.sql` (stable reference catalogs)
+- `V003__runtime_defaults.sql` (runtime policy defaults)
+
+For future database evolution:
+1. create the next versioned Flyway migration (`V004__...sql`, `V005__...sql`, etc.);
 2. run Core/tests so Flyway applies and validates it;
 3. verify Hibernate mapping validation;
 4. review compatibility/rollback implications for destructive changes.
 
-Mandatory persistence rules are owned by
+Established versioned migrations are immutable. Mandatory persistence rules are owned by
 [`AGENTS.md`](../AGENTS.md#8-database-storage-and-data). Large Lexicon/Grammar/TOEIC content
 uses importer tooling rather than Flyway seed blobs.
+
+### Inspecting database
+
+To open `psql` inside the running PostgreSQL container against the Lyreo development database:
+
+```bash
+make db-shell
+```
+
+Example query:
+```sql
+SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;
+```
+
+### Safe local database reset
+
+To reset the local application database during development:
+
+```bash
+make db-reset
+make core
+```
+
+`make db-reset` safely terminates active connections to `lyreo_dev`, drops it, and recreates an empty database owned by `lyreo`. It explicitly rejects system databases (`postgres`, `template0`, `template1`) and leaves the Keycloak database (`lyreo_keycloak`) and Docker volumes completely intact. Running `make core` subsequently recreates the schema through the baseline migrations.
 
 ## 8. Data importer development
 
@@ -160,6 +197,29 @@ Run the smallest relevant checks continuously while developing, then run the req
 checks for the changed area. Exact repository commands are owned by
 [`README.md`](../README.md#15-validation); completion requirements are owned by
 [`AGENTS.md`](../AGENTS.md#14-testing-and-completion).
+
+### Test ownership and naming
+
+Tests are colocated with their owning Maven module under `src/test/java`, mirroring the production package hierarchy:
+- Pure unit tests (`*Test.java`): fast tests managed by Maven Surefire (`make test-java` or `./mvnw -B test`).
+- Integration tests (`*IT.java`): integration tests managed by Maven Failsafe (`make verify-java` or `./mvnw -B verify`).
+
+Core Service (`apps/core-service/src/test/java`) owns tests for whole-application composition, cross-module workflows, HTTP wire contracts, and database baseline verification (`FlywayMigrationIT`), rather than ordinary module business logic.
+
+### Testing tools and patterns
+
+- **Unit tests**: Use JUnit Jupiter, AssertJ, and Mockito (when mocking meaningful boundaries). Avoid starting Spring context when testing pure domain or application logic.
+- **Spring Modulith tests**: `@ApplicationModuleTest` should be used only when a test genuinely requires Spring bean wiring for a specific application module.
+- **PostgreSQL integration tests**: Use Testcontainers (`postgres:18.6-alpine`) via Spring Boot Testcontainers (`@ServiceConnection`) for behavior depending on real PostgreSQL semantics. Docker must be running locally or in CI.
+
+### Code coverage visibility (JaCoCo)
+
+JaCoCo is configured across all Maven modules to provide local feedback and maintain future-agent testing discipline. Reports are generated at:
+```text
+<module>/target/site/jacoco/index.html
+```
+Example: `apps/core-service/target/site/jacoco/index.html` or `modules/lesson/target/site/jacoco/index.html`.
+Coverage policy and targets are owned by [`AGENTS.md`](../AGENTS.md#14-testing-and-completion).
 
 ## 10. Common troubleshooting
 
