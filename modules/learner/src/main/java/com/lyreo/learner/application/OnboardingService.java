@@ -1,6 +1,7 @@
 package com.lyreo.learner.application;
 
 import com.lyreo.contracts.errors.RequestValidationException;
+import com.lyreo.learner.application.port.LearnerProfileRepository;
 import com.lyreo.learner.domain.LearnerPreferences;
 import com.lyreo.learner.domain.LearnerProfile;
 import java.util.UUID;

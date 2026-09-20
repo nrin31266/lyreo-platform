@@ -1,13 +1,13 @@
 package com.lyreo.lesson.api;
 
 import com.lyreo.contracts.errors.ResourceNotFoundException;
-import com.lyreo.lesson.application.CreateLessonBuildService;
-import com.lyreo.lesson.application.LessonPreviewService;
-import com.lyreo.lesson.application.LessonPreviewView;
-import com.lyreo.lesson.domain.LessonActivityType;
-import com.lyreo.lesson.domain.LessonAnnotationType;
-import com.lyreo.lesson.domain.LessonBuildOptions;
-import com.lyreo.lesson.domain.LessonSourceType;
+import com.lyreo.lesson.application.build.CreateLessonBuildService;
+import com.lyreo.lesson.application.preview.LessonPreviewService;
+import com.lyreo.lesson.application.preview.LessonPreviewView;
+import com.lyreo.lesson.domain.build.LessonBuildOptions;
+import com.lyreo.lesson.domain.content.LessonActivityType;
+import com.lyreo.lesson.domain.content.LessonAnnotationType;
+import com.lyreo.lesson.domain.content.LessonSourceType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

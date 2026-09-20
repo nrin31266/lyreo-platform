@@ -1,10 +1,11 @@
 package com.lyreo.speechassessment.application;
 
 import tools.jackson.databind.ObjectMapper;
-import com.lyreo.ai.application.AiInvocationService;
+import com.lyreo.ai.application.execution.AiInvocationService;
 import com.lyreo.ai.domain.AiCapability;
 import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.platform.storage.ObjectStoragePort;
+import com.lyreo.speechassessment.application.port.SpeechAssessmentRepository;
 import com.lyreo.speechassessment.domain.SpeechAttempt;
 import java.net.URI;
 import java.time.Duration;

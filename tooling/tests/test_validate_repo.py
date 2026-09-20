@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from tooling.repo_checks.backend import (
+    check_business_package_topology,
     check_clean_architecture_and_boundaries,
     check_jackson2_databind,
 )
@@ -192,44 +193,97 @@ class ValidateRepoTest(unittest.TestCase):
         self.assertEqual([], errors)
 
 
-    def test_internal_cross_module_type_import_fails(self) -> None:
-        """Internal types (AiRouteRepository, AppUserRepository, AiRoute) imported from another module must fail."""
-        for fqn, label in [
-            ("com.lyreo.ai.infrastructure.AiRouteRepository", "AiRouteRepository"),
-            ("com.lyreo.identity.application.AppUserRepository", "AppUserRepository"),
-            ("com.lyreo.ai.domain.AiRoute", "AiRoute"),
-        ]:
-            with self.subTest(fqn=fqn):
-                root = self.create_fixture({
-                    "modules/lesson/src/main/java/com/lyreo/lesson/package-info.java": "package com.lyreo.lesson;\n",
-                    "modules/lesson/src/main/java/com/lyreo/lesson/application/LessonService.java": (
-                        f"package com.lyreo.lesson.application;\nimport {fqn};\npublic class LessonService {{}}\n"
-                    ),
-                })
-                errors: list[str] = []
-                check_clean_architecture_and_boundaries(root, errors)
-                self.assertTrue(
-                    any("cross-module import must use a named/public interface" in e for e in errors),
-                    f"Expected violation for {label}; got: {errors}",
-                )
-
-    def test_allowed_cross_module_types_pass(self) -> None:
-        """Explicitly allowed types (AiCapability, AiInvocationService, AppUserProvisioningService) must not fail."""
-        allowed_imports = "\n".join([
-            "import com.lyreo.ai.domain.AiCapability;",
-            "import com.lyreo.ai.application.AiInvocationService;",
-            "import com.lyreo.identity.application.AppUserProvisioningService;",
-        ])
+    def test_cross_module_infrastructure_import_fails(self) -> None:
+        """Importing another business module's infrastructure must fail."""
         root = self.create_fixture({
             "modules/lesson/src/main/java/com/lyreo/lesson/package-info.java": "package com.lyreo.lesson;\n",
             "modules/lesson/src/main/java/com/lyreo/lesson/application/LessonService.java": (
-                f"package com.lyreo.lesson.application;\n{allowed_imports}\npublic class LessonService {{}}\n"
+                "package com.lyreo.lesson.application;\n"
+                "import com.lyreo.ai.infrastructure.persistence.JdbcAiRouteRepository;\n"
+                "public class LessonService {}\n"
             ),
         })
         errors: list[str] = []
         check_clean_architecture_and_boundaries(root, errors)
-        cross_errors = [e for e in errors if "cross-module import" in e]
-        self.assertEqual([], cross_errors, f"Unexpected cross-module errors: {cross_errors}")
+        self.assertTrue(
+            any("cross-module infrastructure import" in e for e in errors),
+            f"Expected cross-module infrastructure import violation; got: {errors}",
+        )
+
+    def test_business_package_topology_valid_nested_passes(self) -> None:
+        """Valid nested semantic packages under direct child architecture concerns must pass."""
+        root = self.create_fixture({
+            "modules/lesson/src/main/java/com/lyreo/lesson/package-info.java": "package com.lyreo.lesson;\n",
+            "modules/lesson/src/main/java/com/lyreo/lesson/application/build/CreateLessonBuildService.java": (
+                "package com.lyreo.lesson.application.build;\npublic class CreateLessonBuildService {}\n"
+            ),
+            "modules/lesson/src/main/java/com/lyreo/lesson/domain/content/Lesson.java": (
+                "package com.lyreo.lesson.domain.content;\npublic class Lesson {}\n"
+            ),
+            "modules/lesson/src/main/java/com/lyreo/lesson/infrastructure/integration/ExternalCommandYoutubeSourceMaterializer.java": (
+                "package com.lyreo.lesson.infrastructure.integration;\npublic class ExternalCommandYoutubeSourceMaterializer {}\n"
+            ),
+        })
+        errors: list[str] = []
+        check_business_package_topology(root, errors)
+        self.assertEqual([], errors)
+
+    def test_business_package_topology_invalid_direct_child_fails(self) -> None:
+        """Invalid direct child packages (e.g. services, repositories, common) must fail."""
+        root = self.create_fixture({
+            "modules/lesson/src/main/java/com/lyreo/lesson/package-info.java": "package com.lyreo.lesson;\n",
+            "modules/lesson/src/main/java/com/lyreo/lesson/services/LessonService.java": (
+                "package com.lyreo.lesson.services;\npublic class LessonService {}\n"
+            ),
+        })
+        errors: list[str] = []
+        check_business_package_topology(root, errors)
+        self.assertTrue(
+            any("invalid direct child package `services`" in e for e in errors),
+            f"Expected invalid direct child package error; got: {errors}",
+        )
+
+    def test_business_package_topology_missing_optional_layer_passes(self) -> None:
+        """A module missing optional layers (e.g. domain or api) must pass."""
+        root = self.create_fixture({
+            "modules/chat/src/main/java/com/lyreo/chat/package-info.java": "package com.lyreo.chat;\n",
+            "modules/chat/src/main/java/com/lyreo/chat/api/EnglishTutorController.java": (
+                "package com.lyreo.chat.api;\npublic class EnglishTutorController {}\n"
+            ),
+            "modules/chat/src/main/java/com/lyreo/chat/application/EnglishTutorService.java": (
+                "package com.lyreo.chat.application;\npublic class EnglishTutorService {}\n"
+            ),
+            "modules/chat/src/main/java/com/lyreo/chat/infrastructure/ChatConfiguration.java": (
+                "package com.lyreo.chat.infrastructure;\npublic class ChatConfiguration {}\n"
+            ),
+        })
+        errors: list[str] = []
+        check_business_package_topology(root, errors)
+        self.assertEqual([], errors)
+
+    def test_business_package_topology_application_port_accepted(self) -> None:
+        """application/port must be accepted by the business package topology guard."""
+        root = self.create_fixture({
+            "modules/lesson/src/main/java/com/lyreo/lesson/package-info.java": "package com.lyreo.lesson;\n",
+            "modules/lesson/src/main/java/com/lyreo/lesson/application/port/LessonRepository.java": (
+                "package com.lyreo.lesson.application.port;\npublic interface LessonRepository {}\n"
+            ),
+        })
+        errors: list[str] = []
+        check_business_package_topology(root, errors)
+        self.assertEqual([], errors)
+
+    def test_business_package_topology_infrastructure_persistence_accepted(self) -> None:
+        """infrastructure/persistence must be accepted by the business package topology guard."""
+        root = self.create_fixture({
+            "modules/lesson/src/main/java/com/lyreo/lesson/package-info.java": "package com.lyreo.lesson;\n",
+            "modules/lesson/src/main/java/com/lyreo/lesson/infrastructure/persistence/JdbcLessonRepository.java": (
+                "package com.lyreo.lesson.infrastructure.persistence;\npublic class JdbcLessonRepository {}\n"
+            ),
+        })
+        errors: list[str] = []
+        check_business_package_topology(root, errors)
+        self.assertEqual([], errors)
 
     def test_wildcard_internal_import_fails(self) -> None:
         """Wildcard imports of another module's internal packages must be rejected."""

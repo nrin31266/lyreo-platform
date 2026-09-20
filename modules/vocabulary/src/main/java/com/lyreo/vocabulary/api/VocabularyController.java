@@ -1,8 +1,8 @@
 package com.lyreo.vocabulary.api;
 
 import com.lyreo.identity.application.AppUserProvisioningService;
-import com.lyreo.vocabulary.application.SpacedRepetitionScheduler;
 import com.lyreo.vocabulary.application.VocabularyCommandService;
+import com.lyreo.vocabulary.application.port.SpacedRepetitionScheduler;
 import com.lyreo.vocabulary.domain.VocabularyCard;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;

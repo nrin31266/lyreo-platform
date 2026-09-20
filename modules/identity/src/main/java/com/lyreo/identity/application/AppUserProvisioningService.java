@@ -1,5 +1,6 @@
 package com.lyreo.identity.application;
 
+import com.lyreo.identity.application.port.AppUserRepository;
 import com.lyreo.identity.domain.AppUser;
 import org.springframework.modulith.NamedInterface;
 

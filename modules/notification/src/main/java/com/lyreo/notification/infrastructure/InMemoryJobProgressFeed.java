@@ -1,7 +1,7 @@
 package com.lyreo.notification.infrastructure;
 
-import com.lyreo.notification.application.JobProgressFeed;
-import com.lyreo.notification.application.RealtimeNotificationPort;
+import com.lyreo.notification.application.port.JobProgressFeed;
+import com.lyreo.notification.application.port.RealtimeNotificationPort;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 import java.util.UUID;

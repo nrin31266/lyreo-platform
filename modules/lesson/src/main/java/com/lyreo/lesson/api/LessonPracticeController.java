@@ -1,7 +1,7 @@
 package com.lyreo.lesson.api;
 
 import com.lyreo.identity.application.AppUserProvisioningService;
-import com.lyreo.lesson.application.LessonPracticeService;
+import com.lyreo.lesson.application.practice.LessonPracticeService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

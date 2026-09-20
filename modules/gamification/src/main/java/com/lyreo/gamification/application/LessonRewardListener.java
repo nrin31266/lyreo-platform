@@ -1,6 +1,7 @@
 package com.lyreo.gamification.application;
 
 import com.lyreo.contracts.lesson.LessonActivityCompletedEvent;
+import com.lyreo.gamification.application.port.DiamondLedger;
 import com.lyreo.gamification.domain.DiamondTransaction;
 import java.time.Instant;
 import java.util.UUID;

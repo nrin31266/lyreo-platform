@@ -2,7 +2,7 @@ package com.lyreo.lesson;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.lyreo.lesson.application.DictationScoringPolicy;
+import com.lyreo.lesson.application.practice.DictationScoringPolicy;
 import org.junit.jupiter.api.Test;
 
 class DictationScoringPolicyTest {
