@@ -59,14 +59,25 @@ textarea {
   font: inherit;
 }
 
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 /* =========================================================
    APP SHELL
    ========================================================= */
 
 .shell {
   min-height: 100vh;
+
   display: grid;
   grid-template-columns: 246px minmax(0, 1fr);
+
   background: var(--background);
 }
 
@@ -86,6 +97,15 @@ textarea {
 
   border-right: 1px solid
     color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+/*
+ * Dark mode uses a surface token for the sidebar instead of primary.
+ * `primary` is reserved for prominent interactive elements / CTA.
+ */
+.dark .shell aside {
+  background: var(--surface-elevated);
+  color: var(--foreground);
 }
 
 /* =========================================================
@@ -136,13 +156,13 @@ textarea {
    SIDEBAR NAVIGATION
    ========================================================= */
 
-nav {
+.shell nav {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-nav a {
+.shell nav a {
   position: relative;
 
   color: var(--primary-foreground);
@@ -162,7 +182,7 @@ nav a {
     transform 0.18s ease;
 }
 
-nav a:hover {
+.shell nav a:hover {
   background:
     color-mix(
       in srgb,
@@ -173,7 +193,7 @@ nav a:hover {
   opacity: 1;
 }
 
-nav a.active {
+.shell nav a.active {
   background:
     color-mix(
       in srgb,
@@ -188,7 +208,7 @@ nav a.active {
   font-weight: 650;
 }
 
-nav a.active::before {
+.shell nav a.active::before {
   content: "";
 
   position: absolute;
@@ -202,6 +222,11 @@ nav a.active::before {
   border-radius: 999px;
 
   background: var(--focus-ring);
+}
+
+.dark .shell nav a,
+.dark .shell nav a.active {
+  color: var(--foreground);
 }
 
 /* =========================================================
@@ -255,8 +280,6 @@ nav a.active::before {
       var(--surface) 94%,
       var(--background)
     );
-
-  backdrop-filter: blur(12px);
 }
 
 /* =========================================================
@@ -289,7 +312,7 @@ h2 {
 }
 
 .eyebrow {
-  color: var(--focus-ring);
+  color: var(--primary);
 
   font-size: 11px;
   font-weight: 750;
@@ -373,7 +396,7 @@ h2 {
 .stat strong {
   font-size: 28px;
 
-  color: var(--focus-ring);
+  color: var(--primary);
 }
 
 /* =========================================================
@@ -594,6 +617,10 @@ td {
    LOGIN / CENTER STATE
    ========================================================= */
 
+/*
+ * Do not use primary as a page-sized background.
+ * Primary is reserved for prominent interactive actions.
+ */
 .login,
 .center {
   min-height: 100vh;
@@ -605,28 +632,45 @@ td {
 
   text-align: center;
 
-  background: var(--primary);
+  background: var(--background);
 
-  color: var(--primary-foreground);
+  color: var(--foreground);
 }
 
 .login p {
-  color: var(--primary-foreground);
-
-  opacity: 0.75;
+  color: var(--muted-foreground);
 }
 
 .brand-mark {
   font-size: 48px;
 
-  color: var(--secondary);
+  color: var(--primary);
 }
 
 /* =========================================================
-   RESPONSIVE — TABLET
+   RESPONSIVE — COMPACT TABLET CONTENT
    ========================================================= */
 
-@media (max-width: 850px) {
+@media (max-width: 1000px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .two {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .shell main {
+    padding-inline: 28px;
+  }
+}
+
+/* =========================================================
+   RESPONSIVE — MOBILE NAVIGATION
+   Tailwind md starts at 768px, so this must end below 768px.
+   ========================================================= */
+
+@media (max-width: 767.98px) {
   .shell {
     grid-template-columns: 1fr;
   }
@@ -647,6 +691,8 @@ td {
     width: 250px;
 
     display: flex;
+
+    overflow-y: auto;
   }
 
   .admin-header {
@@ -657,14 +703,13 @@ td {
     padding: 30px 18px;
   }
 
-  .stat-grid,
   .two {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 }
 
 /* =========================================================
-   RESPONSIVE — MOBILE
+   RESPONSIVE — SMALL MOBILE
    ========================================================= */
 
 @media (max-width: 560px) {

@@ -29,8 +29,9 @@ export const semanticThemes: Record<ThemeMode, ThemeColors> = {
     background: primitiveColors.ivory100,
     foreground: primitiveColors.espresso950,
 
-    surface: primitiveColors.white,
-    surfaceElevated: primitiveColors.paper50,
+    // Base surface < elevated surface
+    surface: primitiveColors.paper50,
+    surfaceElevated: primitiveColors.white,
 
     primary: primitiveColors.brown500,
     primaryForeground: primitiveColors.ivory100,
@@ -44,7 +45,8 @@ export const semanticThemes: Record<ThemeMode, ThemeColors> = {
     border: primitiveColors.paper200,
     input: primitiveColors.paper200,
 
-    focusRing: primitiveColors.copper500,
+    // Darker tone for accessible focus indication
+    focusRing: primitiveColors.chestnut500,
 
     success: primitiveColors.success700,
     warning: primitiveColors.warning700,
@@ -62,11 +64,13 @@ export const semanticThemes: Record<ThemeMode, ThemeColors> = {
     surface: primitiveColors.cocoa900,
     surfaceElevated: primitiveColors.cocoa800,
 
-    primary: primitiveColors.cocoa800,
-    primaryForeground: primitiveColors.warmWhite50,
+    // Primary must be the visible CTA/accent color
+    primary: primitiveColors.copper400,
+    primaryForeground: primitiveColors.cocoa950,
 
-    secondary: primitiveColors.copper400,
-    secondaryForeground: primitiveColors.cocoa950,
+    // Keep secondary quieter than primary
+    secondary: primitiveColors.cocoa700,
+    secondaryForeground: primitiveColors.warmWhite50,
 
     muted: primitiveColors.cocoa700,
     mutedForeground: primitiveColors.sand300,
