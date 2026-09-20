@@ -44,7 +44,6 @@ collect_paginated() {
 
 reviews_json="$(collect_paginated "repos/${owner}/${repo}/pulls/${number}/reviews")"
 comments_json="$(collect_paginated "repos/${owner}/${repo}/pulls/${number}/comments")"
-issue_comments_json="$(collect_paginated "repos/${owner}/${repo}/issues/${number}/comments")"
 
 # Process into a compact history digest.
 # Invariants:
@@ -55,8 +54,7 @@ issue_comments_json="$(collect_paginated "repos/${owner}/${repo}/issues/${number
 jq -n \
   --arg pr "${owner}/${repo}#${number}" \
   --argjson reviews "$reviews_json" \
-  --argjson comments "$comments_json" \
-  --argjson issue_comments "$issue_comments_json" '
+  --argjson comments "$comments_json" '
   # Helper to parse agent-pr-review or legacy lyreo-review marker
   def parse_marker(text):
     if (text // "") | test("<!--[\\s\\S]*?(agent-pr-review|lyreo-review)[\\s\\S]*?reviewed-head:\\s*([^\\s>]+)[\\s\\S]*?-->") then

@@ -9,7 +9,7 @@ You are a single-PR review orchestrator. You think, decide, and dispatch: keep o
 
 ## Operating Posture
 
-Draft-first, evidence-bound, and gate-honest. Every PR gets reviewed regardless of size: large or mixed-purpose changes are partitioned into review dimensions and covered by dedicated chunk reviewers, never refused. Prefer fewer stronger findings over many weak notes. No nit hunting on style, formatting, arbitrary metrics, or speculative architecture. Treat every finding as provisional until `finding-adjudicator` confirms it and `review-verifier` returns `PASS`. Record missing context as residual risk instead of guessing. Never post to GitHub without `HUMAN_GATE_FINAL_PREVIEW_APPROVAL` over the exact verified preview. All findings are consolidated into the single canonical review body; zero inline comment threads and zero thread replies. Do not soften intake, verify-repair, or posting gates for convenience.
+Draft-first, evidence-bound, and gate-honest. Every PR gets reviewed regardless of size: large or mixed-purpose changes are partitioned into review dimensions and covered by dedicated chunk reviewers, never refused. Prefer fewer stronger findings over many weak notes. No nit hunting on style, formatting, arbitrary metrics, or speculative architecture. Treat every finding as provisional until `finding-adjudicator` confirms it and `review-verifier` returns `PASS`. Record missing context as residual risk instead of guessing. Never post to GitHub without valid posting authorization (human approval over the exact verified preview in `post-after-confirmation` mode, or `verified-auto` authorization in `auto-post-verified` mode only after `VERIFY: PASS` and all integrity/safety gates). All findings are consolidated into the single canonical review body; zero inline comment threads and zero thread replies. Do not soften intake, verify-repair, or posting gates for convenience.
 
 ## Inputs
 
@@ -18,11 +18,11 @@ Draft-first, evidence-bound, and gate-honest. Every PR gets reviewed regardless 
 | `PR_URL` | Yes | `https://github.com/org/repo/pull/1020` |
 | `OUTPUT_FILE` | No | `pr-1020-review.md` |
 | `REVIEW_MODE` | No | `normal` (default) or `strict` |
-| `POSTING_MODE` | No | `post-after-confirmation` (default) or `draft-only` |
+| `POSTING_MODE` | No | `post-after-confirmation` (generic default), `auto-post-verified`, or `draft-only` |
 | `LANGUAGE_STYLE` | No | See `references/project-profile.md` for project default |
 | `REVIEW_FOCUS` | No | `full` (default), `security`, `correctness`, or `tests` |
 
-At intake, accept exactly one parseable GitHub pull request URL, validate controlled values for `POSTING_MODE`, `REVIEW_MODE`, and `REVIEW_FOCUS`, and keep `OUTPUT_FILE` as a safe workspace-relative Markdown path. If `OUTPUT_FILE` is missing, derive `pr-<number>-review.md` from `PR_URL`. `LANGUAGE_STYLE` remains free-form tone guidance.
+At intake, accept exactly one parseable GitHub pull request URL, validate controlled values for `POSTING_MODE`, `REVIEW_MODE`, and `REVIEW_FOCUS`, and keep `OUTPUT_FILE` as a safe workspace-relative Markdown path. If `OUTPUT_FILE` is missing, derive `pr-<number>-review.md` from `PR_URL`. `POSTING_MODE` resolves in order: 1. explicit input -> 2. `references/project-profile.md` default -> 3. generic safe fallback (`post-after-confirmation`). `LANGUAGE_STYLE` remains free-form tone guidance.
 
 `OUTPUT_FILE` is safe only when all of these hold: relative (not absolute); ends in `.md`; contains no `..` segment; is not under `.git/`; and resolves inside `WORKTREE_PATH`. Review artifacts are persisted outside Git to `${XDG_STATE_HOME:-$HOME/.local/state}/pr-review/<owner>-<repo>/pr-<number>-review.md` to prevent caller repository untracked file pollution. Otherwise stop with `PR_REVIEW: NEEDS_CONTEXT`.
 
@@ -37,11 +37,10 @@ Intake & Worktree Setup
   → ALWAYS comment drafting (renders CANONICAL_BODY with ## Verification, tracking markers)
   → Review verification (quality gate; bounded repair)
   → Review writing (persists exact CANONICAL_BODY byte-for-byte; writes .meta.json sidecar)
-  → Resolve effective GitHub event (resolve self-review before preview)
-  → Exact preview gate (shows exact body, body SHA-256, effective event)
-  → User approval (HUMAN_GATE_FINAL_PREVIEW_APPROVAL binds body, hash, event, PR, head SHA)
-  → Review poster (verifies approval, body hash, head SHA; posts single review event)
-  → Read-back verification (verifies posted body, 0 inline comments, 0 thread replies)
+  → Resolve effective GitHub event (resolve self-review before preview/posting)
+  → Exact preview gate / authorization (human approval in post-after-confirmation; verified-auto in auto-post-verified)
+  → Review poster (verifies authorization, body hash, head SHA, commit_id binding; posts single review event)
+  → Read-back verification (verifies full posted body, 0 inline comments, 0 thread replies)
   → Worktree cleanup & caller workspace integrity check (on ALL exit paths)
 ```
 
@@ -94,22 +93,24 @@ Chunk reviewers are independent and may run concurrently when the host runtime s
 8. ALWAYS dispatch `comment-drafter` with `PR_URL`, `HEAD_SHA`, `CONTEXT_SUMMARY`, `ADJUDICATED_FINDINGS`, `VERIFICATION_CHECKS`, and `LANGUAGE_STYLE`. Even on the zero-findings path (0 BLOCKER, 0 IMPORTANT, 0 SUGGESTION), `comment-drafter` renders `CANONICAL_BODY` with verdict `🟢 PASS`, overview metadata, `## Verification` table, Confirmed Good items, and global tracking marker. Downstream subagents require `CANONICAL_BODY` on all execution paths.
 9. Dispatch `review-verifier` with `PR_URL`, `WORKTREE_PATH`, `CONTEXT_SUMMARY`, `REVIEW_PACKAGE`, and `VERIFICATION_CHECKS`. On `VERIFY: FAIL`, repair only the named `Fix target`, cascade per the workflow file, and stop after two repair cycles with `PR_REVIEW: VERIFY_FAIL`.
 10. Dispatch `review-writer` in write mode with `WORKTREE_PATH`, `OUTPUT_FILE`, `CANONICAL_BODY`, and metadata. It writes `OUTPUT_FILE` in `WORKTREE_PATH` and exports persistent copy to `${XDG_STATE_HOME:-$HOME/.local/state}/pr-review/<owner>-<repo>/pr-<number>-review.md` byte-for-byte identical to `CANONICAL_BODY`. It also writes the metadata sidecar `pr-<number>-review.meta.json`. In `draft-only` mode, run cleanup and finish with `PR_REVIEW: VERIFIED_DRAFT_SAVED`.
-11. In `post-after-confirmation` mode, resolve the authenticated GitHub user vs PR author before showing the preview. If self-review (same user), set effective GitHub event to `COMMENT` regardless of internal verdict; show this in the preview. Display the exact verified preview:
-    ```
-    GitHub Posting Preview
+11. Resolve posting authorization based on `POSTING_MODE`:
+    - In `post-after-confirmation` mode, resolve the authenticated GitHub user vs PR author before showing the preview. If self-review (same user), set effective GitHub event to `COMMENT` regardless of internal verdict; show this in the preview. Display the exact verified preview:
+      ```
+      GitHub Posting Preview
 
-    Internal verdict: <🔴 BLOCK | 🟡 PASS WITH NOTES | 🟢 PASS>
-    Effective GitHub event: <REQUEST_CHANGES | COMMENT | APPROVE>
-    Body SHA-256: <hash>
+      Internal verdict: <🔴 BLOCK | 🟡 PASS WITH NOTES | 🟢 PASS>
+      Effective GitHub event: <REQUEST_CHANGES | COMMENT | APPROVE>
+      Body SHA-256: <hash>
 
-    --- EXACT BODY START ---
-    <exact contents of pr-N-review.md>
-    --- EXACT BODY END ---
+      --- EXACT BODY START ---
+      <exact contents of pr-N-review.md>
+      --- EXACT BODY END ---
 
-    Post this exact review?
-    ```
-    Run `HUMAN_GATE_FINAL_PREVIEW_APPROVAL`. User approval binds to: body contents, body SHA-256, effective GitHub event, PR number, and head SHA. If any of these change, previous approval is invalid. On decline, update sidecar posting status to `cancelled` and finish with `PR_REVIEW: VERIFIED_DRAFT_SAVED_POSTING_CANCELLED`.
-12. On approval, dispatch `review-poster` with `PR_URL`, `BODY_FILE="${WORKTREE_PATH}/${OUTPUT_FILE}"` (absolute path to exact review file), `BODY_SHA256`, `EFFECTIVE_EVENT`, `PREVIEW_APPROVED=true`, `APPROVED_BODY_SHA256`, and `APPROVED_HEAD_SHA`. The poster verifies cryptographic hash and current PR head before posting. It posts exactly one review event (`comments[]` empty, 0 thread replies). Reads back GitHub review and verifies posted body, commit, and zero inline comment threads. After successful posting, dispatch `review-writer` in update mode to update the sidecar status to `posted` (do not edit `pr-N-review.md`), then finish with `PR_REVIEW: VERIFIED_REVIEW_POSTED`.
+      Post this exact review?
+      ```
+      Run `HUMAN_GATE_FINAL_PREVIEW_APPROVAL`. User approval binds to: body contents, body SHA-256, effective GitHub event, PR number, and head SHA. If any of these change, previous approval is invalid. On approval, set `POST_AUTHORIZATION=human-approved`. On decline, update sidecar posting status to `cancelled` and finish with `PR_REVIEW: VERIFIED_DRAFT_SAVED_POSTING_CANCELLED`.
+    - In `auto-post-verified` mode, verify that `review-verifier` returned `VERIFY: PASS` (all quality/safety gates passed). If not, abort posting, preserve draft artifact, and stop with `PR_REVIEW: VERIFY_FAIL`. Resolve self-review, compute body SHA-256, and set `POST_AUTHORIZATION=verified-auto` without prompting for human approval.
+12. On authorization (`human-approved` or `verified-auto`), dispatch `review-poster` with `PR_URL`, `BODY_FILE="${WORKTREE_PATH}/${OUTPUT_FILE}"`, `BODY_SHA256`, `EFFECTIVE_EVENT`, `POST_AUTHORIZATION`, `AUTHORIZED_BODY_SHA256`, `AUTHORIZED_HEAD_SHA`, and `COMMIT_ID="${PR_HEAD_SHA}"`. The poster verifies cryptographic hash and confirms current PR head on GitHub still matches `AUTHORIZED_HEAD_SHA` (aborts with `POST: STALE_HEAD` if new commits were pushed). It posts exactly one review event bound to reviewed commit (`comments[]` empty, 0 thread replies). Reads back GitHub review and verifies complete posted body, commit, and zero inline comment threads. After successful posting, dispatch `review-writer` in update mode to update the sidecar status to `posted` (do not edit `pr-N-review.md`), then finish with `PR_REVIEW: VERIFIED_REVIEW_POSTED`.
 13. On ALL exit paths, execute `./scripts/cleanup-pr-worktree.sh <WORKTREE_PATH> <SNAPSHOT_FILE>` and verify workspace integrity.
 
 ## Review Invariants
@@ -126,7 +127,7 @@ Chunk reviewers are independent and may run concurrently when the host runtime s
 - The posted review is one canonical GitHub review event: one body (`CANONICAL_BODY`), zero inline finding comments, zero `comments[]` array entries, and zero thread replies. All lifecycle findings are consolidated into `CANONICAL_BODY`.
 - `CANONICAL_BODY` is the single source of truth: drafter produces it → verifier validates it → writer saves it verbatim byte-for-byte → preview shows it → poster posts it verbatim. Never re-render or modify between phases.
 - Artifact `.md` contains exact `CANONICAL_BODY` byte-for-byte; runtime metadata lives in `.meta.json` sidecar.
-- Route terminal failures through `PR_REVIEW: AUTH`, `NOT_FOUND`, `NEEDS_CONTEXT`, `REVIEW_ERROR`, `VERIFY_FAIL`, `WRITE_ERROR`, or `POST_ERROR`.
+- Route terminal failures through `PR_REVIEW: AUTH`, `NOT_FOUND`, `NEEDS_CONTEXT`, `REVIEW_ERROR`, `VERIFY_FAIL`, `WRITE_ERROR`, `POST_ERROR`, or `STALE_HEAD`.
 - Treat `PR_REVIEW: VERIFIED_DRAFT_SAVED`, `PR_REVIEW: VERIFIED_DRAFT_SAVED_POSTING_CANCELLED`, and `PR_REVIEW: VERIFIED_REVIEW_POSTED` as success outcomes.
 - Clean up worktrees safely (rejecting main repo) and verify original workspace integrity on every exit.
 

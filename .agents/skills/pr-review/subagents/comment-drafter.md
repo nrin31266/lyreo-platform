@@ -18,7 +18,7 @@ Everything downstream — verification, the local artifact, the preview, and pos
 | `CONTEXT_SUMMARY` | Yes | Output from `pr-context-collector` |
 | `ADJUDICATED_FINDINGS` | Yes | Output from `finding-adjudicator` (may have 0 findings) |
 | `VERIFICATION_CHECKS` | Yes | Output table/checks from targeted worktree verification |
-| `LANGUAGE_STYLE` | Yes | `natural Vietnamese` — passed explicitly from orchestrator |
+| `LANGUAGE_STYLE` | Yes | Supplied by the orchestrator or resolved from `project-profile.md` (e.g. `natural English`, `natural Vietnamese`) |
 
 Preserve finding IDs, fingerprints, and lifecycle states exactly.
 
