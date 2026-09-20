@@ -40,6 +40,19 @@ export const primitiveColors = {
   cream200: '#F3D5B4',
   ivory100: '#FEF6E6',
 
+    // Lyreo dark surfaces
+  cocoa950: '#2A1812',
+  cocoa900: '#362119',
+  cocoa800: '#493025',
+  cocoa700: '#56392D',
+  cocoa500: '#765346',
+
+  // Lyreo dark text & accents
+  warmWhite50: '#FFF8EF',
+  sand300: '#DEC4B3',
+  copper400: '#DB9466',
+  apricot300: '#F0B986',
+
   // Functional colours — intentionally independent from brand colours
   success700: '#2E7D5B',
   success400: '#6FD0A0',

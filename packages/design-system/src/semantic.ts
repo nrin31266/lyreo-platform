@@ -55,35 +55,35 @@ export const semanticThemes: Record<ThemeMode, ThemeColors> = {
     overlay: primitiveColors.overlayLight,
   },
 
-dark: {
-  background: '#2A1812',
-  foreground: '#FFF8EF',
+  dark: {
+    background: primitiveColors.cocoa950,
+    foreground: primitiveColors.warmWhite50,
 
-  surface: '#362119',
-  surfaceElevated: '#493025',
+    surface: primitiveColors.cocoa900,
+    surfaceElevated: primitiveColors.cocoa800,
 
-  primary: '#493025',
-  primaryForeground: '#FFF8EF',
+    primary: primitiveColors.cocoa800,
+    primaryForeground: primitiveColors.warmWhite50,
 
-  secondary: '#DB9466',
-  secondaryForeground: '#2A1812',
+    secondary: primitiveColors.copper400,
+    secondaryForeground: primitiveColors.cocoa950,
 
-  muted: '#56392D',
-  mutedForeground: '#DEC4B3',
+    muted: primitiveColors.cocoa700,
+    mutedForeground: primitiveColors.sand300,
 
-  border: '#765346',
-  input: '#765346',
+    border: primitiveColors.cocoa500,
+    input: primitiveColors.cocoa500,
 
-  focusRing: '#F0B986',
+    focusRing: primitiveColors.apricot300,
 
-  success: primitiveColors.success400,
-  warning: primitiveColors.warning400,
+    success: primitiveColors.success400,
+    warning: primitiveColors.warning400,
 
-  destructive: primitiveColors.danger400,
-  destructiveForeground: primitiveColors.danger950,
+    destructive: primitiveColors.danger400,
+    destructiveForeground: primitiveColors.danger950,
 
-  overlay: primitiveColors.overlayDark,
-},
+    overlay: primitiveColors.overlayDark,
+  },
 };
 
 export const semanticColorRoles = Object.freeze(
