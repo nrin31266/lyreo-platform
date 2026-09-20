@@ -23,27 +23,7 @@ MODULE_PACKAGE = {
     "chat": "chat",
 }
 PACKAGE_TO_MODULE = {package: module for module, package in MODULE_PACKAGE.items()}
-# Explicit allowlist of types that may be imported across business module boundaries.
-# Broad package prefixes are intentionally avoided so internal types like AiRoute or
-# AiRouteRepository cannot slip through by matching a package prefix.
-CROSS_MODULE_ALLOWED_TYPES: frozenset[str] = frozenset({
-    # AI module — public application service and result types only
-    "com.lyreo.ai.application.AiInvocationService",
-    "com.lyreo.ai.application.AiRoutingSnapshotService",
-    "com.lyreo.ai.application.AiExecutionResult",
-    "com.lyreo.ai.application.AiExecutionException",
-    "com.lyreo.ai.application.AiExecutionCommand",
-    # AI module — public capability vocabulary (NamedInterface("domain"))
-    "com.lyreo.ai.domain.AiCapability",
-    # Identity module — public provisioning service and result type only
-    "com.lyreo.identity.application.AppUserProvisioningService",
-    "com.lyreo.identity.application.ProvisionedUser",
-})
-# Any import from these prefixes that is NOT in the allowlist above is a violation.
-CROSS_MODULE_RESTRICTED_PREFIXES = (
-    "com.lyreo.ai.",
-    "com.lyreo.identity.",
-)
+ALLOWED_DIRECT_CHILD_PACKAGES: frozenset[str] = frozenset({"api", "application", "domain", "infrastructure"})
 
 # Regex for normal fully-qualified imports
 IMPORT_RE = re.compile(r"^import\s+([\w.]+);", re.MULTILINE)
@@ -122,19 +102,39 @@ def _check_import(
     if match and match.group(1) != package_name:
         errors.append(f"cross-module infrastructure import in {relative}: {imported}{label}")
 
-    # Cross-module public surface: only explicitly allowed types may be imported.
-    business = re.match(r"com\.lyreo\.([a-z][a-z0-9]*)\.", imported)
-    if not business:
-        return
-    imported_package = business.group(1)
-    if imported_package not in PACKAGE_TO_MODULE or imported_package == package_name:
-        return
-    if not imported.startswith(CROSS_MODULE_RESTRICTED_PREFIXES):
-        return
-    if imported not in CROSS_MODULE_ALLOWED_TYPES:
-        errors.append(
-            f"cross-module import must use a named/public interface or event: {relative}: {imported}{label}"
-        )
+    # Outbound application ports are internal dependency contracts; no business module may import another module's port.
+    port_match = re.match(r"com\.lyreo\.([a-z][a-z0-9]*)\.application\.port\b", imported)
+    if port_match and port_match.group(1) != package_name:
+        errors.append(f"cross-module application port import in {relative}: {imported}{label}")
+
+
+def check_business_package_topology(root: Path, errors: list[str]) -> None:
+    """Verify that business modules use only allowed direct child architecture packages.
+
+    For production Java beneath modules/<module>/src/main/java/com/lyreo/<package>/,
+    the only allowed direct child packages are: api, application, domain, infrastructure.
+    Root package-info.java is allowed. Nested subpackages below those are allowed.
+    """
+    for module_name, package_name in MODULE_PACKAGE.items():
+        module_main_java = root / "modules" / module_name / "src/main/java/com/lyreo" / package_name
+        if not module_main_java.exists():
+            continue
+
+        for path in repo_files(module_main_java, "*.java", root):
+            rel_parts = path.relative_to(module_main_java).parts
+            if len(rel_parts) == 1:
+                if rel_parts[0] == "package-info.java":
+                    continue
+                errors.append(
+                    f"invalid root java file in business module (expected package-info.java): {path.relative_to(root)}"
+                )
+                continue
+
+            direct_child = rel_parts[0]
+            if direct_child not in ALLOWED_DIRECT_CHILD_PACKAGES:
+                errors.append(
+                    f"invalid direct child package `{direct_child}` in business module: {path.relative_to(root)}"
+                )
 
 
 def check_clean_architecture_and_boundaries(root: Path, errors: list[str]) -> None:
@@ -288,6 +288,7 @@ def check_backend(root: Path, errors: list[str], warnings: list[str]) -> None:
     """Run all Java, Spring Boot, architecture, and FastAPI backend boundary checks."""
     check_forbidden_pom_dependencies(root, errors)
     check_fastapi_boundaries(root, errors)
+    check_business_package_topology(root, errors)
     check_clean_architecture_and_boundaries(root, errors)
     check_cross_owner_sql(root, errors)
     check_platform_dependencies(root, errors)

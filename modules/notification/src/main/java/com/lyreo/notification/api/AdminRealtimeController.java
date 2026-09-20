@@ -1,6 +1,6 @@
 package com.lyreo.notification.api;
 
-import com.lyreo.notification.application.JobProgressFeed;
+import com.lyreo.notification.application.port.JobProgressFeed;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;

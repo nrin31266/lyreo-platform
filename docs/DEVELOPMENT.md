@@ -217,3 +217,12 @@ Coding agents must read `../AGENTS.md` before modifying code. `CLAUDE.md`, `GEMI
 
 The required completion checks and documentation ownership rules are defined in
 [`AGENTS.md`](../AGENTS.md#13-documentation-and-comments); do not maintain a second checklist here.
+
+### 11.1 Pull Request Review Skill (`pr-review`)
+
+For reviewing GitHub PRs, use the project-local skill `.agents/skills/pr-review`:
+- **Invocation**: `Review <PR_URL>` (triggers `pr-review`).
+- **Modes (`REVIEW_MODE`)**: `normal` (default: 1–3 dimensions, high signal, no nit hunting) or `strict` (2–4 dimensions, deeper boundary/failure analysis).
+- **Posting (`POSTING_MODE`)**: `post-after-confirmation` (default: preview gate before posting) or `draft-only`.
+- **Worktree isolation**: Executes inside an isolated detached Git worktree; the developer's working tree is immutable.
+- **Review artifact**: Exported outside git to `${XDG_STATE_HOME:-$HOME/.local/state}/pr-review/<owner>-<repo>/pr-<number>-review.md`.

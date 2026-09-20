@@ -16,7 +16,7 @@ intent vẫn ở owner requirement/spec; status ở đây không tự thay đổ
 
 - Type/status: `question` / `open`.
 - Sources: [Dictation requirement](lesson.md#dictation),
-  `modules/lesson/src/main/java/com/lyreo/lesson/application/LessonPracticeService.java`.
+  `modules/lesson/src/main/java/com/lyreo/lesson/application/practice/LessonPracticeService.java`.
 - Evidence: code dùng `DEFAULT_COMPLETION_SCORE = 70`; chưa thấy nguồn product approval.
 - Impact: activity/lesson completion events và downstream reward/progress.
 - Next: duyệt threshold/config policy trước khi ghi 70 thành business rule được chốt.

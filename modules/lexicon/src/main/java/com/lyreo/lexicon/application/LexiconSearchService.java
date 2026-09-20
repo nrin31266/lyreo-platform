@@ -1,5 +1,6 @@
 package com.lyreo.lexicon.application;
 
+import com.lyreo.lexicon.application.port.LexiconRepository;
 import com.lyreo.lexicon.domain.LexiconEntry;
 import java.util.List;
 import java.util.Optional;

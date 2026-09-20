@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.lyreo.contracts.grammar.GrammarQuestionAnsweredEvent;
 import com.lyreo.grammar.application.GrammarPracticeFilter;
-import com.lyreo.grammar.application.GrammarPracticeRepository;
 import com.lyreo.grammar.application.GrammarPracticeScorer;
 import com.lyreo.grammar.application.GrammarPracticeService;
+import com.lyreo.grammar.application.port.GrammarPracticeRepository;
 import com.lyreo.grammar.domain.GrammarQuestion;
 import java.time.Instant;
 import java.util.ArrayList;

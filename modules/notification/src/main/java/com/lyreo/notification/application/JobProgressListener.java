@@ -1,6 +1,7 @@
 package com.lyreo.notification.application;
 
 import com.lyreo.contracts.jobs.JobProgressChangedEvent;
+import com.lyreo.notification.application.port.RealtimeNotificationPort;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;

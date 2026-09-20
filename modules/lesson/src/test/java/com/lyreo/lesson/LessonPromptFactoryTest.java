@@ -2,7 +2,7 @@ package com.lyreo.lesson;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.lyreo.lesson.application.LessonPromptFactory;
+import com.lyreo.lesson.application.build.LessonPromptFactory;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

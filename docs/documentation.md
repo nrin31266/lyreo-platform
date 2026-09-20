@@ -48,7 +48,7 @@ Prefix dùng trong repository:
 - `NFR-<AREA>-NNN`: non-functional requirement;
 - `US-<AREA>-NNN`: user story; `AC-<AREA>-NNN`: acceptance criterion;
 - `FEAT-<SLUG>`: feature contract; `GAP-NNN`: gaps register;
-- `D-NNN`: decision log; giữ nguyên D-001–D-019.
+- `D-NNN`: decision log; decision IDs là immutable, thêm ID kế tiếp khả dụng (D-NNN), không renumber hoặc tái dùng ID đã có.
 
 Area codes hiện dùng: `IDN`, `LSN`, `AI`, `LEX`, `VOC`, `GRM`, `TOE`, `CUR`, `GAM`, `ANL`,
 `NTF`, `CHT`, `SEC`, `OPS`, `DAT`, `UI`. Không renumber ID để chèn nội dung; không tái dùng ID

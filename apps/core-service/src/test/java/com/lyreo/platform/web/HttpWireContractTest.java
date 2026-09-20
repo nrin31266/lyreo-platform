@@ -12,9 +12,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.lyreo.ai.api.AiAdminController;
-import com.lyreo.ai.application.AiAdminService;
-import com.lyreo.ai.application.ProviderSummary;
-import com.lyreo.ai.application.RouteSummary;
+import com.lyreo.ai.application.admin.AiAdminService;
+import com.lyreo.ai.application.admin.ProviderSummary;
+import com.lyreo.ai.application.admin.RouteSummary;
 import com.lyreo.grammar.api.GrammarPracticeController;
 import com.lyreo.grammar.application.GrammarPracticeService;
 import com.lyreo.grammar.domain.GrammarQuestion;
@@ -27,13 +27,13 @@ import com.lyreo.learner.domain.LearnerPreferences;
 import com.lyreo.learner.domain.LearnerProfile;
 import com.lyreo.lesson.api.AdminLessonController;
 import com.lyreo.lesson.api.LessonPracticeController;
-import com.lyreo.lesson.application.CreateLessonBuildService;
-import com.lyreo.lesson.application.LessonPracticeService;
-import com.lyreo.lesson.application.LessonPreviewQuery;
-import com.lyreo.lesson.application.LessonPreviewService;
-import com.lyreo.lesson.application.LessonPreviewView;
-import com.lyreo.lesson.domain.LessonBuildPlan;
-import com.lyreo.lesson.domain.LessonSourceType;
+import com.lyreo.lesson.application.build.CreateLessonBuildService;
+import com.lyreo.lesson.application.practice.LessonPracticeService;
+import com.lyreo.lesson.application.port.LessonPreviewQuery;
+import com.lyreo.lesson.application.preview.LessonPreviewService;
+import com.lyreo.lesson.application.preview.LessonPreviewView;
+import com.lyreo.lesson.domain.build.LessonBuildPlan;
+import com.lyreo.lesson.domain.content.LessonSourceType;
 import com.lyreo.lexicon.api.LexiconController;
 import com.lyreo.lexicon.application.LexiconSearchService;
 import com.lyreo.lexicon.domain.LexiconEntry;
@@ -44,7 +44,7 @@ import com.lyreo.platform.observability.CorrelationIdFilter;
 import com.lyreo.toeic.api.ToeicAttemptController;
 import com.lyreo.toeic.application.ToeicAttemptService;
 import com.lyreo.vocabulary.api.VocabularyController;
-import com.lyreo.vocabulary.application.SpacedRepetitionScheduler;
+import com.lyreo.vocabulary.application.port.SpacedRepetitionScheduler;
 import com.lyreo.vocabulary.application.VocabularyCommandService;
 import com.lyreo.vocabulary.domain.VocabularyCard;
 import java.time.Instant;
@@ -396,7 +396,7 @@ class HttpWireContractTest {
         when(toeicAttemptService.submit(any(), eq(testId), any(), any()))
             .thenReturn(new ToeicAttemptService.SubmitResult(
                 attemptId,
-                new com.lyreo.toeic.application.ToeicAttemptRepository.ScoreSummary(80, 100, 75, 100, 420, 390)
+                new com.lyreo.toeic.application.port.ToeicAttemptRepository.ScoreSummary(80, 100, 75, 100, 420, 390)
             ));
 
         toeicMvc.perform(post("/api/v1/toeic/tests/%s/attempts".formatted(testId))

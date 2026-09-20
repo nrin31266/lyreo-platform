@@ -1,6 +1,6 @@
 package com.lyreo.vocabulary.infrastructure;
 
-import com.lyreo.vocabulary.application.SpacedRepetitionScheduler;
+import com.lyreo.vocabulary.application.port.SpacedRepetitionScheduler;
 import com.lyreo.vocabulary.domain.VocabularyCard;
 import java.time.Duration;
 import java.time.Instant;
