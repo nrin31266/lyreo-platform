@@ -391,9 +391,9 @@ Database implementations (JDBC/JPA adapters, entities, Spring Data interfaces) b
 
 ### H. Spring Modulith public visibility
 
-Business modules keep internal implementation details private by default:
-- Root module package (`com.lyreo.<module>`) is public by default.
-- Subpackages (`api`, `application`, `domain`, `infrastructure`) are internal unless exposed through explicit type-level `@NamedInterface` annotations (e.g. `@NamedInterface("application")` on `AiInvocationService`, `@NamedInterface("domain")` on `AiCapability`) or published events.
+Spring Modulith semantics vs. Lyreo convention:
+- **Spring Modulith framework default:** The module base package (`com.lyreo.<module>`) is treated as the default public API package, while all subpackages are internal by default.
+- **Lyreo architectural convention:** Production classes are never placed directly in the module base package (the root contains only `package-info.java`, enforced by repository validators). Instead, all code lives in subpackages (`api`, `application`, `domain`, `infrastructure`). Selected types intended for cross-module consumption are explicitly exposed using type-level `@NamedInterface(value = "...", propagate = false)` (e.g. `@NamedInterface(value = "application", propagate = false)` on `AiInvocationService`, `@NamedInterface(value = "domain", propagate = false)` on `AiCapability`) or published domain events from `libs/contracts`. Setting `propagate = false` ensures framework propagation does not inadvertently expose internal constructor/method dependency types like outbound ports.
 - Core and other modules access only exposed named interfaces or listen to shared events.
 
 ### I. Small canonical module example

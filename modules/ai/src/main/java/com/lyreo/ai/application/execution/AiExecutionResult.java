@@ -8,7 +8,7 @@ import org.springframework.modulith.NamedInterface;
  * Result of one concrete provider/model invocation.
  * invocationId links business workflow steps to the durable ai_invocation audit row.
  */
-@NamedInterface("application")
+@NamedInterface(value = "application", propagate = false)
 public record AiExecutionResult(
     UUID invocationId,
     String provider,

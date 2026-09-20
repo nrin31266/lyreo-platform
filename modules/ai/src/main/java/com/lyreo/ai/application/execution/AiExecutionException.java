@@ -10,7 +10,7 @@ import org.springframework.modulith.NamedInterface;
  * business request/schema is marked non-fallback so Lyreo does not spend money repeating the
  * same invalid request against every provider.</p>
  */
-@NamedInterface("application")
+@NamedInterface(value = "application", propagate = false)
 public final class AiExecutionException extends RuntimeException {
     private final boolean fallbackAllowed;
     private final String errorCode;

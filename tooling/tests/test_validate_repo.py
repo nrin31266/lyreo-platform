@@ -210,6 +210,23 @@ class ValidateRepoTest(unittest.TestCase):
             f"Expected cross-module infrastructure import violation; got: {errors}",
         )
 
+    def test_cross_module_application_port_import_fails(self) -> None:
+        """Importing another business module's application port must fail."""
+        root = self.create_fixture({
+            "modules/lesson/src/main/java/com/lyreo/lesson/package-info.java": "package com.lyreo.lesson;\n",
+            "modules/lesson/src/main/java/com/lyreo/lesson/application/practice/LessonPracticeService.java": (
+                "package com.lyreo.lesson.application.practice;\n"
+                "import com.lyreo.identity.application.port.AppUserRepository;\n"
+                "public class LessonPracticeService {}\n"
+            ),
+        })
+        errors: list[str] = []
+        check_clean_architecture_and_boundaries(root, errors)
+        self.assertTrue(
+            any("cross-module application port import" in e for e in errors),
+            f"Expected cross-module application port import violation; got: {errors}",
+        )
+
     def test_business_package_topology_valid_nested_passes(self) -> None:
         """Valid nested semantic packages under direct child architecture concerns must pass."""
         root = self.create_fixture({
@@ -227,6 +244,21 @@ class ValidateRepoTest(unittest.TestCase):
         errors: list[str] = []
         check_business_package_topology(root, errors)
         self.assertEqual([], errors)
+
+    def test_business_package_topology_root_java_file_fails(self) -> None:
+        """A root java file other than package-info.java placed directly in a business module root must fail."""
+        root = self.create_fixture({
+            "modules/lesson/src/main/java/com/lyreo/lesson/package-info.java": "package com.lyreo.lesson;\n",
+            "modules/lesson/src/main/java/com/lyreo/lesson/LessonService.java": (
+                "package com.lyreo.lesson;\npublic class LessonService {}\n"
+            ),
+        })
+        errors: list[str] = []
+        check_business_package_topology(root, errors)
+        self.assertTrue(
+            any("invalid root java file in business module" in e for e in errors),
+            f"Expected root java file error; got: {errors}",
+        )
 
     def test_business_package_topology_invalid_direct_child_fails(self) -> None:
         """Invalid direct child packages (e.g. services, repositories, common) must fail."""

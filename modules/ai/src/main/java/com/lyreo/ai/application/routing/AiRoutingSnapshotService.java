@@ -18,7 +18,7 @@ import org.springframework.modulith.NamedInterface;
  * fully pinned reproducibility, introduce that explicitly rather than silently changing this
  * semantic.</p>
  */
-@NamedInterface("application")
+@NamedInterface(value = "application", propagate = false)
 public final class AiRoutingSnapshotService {
     private final AiRouteRepository routes;
 

@@ -17,7 +17,7 @@ import java.util.UUID;
 import org.springframework.modulith.NamedInterface;
 
 /** Resolves provider/model routes and audits every concrete AI attempt. */
-@NamedInterface("application")
+@NamedInterface(value = "application", propagate = false)
 public final class AiInvocationService {
     private final AiRouter router;
     private final AiRouteRepository routes;

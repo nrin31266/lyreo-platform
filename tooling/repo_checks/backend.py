@@ -102,6 +102,11 @@ def _check_import(
     if match and match.group(1) != package_name:
         errors.append(f"cross-module infrastructure import in {relative}: {imported}{label}")
 
+    # Outbound application ports are internal dependency contracts; no business module may import another module's port.
+    port_match = re.match(r"com\.lyreo\.([a-z][a-z0-9]*)\.application\.port\b", imported)
+    if port_match and port_match.group(1) != package_name:
+        errors.append(f"cross-module application port import in {relative}: {imported}{label}")
+
 
 def check_business_package_topology(root: Path, errors: list[str]) -> None:
     """Verify that business modules use only allowed direct child architecture packages.
