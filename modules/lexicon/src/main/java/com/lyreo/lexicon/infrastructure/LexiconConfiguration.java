@@ -1,7 +1,8 @@
 package com.lyreo.lexicon.infrastructure;
 
-import com.lyreo.lexicon.application.LexiconRepository;
 import com.lyreo.lexicon.application.LexiconSearchService;
+import com.lyreo.lexicon.application.port.LexiconRepository;
+import com.lyreo.lexicon.infrastructure.persistence.JdbcLexiconRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;

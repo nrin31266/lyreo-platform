@@ -43,6 +43,18 @@ is available.
 Use the AI subproject environment managed by `uv`; runtime-mode behavior is described in
 [AI runtime modes](#5-ai-runtime-modes).
 
+### Lesson Prep Tool
+
+Operator UI (Gradio on `http://127.0.0.1:7860`) for preparing portable lesson source packages:
+
+```bash
+make lesson-prep   # requires .env via make init-env; see tools/lesson-prep/README.md
+```
+
+Prerequisites: AI Service running (`make ai` or `make ai-local`), `ffmpeg` and `ffprobe` on PATH.
+The tool runs fully standalone without Core, Keycloak, PostgreSQL, or R2, and exports portable
+`*.lesson-source.zip` packages.
+
 ### Admin Web
 
 Run the Vite dev process separately from Core so frontend reload/debug does not restart the backend.
@@ -97,10 +109,16 @@ responses without GPU/model downloads or provider billing.
 ### `local`
 
 FastAPI loads the Qwen runtime for local STT/alignment capability execution. Local mode requires the
-Qwen optional dependencies and a machine/runtime appropriate for the selected model/device.
+Qwen optional dependencies and a machine/runtime appropriate for the selected model/device
+(`make ai-local` sets `AI_RUNTIME_MODE=local`).
 
 Docker GPU is a packaging/deployment option; a developer with a suitable GPU may run the Python
 runtime directly on the host.
+
+Kokoro local TTS is independent of `AI_RUNTIME_MODE`: callers request `LOCAL_KOKORO` on
+`/v1/tts` after installing the `kokoro` optional group and the `espeak-ng` system package
+(Fedora: `sudo dnf install espeak-ng`; Ubuntu/Debian: `sudo apt-get install espeak-ng`;
+macOS: `brew install espeak-ng`). CPU is the sensible default.
 
 External SaaS providers such as Groq/Gemini/DeepSeek are selected through Core capability routing.
 They are independent from `AI_RUNTIME_MODE` and do not constitute a third runtime mode.
@@ -116,18 +134,55 @@ production bucket.
 
 ## 7. Database workflow
 
-### Schema changes
+### Local application startup
 
-For a schema change:
+```bash
+make dev-infra
+make core
+```
 
-1. create a new Flyway migration;
+Core connects to PostgreSQL, runs Flyway migrations, validates Hibernate mappings, and boots the modular monolith.
+
+### Schema changes and migrations
+
+The initial schema history is consolidated into a frozen baseline:
+- `V001__baseline_schema.sql` (schema tables, constraints, indexes)
+- `V002__reference_data.sql` (stable reference catalogs)
+- `V003__runtime_defaults.sql` (runtime policy defaults)
+
+For future database evolution:
+1. create the next versioned Flyway migration (`V004__...sql`, `V005__...sql`, etc.);
 2. run Core/tests so Flyway applies and validates it;
 3. verify Hibernate mapping validation;
 4. review compatibility/rollback implications for destructive changes.
 
-Mandatory persistence rules are owned by
+Established versioned migrations are immutable. Mandatory persistence rules are owned by
 [`AGENTS.md`](../AGENTS.md#8-database-storage-and-data). Large Lexicon/Grammar/TOEIC content
 uses importer tooling rather than Flyway seed blobs.
+
+### Inspecting database
+
+To open `psql` inside the running PostgreSQL container against the Lyreo development database:
+
+```bash
+make db-shell
+```
+
+Example query:
+```sql
+SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;
+```
+
+### Safe local database reset
+
+To reset the local application database during development:
+
+```bash
+make db-reset
+make core
+```
+
+`make db-reset` safely terminates active connections to `lyreo_dev`, drops it, and recreates an empty database owned by `lyreo`. It explicitly rejects system databases (`postgres`, `template0`, `template1`) and leaves the Keycloak database (`lyreo_keycloak`) and Docker volumes completely intact. Running `make core` subsequently recreates the schema through the baseline migrations.
 
 ## 8. Data importer development
 
@@ -147,6 +202,29 @@ Run the smallest relevant checks continuously while developing, then run the req
 checks for the changed area. Exact repository commands are owned by
 [`README.md`](../README.md#15-validation); completion requirements are owned by
 [`AGENTS.md`](../AGENTS.md#14-testing-and-completion).
+
+### Test ownership and naming
+
+Tests are colocated with their owning Maven module under `src/test/java`, mirroring the production package hierarchy:
+- Pure unit tests (`*Test.java`): fast tests managed by Maven Surefire (`make test-java` or `./mvnw -B test`).
+- Integration tests (`*IT.java`): integration tests managed by Maven Failsafe (`make verify-java` or `./mvnw -B verify`).
+
+Core Service (`apps/core-service/src/test/java`) owns tests for whole-application composition, cross-module workflows, HTTP wire contracts, and database baseline verification (`FlywayMigrationIT`), rather than ordinary module business logic.
+
+### Testing tools and patterns
+
+- **Unit tests**: Use JUnit Jupiter, AssertJ, and Mockito (when mocking meaningful boundaries). Avoid starting Spring context when testing pure domain or application logic.
+- **Spring Modulith tests**: `@ApplicationModuleTest` should be used only when a test genuinely requires Spring bean wiring for a specific application module.
+- **PostgreSQL integration tests**: Use Testcontainers (`postgres:18.6-alpine`) via Spring Boot Testcontainers (`@ServiceConnection`) for behavior depending on real PostgreSQL semantics. Docker must be running locally or in CI.
+
+### Code coverage visibility (JaCoCo)
+
+JaCoCo is configured across all Maven modules to provide local feedback and maintain future-agent testing discipline. Reports are generated at:
+```text
+<module>/target/site/jacoco/index.html
+```
+Example: `apps/core-service/target/site/jacoco/index.html` or `modules/lesson/target/site/jacoco/index.html`.
+Coverage policy and targets are owned by [`AGENTS.md`](../AGENTS.md#14-testing-and-completion).
 
 ## 10. Common troubleshooting
 
@@ -204,3 +282,12 @@ Coding agents must read `../AGENTS.md` before modifying code. `CLAUDE.md`, `GEMI
 
 The required completion checks and documentation ownership rules are defined in
 [`AGENTS.md`](../AGENTS.md#13-documentation-and-comments); do not maintain a second checklist here.
+
+### 11.1 Pull Request Review Skill (`pr-review`)
+
+For reviewing GitHub PRs, use the project-local skill `.agents/skills/pr-review`:
+- **Invocation**: `Review <PR_URL>` (triggers `pr-review`).
+- **Modes (`REVIEW_MODE`)**: `normal` (default: 1–3 dimensions, high signal, no nit hunting) or `strict` (2–4 dimensions, deeper boundary/failure analysis).
+- **Posting (`POSTING_MODE`)**: `post-after-confirmation` (default: preview gate before posting) or `draft-only`.
+- **Worktree isolation**: Executes inside an isolated detached Git worktree; the developer's working tree is immutable.
+- **Review artifact**: Exported outside git to `${XDG_STATE_HOME:-$HOME/.local/state}/pr-review/<owner>-<repo>/pr-<number>-review.md`.

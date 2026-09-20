@@ -121,3 +121,120 @@ def test_gemini_pcm_is_wrapped_as_valid_wav():
         assert wav_file.getframerate() == 24_000
         assert wav_file.readframes(wav_file.getnframes()) == pcm
 
+
+
+def test_voice_discovery_requires_internal_token():
+    response = client.get("/v1/tts/voices")
+    assert response.status_code == 401
+
+
+def test_voice_discovery_lists_local_kokoro_voices():
+    response = client.get("/v1/tts/voices", headers=AUTH)
+    assert response.status_code == 200
+    voices = response.json()["voices"]
+    assert voices
+    by_id = {voice["voice_id"]: voice for voice in voices}
+    assert all(voice["provider"] == "LOCAL_KOKORO" for voice in voices)
+    assert by_id["af_heart"]["accent"] == "US"
+    assert by_id["bf_emma"]["accent"] == "UK"
+
+
+def test_mock_tts_local_kokoro_contract():
+    response = client.post(
+        "/v1/tts",
+        headers=AUTH,
+        json=request(
+            provider="LOCAL_KOKORO",
+            model="hexgrad/Kokoro-82M",
+            input={"text": "Hello there."},
+            options={"voice": "af_heart", "accent": "US", "speed": 1.0},
+        ),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["output"]["audio_base64"]
+    assert body["metadata"]["runtime"] == "mock"
+    assert body["metadata"]["voice"] == "af_heart"
+
+
+def test_generic_exception_handler_returns_safe_detail(monkeypatch):
+    from app import main
+
+    def broken_handler(*args, **kwargs):
+        raise RuntimeError("database password leaked: super_secret_123")
+
+    monkeypatch.setattr(main.mock, "stt", broken_handler)
+
+    safe_client = TestClient(main.app, raise_server_exceptions=False)
+    response = safe_client.post(
+        "/v1/stt",
+        headers=AUTH,
+        json=request(provider="LOCAL_QWEN", input={"audio_url": "https://example.invalid/audio.wav"}),
+    )
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal server error"}
+    assert "super_secret_123" not in response.text
+    assert "RuntimeError" not in response.text
+
+
+def test_qwen_inference_lock_serializes_execution():
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+    from app.config import Settings
+    from app.runtime.qwen import QwenRuntime
+    from app.schemas import ExecuteRequest
+
+    cfg = Settings(_env_file=None)
+    runtime = QwenRuntime(cfg)
+
+    execution_order = []
+
+    async def fake_transcribe(*args, **kwargs):
+        execution_order.append("start_stt")
+        await asyncio.sleep(0.05)
+        execution_order.append("end_stt")
+        res = MagicMock()
+        res.text = "transcribed"
+        res.language = "English"
+        return [res]
+
+    async def fake_align(*args, **kwargs):
+        execution_order.append("start_align")
+        await asyncio.sleep(0.05)
+        execution_order.append("end_align")
+        return []
+
+    mock_asr = MagicMock()
+    mock_asr.transcribe = lambda *a, **kw: asyncio.run(fake_transcribe(*a, **kw))
+    runtime._load_asr = AsyncMock(return_value=mock_asr)
+    runtime._align_words = AsyncMock(side_effect=fake_align)
+
+    req1 = ExecuteRequest(
+        invocation_id="1", provider="LOCAL_QWEN", model="qwen",
+        input={"audio": "/tmp/a.wav"}, options={},
+    )
+    req2 = ExecuteRequest(
+        invocation_id="2", provider="LOCAL_QWEN", model="qwen",
+        input={"audio": "/tmp/b.wav", "text": "hello"}, options={},
+    )
+
+    async def run_concurrent():
+        await asyncio.gather(runtime.stt(req1), runtime.align(req2))
+
+    asyncio.run(run_concurrent())
+
+    # Because of _inference_lock, the operations cannot interleave
+    # (i.e. one must finish before the other starts)
+    assert execution_order in (
+        ["start_stt", "end_stt", "start_align", "end_align"],
+        ["start_align", "end_align", "start_stt", "end_stt"],
+    )
+
+
+def test_empty_cuda_cache_safely_handles_missing_torch(monkeypatch):
+    import sys
+    from app.runtime.qwen import _empty_cuda_cache
+
+    monkeypatch.setitem(sys.modules, "torch", None)
+    # Must not raise ModuleNotFoundError or any exception when torch is missing
+    _empty_cuda_cache()

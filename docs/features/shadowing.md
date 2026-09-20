@@ -1,6 +1,7 @@
 # FEAT-SHADOWING — Shadowing and Speech Assessment
 
-Requirements: [Shadowing](../requirements/lesson.md#shadowing); story [US-LSN-003](../requirements/stories/lesson.md#us-lsn-003--nhan-feedback-shadowing).
+Requirements: [Shadowing](../requirements/lesson.md#shadowing); story [US-LSN-003](../requirements/lesson.md#us-lsn-003--nhan-feedback-shadowing).
+
 
 ## Target experience
 

@@ -69,6 +69,16 @@ public contracts, or Spring Modulith events. Never import another module's repos
 or internal infrastructure, and never query another module's tables as a shortcut. Architecture
 tests and validators must protect these boundaries.
 
+Physical and package structure invariants:
+- `apps/*` are deployable/composition roots; Core Service assembles modules and does not own them.
+- `modules/*` are business capabilities; `platform/*` are reusable technical building blocks; `libs/*` are shared Java contracts.
+- Business modules use `api`, `application`, `domain`, `infrastructure` as stable top-level concerns.
+- Keep packages flat while cohesive; deeper packages must represent meaningful semantic/use-case/adapter responsibilities.
+- Outbound application abstractions go in `application/port`; JDBC/JPA implementations go in `infrastructure/persistence`.
+- Do not introduce generic common/utils/helpers/impl/misc buckets or empty architecture folders.
+- `api/` is inbound transport, not cross-module Java visibility; Spring Modulith Named Interfaces and events own cross-module exposure.
+- Detailed conventions and examples: [`docs/ARCHITECTURE.md#backend-module-package-structure`](docs/ARCHITECTURE.md#backend-module-package-structure).
+
 ## 4. Domain ownership
 
 - `identity`: Keycloak subject to app-user mapping and JIT provisioning.
@@ -135,8 +145,11 @@ FastAPI. Provider credentials remain server-side. See `docs/architecture/ai-exec
 ## 8. Database, storage, and data
 
 Flyway owns schema evolution; every schema change needs a new migration, and an applied shared
-migration must not be edited. Hibernate validates mappings/schema and must not mutate schema.
-Large Lexicon/TOEIC/Grammar/Curriculum content belongs in importer tooling, not Flyway.
+migration must not be edited. V001–V003 are the frozen initial baseline after the testing foundation consolidation.
+After the baseline is established, evolve the database by appending the next Vxxx migration; do not edit
+established versioned migrations. Hibernate validates mappings/schema and must not mutate schema.
+Small stable reference/product defaults may live in Flyway. Large Lexicon/TOEIC/Grammar/Curriculum content
+and temporary development fixtures do not.
 
 Store durable/queryable normalized state in PostgreSQL and large immutable/debug artifacts in
 object storage. Persist object keys, not expiring URLs. Sensitive learner recordings are private by
@@ -194,7 +207,7 @@ Workflow: **owner/ID → compare intent with code → classify → decide if nee
 implementation/tests when in scope → traceability/evidence → link/route checks → handoff**.
 
 Requirement IDs are never reused for a new meaning. Retired requirements are marked superseded.
-Architecture decisions retain D-001–D-019 and meaningful new decisions go in `docs/DECISIONS.md`.
+Existing decision IDs are immutable. Append the next available D-NNN; never renumber or reuse an existing decision ID. Meaningful new decisions go in `docs/DECISIONS.md`.
 Documentation conventions are owned by `docs/documentation.md`.
 
 ## 13. Documentation and comments
@@ -209,15 +222,25 @@ acceptance, endpoint/schema, configuration, or roadmap tables.
 - workflow behavior → `docs/features/`; architecture/decisions → `docs/ARCHITECTURE.md`,
   `docs/architecture/`, `docs/DECISIONS.md`;
 - configuration/data/operations → their existing canonical docs;
-- evidence status → `docs/requirements/traceability.md`; unresolved items → `gaps.md`;
-- `docs/LYREO_PLATFORM_SPEC.md` is compatibility navigation, not a competing owner.
+- evidence status → `docs/requirements/traceability.md`; unresolved items → `gaps.md`.
 
 ## 14. Testing and completion
+
+Tests live with their owning Maven module (`src/test/java`). Core owns application-composition,
+cross-module, database-baseline, and HTTP contract tests, not ordinary tests of every business module.
+Behavior-changing backend code requires appropriate tests in the same change:
+- `*Test.java` = normal/fast test (Maven Surefire, `make test-java`);
+- `*IT.java` = integration test (Maven Failsafe, `make verify-java`).
+
+Use PostgreSQL Testcontainers for PostgreSQL-specific behavior. New or materially changed non-trivial
+business logic targets roughly >=80% line coverage for test-worthy code; below roughly 70% normally
+requires explicit justification. 100% is not a goal and trivial code (records, simple DTO accessors,
+constants, simple enums, package-info, configuration holders) must not be tested merely to inflate coverage.
 
 Run checks applicable to the changed area: Java and Modulith tests, Flyway startup/validation,
 Python tests/compile, importer tests/dry-run, TypeScript typecheck/build, shell/config validation, and
 secret/build-output sanity checks as appropriate. `make validate` is only the minimum offline
-guardrail.
+guardrail; `make check` provides full verification.
 
 Before claiming completion, use fresh evidence. If a required check cannot run, name it, explain
 why, and provide the exact command for developer/CI. An acceptable change preserves ownership and

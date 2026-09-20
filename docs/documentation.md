@@ -10,7 +10,7 @@ công việc có tác động tài liệu. Bắt đầu chọn owner từ [bản
 | Lý do sản phẩm và bằng chứng người dùng | `product/discovery.md` |
 | Scope, ưu tiên, non-goals, kết quả mong muốn | `product/prd.md` |
 | Nghĩa vụ sản phẩm/kinh doanh/phi chức năng | `requirements/*.md` |
-| Điều kiện chấp nhận quan sát được | `requirements/stories/*.md` |
+| Điều kiện chấp nhận quan sát được | `requirements/*.md` (mục User Stories & AC) |
 | Flow, state, error, side effect của workflow | `features/*.md` |
 | Engineering invariants | `AGENTS.md` |
 | Protocol/rationale kỹ thuật | `ARCHITECTURE.md`, `architecture/*.md`, `DECISIONS.md` |
@@ -19,7 +19,8 @@ công việc có tác động tài liệu. Bắt đầu chọn owner từ [bản
 | Câu hỏi/xung đột/khoảng trống | `requirements/gaps.md` |
 
 Nơi khác được viết một câu định hướng và link. Không sao chép toàn bộ rule, AC, endpoint/schema,
-config hay roadmap. `LYREO_PLATFORM_SPEC.md` chỉ giữ tương thích đường dẫn/anchor cũ.
+config hay roadmap.
+
 
 ## Trạng thái và nguồn
 
@@ -47,7 +48,7 @@ Prefix dùng trong repository:
 - `NFR-<AREA>-NNN`: non-functional requirement;
 - `US-<AREA>-NNN`: user story; `AC-<AREA>-NNN`: acceptance criterion;
 - `FEAT-<SLUG>`: feature contract; `GAP-NNN`: gaps register;
-- `D-NNN`: decision log; giữ nguyên D-001–D-019.
+- `D-NNN`: decision log; decision IDs là immutable, thêm ID kế tiếp khả dụng (D-NNN), không renumber hoặc tái dùng ID đã có.
 
 Area codes hiện dùng: `IDN`, `LSN`, `AI`, `LEX`, `VOC`, `GRM`, `TOE`, `CUR`, `GAM`, `ANL`,
 `NTF`, `CHT`, `SEC`, `OPS`, `DAT`, `UI`. Không renumber ID để chèn nội dung; không tái dùng ID

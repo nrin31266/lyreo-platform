@@ -27,7 +27,7 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - run: ./mvnw -B test
+      - run: ./mvnw -B verify
 
   python:
     runs-on: ubuntu-latest

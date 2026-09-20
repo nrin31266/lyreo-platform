@@ -1,7 +1,7 @@
 package com.lyreo.lesson.infrastructure;
 
-import com.lyreo.lesson.application.LessonProcessingPolicyRepository;
-import com.lyreo.lesson.domain.LessonProcessingPolicy;
+import com.lyreo.lesson.application.port.LessonProcessingPolicyRepository;
+import com.lyreo.lesson.domain.build.LessonProcessingPolicy;
 import com.lyreo.platform.config.application.RuntimeConfigService;
 
 /** Reads the typed Lesson processing policy from the platform runtime-config registry. */

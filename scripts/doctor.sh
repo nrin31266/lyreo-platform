@@ -43,6 +43,8 @@ if command -v pnpm >/dev/null 2>&1; then ok "pnpm $(pnpm -v)"; else warn 'pnpm n
 if command -v python3 >/dev/null 2>&1; then ok "$(python3 --version)"; else fail 'python3 not found'; fi
 check_command uv 'uv'
 check_command docker 'Docker'
+check_command ffmpeg 'ffmpeg'
+check_command ffprobe 'ffprobe'
 
 for path in \
   infra/docker/.env \
@@ -51,7 +53,8 @@ for path in \
   apps/ai-service/.env \
   apps/admin-web/.env \
   apps/mobile/.env \
-  tools/data-import/.env; do
+  tools/data-import/.env \
+  tools/lesson-prep/.env; do
   if [[ -f "$path" ]]; then ok "$path exists"; else warn "$path missing (run ./scripts/init-dev-env.sh)"; fi
 done
 

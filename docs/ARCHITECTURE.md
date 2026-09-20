@@ -94,9 +94,10 @@ platform/security
 platform/observability
 ```
 
-Detailed product/domain ownership is defined in the routed area requirements from
-[`requirements/analysis.md`](requirements/analysis.md). Enforceable module ownership rules are
+Detailed product/domain ownership is defined in the routed domain requirements indexed in
+[`docs/README.md`](README.md#chọn-tài-liệu-theo-task). Enforceable module ownership rules are
 defined in [`AGENTS.md`](../AGENTS.md#4-domain-ownership).
+
 
 Frontend shared-package boundaries:
 
@@ -341,3 +342,150 @@ Job errors additionally carry:
 - reference to the raw provider artifact/log in object storage for audit (not for Mobile display).
 
 Do not expose raw provider error details or server stack traces in Mobile-facing responses.
+
+<a id="backend-module-package-structure"></a>
+## 18. Backend module package structure
+
+### A. Repository physical topology
+
+- `apps/*`: deployable applications and composition roots (`core-service`, `ai-service`, `admin-web`, `mobile`). Core Service assembles business and platform modules; it does not own business capabilities or domain code.
+- `modules/*`: independent business capabilities (`identity`, `learner`, `ai`, `lesson`, `speech-assessment`, `lexicon`, `vocabulary`, `grammar`, `toeic`, `curriculum`, `gamification`, `analytics`, `notification`, `chat`).
+- `platform/*`: reusable technical building blocks (`cache`, `config`, `jobs`, `storage`, `security`, `observability`).
+- `libs/*`: intentionally shared Java contracts and events (`libs/contracts`).
+
+### B. Maven physical module vs Spring Modulith logical module
+
+Maven physical modules and Spring Modulith logical modules operate at different granularity:
+- Maven modules manage build compilation boundaries, dependencies, and packaging artifacts.
+- Spring Modulith models logical boundaries within the application. For example, `platform/*` modules participate together in the open technical `com.lyreo.platform` boundary, whereas each business capability under `modules/*` defines a logical business module. They are related, but not guaranteed 1:1.
+
+### C. Business-module top-level package contract
+
+For `modules/*`, production Java resides under `com.lyreo.<module>` with stable top-level concern packages:
+- `api`: inbound transport/delivery (controllers, request/response DTOs, transport mapping).
+- `application`: use cases, application services, event listeners, policies, and outbound ports.
+- `domain`: core business models, entities, value objects, and domain invariants.
+- `infrastructure`: adapters, persistence implementations, integrations, and framework configuration.
+
+Top-level concerns represent roles, not mandatory empty directories. A module without domain rules or inbound controllers may omit those packages without violating the contract.
+
+### D. Progressive structure
+
+Packages remain flat while cohesive. When multiple distinct responsibilities emerge, split by semantic capability or use case rather than artificial symmetry.
+
+### E. Outbound ports (`application/port`)
+
+Outbound abstractions required by application use cases belong deterministically in `application/port`:
+- Repositories (`FooRepository`), writers (`LessonActivityWriter`), queries (`LessonPreviewQuery`), materializers (`LessonSourceMaterializer`), schedulers (`SpacedRepetitionScheduler`), and gateways (`AiExecutionGateway`).
+- The application layer defines the contract it needs; infrastructure adapters implement it.
+
+### F. Persistence adapters (`infrastructure/persistence`)
+
+Database implementations (JDBC/JPA adapters, entities, Spring Data interfaces) belong deterministically in `infrastructure/persistence`:
+- `JdbcFooRepository`, `JpaAppUserRepositoryAdapter`, `JpaAppUserEntity`, `SpringDataAppUserJpaRepository`.
+- Configuration classes (`FooConfiguration`) remain directly in `infrastructure/` unless complex multi-adapter setups warrant further separation.
+
+### G. `api/` terminology
+
+`api/` denotes the inbound delivery/transport layer (HTTP controllers, web DTOs). It is **not** the cross-module Java public API. Cross-module Java communication is governed by Spring Modulith module base packages, `@NamedInterface` declarations, and domain events from `libs/contracts`.
+
+### H. Spring Modulith public visibility
+
+Spring Modulith semantics vs. Lyreo convention:
+- **Spring Modulith framework default:** The module base package (`com.lyreo.<module>`) is treated as the default public API package, while all subpackages are internal by default.
+- **Lyreo architectural convention:** Production classes are never placed directly in the module base package (the root contains only `package-info.java`, enforced by repository validators). Instead, all code lives in subpackages (`api`, `application`, `domain`, `infrastructure`). Selected types intended for cross-module consumption are explicitly exposed using type-level `@NamedInterface(value = "...", propagate = false)` (e.g. `@NamedInterface(value = "application", propagate = false)` on `AiInvocationService`, `@NamedInterface(value = "domain", propagate = false)` on `AiCapability`) or published domain events from `libs/contracts`. Setting `propagate = false` ensures framework propagation does not inadvertently expose internal constructor/method dependency types like outbound ports.
+- Core and other modules access only exposed named interfaces or listen to shared events.
+
+### I. Small canonical module example
+
+Shallow modules keep domain/application flat while normalizing port and persistence placement:
+
+```text
+modules/lexicon/
+└── src/main/java/com/lyreo/lexicon/
+    ├── package-info.java
+    ├── api/
+    │   └── LexiconController.java
+    ├── application/
+    │   ├── LexiconSearchService.java
+    │   └── port/
+    │       └── LexiconRepository.java
+    ├── domain/
+    │   └── LexiconEntry.java
+    └── infrastructure/
+        ├── LexiconConfiguration.java
+        └── persistence/
+            └── JdbcLexiconRepository.java
+```
+
+### J. Large progressive module example (Lesson)
+
+Modules with multiple distinct workflows split application, domain, and infrastructure into cohesive semantic subpackages:
+
+```text
+modules/lesson/
+└── src/main/java/com/lyreo/lesson/
+    ├── package-info.java
+    ├── api/
+    │   ├── AdminLessonController.java
+    │   └── LessonPracticeController.java
+    ├── application/
+    │   ├── build/
+    │   │   ├── CreateLessonBuildService.java
+    │   │   ├── LessonBuildJobHandler.java
+    │   │   ├── LessonBuildLifecycleListener.java
+    │   │   ├── LessonBuildPlanner.java
+    │   │   ├── LessonPromptFactory.java
+    │   │   └── SourceMaterializationException.java
+    │   ├── practice/
+    │   │   ├── DictationScoringPolicy.java
+    │   │   └── LessonPracticeService.java
+    │   ├── preview/
+    │   │   ├── LessonPreviewService.java
+    │   │   └── LessonPreviewView.java
+    │   └── port/
+    │       ├── LessonActivityWriter.java
+    │       ├── LessonBuildStateRepository.java
+    │       ├── LessonEnrichmentWriter.java
+    │       ├── LessonPracticeRepository.java
+    │       ├── LessonPreviewQuery.java
+    │       ├── LessonProcessingPolicyRepository.java
+    │       ├── LessonRepository.java
+    │       └── LessonSourceMaterializer.java
+    ├── domain/
+    │   ├── build/
+    │   │   ├── LessonBuildOptions.java
+    │   │   ├── LessonBuildPlan.java
+    │   │   ├── LessonBuildStep.java
+    │   │   └── LessonProcessingPolicy.java
+    │   └── content/
+    │       ├── Lesson.java
+    │       ├── LessonActivityType.java
+    │       ├── LessonAnnotationType.java
+    │       ├── LessonSentence.java
+    │       └── LessonSourceType.java
+    └── infrastructure/
+        ├── LessonConfiguration.java
+        ├── RuntimeLessonProcessingPolicyRepository.java
+        ├── persistence/
+        │   ├── JdbcLessonActivityWriter.java
+        │   ├── JdbcLessonBuildStateRepository.java
+        │   ├── JdbcLessonEnrichmentWriter.java
+        │   ├── JdbcLessonPracticeRepository.java
+        │   ├── JdbcLessonPreviewQuery.java
+        │   └── JdbcLessonRepository.java
+        └── integration/
+            └── ExternalCommandYoutubeSourceMaterializer.java
+```
+
+### K. Platform technical modules
+
+Platform modules (`platform/*`) are reusable technical building blocks, not business capabilities. They are open technical modules within `com.lyreo.platform` and are not forced into the business-module `api/application/domain/infrastructure` taxonomy. Internal technical layering (`application`, `domain`, `infrastructure`) is used where warranted (e.g. `platform/config`, `platform/jobs`), while simpler platform modules (`cache`, `storage`, `security`, `observability`) remain pragmatically flat.
+
+### L. Anti-patterns
+
+- **Giant dumping packages**: throwing dozens of unrelated services, models, and adapters into flat layer folders indefinitely.
+- **Folder per Java suffix**: creating `service/`, `entity/`, `dto/`, `impl/`, `listener/` packages that group by syntax instead of semantic capability.
+- **Junk-drawer packages**: creating `common/`, `shared/`, `utils/`, `helpers/`, `misc/`, or `manager/` packages.
+- **Empty architecture folders**: creating empty `domain/` or `api/` directories merely to satisfy folder symmetry.
+- **Needless nested Spring Modulith modules**: fragmenting cohesive capabilities into tiny artificial modulith modules without architectural justification.

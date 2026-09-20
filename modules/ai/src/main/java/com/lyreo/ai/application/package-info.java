@@ -1,2 +1,2 @@
-/** Public Java-side AI application API for business modules. */
+/** AI application services, use cases and outbound ports. */
 package com.lyreo.ai.application;

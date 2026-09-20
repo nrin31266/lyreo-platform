@@ -21,7 +21,8 @@ for example in \
   "$ROOT/apps/ai-service/.env.example" \
   "$ROOT/apps/admin-web/.env.example" \
   "$ROOT/apps/mobile/.env.example" \
-  "$ROOT/tools/data-import/.env.example"; do
+  "$ROOT/tools/data-import/.env.example" \
+  "$ROOT/tools/lesson-prep/.env.example"; do
   copy_if_missing "$example"
 done
 
@@ -30,6 +31,7 @@ KC_ENV="$ROOT/infra/keycloak/.env"
 CORE_ENV="$ROOT/apps/core-service/.env"
 AI_ENV="$ROOT/apps/ai-service/.env"
 DATA_ENV="$ROOT/tools/data-import/.env"
+PREP_ENV="$ROOT/tools/lesson-prep/.env"
 
 get_env() {
   local file=$1 key=$2
@@ -96,6 +98,8 @@ if [[ -z "$AI_TOKEN" || "$AI_TOKEN" == "change-me" ]]; then
 fi
 set_env "$CORE_ENV" AI_SERVICE_INTERNAL_TOKEN "$AI_TOKEN"
 set_env "$AI_ENV" AI_SERVICE_INTERNAL_TOKEN "$AI_TOKEN"
+# The Lesson Prep Tool calls the same private capability boundary.
+set_env "$PREP_ENV" AI_SERVICE_INTERNAL_TOKEN "$AI_TOKEN"
 
 # Dev-only bootstrap endpoints use a separate token so the AI service credential is not reused.
 BOOTSTRAP_TOKEN=$(get_env "$CORE_ENV" DEV_BOOTSTRAP_TOKEN)

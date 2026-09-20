@@ -1,6 +1,6 @@
 package com.lyreo.chat.application;
 
-import com.lyreo.ai.application.AiInvocationService;
+import com.lyreo.ai.application.execution.AiInvocationService;
 import com.lyreo.ai.domain.AiCapability;
 import java.util.Map;
 

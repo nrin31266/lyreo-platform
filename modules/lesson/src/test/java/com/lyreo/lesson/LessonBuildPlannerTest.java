@@ -2,12 +2,12 @@ package com.lyreo.lesson;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.lyreo.lesson.application.LessonBuildPlanner;
-import com.lyreo.lesson.domain.LessonActivityType;
-import com.lyreo.lesson.domain.LessonAnnotationType;
-import com.lyreo.lesson.domain.LessonBuildOptions;
-import com.lyreo.lesson.domain.LessonBuildStep;
-import com.lyreo.lesson.domain.LessonSourceType;
+import com.lyreo.lesson.application.build.LessonBuildPlanner;
+import com.lyreo.lesson.domain.build.LessonBuildOptions;
+import com.lyreo.lesson.domain.build.LessonBuildStep;
+import com.lyreo.lesson.domain.content.LessonActivityType;
+import com.lyreo.lesson.domain.content.LessonAnnotationType;
+import com.lyreo.lesson.domain.content.LessonSourceType;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 

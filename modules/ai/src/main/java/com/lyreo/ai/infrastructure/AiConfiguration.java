@@ -1,10 +1,14 @@
 package com.lyreo.ai.infrastructure;
 
-import com.lyreo.ai.application.AiAdminRepository;
-import com.lyreo.ai.application.AiAdminService;
-import com.lyreo.ai.application.AiInvocationService;
-import com.lyreo.ai.application.AiRouter;
-import com.lyreo.ai.application.AiRoutingSnapshotService;
+import com.lyreo.ai.application.admin.AiAdminService;
+import com.lyreo.ai.application.execution.AiInvocationService;
+import com.lyreo.ai.application.port.AiAdminRepository;
+import com.lyreo.ai.application.routing.AiRouter;
+import com.lyreo.ai.application.routing.AiRoutingSnapshotService;
+import com.lyreo.ai.infrastructure.integration.FastApiAiExecutionGateway;
+import com.lyreo.ai.infrastructure.persistence.JdbcAiAdminRepository;
+import com.lyreo.ai.infrastructure.persistence.JdbcAiInvocationAuditRepository;
+import com.lyreo.ai.infrastructure.persistence.JdbcAiRouteRepository;
 import com.lyreo.platform.security.SecretCipher;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;

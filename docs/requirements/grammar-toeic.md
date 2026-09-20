@@ -1,7 +1,6 @@
 # Yêu cầu Grammar và TOEIC
 
-Nguồn migration: đặc tả Lyreo trước khi tách owner. Import semantics: [Data Pipelines](../DATA_PIPELINES.md). Feature specs:
-[Grammar Practice](../features/grammar-practice.md), [TOEIC attempts](../features/toeic-attempts.md).
+Nguồn migration: đặc tả Lyreo trước khi tách owner. Import semantics: [Data Pipelines](../DATA_PIPELINES.md).
 
 <a id="grammar"></a>
 ## Grammar
@@ -43,3 +42,35 @@ Analytics/Gamification consumers qua public contract.
 ### BR-TOE-002 — Media ownership
 
 Status: inherited. Structured data vào PostgreSQL, audio/images vào storage; DB giữ object key.
+
+## User Stories & Acceptance Criteria
+
+<a id="us-grm-001--luyen-grammar-tu-question-bank"></a>
+### US-GRM-001 — Luyện Grammar từ question bank
+
+Là learner, tôi muốn trả lời question có taxonomy/explanation để luyện đúng topic.
+
+#### AC-GRM-001 — Server-checked answer
+
+Given question tồn tại, when learner submit option (`POST /api/v1/grammar/questions/{questionId}/attempts`), then server
+load answer key, persist attempt, publish `GrammarQuestionAnsweredEvent` và trả correct/explanation phù hợp; client không quyết định correctness.
+
+#### AC-GRM-002 — Missing/invalid question
+
+Given question hoặc option không hợp lệ, when submit, then không tạo successful attempt/event; AI
+không tự generate câu thay thế mặc định.
+
+<a id="us-toe-001--nop-toeic-attempt"></a>
+### US-TOE-001 — Nộp TOEIC attempt
+
+Là learner, tôi muốn nộp answers để nhận Listening/Reading result và history chính xác.
+
+#### AC-TOE-001 — Raw scoring
+
+Given active test và answer key, when submit (`POST /api/v1/toeic/tests/{testId}/attempts`), then server persist answers,
+tính raw correct counts và publish `ToeicAttemptCompletedEvent`; missing answers được xử lý theo service contract.
+
+#### AC-TOE-002 — Scaled score honesty
+
+Given chưa có conversion table được duyệt, when trả score, then scaled Listening/Reading fields là
+null và UI không diễn giải raw counts thành official scaled score (xem [GAP-008](gaps.md#gap-008--toeic-scaled-score-conversion-table)).

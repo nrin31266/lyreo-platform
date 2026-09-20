@@ -1,6 +1,7 @@
 # FEAT-DICTATION — Dictation Practice
 
-Requirements: [Dictation](../requirements/lesson.md#dictation); story [US-LSN-002](../requirements/stories/lesson.md#us-lsn-002--lam-dictation).
+Requirements: [Dictation](../requirements/lesson.md#dictation); story [US-LSN-002](../requirements/lesson.md#us-lsn-002--lam-dictation).
+
 
 ## Flow
 

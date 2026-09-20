@@ -14,7 +14,12 @@ class Settings(BaseSettings):
     qwen_device: str = 'cuda:0'
     qwen_dtype: str = 'bfloat16'
     qwen_max_inference_batch_size: int = 8
-    qwen_max_new_tokens: int = 512
+    qwen_max_new_tokens: int = 2048
+
+    kokoro_model: str = 'hexgrad/Kokoro-82M'
+    kokoro_default_voice: str = 'af_heart'
+    kokoro_device: str = 'cpu'
+    kokoro_sample_rate: int = 24000
 
     groq_base_url: str = 'https://api.groq.com/openai/v1'
     deepseek_base_url: str = 'https://api.deepseek.com'

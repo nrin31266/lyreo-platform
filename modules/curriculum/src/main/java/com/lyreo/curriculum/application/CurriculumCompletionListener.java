@@ -2,6 +2,7 @@ package com.lyreo.curriculum.application;
 
 import com.lyreo.contracts.lesson.LessonCompletedEvent;
 import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent;
+import com.lyreo.curriculum.application.port.CurriculumProgressRepository;
 import com.lyreo.curriculum.domain.CurriculumItem.ContentType;
 import java.util.UUID;
 import org.springframework.modulith.events.ApplicationModuleListener;

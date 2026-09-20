@@ -1,8 +1,13 @@
 {
   "workspace": "Không gian quản trị",
   "signIn": "Đăng nhập bằng Keycloak",
+  "signInFailed": "Đăng nhập thất bại",
   "completingSignIn": "Đang hoàn tất đăng nhập…",
   "loading": "Đang tải Lyreo…",
+  "unauthorized": {
+    "title": "Từ chối truy cập",
+    "message": "Tài khoản của bạn không có quyền quản trị để truy cập không gian này."
+  },
   "nav": {
     "overview": "Tổng quan",
     "lessonBuilder": "Tạo bài học",

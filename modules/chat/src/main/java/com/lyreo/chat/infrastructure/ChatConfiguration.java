@@ -1,6 +1,6 @@
 package com.lyreo.chat.infrastructure;
 
-import com.lyreo.ai.application.AiInvocationService;
+import com.lyreo.ai.application.execution.AiInvocationService;
 import com.lyreo.chat.application.EnglishTutorPrompt;
 import com.lyreo.chat.application.EnglishTutorService;
 import org.springframework.context.annotation.Bean;

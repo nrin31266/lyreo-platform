@@ -1,9 +1,11 @@
 package com.lyreo.gamification.infrastructure;
 
-import com.lyreo.gamification.application.DiamondLedger;
-import com.lyreo.gamification.application.MissionProgressRepository;
 import com.lyreo.gamification.application.MissionProgressService;
 import com.lyreo.gamification.application.RewardPolicy;
+import com.lyreo.gamification.application.port.DiamondLedger;
+import com.lyreo.gamification.application.port.MissionProgressRepository;
+import com.lyreo.gamification.infrastructure.persistence.JdbcDiamondLedger;
+import com.lyreo.gamification.infrastructure.persistence.JdbcMissionProgressRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;

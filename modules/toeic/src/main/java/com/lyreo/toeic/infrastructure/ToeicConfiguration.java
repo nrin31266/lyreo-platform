@@ -1,7 +1,8 @@
 package com.lyreo.toeic.infrastructure;
 
-import com.lyreo.toeic.application.ToeicAttemptRepository;
 import com.lyreo.toeic.application.ToeicAttemptService;
+import com.lyreo.toeic.application.port.ToeicAttemptRepository;
+import com.lyreo.toeic.infrastructure.persistence.JdbcToeicAttemptRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

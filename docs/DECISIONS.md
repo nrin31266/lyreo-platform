@@ -79,3 +79,13 @@ failures yield safe 500 responses without leaking internals. Shared baseline sem
 can express application boundary outcomes without coupling domain logic to Spring MVC or HTTP runtime
 classes. Swagger/OpenAPI is generated via springdoc with dev/test enablement and production disabled by default.
 Rationale: [`http-api-contract.md`](architecture/http-api-contract.md).
+
+## D-022 — Standalone Lesson Prep Tool and Portable Package Format (2026-09-13)
+Decision: Lesson source acquisition, speech synthesis, transcription, and alignment are executed
+locally inside a dedicated operator workstation (`tools/lesson-prep`) that exports one self-contained,
+portable `*.lesson-source.zip` package (`lesson-source.json` manifest + media bytes). The tool does
+not depend on or mutate Core database tables, Keycloak users/clients, or Cloudflare R2 object storage.
+FastAPI AI Service exposes technical capabilities (`/v1/tts`, `/v1/tts/voices`, `/v1/stt`, `/v1/align`)
+via local file/audio references (`file:///...`) without receiving YouTube URLs or business lesson DTOs.
+Package ingestion into Core database and storage is a separate future phase. Rationale: `DATA_PIPELINES.md`,
+`architecture/ai-execution.md`, and `tools/lesson-prep/README.md`.

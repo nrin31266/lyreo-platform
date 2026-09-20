@@ -49,8 +49,6 @@ For architecture boundaries and technology rationale, read:
 3. `docs/README.md` — the single task/domain/code routing table.
 4. Open only the owner docs, code and tests selected by that route.
 
-`docs/LYREO_PLATFORM_SPEC.md` preserves old paths/anchors; it is no longer a normative master.
-
 `CLAUDE.md`, `GEMINI.md`, and `AGENT.md` are symlinks to `AGENTS.md`; maintain only one
 engineering contract.
 
@@ -98,7 +96,8 @@ lyreo-platform/
 │   └── i18n/                  # shared common/admin/mobile translation resources
 │
 ├── tools/                     # standalone/offline/operator utilities with own runtimes/deps
-│   └── data-import/           # Lexicon/Grammar/TOEIC importers
+│   ├── data-import/           # Lexicon/Grammar/TOEIC importers
+│   └── lesson-prep/           # standalone lesson source preparation workstation (*.lesson-source.zip)
 │
 ├── tooling/                   # repository validators and developer/agent support code
 │
@@ -123,7 +122,7 @@ lyreo-platform/
 - `platform/`: Reusable Java technical building blocks (cache, config, jobs, storage, security, observability). Business modules consume platform through public interfaces and ports, never platform infrastructure internals.
 - `libs/`: Shared Java/Maven contracts and artifacts (`libs/contracts` defines shared domain events and error exceptions).
 - `packages/`: Shared pnpm/TypeScript packages consumed across frontend applications (`design-system` tokens, `i18n` translations).
-- `tools/`: Standalone, offline, or operator utilities with their own runtimes and dependencies (such as the Python data importers in `tools/data-import`).
+- `tools/`: Standalone, offline, or operator utilities with their own runtimes and dependencies (such as the Python data importers in `tools/data-import` and the Lesson Prep Tool in `tools/lesson-prep`).
 - `tooling/`: Lightweight repository guardrails, validators, and developer/agent support code.
 - `infra/`: Infrastructure definitions, Keycloak realm bootstrap, Dockerfiles, and compose assets.
 - `docs/`: Canonical project knowledge, specifications, and architecture decisions.
@@ -248,6 +247,15 @@ Inspect containers:
 docker compose   --env-file infra/docker/.env   -f compose.dev.yml   ps
 ```
 
+Database inspection and reset:
+
+```bash
+make db-shell   # Open psql inside container against lyreo_dev
+make db-reset   # Safe local reset of app database (preserves Keycloak)
+```
+
+Core startup (`make core`) automatically applies Flyway migrations. See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#7-database-workflow) for details.
+
 ---
 
 ## 7. Bootstrap Keycloak
@@ -325,6 +333,12 @@ Or from the repository root:
 make ai
 ```
 
+Run with local Qwen/Kokoro weights (requires GPU or local Python runtime):
+
+```bash
+make ai-local
+```
+
 The development configuration defaults to mock AI runtime, so the project can boot without a GPU
 or downloading local Qwen models.
 
@@ -336,6 +350,17 @@ uv run pytest
 ```
 
 Core/FastAPI responsibility boundaries live in `AGENTS.md` and `docs/ARCHITECTURE.md`.
+
+### Lesson Prep Tool
+
+Operator workstation for preparing portable lesson source packages:
+
+```bash
+make lesson-prep
+```
+
+Opens Gradio UI at `http://127.0.0.1:7860`. Requires AI Service running (`make ai` or `make ai-local`), and `ffmpeg`/`ffprobe` on PATH.
+Full details: `tools/lesson-prep/README.md`.
 
 ---
 
@@ -406,10 +431,11 @@ apps/mobile/.env
 After the components are running, the default development addresses are:
 
 ```text
-Core Service    http://localhost:8080
-AI Service      http://localhost:8000
-Admin Web       http://localhost:5173
-Keycloak        see compose.dev.yml / infra env
+Core Service        http://localhost:8080
+AI Service          http://localhost:8000
+Admin Web           http://localhost:5173
+Lesson Prep Tool    http://localhost:7860
+Keycloak            see compose.dev.yml / infra env
 ```
 
 Use the health endpoints currently configured in code/config. If an endpoint or port changes,
@@ -486,17 +512,28 @@ Main checks can also be run separately:
 
 ```bash
 make validate-docs
-make test-java
+make test-java     # Fast Java unit tests (Surefire)
+make verify-java   # Full Java verification: unit + integration tests (Failsafe)
 make test-ai
+make test-lesson-prep
 pnpm typecheck
 pnpm build
 ```
+
+See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#9-testvalidation-loop) for the complete database and testing workflow.
 
 Python AI tests:
 
 ```bash
 cd apps/ai-service
 uv run pytest
+```
+
+Lesson Prep Tool tests:
+
+```bash
+cd tools/lesson-prep
+uv run --locked --extra dev python -m pytest
 ```
 
 Importer tests:
@@ -524,6 +561,7 @@ Areas with starter implementation/patterns include:
 identity
 jobs
 lesson
+lesson-prep
 ai
 speech-assessment
 lexicon

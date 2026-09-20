@@ -52,7 +52,13 @@ class MockRuntime:
                 "mime_type": "audio/mpeg",
                 "suggested_artifact_key": f"mock/tts/{digest}.mp3",
             },
-            metadata={"runtime": "mock", "binary_generated": False},
+            metadata={
+                "runtime": "mock",
+                "binary_generated": False,
+                "voice": request.options.get("voice"),
+                "accent": request.options.get("accent"),
+                "speed": request.options.get("speed"),
+            },
         )
 
     async def nlp(self, request: ExecuteRequest) -> ExecuteResponse:

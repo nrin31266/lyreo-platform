@@ -3,6 +3,7 @@ package com.lyreo.grammar.application;
 import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.grammar.GrammarQuestionAnsweredEvent;
+import com.lyreo.grammar.application.port.GrammarPracticeRepository;
 import com.lyreo.grammar.domain.GrammarQuestion;
 import java.time.Instant;
 import java.util.List;
