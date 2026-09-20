@@ -26,45 +26,70 @@ export type ThemeColors = {
 
 export const semanticThemes: Record<ThemeMode, ThemeColors> = {
   light: {
-    background: primitiveColors.paper50,
-    foreground: primitiveColors.ink900,
-    surface: primitiveColors.white,
+    background: primitiveColors.ivory100,
+    foreground: primitiveColors.espresso950,
+
+    // Base surface < elevated surface
+    surface: primitiveColors.paper50,
     surfaceElevated: primitiveColors.white,
-    primary: primitiveColors.forest900,
-    primaryForeground: primitiveColors.paper50,
-    secondary: primitiveColors.gold100,
-    secondaryForeground: primitiveColors.forest900,
+
+    primary: primitiveColors.brown500,
+    primaryForeground: primitiveColors.ivory100,
+
+    secondary: primitiveColors.cream200,
+    secondaryForeground: primitiveColors.brown500,
+
     muted: primitiveColors.paper100,
     mutedForeground: primitiveColors.ink700,
+
     border: primitiveColors.paper200,
     input: primitiveColors.paper200,
-    focusRing: primitiveColors.forest500,
+
+    // Darker tone for accessible focus indication
+    focusRing: primitiveColors.chestnut500,
+
     success: primitiveColors.success700,
-    warning: primitiveColors.gold500,
+    warning: primitiveColors.warning700,
+
     destructive: primitiveColors.danger700,
     destructiveForeground: primitiveColors.white,
+
     overlay: primitiveColors.overlayLight,
   },
+
   dark: {
-    background: primitiveColors.forest950,
-    foreground: primitiveColors.paper50,
-    surface: primitiveColors.forest800,
-    surfaceElevated: primitiveColors.forest700,
-    primary: primitiveColors.forest300,
-    primaryForeground: primitiveColors.forest950,
-    secondary: primitiveColors.gold950,
-    secondaryForeground: primitiveColors.gold100,
-    muted: primitiveColors.forest850,
-    mutedForeground: primitiveColors.ink300,
-    border: primitiveColors.forest650,
-    input: primitiveColors.forest650,
-    focusRing: primitiveColors.forest300,
+    background: primitiveColors.cocoa950,
+    foreground: primitiveColors.warmWhite50,
+
+    surface: primitiveColors.cocoa900,
+    surfaceElevated: primitiveColors.cocoa800,
+
+    // Primary must be the visible CTA/accent color
+    primary: primitiveColors.copper400,
+    primaryForeground: primitiveColors.cocoa950,
+
+    // Keep secondary quieter than primary
+    secondary: primitiveColors.cocoa700,
+    secondaryForeground: primitiveColors.warmWhite50,
+
+    muted: primitiveColors.cocoa700,
+    mutedForeground: primitiveColors.sand300,
+
+    border: primitiveColors.cocoa500,
+    input: primitiveColors.cocoa500,
+
+    focusRing: primitiveColors.apricot300,
+
     success: primitiveColors.success400,
-    warning: primitiveColors.gold300,
+    warning: primitiveColors.warning400,
+
     destructive: primitiveColors.danger400,
     destructiveForeground: primitiveColors.danger950,
+
     overlay: primitiveColors.overlayDark,
   },
 };
 
-export const semanticColorRoles = Object.freeze(Object.keys(semanticThemes.light) as (keyof ThemeColors)[]);
+export const semanticColorRoles = Object.freeze(
+  Object.keys(semanticThemes.light) as (keyof ThemeColors)[],
+);
