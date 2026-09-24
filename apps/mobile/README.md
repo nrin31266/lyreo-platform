@@ -8,8 +8,8 @@ Mobile is the **learner experience**, providing dictation, shadowing, SRS vocabu
 
 ## 1. Quick Start Guide
 
-Use Node.js 24.20+ (pinned in the repository root `.nvmrc`) and pnpm 12.3.1 through Corepack so
-local installs and checks match CI.
+Use Node.js 24+ and pnpm 12.3.1 through Corepack. The repository root `.nvmrc` pins the
+recommended patch release used by CI, while other Node 24 patch releases remain supported.
 
 > [!IMPORTANT]
 > **Expo Go is NOT supported.** Lyreo requires native audio recording and background execution via `expo-dev-client`. You must have the **Lyreo Development Build** installed on your device or emulator before Metro is useful.

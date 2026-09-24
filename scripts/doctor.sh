@@ -34,15 +34,13 @@ fi
 if command -v node >/dev/null 2>&1; then
   node_version=$(node -v)
   node_major=$(version_major "$node_version")
-  node_minor=$(printf '%s' "$node_version" | sed -E 's/^v?[0-9]+\.([0-9]+).*/\1/')
-  if [[ "$node_major" =~ ^[0-9]+$ ]] && [[ "$node_minor" =~ ^[0-9]+$ ]] \
-    && (( node_major > 24 || (node_major == 24 && node_minor >= 20) )); then
+  if [[ "$node_major" =~ ^[0-9]+$ ]] && (( node_major >= 24 )); then
     ok "Node $node_version"
   else
-    warn "Node $node_version (repo minimum 24.20.0)"
+    warn "Node $node_version (repo minimum 24.0.0)"
   fi
 else
-  warn 'Node not found (repo minimum 24.20.0)'
+  warn 'Node not found (repo minimum 24.0.0)'
 fi
 
 if command -v pnpm >/dev/null 2>&1; then

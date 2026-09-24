@@ -38,7 +38,7 @@ function ThemedNavigator() {
         }}
       >
         <Stack.Protected guard={status === 'unauthenticated'}>
-          <Stack.Screen name="(public)" />
+          <Stack.Screen name="sign-in" />
         </Stack.Protected>
         <Stack.Protected guard={status === 'authenticated'}>
           <Stack.Screen name="(app)" />
