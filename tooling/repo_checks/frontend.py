@@ -40,11 +40,12 @@ def check_raw_colors_and_primitives(root: Path, errors: list[str]) -> None:
 def check_secure_store_usage(root: Path, errors: list[str]) -> None:
     """Ensure SecureStore is restricted to authentication and session management."""
     mobile_dir = root / "apps/mobile"
+    session_storage = "apps/mobile/src/auth/session-storage.ts"
     if not mobile_dir.exists():
         return
     for pattern in ("*.ts", "*.tsx"):
         for path in repo_files(mobile_dir, pattern, root):
-            if "SecureStore" in path.read_text(encoding="utf-8") and path.relative_to(root).as_posix() != "apps/mobile/src/session.ts":
+            if "SecureStore" in path.read_text(encoding="utf-8") and path.relative_to(root).as_posix() != session_storage:
                 errors.append(f"SecureStore usage outside auth/session storage: {path.relative_to(root)}")
 
 

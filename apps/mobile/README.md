@@ -8,6 +8,9 @@ Mobile is the **learner experience**, providing dictation, shadowing, SRS vocabu
 
 ## 1. Quick Start Guide
 
+Use Node.js 24+ and pnpm 12.3.1 through Corepack. The repository root `.nvmrc` pins the
+recommended patch release used by CI, while other Node 24 patch releases remain supported.
+
 > [!IMPORTANT]
 > **Expo Go is NOT supported.** Lyreo requires native audio recording and background execution via `expo-dev-client`. You must have the **Lyreo Development Build** installed on your device or emulator before Metro is useful.
 > **Metro Port**: Metro runs on port **8082** by default (to avoid port 8081 occupied by Keycloak).
@@ -21,7 +24,10 @@ cp apps/mobile/.env.example apps/mobile/.env
 
 Default addresses in `apps/mobile/.env`:
 - **Android Emulator**: Reaches host services via `10.0.2.2` (Core: `10.0.2.2:8080`, Keycloak: `10.0.2.2:8081`).
-- **Physical device**: Set `EXPO_PUBLIC_API_BASE_URL` and `EXPO_PUBLIC_KEYCLOAK_URL` to your machine's LAN IP, or use a development tunnel (`npx expo start --tunnel`).
+- **Physical Android via USB**: Use the `adb reverse` workflow below and set both service URLs to `localhost` on the device. A LAN IP requires Keycloak's advertised issuer and Core's expected issuer to match; do not change only the Mobile URL and assume authenticated API calls will work.
+
+All four `EXPO_PUBLIC_*` values in `.env.example` are required. Mobile validates them at startup;
+they are public endpoint/client metadata and must never contain secrets.
 
 ---
 
@@ -65,6 +71,24 @@ make mobile
    make mobile
    ```
    Press `a` in the Metro terminal or tap the **Lyreo** app on the emulator. Metro hot-reloads all TSX, components, and Tailwind styling instantly.
+
+### Physical Android via USB (no emulator)
+
+With USB debugging enabled and the device authorized, confirm `adb devices -l` lists it. Set
+`EXPO_PUBLIC_API_BASE_URL=http://localhost:8080` and
+`EXPO_PUBLIC_KEYCLOAK_URL=http://localhost:8081` in the ignored `apps/mobile/.env`, then run:
+
+```bash
+adb reverse tcp:8080 tcp:8080   # Core
+adb reverse tcp:8081 tcp:8081   # Keycloak
+adb reverse tcp:8082 tcp:8082   # Metro
+make mobile-android-install      # First install or native dependency change
+make mobile                      # Start Metro; open Lyreo on the phone
+```
+
+Start PostgreSQL, Keycloak, and Core using the root development workflow before testing login.
+Re-run `adb reverse` after reconnecting the phone. If multiple devices are listed, select the
+physical device explicitly with `adb -s <serial>` (and `ANDROID_SERIAL=<serial>` for the install).
 
 ---
 
@@ -113,10 +137,23 @@ make mobile
 - **Continuous Native Generation (CNG)**: `apps/mobile/android/` and `apps/mobile/ios/` are **generated build artifacts** derived from `app.json` and `package.json`. They are intentionally git-ignored. Do not commit manual edits inside those folders; declare native changes via Expo config plugins instead.
 - **UI Foundation**: Uses NativeWind v4 (Tailwind v3.4), consuming semantic light/dark tokens from `@lyreo/design-system`.
 - **Internationalization**: Uses `@lyreo/i18n` for shared EN/VI resources.
-- **Security & Storage**: Authentication tokens (Access, Refresh, ID) use `expo-secure-store`. Ordinary preferences (theme, locale) use `AsyncStorage`.
+- **Navigation**: Expo Router route groups separate public and authenticated screens. Root
+  `Stack.Protected` guards derive only from `SessionProvider` status.
+- **Security & Storage**: The access token stays in memory. Refresh and ID token material use
+  `expo-secure-store`; a stored refresh token is validated through OIDC during app bootstrap.
+  Ordinary preferences (theme, locale) use `AsyncStorage`.
+- **API**: Feature code uses the shared authenticated client in `src/api`. It refreshes once and
+  retries once on `401`, then invalidates the session. Core RFC 9457 errors are normalized with
+  their stable code, field violations and correlation ID.
+- **OIDC callback**: The Development Build returns to `lyreo://auth/callback`. Run
+  `make keycloak-seed` after pulling callback configuration changes so an existing realm is updated.
 - **Typecheck**:
   ```bash
   pnpm --filter @lyreo/mobile typecheck
+  ```
+- **Foundation tests**:
+  ```bash
+  pnpm --filter @lyreo/mobile test
   ```
 
 ---

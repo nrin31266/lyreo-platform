@@ -96,4 +96,3 @@ src/
    - `<domain>.types.ts` for page DTOs.
 2. Register the route path and label key in `src/app/layout/admin-navigation.ts`.
 3. Add the nested `<Route>` under `AdminLayout` in `src/app/router.tsx`.
-

@@ -1,88 +1,69 @@
-import { supportedLocales, type SupportedLocale } from '@lyreo/i18n';
 import type { ThemePreference } from '@lyreo/design-system';
-import { Link, Redirect } from 'expo-router';
+import { supportedLocales, type SupportedLocale } from '@lyreo/i18n';
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Switch, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Pressable, ScrollView, Switch, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { mobileApi } from '../src/api';
-import { useAuth } from '../src/auth';
-import { Button } from '../src/components/ui/button';
-import { Text } from '../src/components/ui/text';
-import { useAppLocale } from '../src/providers/LocaleProvider';
-import { useAppTheme } from '../src/providers/AppThemeProvider';
-
-type DisplayTiming = 'OFF' | 'TAP_TO_SHOW' | 'AFTER_ATTEMPT' | 'ALWAYS';
-
-type Preferences = {
-  preferredAccent: string;
-  translation: DisplayTiming;
-  sentenceIpa: DisplayTiming;
-  vocabularyNotes: DisplayTiming;
-  grammarNotes: DisplayTiming;
-  thoughtGroups: boolean;
-  karaokeHighlighting: boolean;
-  properNounHints: boolean;
-  defaultPlaybackSpeed: number;
-};
-
-const defaults: Preferences = {
-  preferredAccent: 'US',
-  translation: 'AFTER_ATTEMPT',
-  sentenceIpa: 'TAP_TO_SHOW',
-  vocabularyNotes: 'AFTER_ATTEMPT',
-  grammarNotes: 'AFTER_ATTEMPT',
-  thoughtGroups: true,
-  karaokeHighlighting: true,
-  properNounHints: true,
-  defaultPlaybackSpeed: 1,
-};
+import { BackButton } from '@/components/navigation/back-button';
+import { useApiClient } from '@/api/api-provider';
+import { useSession } from '@/auth/use-session';
+import { ErrorState } from '@/components/states/error-state';
+import { LoadingState } from '@/components/states/loading-state';
+import { Button } from '@/components/ui/button';
+import { Text } from '@/components/ui/text';
+import {
+  defaultLearnerPreferences,
+  getLearnerPreferences,
+  updateLearnerPreferences,
+  type DisplayTiming,
+  type LearnerPreferences,
+} from '@/features/preferences/api';
+import { useAppLocale } from '@/providers/LocaleProvider';
+import { useAppTheme } from '@/providers/AppThemeProvider';
 
 const displayTimings: DisplayTiming[] = ['OFF', 'TAP_TO_SHOW', 'AFTER_ATTEMPT', 'ALWAYS'];
 const themePreferences: ThemePreference[] = ['system', 'light', 'dark'];
 
 export default function SettingsScreen() {
-  const auth = useAuth();
-  const { colors, preference: themePreference, setPreference: setThemePreference } = useAppTheme();
+  const client = useApiClient();
+  const session = useSession();
+  const { preference: themePreference, setPreference: setThemePreference } = useAppTheme();
   const { locale, setLocale } = useAppLocale();
   const { t } = useTranslation(['mobile', 'common']);
-  const [preferences, setPreferences] = useState<Preferences>(defaults);
-  const [loading, setLoading] = useState(true);
+  const [preferences, setPreferences] = useState<LearnerPreferences>(defaultLearnerPreferences);
+  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+
+  const load = useCallback((signal?: AbortSignal) => {
+    setLoadState('loading');
+    setMessage(null);
+    void getLearnerPreferences(client, signal)
+      .then(value => {
+        setPreferences(value);
+        setLoadState('loaded');
+      })
+      .catch(() => {
+        if (signal?.aborted) return;
+        setLoadState('error');
+      });
+  }, [client]);
 
   useEffect(() => {
-    if (!auth.authenticated) {
-      setLoading(false);
-      return;
-    }
-
-    auth.getAccessToken()
-      .then(token => {
-        if (!token) return;
-        return mobileApi<Preferences>('/api/v1/learner/preferences', token).then(setPreferences);
-      })
-      .catch(() => setMessage(t('mobile:settings.loadFailed')))
-      .finally(() => setLoading(false));
-  }, [auth.authenticated, auth.getAccessToken, t]);
-
-  if (!auth.loading && !auth.authenticated) return <Redirect href="/login" />;
+    const controller = new AbortController();
+    load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
 
   async function save() {
-    const token = await auth.getAccessToken();
-    if (!token) return;
-
     setSaving(true);
-    setMessage('');
+    setMessage(null);
     try {
-      const saved = await mobileApi<Preferences>('/api/v1/learner/preferences', token, {
-        method: 'PUT',
-        body: JSON.stringify(preferences),
-      });
+      const saved = await updateLearnerPreferences(client, preferences);
       setPreferences(saved);
-      setMessage(t('mobile:settings.saved'));
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : t('mobile:settings.saveFailed'));
+      setMessage({ text: t('mobile:settings.saved'), error: false });
+    } catch {
+      setMessage({ text: t('mobile:settings.saveFailed'), error: true });
     } finally {
       setSaving(false);
     }
@@ -90,9 +71,7 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerStyle={{ padding: 24, paddingTop: 54, paddingBottom: 50, gap: 16 }}>
-      <Link href="/" asChild>
-        <Pressable><Text className="font-bold text-primary">{t('mobile:settings.back')}</Text></Pressable>
-      </Link>
+      <BackButton label={t('mobile:settings.back')} />
       <Text className="mt-[18px] text-[40px] font-extrabold tracking-[-1.5px] text-foreground">{t('mobile:settings.title')}</Text>
       <Text className="leading-[22px] text-muted-foreground">{t('mobile:settings.lead')}</Text>
 
@@ -101,7 +80,7 @@ export default function SettingsScreen() {
         <ChoiceChips<SupportedLocale>
           label={t('mobile:settings.language')}
           value={locale}
-          values={[...supportedLocales]}
+          values={supportedLocales}
           renderLabel={value => t(`common:language.${value === 'en' ? 'english' : 'vietnamese'}`)}
           onChange={value => void setLocale(value)}
         />
@@ -114,25 +93,30 @@ export default function SettingsScreen() {
         />
       </Section>
 
-      {loading ? (
-        <ActivityIndicator color={colors.primary} />
-      ) : (
+      {loadState === 'loading' ? <LoadingState /> : null}
+      {loadState === 'error' ? (
+        <ErrorState message={t('mobile:settings.loadFailed')} onRetry={() => load()} />
+      ) : null}
+      {loadState === 'loaded' ? (
         <>
           <Section title={t('mobile:settings.shadowing')}>
             <Toggle
               label={t('mobile:settings.thoughtGroups')}
               value={preferences.thoughtGroups}
-              set={thoughtGroups => setPreferences({ ...preferences, thoughtGroups })}
+              disabled={saving}
+              set={thoughtGroups => setPreferences(previous => ({ ...previous, thoughtGroups }))}
             />
             <Toggle
               label={t('mobile:settings.karaoke')}
               value={preferences.karaokeHighlighting}
-              set={karaokeHighlighting => setPreferences({ ...preferences, karaokeHighlighting })}
+              disabled={saving}
+              set={karaokeHighlighting => setPreferences(previous => ({ ...previous, karaokeHighlighting }))}
             />
             <Choice
               label={t('mobile:settings.sentenceIpa')}
               value={preferences.sentenceIpa}
-              onChange={sentenceIpa => setPreferences({ ...preferences, sentenceIpa })}
+              disabled={saving}
+              onChange={sentenceIpa => setPreferences(previous => ({ ...previous, sentenceIpa }))}
             />
           </Section>
 
@@ -140,12 +124,14 @@ export default function SettingsScreen() {
             <Toggle
               label={t('mobile:settings.properNounHints')}
               value={preferences.properNounHints}
-              set={properNounHints => setPreferences({ ...preferences, properNounHints })}
+              disabled={saving}
+              set={properNounHints => setPreferences(previous => ({ ...previous, properNounHints }))}
             />
             <Choice
               label={t('mobile:settings.translation')}
               value={preferences.translation}
-              onChange={translation => setPreferences({ ...preferences, translation })}
+              disabled={saving}
+              onChange={translation => setPreferences(previous => ({ ...previous, translation }))}
             />
           </Section>
 
@@ -153,23 +139,29 @@ export default function SettingsScreen() {
             <Choice
               label={t('mobile:settings.vocabularyNotes')}
               value={preferences.vocabularyNotes}
-              onChange={vocabularyNotes => setPreferences({ ...preferences, vocabularyNotes })}
+              disabled={saving}
+              onChange={vocabularyNotes => setPreferences(previous => ({ ...previous, vocabularyNotes }))}
             />
             <Choice
               label={t('mobile:settings.grammarNotes')}
               value={preferences.grammarNotes}
-              onChange={grammarNotes => setPreferences({ ...preferences, grammarNotes })}
+              disabled={saving}
+              onChange={grammarNotes => setPreferences(previous => ({ ...previous, grammarNotes }))}
             />
           </Section>
 
           <Button size="lg" onPress={() => void save()} disabled={saving}>
             {saving ? t('common:status.saving') : t('mobile:settings.save')}
           </Button>
-          {message ? <Text className="text-xs leading-[19px] text-muted-foreground">{message}</Text> : null}
+          {message ? (
+            <Text className={message.error ? 'text-sm text-destructive' : 'text-sm text-success'}>
+              {message.text}
+            </Text>
+          ) : null}
         </>
-      )}
+      ) : null}
 
-      <Button variant="outline" size="lg" onPress={() => void auth.signOut()}>
+      <Button variant="outline" size="lg" onPress={() => void session.signOut()}>
         {t('common:actions.signOut')}
       </Button>
     </ScrollView>
@@ -185,13 +177,24 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Toggle({ label, value, set }: { label: string; value: boolean; set: (value: boolean) => void }) {
+function Toggle({
+  label,
+  value,
+  disabled,
+  set,
+}: {
+  label: string;
+  value: boolean;
+  disabled?: boolean;
+  set: (value: boolean) => void;
+}) {
   const { colors } = useAppTheme();
   return (
     <View className="flex-row items-center justify-between border-b border-border py-2.5">
       <Text className="font-semibold text-foreground">{label}</Text>
       <Switch
         value={value}
+        disabled={disabled}
         onValueChange={set}
         trackColor={{ false: colors.input, true: colors.primary }}
         thumbColor={value ? colors.primaryForeground : colors.surface}
@@ -200,12 +203,23 @@ function Toggle({ label, value, set }: { label: string; value: boolean; set: (va
   );
 }
 
-function Choice({ label, value, onChange }: { label: string; value: DisplayTiming; onChange: (value: DisplayTiming) => void }) {
+function Choice({
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: DisplayTiming;
+  disabled?: boolean;
+  onChange: (value: DisplayTiming) => void;
+}) {
   const { t } = useTranslation('mobile');
   return (
     <ChoiceChips
       label={label}
       value={value}
+      disabled={disabled}
       values={displayTimings}
       renderLabel={option => t(`settings.displayTiming.${option}`)}
       onChange={onChange}
@@ -219,12 +233,14 @@ function ChoiceChips<T extends string>({
   values,
   renderLabel,
   onChange,
+  disabled,
 }: {
   label: string;
   value: T;
   values: readonly T[];
   renderLabel: (value: T) => string;
   onChange: (value: T) => void;
+  disabled?: boolean;
 }) {
   return (
     <View className="gap-2 border-b border-border py-3 last:border-b-0">
@@ -235,6 +251,7 @@ function ChoiceChips<T extends string>({
           return (
             <Pressable
               key={option}
+              disabled={disabled}
               onPress={() => onChange(option)}
               className={active
                 ? 'rounded-full border border-primary bg-primary px-2.5 py-2'

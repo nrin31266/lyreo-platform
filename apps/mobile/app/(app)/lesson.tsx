@@ -1,9 +1,9 @@
-import { Link } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../src/components/ui/button';
-import { Text } from '../src/components/ui/text';
+import { BackButton } from '@/components/navigation/back-button';
+import { Button } from '@/components/ui/button';
+import { Text } from '@/components/ui/text';
 
 /**
  * Representative Shadowing screen, not the final player implementation.
@@ -16,9 +16,7 @@ export default function LessonScreen() {
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerStyle={{ padding: 24, paddingTop: 54, paddingBottom: 60 }}>
-      <Link href="/" asChild>
-        <Pressable className="mb-9"><Text className="font-bold text-primary">{t('lesson.back')}</Text></Pressable>
-      </Link>
+      <BackButton className="mb-9" label={t('lesson.back')} />
       <Text className="text-[11px] font-extrabold tracking-[1.6px] text-primary">{t('lesson.eyebrow')}</Text>
 
       <View className="my-[18px] items-center rounded-lg bg-primary p-[22px]">

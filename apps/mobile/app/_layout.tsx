@@ -1,14 +1,33 @@
 import '../global.css';
-import * as WebBrowser from 'expo-web-browser';
-import { Stack } from 'expo-router';
+import { View } from 'react-native';
+import { Stack } from 'expo-router/stack';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { AppProviders } from '../src/providers/AppProviders';
-import { useAppTheme } from '../src/providers/AppThemeProvider';
+import { useEffect } from 'react';
+import { useSession } from '@/auth/use-session';
+import { LoadingState } from '@/components/states/loading-state';
+import { AppProviders } from '@/providers/AppProviders';
+import { useAppTheme } from '@/providers/AppThemeProvider';
 
-WebBrowser.maybeCompleteAuthSession();
+void SplashScreen.preventAutoHideAsync();
 
 function ThemedNavigator() {
   const { colors, mode } = useAppTheme();
+  const { status } = useSession();
+
+  useEffect(() => {
+    if (status !== 'bootstrapping') void SplashScreen.hideAsync();
+  }, [status]);
+
+  if (status === 'bootstrapping') {
+    return (
+      <View className="flex-1 justify-center bg-background">
+        <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
+        <LoadingState />
+      </View>
+    );
+  }
+
   return (
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
@@ -17,7 +36,17 @@ function ThemedNavigator() {
           headerShown: false,
           contentStyle: { backgroundColor: colors.background },
         }}
-      />
+      >
+        <Stack.Screen name="index" />
+        <Stack.Protected guard={status === 'unauthenticated'}>
+          <Stack.Screen name="sign-in" />
+        </Stack.Protected>
+        <Stack.Protected guard={status === 'authenticated'}>
+          <Stack.Screen name="(app)" />
+        </Stack.Protected>
+        <Stack.Screen name="auth/callback" />
+        <Stack.Screen name="+not-found" />
+      </Stack>
     </>
   );
 }

@@ -2,12 +2,14 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "types": [
+      "node"
+    ],
     "paths": {
       "@/*": [
         "./src/*"
       ]
     },
-    "baseUrl": ".",
     "resolveJsonModule": true
   },
   "include": [
