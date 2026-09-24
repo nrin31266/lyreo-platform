@@ -36,7 +36,8 @@ lives in a separate sidecar file: `pr-<number>-review.meta.json`.
 | `REVIEW_VERDICT` | write mode | `🔴 BLOCK`, `🟡 PASS WITH NOTES`, or `🟢 PASS` |
 | `REVIEW_DECISION` | write mode | `request changes`, `comment`, or `approve` |
 | `EFFECTIVE_EVENT` | No | `REQUEST_CHANGES`, `COMMENT`, or `APPROVE` (if already resolved) |
-| `POSTING_STATUS` | Yes | `draft` (write mode default), `posted`, `cancelled`, `failed` |
+| `POST_AUTHORIZATION` | No | `human-approved`, `verified-auto`, or null |
+| `POSTING_STATUS` | Yes | `draft` (write mode default), `posted`, `cancelled`, `failed`, `stale_head` |
 | `POSTED_REVIEW_ID`| update mode| GitHub review ID if successfully posted, otherwise null |
 
 All repository file writes occur inside `WORKTREE_PATH` (or persistent XDG storage). The caller's
@@ -73,6 +74,7 @@ original workspace is read-only and untouched.
      "review_verdict": "<REVIEW_VERDICT>",
      "review_decision": "<REVIEW_DECISION>",
      "effective_event": "<EFFECTIVE_EVENT or null>",
+     "post_authorization": "<POST_AUTHORIZATION or null>",
      "posting_status": "<POSTING_STATUS>",
      "updated_at": "<ISO-8601 UTC timestamp>",
      "posted_review_id": null
@@ -90,7 +92,8 @@ original workspace is read-only and untouched.
    - Do NOT edit or mutate `pr-<number>-review.md`. The Markdown body remains immutable.
    - Read the existing `.meta.json` sidecar in both local and persistent locations.
    - Update only the metadata fields:
-     - `posting_status`: new status (`posted`, `cancelled`, or `failed`)
+     - `posting_status`: new status (`posted`, `cancelled`, `failed`, or `stale_head`)
+     - `post_authorization`: authorization used if provided
      - `posted_review_id`: GitHub review ID (if posted, else keep existing)
      - `effective_event`: effective event used (if provided)
      - `updated_at`: current UTC timestamp
@@ -108,7 +111,7 @@ Sidecar path: <path to .meta.json>
 Body SHA-256: <sha256 hash of CANONICAL_BODY>
 Review verdict: <🔴 BLOCK | 🟡 PASS WITH NOTES | 🟢 PASS>
 Review decision: <comment | request changes | approve>
-Posting status: <draft | posted | cancelled | failed>
+Posting status: <draft | posted | cancelled | failed | stale_head>
 Canonical body byte length: <number — confirms byte-for-byte parity>
 Reason: none | <why status is ERROR>
 ```

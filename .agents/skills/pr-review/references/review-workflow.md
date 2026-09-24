@@ -15,7 +15,7 @@
 | 7. Comment Drafting | `comment-drafter` | ALWAYS dispatched → `COMMENTS: PASS` (renders `CANONICAL_BODY` with `## Verification`) |
 | 8. Review Verification | `review-verifier` | `VERIFY: PASS` (quality gate; single `Fix target` on repair) |
 | 9. Review Writing | `review-writer` | `WRITE: PASS` (saves exact body byte-for-byte & writes `.meta.json` sidecar) |
-| 10. Exact Preview & Gate | Inline (orchestrator) | Effective event resolved; user approves exact preview binding body hash and PR head |
+| 10. Exact Preview & Authorization | Inline (orchestrator) | Effective event resolved; authorized via human preview approval or verified-auto |
 | 11. Review Posting | `review-poster` | `POST: PASS` (1 review event, 0 inline comments, 0 thread replies; skipped in `draft-only`) |
 | 12. Artifact Update | `review-writer` (update mode) | `WRITE: PASS` (updates `.meta.json` sidecar only; `.md` file is never edited) |
 | 13. Worktree Cleanup | Inline (`cleanup-pr-worktree.sh`) | Linked worktree pruned & caller workspace integrity verified (on ALL exit paths) |
@@ -32,10 +32,11 @@ Existing-comment digest: <summary reference, held by adjudicator inputs>
 Latest status: <CONTEXT | CHUNK | ADJUDICATE | COMMENTS | VERIFY | WRITE | POST block>
 Review verdict (post-verify): 🔴 BLOCK | 🟡 PASS WITH NOTES | 🟢 PASS
 Review decision (post-verify): comment | request changes | approve
-Effective GitHub event: REQUEST_CHANGES | COMMENT | APPROVE (resolved before preview)
-Approved body SHA-256: <hash or none>
-Approved head SHA: <sha or none>
-Posting status: draft | posted | cancelled | failed
+Effective GitHub event: REQUEST_CHANGES | COMMENT | APPROVE (resolved before preview/posting)
+Post authorization: human-approved | verified-auto | none
+Authorized body SHA-256: <hash or none>
+Authorized head SHA: <sha or none>
+Posting status: draft | posted | cancelled | failed | stale_head
 Exported artifact path: <persistent path in ~/.local/state/...>
 Sidecar path: <persistent path to .meta.json>
 Repair cycles: <0–2>
@@ -53,8 +54,10 @@ Every subagent must return its documented status block. When a reply is missing 
 
 ### 1. Intake & Worktree Setup
 
-1. Require exactly one parseable GitHub PR URL, valid `POSTING_MODE` (`draft-only` or `post-after-confirmation` [default]), `REVIEW_MODE` (`normal` [default] or `strict`), `REVIEW_FOCUS` values, and a safe workspace-relative Markdown `OUTPUT_FILE` (relative, `.md`, no `..`, not under `.git/`, resolves inside the workspace). If multiple PR URLs are present, run `HUMAN_GATE_CHOOSE_ONE_PR`; if a valid single PR is not chosen, stop with `PR_REVIEW: NEEDS_CONTEXT`.
-2. Run `../scripts/prepare-pr-worktree.sh <PR_URL>` to create an isolated detached worktree (`WORKTREE_PATH`) and capture an immutable snapshot of the original workspace (`ORIGINAL_ROOT`, `ORIGINAL_BRANCH`, `ORIGINAL_HEAD`, `git status --porcelain`). If worktree creation fails, stop with `PR_REVIEW: NEEDS_CONTEXT`. All subsequent file reads, diff inspections, and verification checks run inside `WORKTREE_PATH`; never modify or check out PR files in the caller's working tree.
+1. Require exactly one parseable GitHub PR URL, valid `POSTING_MODE` (`post-after-confirmation` [generic safe fallback], `draft-only`, or `auto-post-verified`), `REVIEW_MODE` (`normal` [default] or `strict`), `REVIEW_FOCUS` values, and a safe workspace-relative Markdown `OUTPUT_FILE` (relative, `.md`, no `..`, not under `.git/`, resolves inside the workspace).
+   - Resolve `POSTING_MODE` in order: 1. explicit invocation input -> 2. project profile default (`references/project-profile.md`) -> 3. generic safe fallback (`post-after-confirmation`).
+   - If multiple PR URLs are present, run `HUMAN_GATE_CHOOSE_ONE_PR`; if a valid single PR is not chosen, stop with `PR_REVIEW: NEEDS_CONTEXT`.
+2. Run `../scripts/prepare-pr-worktree.sh <PR_URL>` to create an isolated detached worktree (`WORKTREE_PATH`) and capture an immutable snapshot of the original workspace (`ORIGINAL_ROOT`, `ORIGINAL_BRANCH`, `ORIGINAL_HEAD`, `git status --porcelain`). If the worktree path already exists from an interrupted run, it safely recovers it if Git confirms it is a linked worktree of this repository; otherwise it refuses unverified paths. If worktree creation fails, stop with `PR_REVIEW: NEEDS_CONTEXT`. All subsequent file reads, diff inspections, and verification checks run inside `WORKTREE_PATH`; never modify or check out PR files in the caller's working tree.
 
 ### 2. Context
 
@@ -104,44 +107,67 @@ Every subagent must return its documented status block. When a reply is missing 
     Route `WRITE: ERROR` to `PR_REVIEW: WRITE_ERROR`.
 17. In `draft-only` mode, run cleanup and finish with `PR_REVIEW: VERIFIED_DRAFT_SAVED`.
 
-### 9. Exact Preview Gate & User Approval
+### 9. Exact Preview Gate & Posting Authorization
 
-18. In `post-after-confirmation` mode, resolve the authenticated GitHub user vs PR author BEFORE showing the preview:
-    - If the authenticated user is the PR author (self-review), set `EFFECTIVE_EVENT` to `COMMENT` regardless of internal verdict; record this in the preview. Never preview `REQUEST_CHANGES` when self-review would cause a GitHub 422 error.
-    - Compute SHA-256 hash of `pr-<number>-review.md`.
-    - Display the exact verified preview:
-      ```text
-      GitHub Posting Preview
+18. Posting authorization is resolved strictly based on `POSTING_MODE`:
+    - **`draft-only`**:
+      Skip preview and posting entirely. Run worktree cleanup and finish with `PR_REVIEW: VERIFIED_DRAFT_SAVED`.
+    - **`post-after-confirmation`**:
+      Resolve the authenticated GitHub user vs PR author BEFORE showing the preview:
+      - If self-review (same user), set `EFFECTIVE_EVENT` to `COMMENT` regardless of internal verdict; record this in the preview. Never preview `REQUEST_CHANGES` when self-review would cause a GitHub 422 error.
+      - Compute SHA-256 hash of `pr-<number>-review.md`.
+      - Display the exact verified preview:
+        ```text
+        GitHub Posting Preview
 
-      Internal verdict: <🔴 BLOCK | 🟡 PASS WITH NOTES | 🟢 PASS>
-      Effective GitHub event: <REQUEST_CHANGES | COMMENT | APPROVE>
-      Body SHA-256: <computed SHA-256 hash>
+        Internal verdict: <🔴 BLOCK | 🟡 PASS WITH NOTES | 🟢 PASS>
+        Effective GitHub event: <REQUEST_CHANGES | COMMENT | APPROVE>
+        Body SHA-256: <computed SHA-256 hash>
 
-      --- EXACT BODY START ---
-      <exact contents of pr-N-review.md>
-      --- EXACT BODY END ---
+        --- EXACT BODY START ---
+        <exact contents of pr-N-review.md>
+        --- EXACT BODY END ---
 
-      Post this exact review?
-      ```
-    - Run `HUMAN_GATE_FINAL_PREVIEW_APPROVAL`. User approval binds strictly to:
-      1. Exact body contents and body SHA-256
-      2. Effective GitHub event
-      3. PR number and current PR head SHA
-    - If any of these change before posting, the approval is void — re-preview and ask again.
-19. If the user declines, dispatch `review-writer` in update mode to update the sidecar `.meta.json` status to `cancelled` (do not edit `pr-N-review.md`), run cleanup, then finish with `PR_REVIEW: VERIFIED_DRAFT_SAVED_POSTING_CANCELLED`.
+        Post this exact review?
+        ```
+      - Run `HUMAN_GATE_FINAL_PREVIEW_APPROVAL`. User approval binds strictly to:
+        1. Exact body contents and body SHA-256
+        2. Effective GitHub event
+        3. PR number and current PR head SHA
+      - If any of these change before posting, the approval is void — re-preview and ask again.
+      - On approval, record `POST_AUTHORIZATION=human-approved`, `AUTHORIZED_BODY_SHA256=<hash>`, and `AUTHORIZED_HEAD_SHA=<head_sha>`.
+      - If the user declines, dispatch `review-writer` in update mode to update the sidecar `.meta.json` status to `cancelled` (do not edit `pr-N-review.md`), run cleanup, then finish with `PR_REVIEW: VERIFIED_DRAFT_SAVED_POSTING_CANCELLED`.
+    - **`auto-post-verified`**:
+      - Authorized ONLY after `review-verifier` returns `VERIFY: PASS` (all quality, lifecycle, marker, and verification gates passed).
+      - If `review-verifier` returned `VERIFY: FAIL` or repair cycles were exhausted, abort posting immediately: preserve draft artifact in worktree/persistent storage and stop with `PR_REVIEW: VERIFY_FAIL`. Never auto-post an unverified review.
+      - Resolve the authenticated GitHub user vs PR author (self-review -> set `EFFECTIVE_EVENT` to `COMMENT`).
+      - Compute SHA-256 hash of `pr-<number>-review.md`.
+      - Set `POST_AUTHORIZATION=verified-auto`, `AUTHORIZED_BODY_SHA256=<hash>`, and `AUTHORIZED_HEAD_SHA=<head_sha>`.
+      - Do NOT prompt the user with `HUMAN_GATE_FINAL_PREVIEW_APPROVAL`.
+      - Proceed immediately to Review Posting.
 
 ### 10. Review Posting & Read-Back Verification
 
-20. On approval, dispatch `review-poster` with `PR_URL`, `BODY_FILE="${WORKTREE_PATH}/${OUTPUT_FILE}"` (absolute path to exact review file), `BODY_SHA256`, `EFFECTIVE_EVENT`, `PREVIEW_APPROVED=true`, `APPROVED_BODY_SHA256`, and `APPROVED_HEAD_SHA`.
+19. On authorization (`human-approved` or `verified-auto`), dispatch `review-poster` with:
+    `PR_URL`, `BODY_FILE="${WORKTREE_PATH}/${OUTPUT_FILE}"` (absolute path to exact review file), `BODY_SHA256`, `EFFECTIVE_EVENT`, `POST_AUTHORIZATION`, `AUTHORIZED_BODY_SHA256`, `AUTHORIZED_HEAD_SHA`, and `COMMIT_ID="${PR_HEAD_SHA}"`.
     - `review-poster` reads `BODY_FILE` directly via its absolute path; it does not need `WORKTREE_PATH`.
-    - Before posting, `review-poster` verifies: `sha256(BODY_FILE) == APPROVED_BODY_SHA256`, current PR head == `APPROVED_HEAD_SHA`, and effective event matches. If any check fails, it stops with `POST: PREVIEW_REQUIRED` without posting.
-    - Posts ONE atomic review event: exact `BODY_FILE` as review body, `comments: []` (empty array, zero inline comments), and zero thread replies.
-    - Reads back the created review to verify: body matches `BODY_FILE`, commit matches expected, 0 inline comments created, 0 thread replies created.
-    - Route `POST: PASS` to artifact update. Route `POST: PREVIEW_REQUIRED`, `POST: AUTH`, `POST: METADATA_INVALID`, and `POST: ERROR` to `PR_REVIEW: POST_ERROR` with reason and next step, and update the sidecar status to `failed`.
+    - Before posting, `review-poster` verifies:
+      1. `POST_AUTHORIZATION` is valid (`human-approved` or `verified-auto`).
+      2. `sha256(BODY_FILE) == AUTHORIZED_BODY_SHA256`.
+      3. Current PR head fetched from GitHub matches `AUTHORIZED_HEAD_SHA` exactly. If developer pushed new commits, abort posting with `POST: STALE_HEAD`.
+      4. Effective event matches self-review rules.
+    - If current head changed (`POST: STALE_HEAD`), dispatch `review-writer` in update mode with `POSTING_STATUS=stale_head`, run cleanup, and stop with `PR_REVIEW: STALE_HEAD` (Reason: "PR head changed during review; re-review required"). The review draft artifact is preserved; no stale review is posted to GitHub.
+    - If hash or authorization check fails, stop with `PR_REVIEW: POST_ERROR`.
+    - Posts ONE atomic review event bound to reviewed commit: exact `BODY_FILE` as review body, `commit_id: COMMIT_ID`, `comments: []` (empty array, zero inline comments), and zero thread replies.
+    - Reads back the created review to verify:
+      1. Complete body integrity: full returned body matches `BODY_FILE` exactly (normalizing `\r\n` to `\n`). No spot-check line matching.
+      2. Commit matches reviewed `AUTHORIZED_HEAD_SHA`.
+      3. 0 inline comments created, 0 thread replies created.
+    - Route `POST: PASS` to artifact update. Route `POST: AUTH`, `POST: METADATA_INVALID`, and `POST: ERROR` to `PR_REVIEW: POST_ERROR` with reason and next step, and update sidecar status to `failed`.
 
 ### 11. Artifact Update
 
-21. After `POST: PASS`, dispatch `review-writer` in update mode with `POSTING_STATUS=posted` and `POSTED_REVIEW_ID`.
+20. After `POST: PASS`, dispatch `review-writer` in update mode with `POSTING_STATUS=posted` and `POSTED_REVIEW_ID`.
     - `review-writer` updates ONLY the `.meta.json` sidecar. It NEVER edits `pr-<number>-review.md`.
     - Finish with `PR_REVIEW: VERIFIED_REVIEW_POSTED`.
 
@@ -190,7 +216,7 @@ PR_REVIEW: VERIFIED_REVIEW_POSTED
 Failure envelope:
 
 ```text
-PR_REVIEW: AUTH | NOT_FOUND | NEEDS_CONTEXT | REVIEW_ERROR | VERIFY_FAIL | WRITE_ERROR | POST_ERROR
+PR_REVIEW: AUTH | NOT_FOUND | NEEDS_CONTEXT | REVIEW_ERROR | VERIFY_FAIL | WRITE_ERROR | POST_ERROR | STALE_HEAD
 Reason: <one line>
 Next step: <one clear action>
 ```

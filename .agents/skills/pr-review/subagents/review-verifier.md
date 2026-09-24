@@ -19,7 +19,7 @@ rewriting the package yourself.
 | `REVIEW_PACKAGE` | Yes | Output from `comment-drafter` (contains `CANONICAL_BODY`) |
 | `VERIFICATION_CHECKS` | Yes | List of targeted tests/checks run in worktree |
 | `OUTPUT_FILE` | No | `pr-1020-review.md` |
-| `LANGUAGE_STYLE` | No | `natural Vietnamese` |
+| `LANGUAGE_STYLE` | No | Supplied by the orchestrator or resolved from `project-profile.md` |
 
 All repository inspection and diff verification checks run inside `WORKTREE_PATH`. The caller's
 original workspace is read-only and untouched.
