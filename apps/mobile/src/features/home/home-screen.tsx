@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Text } from '@/components/ui/text';
 import { AccountSummary } from '@/features/account/account-summary';
 
-export default function HomeScreen() {
+export function HomeScreen() {
   const { t } = useTranslation('mobile');
 
   return (

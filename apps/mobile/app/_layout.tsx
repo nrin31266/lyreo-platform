@@ -37,6 +37,7 @@ function ThemedNavigator() {
           contentStyle: { backgroundColor: colors.background },
         }}
       >
+        <Stack.Screen name="index" />
         <Stack.Protected guard={status === 'unauthenticated'}>
           <Stack.Screen name="sign-in" />
         </Stack.Protected>

@@ -1,18 +1,31 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { getRoutes } from 'expo-router/build/getRoutes';
+import requireContext from 'expo-router/build/testing-library/require-context-ponyfill';
+import { resolveRootRoute } from '@/navigation/root-route';
 
-const mobileRoot = new URL('../../', import.meta.url);
+test('Expo Router resolves the root path through the always-available index route', () => {
+  const appDirectory = fileURLToPath(new URL('../../app', import.meta.url));
+  const routeTree = getRoutes(requireContext(appDirectory), {
+    ignoreRequireErrors: true,
+    skipGenerated: true,
+  });
 
-test('the unauthenticated screen is a root route beside the protected app group', () => {
-  const rootLayout = readFileSync(new URL('app/_layout.tsx', mobileRoot), 'utf8');
+  const rootIndex = routeTree?.children.find((route) => route.route === 'index');
 
-  assert.equal(existsSync(new URL('app/sign-in.tsx', mobileRoot)), true);
-  assert.match(rootLayout, /<Stack\.Screen name="sign-in"/);
-  assert.doesNotMatch(rootLayout, /<Stack\.Screen name="\(public\)"/);
+  assert.equal(rootIndex?.contextKey, './index.tsx');
+  assert.equal(
+    routeTree?.children.some((route) => route.route === '(app)/index'),
+    false,
+  );
 });
 
-test('the authenticated app group remains the sole owner of the root path', () => {
-  assert.equal(existsSync(new URL('app/(app)/index.tsx', mobileRoot)), true);
-  assert.equal(existsSync(new URL('app/(public)/index.tsx', mobileRoot)), false);
+test('the root route handles every session state explicitly', () => {
+  assert.deepEqual(resolveRootRoute('bootstrapping'), { screen: 'loading' });
+  assert.deepEqual(resolveRootRoute('unauthenticated'), {
+    screen: 'redirect',
+    href: '/sign-in',
+  });
+  assert.deepEqual(resolveRootRoute('authenticated'), { screen: 'home' });
 });
