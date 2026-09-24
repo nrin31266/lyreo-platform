@@ -23,11 +23,10 @@ make data-fetch
 make data-check
 ```
 
-`make setup` also fetches the dataset by default. Developers who are not doing Grammar/TOEIC data
-work can defer the multi-GB download:
+Normal `make setup` does not download the dataset. To include it in first-clone setup, opt in:
 
 ```bash
-SKIP_DATA=1 make setup
+WITH_DATA=1 make setup
 ```
 
 Then prepare the Python project environment:
@@ -104,7 +103,7 @@ DAUTOEIC_DATA_URL=https://drive.google.com/file/d/1FQgEswv3hUmT0Wv8Tyy9Jl_p9iLfo
 DAUTOEIC_DATA_SHA256=
 ```
 
-`scripts/fetch-data.sh`:
+`tools/data-import/scripts/fetch-data.sh`:
 
 1. skips the download when the existing dataset already matches the importer contract;
 2. supports HTTP(S), Google Drive file shares, `file://`, and local archive paths;

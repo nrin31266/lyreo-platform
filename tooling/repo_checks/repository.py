@@ -44,70 +44,19 @@ def repo_files(base: Path, pattern: str, root: Path | None = None):
 
 
 REQUIRED_FILES = (
-    "README.md",
-    "AGENTS.md",
-    "docs/ARCHITECTURE.md",
-
-    "docs/TECH_CHOICES.md",
-    "docs/DATA_PIPELINES.md",
-    "docs/DECISIONS.md",
-    "docs/CONFIGURATION.md",
-    "docs/DEVELOPMENT.md",
-    "docs/OPERATIONS.md",
-    "pom.xml",
-    "compose.dev.yml",
-    "compose.prod.yml",
-    ".dockerignore",
-    "infra/docker/README.md",
-    "scripts/doctor.sh",
-    "scripts/fetch-data.sh",
-    "scripts/verify-prod-env.sh",
-    "platform/config/pom.xml",
-    "apps/core-service/.env.example",
-    "apps/admin-web/.env.example",
-    "apps/mobile/.env.example",
-    "apps/ai-service/.env.example",
-    "infra/keycloak/import/lyreo-realm.json",
-    "infra/postgres/init/01-create-keycloak-db.sh",
-    "tools/data-import/import_grammar.py",
-    "tools/data-import/import_toeic.py",
-    "tools/data-import/import_lexicon.py",
-    "tools/data-import/.env.example",
-    "tools/lesson-prep/.env.example",
-    "tools/lesson-prep/README.md",
-    "packages/design-system/package.json",
-    "packages/design-system/src/semantic.ts",
-    "packages/i18n/package.json",
-    "packages/i18n/src/index.ts",
-    "packages/i18n/src/locales/en/common.json",
-    "packages/i18n/src/locales/en/admin.json",
-    "packages/i18n/src/locales/en/mobile.json",
-    "packages/i18n/src/locales/vi/common.json",
-    "packages/i18n/src/locales/vi/admin.json",
-    "packages/i18n/src/locales/vi/mobile.json",
-    "apps/admin-web/components.json",
-    "apps/admin-web/src/providers/AppThemeProvider.tsx",
-    "apps/mobile/components.json",
-    "apps/mobile/global.css",
-    "apps/mobile/babel.config.js",
-    "apps/mobile/metro.config.js",
-    "apps/mobile/src/providers/AppThemeProvider.tsx",
-    "apps/mobile/src/providers/LocaleProvider.tsx",
+    "README.md", "AGENTS.md", "pom.xml", "Makefile",
+    "pnpm-workspace.yaml", "package.json", "compose.dev.yml",
+    ".java-version", ".nvmrc",
 )
 
-REQUIRED_LOCKFILES = (
-    "pnpm-lock.yaml",
-    "apps/ai-service/uv.lock",
-    "tools/data-import/uv.lock",
-    "tools/lesson-prep/uv.lock",
-)
+REQUIRED_LOCKFILES = ("pnpm-lock.yaml",)
 
 ENV_OWNER_SCOPES = {
     "apps/core-service/.env.example": ("apps/core-service",),
     "apps/ai-service/.env.example": ("apps/ai-service/app",),
     "infra/docker/.env.example": ("compose.dev.yml", "compose.prod.yml", "compose.gpu.yml", "scripts/init-dev-env.sh"),
     "infra/keycloak/.env.example": ("infra/keycloak/scripts", "scripts/init-dev-env.sh"),
-    "tools/data-import/.env.example": ("tools/data-import", "scripts/fetch-data.sh", "scripts/init-dev-env.sh", "scripts/doctor.sh"),
+    "tools/data-import/.env.example": ("tools/data-import", "scripts/init-dev-env.sh", "scripts/doctor.sh"),
     "tools/lesson-prep/.env.example": ("tools/lesson-prep", "scripts/init-dev-env.sh", "scripts/doctor.sh"),
 }
 
@@ -285,7 +234,13 @@ def check_env_contracts(root: Path, errors: list[str]) -> None:
 
 def check_lockfiles(root: Path, errors: list[str]) -> None:
     """Verify existence of mandatory lockfiles and workspace importers."""
-    for lock_rel in REQUIRED_LOCKFILES:
+    python_lockfiles = [
+        path.relative_to(root).with_name("uv.lock").as_posix()
+        for base in (root / "apps", root / "tools")
+        if base.exists()
+        for path in base.glob("*/pyproject.toml")
+    ]
+    for lock_rel in (*REQUIRED_LOCKFILES, *python_lockfiles):
         lock_path = root / lock_rel
         if not lock_path.exists():
             errors.append(f"missing required lockfile: {lock_rel}")
@@ -293,18 +248,19 @@ def check_lockfiles(root: Path, errors: list[str]) -> None:
     lockfile = root / "pnpm-lock.yaml"
     if lockfile.exists():
         lock_text = lockfile.read_text(encoding="utf-8")
-        required_importers = (
-            "apps/admin-web:",
-            "apps/mobile:",
-            "packages/design-system:",
-            "packages/i18n:",
-        )
-        missing_importers = [
-            item[:-1] for item in required_importers
-            if not re.search(rf"^  {re.escape(item)}", lock_text, re.MULTILINE)
-        ]
-        if missing_importers:
-            errors.append("pnpm-lock.yaml is stale/incomplete; missing workspace importers: " + ", ".join(missing_importers))
+        workspace = root / "pnpm-workspace.yaml"
+        if workspace.exists():
+            patterns = re.findall(r"^\s*-\s+([^#\s]+)", workspace.read_text(encoding="utf-8"), re.MULTILINE)
+            importers = {
+                directory.relative_to(root).as_posix()
+                for pattern in patterns
+                for directory in root.glob(pattern)
+                if (directory / "package.json").is_file()
+            }
+            missing = sorted(importer for importer in importers
+                             if not re.search(rf"^  {re.escape(importer)}:", lock_text, re.MULTILINE))
+            if missing:
+                errors.append("pnpm-lock.yaml is stale/incomplete; missing workspace importers: " + ", ".join(missing))
 
 
 def check_repository(root: Path, errors: list[str], warnings: list[str]) -> None:

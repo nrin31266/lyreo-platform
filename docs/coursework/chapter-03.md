@@ -1,5 +1,7 @@
 # Chương 3 — AI hỗ trợ xây dựng tài liệu yêu cầu Lyreo
 
+> Coursework/report evidence only. Product, architecture, implementation, and test truth live in their canonical owners.
+
 Mục đích: lớp trình bày môn học map 3.1–3.5 tới owner docs; không phải bản sao normative. Bằng chứng
 đợt làm: [AI usage log](ai-usage-log.md). Chưa có rubric ngoài tên năm mục, nên tài liệu này không tự
 tuyên bố đáp ứng toàn bộ yêu cầu của trường.
@@ -17,7 +19,7 @@ học tập. Vì chưa có user research trong repo, không tạo persona/quote 
 
 Mục tiêu là thống nhất vision, value, scope, priority, non-goals và outcome direction. AI hỗ trợ tách
 product layer khỏi API/schema/architecture; con người phải quyết YouTube phase, KPI và release tradeoff.
-Kết quả chuẩn: [PRD](../product/prd.md); issues: [Gaps](../requirements/gaps.md).
+Kết quả chuẩn: [PRD](../product/prd.md); issues: [open questions](../requirements/open-questions.md).
 
 Nhận xét: target product không bị thu nhỏ theo starter screens, nhưng roadmap không được dùng như
 implementation status.
@@ -26,16 +28,16 @@ implementation status.
 
 Mục tiêu là actors/terms/boundaries và FR/BR/NFR nguyên tử có ID. AI hỗ trợ phân loại nội dung legacy,
 đối chiếu ownership/code path và tạo links; con người duyệt business policy, thresholds, privacy và
-provenance. Kết quả chuẩn: [Domain requirements](../README.md#chọn-tài-liệu-theo-task) và các area files được index tại đó.
+provenance. Kết quả chuẩn: [Domain requirements](../README.md) và các area files được index tại đó.
 
 Nhận xét: trạng thái `inherited` bảo toàn ý cũ nhưng không giả định approval. Evidence status được tách
-sang [Traceability](../requirements/traceability.md).
+sang [coursework snapshot](traceability-snapshot.md).
 
 ## 3.4 User Stories và Acceptance Criteria
 
 Mục tiêu là diễn đạt giá trị actor và kết quả có thể quan sát, gồm happy path, invalid/permission/
 state branches có ý nghĩa. AI hỗ trợ draft story/AC và nối IDs; con người cần kiểm tra ngôn ngữ,
-policy và độ phù hợp với người dùng. Kết quả chuẩn: [Domain requirements (colocated)](../README.md#chọn-tài-liệu-theo-task).
+policy và độ phù hợp với người dùng. Kết quả chuẩn: [Domain requirements (colocated)](../README.md).
 
 Nhận xét: AC không viết “đã code xong/test pass”; command và kết quả chạy thuộc traceability.
 

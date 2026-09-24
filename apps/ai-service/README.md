@@ -1,114 +1,18 @@
 # Lyreo AI Service
 
-FastAPI là **thin AI capability runtime**. Nó không sở hữu Lesson state machine, Curriculum,
-Diamond, progress, SRS hay business policy.
-
-## Boundary
-
-Core gửi:
-
-```text
-capability + provider + model + business-built prompt/input/options
-```
-
-AI Service:
-
-1. verify internal service token;
-2. dispatch đúng runtime/provider adapter;
-3. execute model/API;
-4. normalize output contract;
-5. trả result về Core.
-
-Business prompt/orchestration vẫn ở Java.
-
-## Endpoints
-
-```text
-GET  /health
-POST /v1/stt
-POST /v1/align
-POST /v1/tts
-GET  /v1/tts/voices
-POST /v1/nlp/analyze
-POST /v1/multimodal/judge
-POST /v1/llm/generate
-```
-
-Các endpoint `/v1/*` yêu cầu `X-Lyreo-Internal-Token`.
-
-## Runtime modes
-
-### `mock`
-
-Default cho dev/CI. Không GPU, không tải model, không gọi paid provider nếu test dùng mock path.
-
-### `local`
-
-Import package Python `qwen-asr` trực tiếp và lazy-load:
-
-- Qwen3-ASR;
-- Qwen3-ForcedAligner.
-
-Qwen **không bắt buộc Docker**. Developer GPU có thể chạy Python local. `Dockerfile.gpu` chỉ đóng gói CUDA/runtime reproducibly.
-
-### Kokoro TTS (provider `LOCAL_KOKORO`)
-
-Local TTS runtime, lazy-loaded on first `/v1/tts` call. Long text is streamed via
-Kokoro's native phoneme chunking; output is a normalized mono WAV.
-
-```bash
-uv sync --extra kokoro
-# Phonemization also needs the 'espeak-ng' system package (see .env.example for per-OS commands)
-```
-
-Voice discovery `GET /v1/tts/voices` returns the supported voice set (static metadata, no model
-load) so the Lesson Prep Tool never hard-codes voices.
+FastAPI executes technical STT, alignment, TTS, NLP, generic LLM, and judging capabilities. Core owns product prompts, routing decisions, workflow, and durable business state. The stable boundary is in [AI execution](../../docs/architecture/ai-execution.md); current endpoints and schemas are in the running OpenAPI document and code.
 
 ## Local development
 
+Copy `.env.example` to `.env`, then use the project environment:
+
 ```bash
-cp .env.example .env
 uv sync --locked --extra dev
 set -a; source .env; set +a
 uv run uvicorn app.main:app --reload --port 8000
+uv run --locked --extra dev python -m pytest
 ```
 
-Tests:
+`mock` mode is the normal deterministic development/CI runtime and needs no GPU or paid provider. For local Qwen inference, sync the `qwen` extra and select the local runtime as described in `.env.example`. Kokoro TTS uses its separate `kokoro` extra and system phonemization dependency. Model weights are cached locally and never committed.
 
-```bash
-uv run --extra dev pytest
-```
-
-## Local Qwen/GPU
-
-```bash
-uv sync --locked --extra qwen --extra dev
-AI_RUNTIME_MODE=local uv run uvicorn app.main:app --port 8000
-```
-
-Model weights được cache bởi Hugging Face/qwen runtime trên máy, không commit Git.
-
-## Provider credentials
-
-FastAPI không persist API key. Core encrypt credential trong PostgreSQL và forward credential đã chọn trên internal request. Không log header credential.
-
-## Media input
-
-Core nên gửi signed R2 URL/file URL dev thay vì base64 audio lớn. Raw media ownership vẫn ở object storage.
-
-## Adding a provider/capability
-
-Được phép:
-
-- thêm adapter model/provider;
-- normalize protocol;
-- audio/NLP preprocessing kỹ thuật.
-
-Không được phép:
-
-- quyết định learner nên học gì;
-- quản Lesson/Curriculum progress;
-- award Diamond;
-- đưa product prompt/state machine vào Python.
-
-Xem root `AGENTS.md`.
+Internal capability calls require the service token. FastAPI does not persist provider credentials or business records. Do not log incoming credentials. Use authorized media references for large audio; storage ownership remains outside this process.

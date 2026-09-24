@@ -1,5 +1,7 @@
 # AI usage log — documentation setup
 
+> Coursework/report evidence only. Product, architecture, implementation, and test truth live in their canonical owners.
+
 Mục đích: bằng chứng trung thực về AI hỗ trợ trong đợt migration docs đầu tiên. Không phải transcript
 đầy đủ, đánh giá chất lượng model hay human approval.
 
@@ -11,7 +13,7 @@ Mục đích: bằng chứng trung thực về AI hỗ trợ trong đợt migrat
   requirements/stories/features/coursework, traceability/gaps và offline docs validator.
 - Input: root `AGENTS.md`, 21 project docs, code/test/config entrypoints liên quan và execution plan
   ngoài repository. Plan ngoài repo không được biến thành tài liệu bắt buộc đọc về sau.
-- Output: `AGENTS.md`, `docs/README.md`, `docs/documentation.md`, `docs/product/`,
+- Output: `AGENTS.md`, `docs/README.md`, `docs/DOCUMENTATION.md`, `docs/product/`,
   `docs/requirements/`, `docs/features/`, `docs/architecture/`, `docs/coursework/`, compatibility page,
   validator/tests và CI/Makefile wiring.
 - Kiểm tra của AI: `make validate-docs` (`Markdown=62`), `make validate`

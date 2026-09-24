@@ -1,7 +1,7 @@
 # AI execution boundary and protocol
 
 Mục đích: giải thích contract Core↔FastAPI và ownership của routing/audit. Product obligations ở
-[AI requirements](../requirements/ai.md); workflow detail ở [AI Routing](../features/ai-routing.md).
+[AI requirements](../requirements/ai.md).
 
 ## Boundary
 
@@ -20,11 +20,7 @@ canonical audio reference.
 
 ## Wire contract
 
-Current FastAPI endpoints are `GET /health`, `POST /v1/stt`, `/v1/align`, `/v1/tts`,
-`GET /v1/tts/voices`, `/v1/nlp/analyze`, `/v1/llm/generate`, `/v1/multimodal/judge`.
-`/v1/*` requires `X-Lyreo-Internal-Token`. Canonical DTOs are code-owned in
-`apps/ai-service/app/schemas.py`; Java gateway must be reviewed with them whenever
-fields/errors/credential transport change.
+The internal capability API is versioned under `/v1/*` and requires an internal token. Current endpoints and DTOs are owned by FastAPI OpenAPI/code. Review the Java gateway when fields, errors, or credential transport change.
 
 Core (and the Prep Tool) send selected capability/provider/model and business-built
 prompt/input/options. FastAPI dispatches runtime/provider and returns normalized capability
@@ -46,5 +42,4 @@ Calls need timeout/resilience and cancellation check before business commit. Cor
 errors; raw provider details live only in protected logs/artifacts. Credentials are encrypted in
 Core DB, forwarded only for the selected internal call, never persisted/logged by FastAPI.
 
-Raw result is audit/debug; PostgreSQL normalized state is query/workflow truth. Mock contract tests
-do not certify live model accuracy, latency, cost or provider compatibility.
+Raw result is audit/debug; PostgreSQL normalized state is query/workflow truth. Mock execution does not certify live model quality, latency, cost, or provider compatibility.

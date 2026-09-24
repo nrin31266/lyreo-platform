@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/android-emulator.sh
+# apps/mobile/scripts/android-emulator.sh
 #
 # Android AVD helper for Lyreo development on Linux.
 # Manages the canonical Lyreo_Pixel8_API36 emulator without Android Studio.
@@ -8,10 +8,10 @@
 # Supported fallback: Android Command-line Tools (`sdkmanager`, `avdmanager`)
 #
 # Usage:
-#   ./scripts/android-emulator.sh check
-#   ./scripts/android-emulator.sh create
-#   ./scripts/android-emulator.sh start
-#   ./scripts/android-emulator.sh list
+#   ./apps/mobile/scripts/android-emulator.sh check
+#   ./apps/mobile/scripts/android-emulator.sh create
+#   ./apps/mobile/scripts/android-emulator.sh start
+#   ./apps/mobile/scripts/android-emulator.sh list
 #
 # Requires Android SDK installed and accessible via ANDROID_HOME, ANDROID_SDK_ROOT,
 # $HOME/Android/Sdk, or the `android` CLI.

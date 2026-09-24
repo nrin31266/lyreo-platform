@@ -2,47 +2,69 @@
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
         ai-local lesson-prep test-lesson-prep clean-prep clean-cache clean \
-        test-java verify-java test-ai test-importers test-docs test-tooling test-frontend typecheck build-frontend validate-docs validate check prod-config verify-prod-env down-v
+        test-java verify-java test-ai test-data-import test-tooling test-frontend typecheck build-web validate-docs validate-repo validate check prod-config verify-prod-env down-v
 
 help:
 	@printf '%s\n' \
 	  'Lyreo common commands:' \
-	  '  make setup                       First-clone setup: env + dataset + deps + PostgreSQL/Keycloak bootstrap' \
+	  '' \
+	  'Setup' \
+	  '  make setup                       First-clone setup: env + deps + PostgreSQL/Keycloak bootstrap' \
 	  '  make init-env                    Copy/synchronize local .env files' \
 	  '  make doctor                      Inspect local toolchain/env/data readiness' \
-	  '  make data-fetch                  Download/install Grammar+TOEIC dataset when missing' \
-	  '  make data-check                  Validate the importer-facing Grammar+TOEIC dataset structure' \
 	  '  make deps                        Sync Python dependencies and install pnpm workspace dependencies' \
 	  '  make deps-java                   Compile and install internal Java artifacts required by Core into local Maven cache' \
-	  '  make dev-infra                   Start PostgreSQL + Keycloak only' \
-	  '  make db-shell                    Open psql inside PostgreSQL container against Lyreo dev DB' \
-	  '  make db-reset                    Reset local Lyreo application DB (preserves Keycloak)' \
-	  '  make keycloak-seed               Verify realm/client/roles and seed dev users' \
+	  '' \
+	  'Run' \
 	  '  make core                        Run Spring Boot locally' \
 	  '  make ai                          Run FastAPI locally' \
 	  '  make ai-local                    Run FastAPI locally with local Qwen/Kokoro weights' \
 	  '  make lesson-prep                 Run local Lesson Prep Gradio workstation' \
 	  '  make admin                       Run Admin Vite dev server' \
 	  '  make mobile                      Run Expo Metro bundler (requires Dev Build installed on device/emulator)' \
+	  '' \
+	  'Data' \
+	  '  make data-fetch                  Download/install Grammar+TOEIC dataset when missing' \
+	  '  make data-check                  Validate the importer-facing Grammar+TOEIC dataset structure' \
+	  '' \
+	  'Infrastructure' \
+	  '  make dev-infra                   Start PostgreSQL + Keycloak only' \
+	  '  make db-shell                    Open psql inside PostgreSQL container against Lyreo dev DB' \
+	  '  make db-reset                    Reset local Lyreo application DB (preserves Keycloak)' \
+	  '  make keycloak-seed               Verify realm/client/roles and seed dev users' \
+	  '' \
+	  'Mobile native' \
 	  '  make mobile-ios-device-register  Register a physical iOS device with EAS (run once per device)' \
 	  '  make mobile-ios-build            Trigger EAS cloud build for iOS development profile' \
 	  '  make android-check               Verify Android CLI tools, KVM, and AVD readiness' \
 	  '  make android-emulator-create     Create the canonical Lyreo Android emulator (idempotent)' \
 	  '  make android-emulator            Start the Android emulator (no Android Studio needed)' \
 	  '  make mobile-android-install      Build and install Android Dev Build into running emulator/device' \
+	  '' \
+	  'Verification' \
+	  '  make validate                    Offline repository/syntax guardrails' \
+	  '  make check                       Run available Java/Python/importer/frontend checks' \
+	  '  make validate-docs               Offline Markdown link/anchor/ID/path guardrails' \
+	  '  make validate-repo               Offline repository invariant checks' \
+	  '  make test-tooling                Run validator tests' \
 	  '  make test-java                   Run fast Java unit tests (Surefire)' \
 	  '  make verify-java                 Run full Java verification: unit + integration tests (Failsafe)' \
-	  '  make validate                    Offline repository/syntax guardrails' \
-	  '  make validate-docs               Offline Markdown link/anchor/ID/path guardrails' \
+	  '  make test-data-import            Run data importer test suite' \
 	  '  make test-lesson-prep            Run lesson-prep test suite' \
-	  '  make check                       Run available Java/Python/importer/frontend checks' \
+	  '  make typecheck                   Typecheck TypeScript workspaces' \
+	  '  make test-frontend              Run Admin Web and Mobile tests' \
+	  '  make build-web                  Build Admin Web' \
+	  '' \
+	  'Cleanup' \
 	  '  make clean-prep                  Clean temporary lesson-prep session workspaces' \
 	  '  make clean-cache                 Clean Python bytecode and test caches' \
 	  '  make clean                       Aggregate cleanup: clean-cache + clean-prep' \
+	  '' \
+	  'Deployment/config' \
 	  '  make dev-config                  Validate compose.dev.yml syntax/resolution' \
 	  '  make prod-config                 Validate compose.prod.yml syntax/resolution' \
 	  '' \
-	  'First clone downloads the shared TOEIC archive by default. Use SKIP_DATA=1 make setup to defer it.' \
+	  'Dataset download is opt-in: make data-fetch, or WITH_DATA=1 make setup.' \
 	  '' \
 	  'Android first-time: make android-check -> make android-emulator-create -> make android-emulator -> make mobile-android-install -> make mobile' \
 	  'iOS first-time:     make mobile-ios-device-register -> make mobile-ios-build -> install IPA from EAS URL -> make mobile'
@@ -54,10 +76,10 @@ doctor:
 	./scripts/doctor.sh
 
 data-fetch:
-	./scripts/fetch-data.sh
+	./tools/data-import/scripts/fetch-data.sh
 
 data-check:
-	./scripts/fetch-data.sh --check
+	./tools/data-import/scripts/fetch-data.sh --check
 
 deps-java:
 	./mvnw -B -pl apps/core-service -am -DskipTests install
@@ -69,12 +91,10 @@ deps: deps-java
 	pnpm install --frozen-lockfile
 
 setup:
-	$(MAKE) doctor
 	$(MAKE) init-env
-	@if [ "$${SKIP_DATA:-0}" = "1" ]; then \
-		echo 'Skipping Grammar/TOEIC dataset download because SKIP_DATA=1.'; \
-	else \
-		./scripts/fetch-data.sh --required; \
+	$(MAKE) doctor
+	@if [ "$${WITH_DATA:-0}" = "1" ]; then \
+		$(MAKE) data-fetch; \
 	fi
 	$(MAKE) deps
 	$(MAKE) dev-infra
@@ -141,40 +161,24 @@ mobile-ios-build:
 
 # Verify Android CLI tools, KVM access, and canonical AVD status.
 android-check:
-	./scripts/android-emulator.sh check
+	./apps/mobile/scripts/android-emulator.sh check
 
 # Create the canonical Lyreo Android emulator (idempotent — safe to re-run).
 # Requires: Android SDK with cmdline-tools and system-images;android-36;google_apis;x86_64.
 android-emulator-create:
-	./scripts/android-emulator.sh create
+	./apps/mobile/scripts/android-emulator.sh create
 
 # Start the canonical emulator without Android Studio.
 # Run this in a dedicated terminal; Metro runs separately with: make mobile
 android-emulator:
-	./scripts/android-emulator.sh start
+	./apps/mobile/scripts/android-emulator.sh start
 
 # Build and install the Android Development Build into the running emulator or connected device.
 # Uses --no-bundler so that 'make mobile' retains sole responsibility for running Metro.
 # Requires an emulator or device to be visible via adb before running.
 # Automatically sets sdk.dir and prioritizes canonical JDK 17 LTS (or 21 LTS fallback) when host Java is >= 24 (Spring Boot 4 backend).
 mobile-android-install:
-	@SDK=$$(./scripts/android-emulator.sh sdk-path 2>/dev/null || echo "$$ANDROID_HOME"); \
-	[ -z "$$SDK" ] && SDK="$$HOME/Android/Sdk"; \
-	export ANDROID_HOME="$$SDK"; \
-	export ANDROID_SDK_ROOT="$$SDK"; \
-	export PATH="$$SDK/platform-tools:$$SDK/cmdline-tools/latest/bin:$$PATH"; \
-	mkdir -p apps/mobile/android && echo "sdk.dir=$$SDK" > apps/mobile/android/local.properties; \
-	CUR_JAVA_VER=$$(java -version 2>&1 | awk -F '"' '/version/{print $$2}' | cut -d. -f1); \
-	if [ "$${CUR_JAVA_VER:-0}" -ge 24 ]; then \
-	  for cand in "$$JAVA_17_HOME" "$$JAVA_21_HOME" "$$HOME/.sdkman/candidates/java/17"* "$$HOME/.sdkman/candidates/java/21"* /usr/lib/jvm/java-17* /usr/lib/jvm/java-21*; do \
-	    if [ -n "$$cand" ] && [ -d "$$cand" ]; then \
-	      export JAVA_HOME="$$cand"; \
-	      export PATH="$$JAVA_HOME/bin:$$PATH"; \
-	      break; \
-	    fi; \
-	  done; \
-	fi; \
-	cd apps/mobile && npx expo run:android --no-bundler
+	./apps/mobile/scripts/android-install.sh
 
 test-java:
 	./mvnw -B test
@@ -185,7 +189,7 @@ verify-java:
 test-ai:
 	cd apps/ai-service && uv run --locked --extra dev python -m pytest
 
-test-importers:
+test-data-import:
 	cd tools/data-import && uv run --locked --extra dev python -m pytest
 
 test-lesson-prep:
@@ -209,7 +213,7 @@ typecheck:
 test-frontend:
 	pnpm test
 
-build-frontend:
+build-web:
 	pnpm build
 
 validate-docs:
@@ -218,8 +222,8 @@ validate-docs:
 test-tooling:
 	python3 -m unittest discover -s tooling/tests -v
 
-# Backward-compatible alias for test-tooling
-test-docs: test-tooling
+validate-repo:
+	python3 tooling/validate_repo.py
 
 validate:
 	$(MAKE) validate-docs
@@ -235,10 +239,10 @@ validate:
 	    tools/data-import/common.py \
 	    tools/data-import/tests; \
 	  status=$$?; rm -rf "$$tmp"; exit $$status
-	bash -n scripts/*.sh infra/keycloak/scripts/*.sh infra/postgres/init/*.sh
-	python3 tooling/validate_repo.py
+	bash -n scripts/*.sh apps/mobile/scripts/*.sh tools/data-import/scripts/*.sh infra/keycloak/scripts/*.sh infra/postgres/init/*.sh
+	$(MAKE) validate-repo
 
-check: validate test-tooling verify-java test-ai test-importers test-lesson-prep typecheck test-frontend build-frontend
+check: validate test-tooling verify-java test-ai test-data-import test-lesson-prep typecheck test-frontend build-web
 
 verify-prod-env:
 	./scripts/verify-prod-env.sh

@@ -1,6 +1,6 @@
 # Docker topology
 
-Lyreo cố ý tách **development infrastructure** khỏi **production/self-host topology**.
+Lyreo cố ý tách **development infrastructure** khỏi **deployable compose baseline**.
 
 ## `compose.dev.yml`
 
@@ -32,7 +32,7 @@ docker compose --env-file infra/docker/.env -f compose.dev.yml down -v
 
 Sau reset phải chạy lại `make keycloak-seed`.
 
-## `compose.prod.yml`
+## `compose.prod.yml` (name pending clarification)
 
 Build/run:
 
@@ -43,7 +43,8 @@ Build/run:
 - Admin Web static Nginx;
 - edge Nginx.
 
-Dùng để test full deployment topology hoặc self-host nhỏ. Không mặc định là HA production.
+Dùng để test full deployment topology hoặc self-host nhỏ. Tên `prod` chưa xác lập
+production contract; xem [OQ-006](../../docs/requirements/open-questions.md#oq-006--production-versus-deploy-terminology). Không mặc định là HA production.
 
 Trước chạy:
 

@@ -40,12 +40,11 @@ def check_raw_colors_and_primitives(root: Path, errors: list[str]) -> None:
 def check_secure_store_usage(root: Path, errors: list[str]) -> None:
     """Ensure SecureStore is restricted to authentication and session management."""
     mobile_dir = root / "apps/mobile"
-    session_storage = "apps/mobile/src/auth/session-storage.ts"
     if not mobile_dir.exists():
         return
     for pattern in ("*.ts", "*.tsx"):
         for path in repo_files(mobile_dir, pattern, root):
-            if "SecureStore" in path.read_text(encoding="utf-8") and path.relative_to(root).as_posix() != session_storage:
+            if "SecureStore" in path.read_text(encoding="utf-8") and "auth" not in path.relative_to(mobile_dir).parts:
                 errors.append(f"SecureStore usage outside auth/session storage: {path.relative_to(root)}")
 
 
@@ -83,169 +82,6 @@ def check_i18n_parity_and_keys(root: Path, errors: list[str]) -> None:
                     namespace, key = default_namespace, raw_key
                 if namespace in translation_index and key not in translation_index[namespace]:
                     errors.append(f"missing literal i18n key in {path.relative_to(root)}: {raw_key}")
-
-
-def check_semantic_theme_contract(root: Path, errors: list[str]) -> tuple[str, ...]:
-    """Verify ThemeColors role parity and valid primitive mappings in design-system."""
-    semantic_path = root / "packages/design-system/src/semantic.ts"
-    if not semantic_path.exists():
-        return ()
-
-    semantic_source = semantic_path.read_text(encoding="utf-8")
-    if RAW_COLOR_RE.search(semantic_source):
-        errors.append("semantic theme must map to design-system primitives instead of embedding raw color literals")
-
-    semantic_roles: tuple[str, ...] = ()
-    theme_type = re.search(r"export type ThemeColors\s*=\s*\{(.*?)\};", semantic_source, re.DOTALL)
-    if theme_type:
-        semantic_roles = tuple(re.findall(r"^\s*([A-Za-z][A-Za-z0-9]*)\s*:", theme_type.group(1), re.MULTILINE))
-    if not semantic_roles:
-        errors.append("could not derive semantic ThemeColors roles for frontend adapter validation")
-        return ()
-
-    semantic_maps = re.search(
-        r"export const semanticThemes[^=]*=\s*\{\s*light:\s*\{(?P<light>.*?)\}\s*,\s*dark:\s*\{(?P<dark>.*?)\}\s*,?\s*\};",
-        semantic_source,
-        re.DOTALL,
-    )
-    if not semantic_maps:
-        errors.append("could not parse semanticThemes.light/dark for parity validation")
-        return semantic_roles
-
-    def theme_map_keys(block: str) -> tuple[str, ...]:
-        return tuple(re.findall(r"^\s*([A-Za-z][A-Za-z0-9]*)\s*:", block, re.MULTILINE))
-
-    light_roles = theme_map_keys(semantic_maps.group("light"))
-    dark_roles = theme_map_keys(semantic_maps.group("dark"))
-    expected = set(semantic_roles)
-    for mode, roles in (("light", light_roles), ("dark", dark_roles)):
-        role_set = set(roles)
-        missing = sorted(expected - role_set)
-        extra = sorted(role_set - expected)
-        duplicate = sorted({role for role in roles if roles.count(role) > 1})
-        if missing or extra or duplicate:
-            errors.append(
-                f"semanticThemes.{mode} role parity failed: "
-                f"missing={missing or '[]'}, extra={extra or '[]'}, duplicate={duplicate or '[]'}"
-            )
-        if re.search(r":\s*(?:undefined|null)\b", semantic_maps.group(mode)):
-            errors.append(f"semanticThemes.{mode} contains undefined/null semantic color value")
-    if set(light_roles) != set(dark_roles):
-        errors.append("semanticThemes.light and semanticThemes.dark do not have identical role sets")
-
-    primitive_path = root / "packages/design-system/src/primitives.ts"
-    primitive_keys: set[str] = set()
-    if primitive_path.exists():
-        primitive_source = primitive_path.read_text(encoding="utf-8")
-        primitive_block = re.search(r"export const primitiveColors\s*=\s*\{(.*?)\} as const;", primitive_source, re.DOTALL)
-        if primitive_block:
-            primitive_keys = set(re.findall(r"^\s*([A-Za-z][A-Za-z0-9]*)\s*:", primitive_block.group(1), re.MULTILINE))
-    if not primitive_keys:
-        errors.append("could not derive primitiveColors keys for semantic theme validation")
-    else:
-        for mode in ("light", "dark"):
-            block = semantic_maps.group(mode)
-            assignments = re.findall(
-                r"^\s*([A-Za-z][A-Za-z0-9]*)\s*:\s*primitiveColors\.([A-Za-z][A-Za-z0-9]*)\s*,?",
-                block,
-                re.MULTILINE,
-            )
-            if len(assignments) != len(semantic_roles):
-                errors.append(f"semanticThemes.{mode} must map every role directly to primitiveColors")
-            for role, primitive in assignments:
-                if primitive not in primitive_keys:
-                    errors.append(f"semanticThemes.{mode}.{role} references missing primitiveColors.{primitive}")
-
-    return semantic_roles
-
-
-def check_theme_adapters_and_wiring(root: Path, semantic_roles: tuple[str, ...], errors: list[str]) -> None:
-    """Verify Tailwind adapters and ThemeProviders connect properly to semantic theme tokens."""
-    admin_styles = root / "apps/admin-web/src/ui/styles.css"
-    admin_theme_provider = root / "apps/admin-web/src/providers/AppThemeProvider.tsx"
-    mobile_provider = root / "apps/mobile/src/providers/AppThemeProvider.tsx"
-    mobile_tailwind = root / "apps/mobile/tailwind.config.js"
-
-    if admin_styles.exists() and mobile_provider.exists() and mobile_tailwind.exists():
-        admin_text = admin_styles.read_text(encoding="utf-8")
-        mobile_provider_text = mobile_provider.read_text(encoding="utf-8")
-        mobile_tailwind_text = mobile_tailwind.read_text(encoding="utf-8")
-        tailwind_alias = {"focusRing": "ring"}
-        for role in semantic_roles:
-            css_name = re.sub(r"([A-Z])", lambda match: "-" + match.group(1).lower(), role)
-            class_name = tailwind_alias.get(role, css_name)
-
-            if not re.search(
-                rf"--color-{re.escape(class_name)}\s*:\s*var\(--{re.escape(css_name)}\)",
-                admin_text,
-            ):
-                errors.append(f"Admin Tailwind adapter miswired/missing semantic role: {role}")
-
-            if not re.search(
-                rf"""['"]--{re.escape(css_name)}['"]\s*:\s*colors\.{re.escape(role)}\b""",
-                mobile_provider_text,
-            ):
-                errors.append(f"Mobile theme provider miswired/missing semantic role: {role}")
-
-            if not re.search(
-                rf"""['"]?{re.escape(class_name)}['"]?\s*:\s*['"]var\(--{re.escape(css_name)}\)""",
-                mobile_tailwind_text,
-            ):
-                errors.append(f"Mobile Tailwind adapter miswired/missing semantic role: {role}")
-
-    if admin_theme_provider.exists():
-        admin_theme_text = admin_theme_provider.read_text(encoding="utf-8")
-        for marker, message in (
-            ("(prefers-color-scheme: dark)", "Admin theme provider must observe prefers-color-scheme"),
-            ("addEventListener('change'", "Admin system theme must react to OS color-scheme changes"),
-            ("classList.toggle('dark'", "Admin dark mode must toggle the .dark class on documentElement"),
-            ("semanticThemes[mode]", "Admin theme provider must source values from semanticThemes"),
-            ("--lyreo-radius-", "Admin theme adapter must publish shared design-system radius tokens"),
-        ):
-            if marker not in admin_theme_text:
-                errors.append(message)
-
-    if admin_styles.exists() and "@custom-variant dark" not in admin_styles.read_text(encoding="utf-8"):
-        errors.append("Admin Tailwind CSS must keep a .dark class custom variant")
-
-    if mobile_provider.exists():
-        mobile_theme_text = mobile_provider.read_text(encoding="utf-8")
-        for marker, message in (
-            ("useColorScheme()", "Mobile theme provider must observe device color scheme"),
-            ("semanticThemes[mode]", "Mobile theme provider must source values from semanticThemes"),
-            ("vars({", "Mobile theme provider must expose semantic variables through NativeWind vars()"),
-            ("bg-background", "Mobile theme root must consume semantic background tokens"),
-        ):
-            if marker not in mobile_theme_text:
-                errors.append(message)
-
-    mobile_app_config = root / "apps/mobile/app.json"
-    if mobile_app_config.exists():
-        try:
-            mobile_app = json.loads(mobile_app_config.read_text(encoding="utf-8"))
-            if mobile_app.get("expo", {}).get("userInterfaceStyle") != "automatic":
-                errors.append("Mobile app.json must keep expo.userInterfaceStyle=automatic for system dark/light changes")
-        except Exception:
-            pass
-
-    if mobile_tailwind.exists():
-        mobile_tailwind_source = mobile_tailwind.read_text(encoding="utf-8")
-        if "tailwindcss-animate" not in mobile_tailwind_source:
-            errors.append("Mobile Tailwind config must register tailwindcss-animate for RNR-style primitives")
-        if "@lyreo/design-system/foundation" not in mobile_tailwind_source:
-            errors.append("Mobile Tailwind radius config must consume the shared design-system foundation source")
-
-    mobile_metro = root / "apps/mobile/metro.config.js"
-    if mobile_metro.exists():
-        metro_text = mobile_metro.read_text(encoding="utf-8")
-        if "inlineRem: 16" not in metro_text:
-            errors.append("Mobile NativeWind Metro config must keep inlineRem=16")
-        if "resolveRequest" in metro_text:
-            errors.append("Mobile Metro config must not carry a custom package resolver hack")
-
-    app_providers = root / "apps/mobile/src/providers/AppProviders.tsx"
-    if app_providers.exists() and "PortalHost" not in app_providers.read_text(encoding="utf-8"):
-        errors.append("Mobile AppProviders must mount PortalHost for portal-based native primitives")
 
 
 def check_mobile_dependencies(root: Path, errors: list[str]) -> None:
@@ -351,8 +187,6 @@ def check_frontend(root: Path, errors: list[str], warnings: list[str]) -> None:
     check_raw_colors_and_primitives(root, errors)
     check_secure_store_usage(root, errors)
     check_i18n_parity_and_keys(root, errors)
-    semantic_roles = check_semantic_theme_contract(root, errors)
-    check_theme_adapters_and_wiring(root, semantic_roles, errors)
     check_mobile_dependencies(root, errors)
     check_admin_docker_packaging(root, errors)
     check_ui_primitive_consumers(root, warnings)

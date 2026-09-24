@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
+ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 ENV_FILE="$ROOT/tools/data-import/.env"
 REQUIRED=false
 FORCE=false
@@ -9,7 +9,7 @@ CHECK_ONLY=false
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/fetch-data.sh [--required] [--force] [--check]
+Usage: ./tools/data-import/scripts/fetch-data.sh [--required] [--force] [--check]
 
 Fetch the external Grammar/TOEIC dataset only when DAUTOEIC_DATA_DIR is missing.
 Configuration is read from tools/data-import/.env.
