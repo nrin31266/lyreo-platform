@@ -1,4 +1,5 @@
 import { Link, Redirect, useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
 import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSession } from '@/auth/use-session';
@@ -8,8 +9,20 @@ import { Button } from '@/components/ui/button';
 
 export default function AuthCallbackScreen() {
   const session = useSession();
-  const params = useLocalSearchParams<{ code?: string; error?: string }>();
+  const params = useLocalSearchParams<{
+    code?: string | string[];
+    error?: string | string[];
+    state?: string | string[];
+  }>();
   const { t } = useTranslation('mobile');
+  const code = firstParam(params.code);
+  const error = firstParam(params.error);
+  const state = firstParam(params.state);
+
+  useEffect(() => {
+    if (!code && !error) return;
+    void session.completeAuthorizationCallback({ code, error, state });
+  }, [code, error, session.completeAuthorizationCallback, state]);
 
   if (session.error) {
     return (
@@ -26,7 +39,7 @@ export default function AuthCallbackScreen() {
     return <Redirect href="/" />;
   }
 
-  const hasAuthorizationResponse = typeof params.code === 'string' || typeof params.error === 'string';
+  const hasAuthorizationResponse = Boolean(code || error);
   if (session.status === 'unauthenticated' && !hasAuthorizationResponse) {
     return <Redirect href="/sign-in" />;
   }
@@ -36,4 +49,8 @@ export default function AuthCallbackScreen() {
       <LoadingState label={t('auth.preparing')} />
     </View>
   );
+}
+
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }

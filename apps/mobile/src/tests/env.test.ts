@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseMobileEnv } from '../config/env.ts';
+import { parseMobileEnv } from '../config/env';
 
 const validSource = {
   apiBaseUrl: 'http://10.0.2.2:8080/',

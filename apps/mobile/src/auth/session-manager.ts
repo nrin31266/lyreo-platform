@@ -34,6 +34,16 @@ type SessionManagerDependencies = {
 export type RefreshFailure = 'invalid' | 'unavailable' | null;
 export type BootstrapResult = 'empty' | 'restored' | 'invalid' | 'unavailable';
 
+export class SessionUnavailableError extends Error {
+  override readonly cause: unknown;
+
+  constructor(cause: unknown) {
+    super('The identity service is temporarily unavailable');
+    this.name = 'SessionUnavailableError';
+    this.cause = cause;
+  }
+}
+
 export class SessionManager {
   private readonly dependencies: SessionManagerDependencies;
   private readonly listeners = new Set<(snapshot: SessionSnapshot) => void>();
@@ -159,7 +169,13 @@ export class SessionManager {
     }
 
     this.persistentSession = persisted;
-    const accessToken = await this.refreshSession();
+    let accessToken: string | null;
+    try {
+      accessToken = await this.refreshSession();
+    } catch (error) {
+      if (error instanceof SessionUnavailableError) return 'unavailable';
+      throw error;
+    }
     if (accessToken) return 'restored';
     return this.lastRefreshFailure === 'invalid' ? 'invalid' : 'unavailable';
   }
@@ -168,7 +184,6 @@ export class SessionManager {
     const generation = this.generation;
     const refreshToken = this.persistentSession?.refreshToken;
     if (!refreshToken) {
-      await this.invalidate();
       return null;
     }
 
@@ -187,7 +202,10 @@ export class SessionManager {
       } else {
         this.accessSession = null;
         this.lastRefreshFailure = 'unavailable';
-        this.updateSnapshot('unauthenticated');
+        if (this.snapshot.status !== 'authenticated') {
+          this.updateSnapshot('unauthenticated');
+        }
+        throw new SessionUnavailableError(error);
       }
       return null;
     }

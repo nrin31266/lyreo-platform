@@ -19,7 +19,16 @@ import {
   isOidcAccessTokenFresh,
   refreshOidcTokens,
 } from './oidc';
-import { SessionManager, type SessionSnapshot, type SessionStatus } from './session-manager';
+import {
+  resolveAuthorizationCallback,
+  type AuthorizationCallbackParams,
+} from './authorization-callback';
+import {
+  SessionManager,
+  SessionUnavailableError,
+  type SessionSnapshot,
+  type SessionStatus,
+} from './session-manager';
 import { secureSessionStorage } from './session-storage';
 
 export type SessionErrorCode = 'authenticationFailed' | 'identityUnavailable' | 'sessionExpired';
@@ -29,6 +38,7 @@ type SessionContextValue = {
   error: SessionErrorCode | null;
   signInReady: boolean;
   signIn: () => Promise<void>;
+  completeAuthorizationCallback: (params: AuthorizationCallbackParams) => Promise<void>;
   signOut: () => Promise<void>;
   getValidAccessToken: () => Promise<string | null>;
   refreshSession: () => Promise<string | null>;
@@ -62,6 +72,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState<SessionErrorCode | null>(null);
   const initializeInFlight = useRef<Promise<void> | null>(null);
   const handledResponse = useRef<AuthSession.AuthSessionResult | null>(null);
+  const handledCallbacks = useRef(new Set<string>());
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     getAuthRequestConfig(),
@@ -103,27 +114,51 @@ export function SessionProvider({ children }: PropsWithChildren) {
     void initialize();
   }, [initialize]);
 
+  const completeAuthorizationCallback = useCallback(async (
+    params: AuthorizationCallbackParams,
+  ): Promise<void> => {
+    const resolution = resolveAuthorizationCallback(params, request);
+    if (resolution.type !== 'exchange' || !discovery) {
+      setError('authenticationFailed');
+      return;
+    }
+    if (handledCallbacks.current.has(resolution.key)) return;
+    handledCallbacks.current.add(resolution.key);
+
+    setExchanging(true);
+    setError(null);
+    try {
+      const tokens = await exchangeAuthorizationCode(
+        resolution.code,
+        resolution.codeVerifier,
+        discovery,
+      );
+      await manager.acceptTokenSet(tokens);
+    } catch {
+      setError('authenticationFailed');
+    } finally {
+      setExchanging(false);
+    }
+  }, [discovery, manager, request]);
+
   useEffect(() => {
     if (!response || handledResponse.current === response) return;
     handledResponse.current = response;
 
     if (response.type === 'error') {
-      setError('authenticationFailed');
+      void completeAuthorizationCallback({
+        error: response.params.error ?? response.error?.code ?? 'authorization_error',
+        state: response.params.state,
+      });
       return;
     }
-    if (response.type !== 'success') return;
-    if (!response.params.code || !request?.codeVerifier || !discovery) {
-      setError('authenticationFailed');
-      return;
+    if (response.type === 'success') {
+      void completeAuthorizationCallback({
+        code: response.params.code,
+        state: response.params.state,
+      });
     }
-
-    setExchanging(true);
-    setError(null);
-    void exchangeAuthorizationCode(response.params.code, request.codeVerifier, discovery)
-      .then(tokens => manager.acceptTokenSet(tokens))
-      .catch(() => setError('authenticationFailed'))
-      .finally(() => setExchanging(false));
-  }, [discovery, manager, request, response]);
+  }, [completeAuthorizationCallback, response]);
 
   const signIn = useCallback(async () => {
     setError(null);
@@ -140,24 +175,26 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   const getValidAccessToken = useCallback(async () => {
     const wasAuthenticated = manager.getSnapshot().status === 'authenticated';
-    const token = await manager.getValidAccessToken();
-    if (!token && wasAuthenticated) {
-      setError(manager.getLastRefreshFailure() === 'unavailable'
-        ? 'identityUnavailable'
-        : 'sessionExpired');
+    try {
+      const token = await manager.getValidAccessToken();
+      if (!token && wasAuthenticated) setError('sessionExpired');
+      return token;
+    } catch (error) {
+      if (error instanceof SessionUnavailableError) setError('identityUnavailable');
+      throw error;
     }
-    return token;
   }, [manager]);
 
   const refreshSession = useCallback(async () => {
     const wasAuthenticated = manager.getSnapshot().status === 'authenticated';
-    const token = await manager.refreshSession();
-    if (!token && wasAuthenticated) {
-      setError(manager.getLastRefreshFailure() === 'unavailable'
-        ? 'identityUnavailable'
-        : 'sessionExpired');
+    try {
+      const token = await manager.refreshSession();
+      if (!token && wasAuthenticated) setError('sessionExpired');
+      return token;
+    } catch (error) {
+      if (error instanceof SessionUnavailableError) setError('identityUnavailable');
+      throw error;
     }
-    return token;
   }, [manager]);
 
   const invalidateSession = useCallback(async () => {
@@ -180,6 +217,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     error,
     signInReady: Boolean(request && discovery),
     signIn,
+    completeAuthorizationCallback,
     signOut,
     getValidAccessToken,
     refreshSession,
@@ -192,6 +230,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     request,
     discovery,
     signIn,
+    completeAuthorizationCallback,
     signOut,
     getValidAccessToken,
     refreshSession,

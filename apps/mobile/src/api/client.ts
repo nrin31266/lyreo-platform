@@ -40,12 +40,22 @@ export function createApiClient(dependencies: ApiClientDependencies): ApiClient 
 
   return {
     async request<T>(path: string, init: RequestInit = {}): Promise<T> {
-      const accessToken = await dependencies.getValidAccessToken();
+      let accessToken: string | null;
+      try {
+        accessToken = await dependencies.getValidAccessToken();
+      } catch (error) {
+        throw apiErrorFromRequestFailure(error);
+      }
       if (!accessToken) throw unauthorizedApiError();
 
       let response = await send(path, accessToken, init);
       if (response.status === 401) {
-        const refreshedToken = await dependencies.refreshSession();
+        let refreshedToken: string | null;
+        try {
+          refreshedToken = await dependencies.refreshSession();
+        } catch (error) {
+          throw apiErrorFromRequestFailure(error);
+        }
         if (!refreshedToken) throw await apiErrorFromResponse(response);
         response = await send(path, refreshedToken, init);
         if (response.status === 401) {

@@ -1,11 +1,15 @@
+import { SessionUnavailableError } from '@/auth/session-manager';
+
 export type ApiErrorKind =
   | 'network'
   | 'timeout'
   | 'aborted'
   | 'unauthorized'
   | 'forbidden'
+  | 'notFound'
   | 'validation'
   | 'conflict'
+  | 'rateLimited'
   | 'server'
   | 'unknown';
 
@@ -76,6 +80,7 @@ export async function apiErrorFromResponse(response: Response): Promise<ApiError
 
 export function apiErrorFromRequestFailure(cause: unknown): ApiError {
   if (cause instanceof ApiError) return cause;
+  if (cause instanceof SessionUnavailableError) return new ApiError({ kind: 'network', cause });
   if (isAbortError(cause)) return new ApiError({ kind: 'aborted', cause });
   if (cause instanceof TypeError) return new ApiError({ kind: 'network', cause });
   return new ApiError({ kind: 'unknown', cause });
@@ -94,7 +99,9 @@ function kindForStatus(status: number): ApiErrorKind {
   if (status === 400) return 'validation';
   if (status === 401) return 'unauthorized';
   if (status === 403) return 'forbidden';
+  if (status === 404) return 'notFound';
   if (status === 409) return 'conflict';
+  if (status === 429) return 'rateLimited';
   if (status >= 500) return 'server';
   return 'unknown';
 }

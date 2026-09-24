@@ -12,6 +12,7 @@ export function BackButton({ label, className }: BackButtonProps) {
 
   return (
     <Pressable
+      accessibilityRole="button"
       className={className}
       onPress={() => {
         if (router.canGoBack()) router.back();

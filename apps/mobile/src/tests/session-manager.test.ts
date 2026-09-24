@@ -1,15 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { SessionManager } from '../auth/session-manager.ts';
+import {
+  SessionManager,
+  type PersistentSession,
+  type TokenSet,
+} from '../auth/session-manager';
 
-function memoryStorage(initial = null) {
+function memoryStorage(initial: PersistentSession | null = null) {
   let value = initial;
   let clearCount = 0;
   let legacyClearCount = 0;
   return {
     storage: {
       async read() { return value; },
-      async write(next) { value = next; },
+      async write(next: PersistentSession) { value = next; },
       async clear() { value = null; clearCount += 1; },
       async clearLegacyAccessToken() { legacyClearCount += 1; },
     },
@@ -19,7 +23,7 @@ function memoryStorage(initial = null) {
   };
 }
 
-function tokenSet(overrides = {}) {
+function tokenSet(overrides: Partial<TokenSet> = {}): TokenSet {
   return {
     accessToken: 'access-1',
     refreshToken: 'refresh-1',
@@ -47,7 +51,7 @@ test('bootstrap without a refresh token becomes unauthenticated and removes lega
 
 test('bootstrap validates a persisted session by refreshing it', async () => {
   const memory = memoryStorage({ refreshToken: 'persisted-refresh', idToken: 'persisted-id' });
-  let receivedRefreshToken;
+  let receivedRefreshToken: string | undefined;
   const manager = new SessionManager({
     storage: memory.storage,
     refreshTokens: async refreshToken => {
@@ -62,7 +66,7 @@ test('bootstrap validates a persisted session by refreshing it', async () => {
   assert.equal(receivedRefreshToken, 'persisted-refresh');
   assert.equal(manager.getSnapshot().status, 'authenticated');
   assert.equal(await manager.getValidAccessToken(), 'access-1');
-  assert.equal(memory.current().refreshToken, 'rotated-refresh');
+  assert.equal(memory.current()?.refreshToken, 'rotated-refresh');
 });
 
 test('an invalid refresh clears the persistent session', async () => {
@@ -100,14 +104,49 @@ test('a temporary refresh failure preserves the persisted session for retry', as
   assert.equal(manager.getLastRefreshFailure(), 'unavailable');
   assert.equal(await manager.refreshSession(), 'retry-access');
   assert.equal(manager.getSnapshot().status, 'authenticated');
-  assert.equal(memory.current().refreshToken, 'retry-refresh');
+  assert.equal(memory.current()?.refreshToken, 'retry-refresh');
+});
+
+test('a temporary refresh failure keeps an established session mounted', async () => {
+  const memory = memoryStorage();
+  const manager = new SessionManager({
+    storage: memory.storage,
+    refreshTokens: async () => { throw new TypeError('Network request failed'); },
+    isAccessTokenFresh: () => false,
+    isInvalidRefreshError: () => false,
+  });
+  await manager.acceptTokenSet(tokenSet());
+
+  await assert.rejects(() => manager.refreshSession());
+
+  assert.equal(manager.getSnapshot().status, 'authenticated');
+  assert.equal(manager.getLastRefreshFailure(), 'unavailable');
+  assert.equal(memory.current()?.refreshToken, 'refresh-1');
+  assert.equal(memory.clearCount(), 0);
+});
+
+test('refresh after suspend does not clear the persisted credentials', async () => {
+  const persisted = { refreshToken: 'persisted-refresh', idToken: 'persisted-id' };
+  const memory = memoryStorage(persisted);
+  const manager = new SessionManager({
+    storage: memory.storage,
+    refreshTokens: async () => tokenSet(),
+    isAccessTokenFresh: () => false,
+    isInvalidRefreshError: () => false,
+  });
+
+  manager.suspend();
+
+  assert.equal(await manager.refreshSession(), null);
+  assert.deepEqual(memory.current(), persisted);
+  assert.equal(memory.clearCount(), 0);
 });
 
 test('concurrent expired-token requests share one refresh and persist rotation', async () => {
   const memory = memoryStorage();
   let refreshCount = 0;
-  let resolveRefresh;
-  const refreshResult = new Promise(resolve => { resolveRefresh = resolve; });
+  let resolveRefresh!: (value: TokenSet | PromiseLike<TokenSet>) => void;
+  const refreshResult = new Promise<TokenSet>(resolve => { resolveRefresh = resolve; });
   const manager = new SessionManager({
     storage: memory.storage,
     refreshTokens: async () => {
@@ -124,7 +163,7 @@ test('concurrent expired-token requests share one refresh and persist rotation',
 
   assert.deepEqual(await Promise.all(requests), Array(8).fill('access-2'));
   assert.equal(refreshCount, 1);
-  assert.equal(memory.current().refreshToken, 'refresh-2');
+  assert.equal(memory.current()?.refreshToken, 'refresh-2');
 });
 
 test('fresh access tokens stay in memory and logout clears all session material', async () => {
@@ -147,8 +186,8 @@ test('fresh access tokens stay in memory and logout clears all session material'
 
 test('a refresh response arriving after logout cannot restore the session', async () => {
   const memory = memoryStorage();
-  let resolveRefresh;
-  const refreshResult = new Promise(resolve => { resolveRefresh = resolve; });
+  let resolveRefresh!: (value: TokenSet | PromiseLike<TokenSet>) => void;
+  const refreshResult = new Promise<TokenSet>(resolve => { resolveRefresh = resolve; });
   const manager = new SessionManager({
     storage: memory.storage,
     refreshTokens: () => refreshResult,
@@ -169,10 +208,10 @@ test('a refresh response arriving after logout cannot restore the session', asyn
 test('logout clears a rotated token even when its secure write is in progress', async () => {
   const memory = memoryStorage();
   const write = memory.storage.write;
-  let signalWriteStarted;
-  let finishWrite;
-  const writeStarted = new Promise(resolve => { signalWriteStarted = resolve; });
-  const writeBarrier = new Promise(resolve => { finishWrite = resolve; });
+  let signalWriteStarted!: () => void;
+  let finishWrite!: () => void;
+  const writeStarted = new Promise<void>(resolve => { signalWriteStarted = resolve; });
+  const writeBarrier = new Promise<void>(resolve => { finishWrite = resolve; });
   memory.storage.write = async session => {
     if (session.refreshToken === 'rotated-refresh') {
       signalWriteStarted();
@@ -200,8 +239,8 @@ test('logout clears a rotated token even when its secure write is in progress', 
 
 test('a late invalid refresh cannot clear a newer sign-in', async () => {
   const memory = memoryStorage();
-  let rejectRefresh;
-  const refreshResult = new Promise((_resolve, reject) => { rejectRefresh = reject; });
+  let rejectRefresh!: (reason?: unknown) => void;
+  const refreshResult = new Promise<TokenSet>((_resolve, reject) => { rejectRefresh = reject; });
   const manager = new SessionManager({
     storage: memory.storage,
     refreshTokens: () => refreshResult,
@@ -218,5 +257,5 @@ test('a late invalid refresh cannot clear a newer sign-in', async () => {
 
   assert.equal(manager.getSnapshot().status, 'authenticated');
   assert.equal(await manager.getValidAccessToken(), 'new-access');
-  assert.equal(memory.current().refreshToken, 'new-refresh');
+  assert.equal(memory.current()?.refreshToken, 'new-refresh');
 });

@@ -34,12 +34,27 @@ fi
 if command -v node >/dev/null 2>&1; then
   node_version=$(node -v)
   node_major=$(version_major "$node_version")
-  if [[ "$node_major" =~ ^[0-9]+$ ]] && (( node_major >= 24 )); then ok "Node $node_version"; else warn "Node $node_version (repo target 24 LTS)"; fi
+  node_minor=$(printf '%s' "$node_version" | sed -E 's/^v?[0-9]+\.([0-9]+).*/\1/')
+  if [[ "$node_major" =~ ^[0-9]+$ ]] && [[ "$node_minor" =~ ^[0-9]+$ ]] \
+    && (( node_major > 24 || (node_major == 24 && node_minor >= 20) )); then
+    ok "Node $node_version"
+  else
+    warn "Node $node_version (repo minimum 24.20.0)"
+  fi
 else
-  warn 'Node not found (repo target 24 LTS)'
+  warn 'Node not found (repo minimum 24.20.0)'
 fi
 
-if command -v pnpm >/dev/null 2>&1; then ok "pnpm $(pnpm -v)"; else warn 'pnpm not found (use Corepack; repo target 12)'; fi
+if command -v pnpm >/dev/null 2>&1; then
+  pnpm_version=$(pnpm -v)
+  if [[ "$pnpm_version" == "12.3.1" ]]; then
+    ok "pnpm $pnpm_version"
+  else
+    warn "pnpm $pnpm_version (repo requires 12.3.1 through Corepack)"
+  fi
+else
+  warn 'pnpm not found (use Corepack; repo requires 12.3.1)'
+fi
 if command -v python3 >/dev/null 2>&1; then ok "$(python3 --version)"; else fail 'python3 not found'; fi
 check_command uv 'uv'
 check_command docker 'Docker'

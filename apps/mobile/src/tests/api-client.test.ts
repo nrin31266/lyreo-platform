@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createApiClient } from '../api/client.ts';
-import { ApiError, apiErrorFromResponse } from '../api/errors.ts';
+import { createApiClient } from '../api/client';
+import { ApiError, apiErrorFromResponse } from '../api/errors';
+import { SessionUnavailableError } from '../auth/session-manager';
 
 test('Problem Details preserves safe fields, violations, and response correlation ID', async () => {
   const response = new Response(JSON.stringify({
@@ -33,7 +34,7 @@ test('Problem Details preserves safe fields, violations, and response correlatio
 });
 
 test('API client adds auth, refreshes once on 401, and retries once', async () => {
-  const seenAuthorization = [];
+  const seenAuthorization: Array<string | null> = [];
   let fetchCount = 0;
   let refreshCount = 0;
   const client = createApiClient({
@@ -43,7 +44,7 @@ test('API client adds auth, refreshes once on 401, and retries once', async () =
     invalidateSession: async () => {},
     fetchImplementation: async (_input, init) => {
       fetchCount += 1;
-      seenAuthorization.push(new Headers(init.headers).get('Authorization'));
+      seenAuthorization.push(new Headers(init?.headers).get('Authorization'));
       if (fetchCount === 1) {
         return new Response(JSON.stringify({ code: 'AUTHENTICATION_REQUIRED' }), { status: 401 });
       }
@@ -97,6 +98,33 @@ test('fetch failures are normalized as network errors', async () => {
   );
 });
 
+test('identity refresh outages are normalized as network errors', async () => {
+  const client = createApiClient({
+    baseUrl: 'http://core.test',
+    getValidAccessToken: async () => { throw new SessionUnavailableError(new TypeError('offline')); },
+    refreshSession: async () => null,
+    invalidateSession: async () => {},
+    fetchImplementation: async () => new Response(),
+  });
+
+  await assert.rejects(
+    () => client.request('/api/v1/me'),
+    error => error instanceof ApiError && error.kind === 'network',
+  );
+});
+
+test('Problem Details maps not found and rate limited responses to stable kinds', async () => {
+  const notFound = await apiErrorFromResponse(new Response(JSON.stringify({
+    code: 'RESOURCE_NOT_FOUND',
+  }), { status: 404 }));
+  const rateLimited = await apiErrorFromResponse(new Response(JSON.stringify({
+    code: 'RATE_LIMITED',
+  }), { status: 429 }));
+
+  assert.equal(notFound.kind, 'notFound');
+  assert.equal(rateLimited.kind, 'rateLimited');
+});
+
 test('a missing access token fails before sending a request', async () => {
   let fetchCount = 0;
   const client = createApiClient({
@@ -118,14 +146,14 @@ test('a missing access token fails before sending a request', async () => {
 });
 
 test('204 responses return undefined and preserve a custom Accept header', async () => {
-  let accept;
+  let accept: string | null | undefined;
   const client = createApiClient({
     baseUrl: 'http://core.test',
     getValidAccessToken: async () => 'access-1',
     refreshSession: async () => null,
     invalidateSession: async () => {},
     fetchImplementation: async (_input, init) => {
-      accept = new Headers(init.headers).get('Accept');
+      accept = new Headers(init?.headers).get('Accept');
       return new Response(null, { status: 204 });
     },
   });
