@@ -21,7 +21,9 @@ require_non_placeholder() {
   local file=$1 key=$2
   local value
   value=$(get_env "$file" "$key")
-  if [[ -z "$value" || "$value" == *change-me* || "$value" == replace-* ]]; then
+  if [[ -z "$value" || "$value" == *change-me* || "$value" == replace-* \
+        || "$value" == "lyreo_dev_password" || "$value" == "admin" \
+        || "$value" == "Password123!ChangeMe" ]]; then
     echo "Unsafe/missing $key in $file" >&2
     return 1
   fi

@@ -12,7 +12,7 @@ from tooling.repo_checks.backend import (
 )
 from tooling.repo_checks.frontend import (
     check_mobile_dependencies,
-    check_theme_adapters_and_wiring,
+    check_raw_colors_and_primitives,
 )
 from tooling.repo_checks.repository import check_lockfiles
 
@@ -26,13 +26,20 @@ class ValidateRepoTest(unittest.TestCase):
             file_path = root / rel_path
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(content, encoding="utf-8")
+            if rel_path.startswith("modules/"):
+                module_root = root / "modules" / Path(rel_path).parts[1]
+                pom = module_root / "pom.xml"
+                if not pom.exists():
+                    pom.write_text("<project/>\n", encoding="utf-8")
         return root
 
     def test_missing_required_lockfile_fails(self) -> None:
         """Missing required lockfiles must produce explicit validation errors."""
         root = self.create_fixture({
             "pnpm-lock.yaml": "lockfileVersion: '9.0'\nimporters:\n  apps/admin-web:\n  apps/mobile:\n  packages/design-system:\n  packages/i18n:\n",
-            # Missing apps/ai-service/uv.lock and tools/data-import/uv.lock
+            "apps/ai-service/pyproject.toml": "[project]\nname = \"ai-service\"\n",
+            "tools/data-import/pyproject.toml": "[project]\nname = \"data-import\"\n",
+            "tools/lesson-prep/pyproject.toml": "[project]\nname = \"lesson-prep\"\n",
         })
         errors: list[str] = []
         check_lockfiles(root, errors)
@@ -164,34 +171,24 @@ class ValidateRepoTest(unittest.TestCase):
         check_mobile_dependencies(root_missing, missing_errors)
         self.assertTrue(any("Mobile Expo Router direct dependency missing: expo-router" in err for err in missing_errors))
 
-    def test_implementation_equivalent_frontend_refactor_passes(self) -> None:
-        """Behavior-equivalent frontend code must not fail due to removed brittle string guards."""
+    def test_equivalent_frontend_theme_implementation_passes(self) -> None:
         root = self.create_fixture({
-            "apps/admin-web/src/providers/AppThemeProvider.tsx": (
-                "import { semanticThemes } from '@lyreo/design-system';\n"
-                "// Published radius tokens without using exact Object.entries(radius) syntax\n"
-                "document.documentElement.style.setProperty('--lyreo-radius-md', '8px');\n"
-                "if (window.matchMedia('(prefers-color-scheme: dark)').matches) {}\n"
-                "window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {});\n"
-                "document.documentElement.classList.toggle('dark', isDark);\n"
-                "const colors = semanticThemes[mode];\n"
-            ),
             "apps/mobile/src/providers/AppThemeProvider.tsx": (
-                "import { semanticThemes } from '@lyreo/design-system';\n"
-                "import { useColorScheme, View } from 'react-native';\n"
-                "import { vars } from 'nativewind';\n"
-                "export function AppThemeProvider() {\n  const scheme = useColorScheme();\n"
-                "  const colors = semanticThemes[mode];\n"
-                "  const v = vars({ '--bg': colors.background });\n"
-                "  // Refactored className attribute formatting\n"
-                "  return <View className='bg-background p-4 flex-1' style={v} />;\n"
-                "}\n"
+                "export const theme = semanticThemes[preferredMode];\n"
+                "export const style = makeNativeVariables(theme);\n"
             ),
         })
         errors: list[str] = []
-        check_theme_adapters_and_wiring(root, (), errors)
+        check_raw_colors_and_primitives(root, errors)
         self.assertEqual([], errors)
 
+    def test_raw_feature_color_fails(self) -> None:
+        root = self.create_fixture({
+            "apps/mobile/src/features/lesson/LessonCard.tsx": "export const color = '#ff0000';\n",
+        })
+        errors: list[str] = []
+        check_raw_colors_and_primitives(root, errors)
+        self.assertTrue(any("raw frontend color literal" in error for error in errors))
 
     def test_cross_module_infrastructure_import_fails(self) -> None:
         """Importing another business module's infrastructure must fail."""
@@ -226,6 +223,18 @@ class ValidateRepoTest(unittest.TestCase):
             any("cross-module application port import" in e for e in errors),
             f"Expected cross-module application port import violation; got: {errors}",
         )
+
+    def test_new_business_module_is_checked_without_inventory_edit(self) -> None:
+        root = self.create_fixture({
+            "modules/new-capability/pom.xml": "<project/>",
+            "modules/new-capability/src/main/java/com/lyreo/newcapability/application/port/Bad.java": (
+                "package com.lyreo.newcapability.application.port;\n"
+                "import com.lyreo.lesson.infrastructure.persistence.LessonEntity;\n"
+            ),
+        })
+        errors: list[str] = []
+        check_clean_architecture_and_boundaries(root, errors)
+        self.assertTrue(any("cross-module infrastructure import" in error for error in errors))
 
     def test_business_package_topology_valid_nested_passes(self) -> None:
         """Valid nested semantic packages under direct child architecture concerns must pass."""

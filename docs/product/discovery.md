@@ -41,7 +41,7 @@ claim cải thiện kết quả học trong tài liệu này.
 ## Rủi ro discovery
 
 - Scope rộng có thể làm mờ vòng giá trị đầu tiên; phạm vi YouTube của phase đầu còn xung đột
-  ([GAP-001](../requirements/gaps.md#gap-001--youtube-p0-hay-sau-lesson-mvp)).
+  ([OQ-001](../requirements/open-questions.md#oq-001--youtube-in-the-first-lesson-release)).
 - Chất lượng ASR/alignment/pronunciation model thật chưa được chứng minh bởi mock runtime.
 - Công thức completion, reward và TOEIC scaled score cần quyết định/nguồn đáng tin cậy.
 - YouTube processing cần đánh giá pháp lý/chính sách độc lập với khả năng kỹ thuật adapter.

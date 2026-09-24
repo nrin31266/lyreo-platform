@@ -115,7 +115,7 @@ echo 'Local object storage is the default; R2_* values are only needed for R2 in
 if [[ -f "$DATA_ENV" ]]; then
   DATA_URL=$(get_env "$DATA_ENV" DAUTOEIC_DATA_URL)
   if [[ -n "$DATA_URL" ]]; then
-    echo 'Grammar/TOEIC shared dataset URL configured; run make data-fetch (or make setup).'
+    echo 'Grammar/TOEIC shared dataset URL configured; run make data-fetch (or WITH_DATA=1 make setup).'
   else
     echo 'Grammar/TOEIC dataset URL is not configured; app development can continue, importer/data work needs a local dataset.'
   fi

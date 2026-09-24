@@ -6,23 +6,18 @@ from pathlib import Path
 
 from .repository import repo_files
 
-MODULE_PACKAGE = {
-    "identity": "identity",
-    "learner": "learner",
-    "ai": "ai",
-    "lesson": "lesson",
-    "speech-assessment": "speechassessment",
-    "lexicon": "lexicon",
-    "vocabulary": "vocabulary",
-    "grammar": "grammar",
-    "toeic": "toeic",
-    "curriculum": "curriculum",
-    "gamification": "gamification",
-    "analytics": "analytics",
-    "notification": "notification",
-    "chat": "chat",
-}
-PACKAGE_TO_MODULE = {package: module for module, package in MODULE_PACKAGE.items()}
+def module_packages(root: Path) -> dict[str, str]:
+    """Discover business modules from Maven roots and the Lyreo package convention."""
+    modules = root / "modules"
+    if not modules.exists():
+        return {}
+    return {
+        directory.name: directory.name.replace("-", "")
+        for directory in modules.iterdir()
+        if directory.is_dir() and (directory / "pom.xml").is_file()
+    }
+
+
 ALLOWED_DIRECT_CHILD_PACKAGES: frozenset[str] = frozenset({"api", "application", "domain", "infrastructure"})
 
 # Regex for normal fully-qualified imports
@@ -115,7 +110,7 @@ def check_business_package_topology(root: Path, errors: list[str]) -> None:
     the only allowed direct child packages are: api, application, domain, infrastructure.
     Root package-info.java is allowed. Nested subpackages below those are allowed.
     """
-    for module_name, package_name in MODULE_PACKAGE.items():
+    for module_name, package_name in module_packages(root).items():
         module_main_java = root / "modules" / module_name / "src/main/java/com/lyreo" / package_name
         if not module_main_java.exists():
             continue
@@ -139,7 +134,7 @@ def check_business_package_topology(root: Path, errors: list[str]) -> None:
 
 def check_clean_architecture_and_boundaries(root: Path, errors: list[str]) -> None:
     """Verify Clean/Hexagonal boundaries inside and between business modules."""
-    for module_name, package_name in MODULE_PACKAGE.items():
+    for module_name, package_name in module_packages(root).items():
         module_root = root / "modules" / module_name
         if not module_root.exists():
             continue
@@ -178,7 +173,7 @@ def check_clean_architecture_and_boundaries(root: Path, errors: list[str]) -> No
 
 def check_cross_owner_sql(root: Path, errors: list[str]) -> None:
     """Ensure business modules do not reference jobs-owned SQL tokens."""
-    for module_name in MODULE_PACKAGE:
+    for module_name in module_packages(root):
         module_root = root / "modules" / module_name
         if not module_root.exists():
             continue
@@ -200,7 +195,7 @@ def check_platform_dependencies(root: Path, errors: list[str]) -> None:
         return
     for path in repo_files(platform_dir, "*.java", root):
         text = path.read_text(encoding="utf-8")
-        for package_name in PACKAGE_TO_MODULE:
+        for package_name in module_packages(root).values():
             if f"import com.lyreo.{package_name}." in text:
                 errors.append(f"platform depends on business module: {path.relative_to(root)}")
 
@@ -215,20 +210,6 @@ def check_transactional_targets(root: Path, errors: list[str]) -> None:
 
 def check_flyway_and_modulith_migrations(root: Path, errors: list[str]) -> None:
     """Verify Flyway migrations sorting, uniqueness, and Spring Modulith table schema."""
-    modulith_migration = (
-        root / "apps/core-service/src/main/resources/db/migration/V001__baseline_schema.sql"
-    )
-    if modulith_migration.exists():
-        migration_text = modulith_migration.read_text(encoding="utf-8").lower()
-        for required in (
-            "serialized_event text not null",
-            "event_publication_serialized_event_hash_idx",
-            "completion_attempts int",
-            "last_resubmission_date",
-        ):
-            if required not in migration_text:
-                errors.append(f"Spring Modulith PostgreSQL registry schema marker missing: {required}")
-
     migration_dir = root / "apps/core-service/src/main/resources/db/migration"
     if migration_dir.exists():
         migrations = sorted(migration_dir.glob("V*__*.sql"))

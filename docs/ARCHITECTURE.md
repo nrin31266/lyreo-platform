@@ -1,491 +1,51 @@
-# Lyreo Architecture
+# Lyreo architecture
 
-## 1. System view
+Lyreo is an English-learning system with Mobile as the primary learner client, Admin Web for content managers and operators, and a planned, lower-priority Learner Web. Keycloak provides identity. Core owns business behavior and durable data; a separate FastAPI process executes AI capabilities.
 
-```text
-                        ┌───────────────────────┐
-                        │      Keycloak         │
-                        │  OIDC / PKCE / roles  │
-                        └───────────┬───────────┘
-                                    │
-Admin Web ───────────────┐           │
-                         ├───────────┼───────────────┐
-Mobile ──────────────────┘           │               │
-                                     ▼               │
-                         ┌───────────────────────┐    │
-                         │     Core Service      │    │
-                         │ Spring Boot + Modulith│    │
-                         └───────┬─────┬─────────┘    │
-                                 │     │              │
-                                 │     └── HTTP ──────┼────→ FastAPI AI Service
-                                 │                    │        ├─ Qwen3-ASR
-                                 │                    │        ├─ ForcedAligner
-                                 │                    │        ├─ Groq
-                                 │                    │        ├─ Gemini
-                                 │                    │        └─ DeepSeek
-                                 │                    │
-                        ┌────────▼────────┐    ┌──────▼───────┐
-                        │   PostgreSQL    │    │ Cloudflare R2│
-                        │ state/jobs/data │    │ artifacts    │
-                        └─────────────────┘    └──────────────┘
-```
-
-One deployable Core Service, many internal business modules. AI Service is a separate process because Python/model runtime is a different operational concern.
-
-## 2. Architectural style
-
-Lyreo combines:
-
-- **Modular Monolith** at deployable/business-boundary level;
-- **Spring Modulith** for module verification and internal events;
-- **Pragmatic Clean / Hexagonal Architecture** inside modules;
-- **PostgreSQL durable jobs** for long-running workflows;
-- **thin FastAPI capability runtime** for AI execution.
-
-## 3. Clean Architecture dependency direction
+## System and containers
 
 ```text
-API / delivery
-      ↓
-Application / use cases
-      ↓
-Domain
-      ↑
-Infrastructure implements ports
+Mobile / Admin Web / planned Learner Web
+                 | OIDC + PKCE
+              Keycloak
+                 |
+                 v
+       Core Service (Spring Boot)
+          |       |          |
+     PostgreSQL  R2      AI Service (FastAPI)
+     state/jobs  artifacts  technical inference
 ```
 
-Domain/application must not know:
+Core is one deployable Java modular monolith. PostgreSQL stores normalized product and workflow state. Flyway owns its schema. R2 stores large artifacts behind a storage port; local development uses filesystem storage. The AI Service has no business database or workflow ownership.
 
-- JDBC/JPA implementation details;
-- R2/AWS SDK;
-- FastAPI HTTP details;
-- Keycloak SDK;
-- browser/mobile frameworks.
+## Building blocks and dependency direction
 
-Simple reference CRUD may be less ceremonious, but business modules with real rules keep explicit ports/use cases.
+`apps/*` are deployable/composition roots. `modules/*` own business capabilities; `platform/*` owns reusable technical infrastructure; `libs/*` holds intentionally shared Java contracts. Core assembles modules and does not own their domain behavior.
 
-## 4. Business module boundaries
+Business capabilities include identity and learner; lesson and speech assessment; lexicon and vocabulary; grammar and TOEIC; curriculum and gamification; analytics, notification, AI administration, and low-priority chat. Detailed behavior belongs in [requirements](README.md), not this building-block view. Each producer owns detailed progress and attempts; analytics projects summaries from published facts.
 
 ```text
-identity
-learner
-ai
-lesson
-speech-assessment
-lexicon
-vocabulary
-grammar
-toeic
-curriculum
-gamification
-analytics
-notification
-chat            # low priority product feature
+api / inbound adapter -> application -> domain
+infrastructure       -> application ports / domain
 ```
 
-Technical platform:
+Domain and application code do not depend on HTTP, persistence adapters, object storage SDKs, model runtimes, or client frameworks. Cross-module collaboration uses named/public Spring Modulith interfaces, shared contracts, or events. Modules do not import each other's repositories, entities, or internal adapters. Platform code does not depend on business modules.
 
-```text
-platform/cache
-platform/config
-platform/jobs
-platform/storage
-platform/security
-platform/observability
-```
+Mobile and Admin Web implement their own components and platform adapters. [`design-system`](../packages/design-system/README.md) owns semantic tokens; [`i18n`](../packages/i18n/README.md) owns shared EN/VI resources. Shared contracts do not require shared Web/Native components.
 
-Detailed product/domain ownership is defined in the routed domain requirements indexed in
-[`docs/README.md`](README.md#chọn-tài-liệu-theo-task). Enforceable module ownership rules are
-defined in [`AGENTS.md`](../AGENTS.md#4-domain-ownership).
+## Important runtime scenarios
 
+An asynchronous Lesson build accepts an authorized request, persists a job and product state, then workers claim durable PostgreSQL steps. Workers check cancellation, renew leases, and fence writes before committing. [Lesson Build](features/lesson-build.md) owns the workflow; the [jobs protocol](architecture/background-jobs.md) owns claim, recovery, and cancellation semantics.
 
-Frontend shared-package boundaries:
+When business work needs inference, Core selects capability, route, prompt, and expected output. FastAPI executes technical STT, alignment, TTS, NLP, generic LLM, or judging and returns a normalized result. Core audits the invocation and commits business state. The [AI execution contract](architecture/ai-execution.md) owns that boundary.
 
-```text
-packages/design-system  primitive/foundation tokens + semantic light/dark theme contract
-packages/i18n           intentionally shared common/admin/mobile translation resources
-apps/admin-web          Web component implementation and browser adapters
-apps/mobile             Native component implementation and device adapters
-```
+Public clients authenticate with Keycloak and call Core. Core enforces resource authorization, scoring, and rewards. The [HTTP contract](architecture/http-api-contract.md) owns versioning, successful responses, Problem Details, and correlation IDs.
 
-Web and Mobile share semantic names/resources where appropriate, not component implementation or
-platform-specific Tailwind configuration.
+## Cross-cutting constraints and risks
 
-Theme resolution is likewise adapter-owned while the color contract remains shared:
-
-```text
-semanticThemes.light / semanticThemes.dark
-        ├── Admin AppThemeProvider → prefers-color-scheme → .dark + CSS variables
-        └── Mobile AppThemeProvider → useColorScheme() → NativeWind vars on root View
-```
-
-Feature screens consume semantic roles only; they do not own raw hex palettes or duplicate a
-second light/dark theme map.
-
-## 5. Cross-module communication
-
-Allowed:
-
-1. named/public module API;
-2. event contract from `libs/contracts` + Spring Modulith.
-
-Forbidden:
-
-- importing another module's repository;
-- importing another module's infrastructure class;
-- sharing JPA entity as cross-module contract.
-
-Example:
-
-```text
-LessonCompletedEvent
-       ↓
-Curriculum → complete referenced item
-Gamification → mission/reward update
-Analytics → project study summary
-```
-
-The eventing transport decision and its rationale are recorded in `TECH_CHOICES.md` and
-`DECISIONS.md` D-002.
-
-## 6. Lesson model: Content ≠ Annotation ≠ Activity
-
-```text
-Lesson
-├─ Content
-│  ├─ source type/reference
-│  ├─ transcript
-│  ├─ canonical audio/reference media
-│  ├─ sentences
-│  └─ word timestamps
-│
-├─ Annotation
-│  ├─ translation
-│  ├─ lexical units
-│  ├─ grammar points
-│  ├─ entity/dictation hints
-│  ├─ sentence IPA (optional)
-│  ├─ thought groups
-│  └─ learning tips
-│
-└─ Activity
-   ├─ dictation
-   ├─ shadowing
-   ├─ vocabulary practice
-   └─ grammar practice
-```
-
-A contextual vocabulary note shown after Dictation is **not** automatically Vocabulary Practice.
-
-## 7. Lesson build planning
-
-`LessonBuildPlanner` derives required steps from source + creator options.
-
-Examples:
-
-```text
-TEXT + Vocabulary/Grammar annotations
-→ no TTS/alignment unless another selected activity needs them
-
-TEXT + Dictation/Shadowing
-→ TTS → alignment → activity build
-
-AUDIO/YouTube
-→ STT → optional alignment → annotations/activities
-```
-
-This avoids running every expensive AI step for every lesson.
-
-Admin runtime policy defines the allowed envelope. Creator choice becomes an immutable build snapshot.
-
-Provider routing snapshot is diagnostic metadata, not an execution pin: each AI invocation resolves the current enabled route so operators can disable a broken provider/fallback while a queued job is waiting. The actual provider/model used is persisted in `ai_invocation`.
-
-## 8. Background job architecture
-
-Long operations never hold the original browser/mobile HTTP request open.
-
-```text
-POST /api/v1/admin/lessons/build
-  ↓
-create lesson DRAFT
-  ↓
-INSERT background_job + lesson_build_job
-  ↓
-HTTP 202 {lessonId, jobId}
-
-BackgroundJobWorker
-  ↓
-SELECT ... FOR UPDATE SKIP LOCKED
-  ↓
-lease + heartbeat + fencing
-  ↓
-run persisted idempotent steps
-  ↓
-SUCCEEDED / RETRY_WAIT / CANCELLED / FAILED
-```
-
-Spring Modulith event registry is **not** used as a workflow engine. PostgreSQL job/step state is authoritative.
-
-## 9. Job lease/fencing
-
-Each claimed job has `lease_owner` and `lease_until`.
-
-If worker A stalls and worker B recovers the expired lease, worker A is stale and must not overwrite B's state. Repository updates include worker ownership checks; stale updates become lease-lost conditions.
-
-## 10. AI boundary
-
-Java owns:
-
-- product intent;
-- business prompt;
-- output schema expectation;
-- provider capability request;
-- retry/cancel/workflow state.
-
-FastAPI owns:
-
-- model/provider adapter;
-- model loading;
-- technical audio/NLP preprocessing;
-- execution + normalized response.
-
-This lets provider/model implementation change without moving Lesson/Curriculum business logic into Python.
-
-## 11. Progress architecture
-
-No God `progress` module.
-
-```text
-lesson      → lesson progress/attempts
-vocabulary  → SRS/review history
-grammar     → grammar attempts
-toeic       → TOEIC attempts
-curriculum  → item/path progress
-```
-
-`analytics` consumes events and projects:
-
-- daily activity;
-- skill summary;
-- weaknesses;
-- dashboard/recommendation inputs.
-
-## 12. Runtime configuration precedence
-
-The authoritative configuration layers, precedence, persistence, and override semantics live in
-`CONFIGURATION.md`.
-
-## 13. Storage
-
-PostgreSQL stores normalized/queryable state.
-
-R2 stores:
-
-- canonical/derived audio;
-- TOEIC images/audio;
-- learner recording;
-- raw AI output/debug artifact.
-
-DB stores object keys, never presigned URL. Storage semantics are documented in
-[`CONFIGURATION.md`](CONFIGURATION.md#7-storage-configuration) and the owning feature/data docs.
-
-## 14. Cache / rate limit / resilience
-
-- Caffeine: local read cache only.
-- Bucket4j: inbound single-node MVP API quota.
-- Resilience4j: outbound provider/FastAPI retry, circuit breaker, timeout, bulkhead.
-
-Technology selection rationale, including the current Redis decision, lives in
-`TECH_CHOICES.md` and `DECISIONS.md`.
-
-## 15. Schema ownership
-
-Mandatory schema/persistence rules are defined in
-[`AGENTS.md`](../AGENTS.md#8-database-storage-and-data). Large dataset import
-semantics are defined in `DATA_PIPELINES.md`.
-
-## 16. API path conventions
-
-```text
-/api/v1/*          Core public API (Learner and Admin)
-/internal/*        Core internal/FastAPI-to-Core calls; not exposed to Mobile/Admin clients
-/v1/*              FastAPI capability service (internal-only)
-```
-
-Do not version endpoints by provider name. When breaking API changes are needed, bump the path
-version and document the deprecation in the feature's owner doc.
-
-## 17. API error envelope
-
-All Core public HTTP error responses follow the RFC 9457 Problem Details standard, owned canonically
-by [`http-api-contract.md`](architecture/http-api-contract.md). Responses use `Content-Type: application/problem+json`
-with `type`, `title`, `status`, `detail`, `instance`, machine-readable `code`, and `correlationId`.
-
-```json
-{
-  "type": "urn:lyreo:problem:request-validation-failed",
-  "title": "Request validation failed",
-  "status": 400,
-  "detail": "One or more request fields are invalid.",
-  "instance": "/api/v1/...",
-  "code": "REQUEST_VALIDATION_FAILED",
-  "correlationId": "...",
-  "errors": []
-}
-```
-
-Job errors additionally carry:
-
-- a stable machine-readable `code`;
-- a human-readable summary;
-- a `retryable` boolean (transient provider/network errors are retryable; invalid input is not);
-- reference to the raw provider artifact/log in object storage for audit (not for Mobile display).
-
-Do not expose raw provider error details or server stack traces in Mobile-facing responses.
+PostgreSQL is workflow truth; UI events and raw AI artifacts are not checkpoints. Store object keys rather than expiring URLs. Configuration precedence belongs in [configuration](CONFIGURATION.md), import semantics in [data pipelines](DATA_PIPELINES.md), and architecture rationale in [decisions](DECISIONS.md). Unresolved product or deployment choices are tracked in [open questions](requirements/open-questions.md).
 
 <a id="backend-module-package-structure"></a>
-## 18. Backend module package structure
+## Backend module package structure
 
-### A. Repository physical topology
-
-- `apps/*`: deployable applications and composition roots (`core-service`, `ai-service`, `admin-web`, `mobile`). Core Service assembles business and platform modules; it does not own business capabilities or domain code.
-- `modules/*`: independent business capabilities (`identity`, `learner`, `ai`, `lesson`, `speech-assessment`, `lexicon`, `vocabulary`, `grammar`, `toeic`, `curriculum`, `gamification`, `analytics`, `notification`, `chat`).
-- `platform/*`: reusable technical building blocks (`cache`, `config`, `jobs`, `storage`, `security`, `observability`).
-- `libs/*`: intentionally shared Java contracts and events (`libs/contracts`).
-
-### B. Maven physical module vs Spring Modulith logical module
-
-Maven physical modules and Spring Modulith logical modules operate at different granularity:
-- Maven modules manage build compilation boundaries, dependencies, and packaging artifacts.
-- Spring Modulith models logical boundaries within the application. For example, `platform/*` modules participate together in the open technical `com.lyreo.platform` boundary, whereas each business capability under `modules/*` defines a logical business module. They are related, but not guaranteed 1:1.
-
-### C. Business-module top-level package contract
-
-For `modules/*`, production Java resides under `com.lyreo.<module>` with stable top-level concern packages:
-- `api`: inbound transport/delivery (controllers, request/response DTOs, transport mapping).
-- `application`: use cases, application services, event listeners, policies, and outbound ports.
-- `domain`: core business models, entities, value objects, and domain invariants.
-- `infrastructure`: adapters, persistence implementations, integrations, and framework configuration.
-
-Top-level concerns represent roles, not mandatory empty directories. A module without domain rules or inbound controllers may omit those packages without violating the contract.
-
-### D. Progressive structure
-
-Packages remain flat while cohesive. When multiple distinct responsibilities emerge, split by semantic capability or use case rather than artificial symmetry.
-
-### E. Outbound ports (`application/port`)
-
-Outbound abstractions required by application use cases belong deterministically in `application/port`:
-- Repositories (`FooRepository`), writers (`LessonActivityWriter`), queries (`LessonPreviewQuery`), materializers (`LessonSourceMaterializer`), schedulers (`SpacedRepetitionScheduler`), and gateways (`AiExecutionGateway`).
-- The application layer defines the contract it needs; infrastructure adapters implement it.
-
-### F. Persistence adapters (`infrastructure/persistence`)
-
-Database implementations (JDBC/JPA adapters, entities, Spring Data interfaces) belong deterministically in `infrastructure/persistence`:
-- `JdbcFooRepository`, `JpaAppUserRepositoryAdapter`, `JpaAppUserEntity`, `SpringDataAppUserJpaRepository`.
-- Configuration classes (`FooConfiguration`) remain directly in `infrastructure/` unless complex multi-adapter setups warrant further separation.
-
-### G. `api/` terminology
-
-`api/` denotes the inbound delivery/transport layer (HTTP controllers, web DTOs). It is **not** the cross-module Java public API. Cross-module Java communication is governed by Spring Modulith module base packages, `@NamedInterface` declarations, and domain events from `libs/contracts`.
-
-### H. Spring Modulith public visibility
-
-Spring Modulith semantics vs. Lyreo convention:
-- **Spring Modulith framework default:** The module base package (`com.lyreo.<module>`) is treated as the default public API package, while all subpackages are internal by default.
-- **Lyreo architectural convention:** Production classes are never placed directly in the module base package (the root contains only `package-info.java`, enforced by repository validators). Instead, all code lives in subpackages (`api`, `application`, `domain`, `infrastructure`). Selected types intended for cross-module consumption are explicitly exposed using type-level `@NamedInterface(value = "...", propagate = false)` (e.g. `@NamedInterface(value = "application", propagate = false)` on `AiInvocationService`, `@NamedInterface(value = "domain", propagate = false)` on `AiCapability`) or published domain events from `libs/contracts`. Setting `propagate = false` ensures framework propagation does not inadvertently expose internal constructor/method dependency types like outbound ports.
-- Core and other modules access only exposed named interfaces or listen to shared events.
-
-### I. Small canonical module example
-
-Shallow modules keep domain/application flat while normalizing port and persistence placement:
-
-```text
-modules/lexicon/
-└── src/main/java/com/lyreo/lexicon/
-    ├── package-info.java
-    ├── api/
-    │   └── LexiconController.java
-    ├── application/
-    │   ├── LexiconSearchService.java
-    │   └── port/
-    │       └── LexiconRepository.java
-    ├── domain/
-    │   └── LexiconEntry.java
-    └── infrastructure/
-        ├── LexiconConfiguration.java
-        └── persistence/
-            └── JdbcLexiconRepository.java
-```
-
-### J. Large progressive module example (Lesson)
-
-Modules with multiple distinct workflows split application, domain, and infrastructure into cohesive semantic subpackages:
-
-```text
-modules/lesson/
-└── src/main/java/com/lyreo/lesson/
-    ├── package-info.java
-    ├── api/
-    │   ├── AdminLessonController.java
-    │   └── LessonPracticeController.java
-    ├── application/
-    │   ├── build/
-    │   │   ├── CreateLessonBuildService.java
-    │   │   ├── LessonBuildJobHandler.java
-    │   │   ├── LessonBuildLifecycleListener.java
-    │   │   ├── LessonBuildPlanner.java
-    │   │   ├── LessonPromptFactory.java
-    │   │   └── SourceMaterializationException.java
-    │   ├── practice/
-    │   │   ├── DictationScoringPolicy.java
-    │   │   └── LessonPracticeService.java
-    │   ├── preview/
-    │   │   ├── LessonPreviewService.java
-    │   │   └── LessonPreviewView.java
-    │   └── port/
-    │       ├── LessonActivityWriter.java
-    │       ├── LessonBuildStateRepository.java
-    │       ├── LessonEnrichmentWriter.java
-    │       ├── LessonPracticeRepository.java
-    │       ├── LessonPreviewQuery.java
-    │       ├── LessonProcessingPolicyRepository.java
-    │       ├── LessonRepository.java
-    │       └── LessonSourceMaterializer.java
-    ├── domain/
-    │   ├── build/
-    │   │   ├── LessonBuildOptions.java
-    │   │   ├── LessonBuildPlan.java
-    │   │   ├── LessonBuildStep.java
-    │   │   └── LessonProcessingPolicy.java
-    │   └── content/
-    │       ├── Lesson.java
-    │       ├── LessonActivityType.java
-    │       ├── LessonAnnotationType.java
-    │       ├── LessonSentence.java
-    │       └── LessonSourceType.java
-    └── infrastructure/
-        ├── LessonConfiguration.java
-        ├── RuntimeLessonProcessingPolicyRepository.java
-        ├── persistence/
-        │   ├── JdbcLessonActivityWriter.java
-        │   ├── JdbcLessonBuildStateRepository.java
-        │   ├── JdbcLessonEnrichmentWriter.java
-        │   ├── JdbcLessonPracticeRepository.java
-        │   ├── JdbcLessonPreviewQuery.java
-        │   └── JdbcLessonRepository.java
-        └── integration/
-            └── ExternalCommandYoutubeSourceMaterializer.java
-```
-
-### K. Platform technical modules
-
-Platform modules (`platform/*`) are reusable technical building blocks, not business capabilities. They are open technical modules within `com.lyreo.platform` and are not forced into the business-module `api/application/domain/infrastructure` taxonomy. Internal technical layering (`application`, `domain`, `infrastructure`) is used where warranted (e.g. `platform/config`, `platform/jobs`), while simpler platform modules (`cache`, `storage`, `security`, `observability`) remain pragmatically flat.
-
-### L. Anti-patterns
-
-- **Giant dumping packages**: throwing dozens of unrelated services, models, and adapters into flat layer folders indefinitely.
-- **Folder per Java suffix**: creating `service/`, `entity/`, `dto/`, `impl/`, `listener/` packages that group by syntax instead of semantic capability.
-- **Junk-drawer packages**: creating `common/`, `shared/`, `utils/`, `helpers/`, `misc/`, or `manager/` packages.
-- **Empty architecture folders**: creating empty `domain/` or `api/` directories merely to satisfy folder symmetry.
-- **Needless nested Spring Modulith modules**: fragmenting cohesive capabilities into tiny artificial modulith modules without architectural justification.
+Production business modules use `api`, `application`, `domain`, and `infrastructure` as stable top-level concerns where needed. They are roles, not mandatory empty folders. Keep packages flat while cohesive; split deeper by real use case or adapter responsibility. Outbound abstractions belong in `application/port`; JDBC/JPA implementations belong in `infrastructure/persistence`. `api` is inbound transport, not Java cross-module visibility. Named interfaces and shared events define cross-module exposure. Avoid generic `common`, `utils`, `helpers`, `impl`, or `misc` buckets.

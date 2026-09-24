@@ -94,16 +94,21 @@ class ValidateDocsTest(unittest.TestCase):
 
     # ── new tests: project-specific guards ────────────────────────────────────
 
-    def test_concrete_evidence_path_missing_fails(self) -> None:
-        """A code path cited in traceability.md must actually exist in the repository."""
-        errors = self.fixture({
-            "docs/requirements/traceability.md": "Status: `modules/nonexistent/Foo.java`\n",
-            "docs/README.md": "",
-        }, project_guards=True)
-        self.assertTrue(
-            any("does not exist" in error for error in errors),
-            f"Expected missing evidence-path error; got: {errors}",
+    def test_merged_requirement_document_passes_project_guards(self) -> None:
+        errors = self.fixture(
+            {
+                "AGENTS.md": "# Contract\n",
+                "docs/README.md": "[combined](requirements/combined.md#fr-tst-001--rule)\n",
+                "docs/requirements/combined.md": "### FR-TST-001 — Rule\n",
+            },
+            project_guards=True,
+            symlinks={"AGENT.md": "AGENTS.md", "CLAUDE.md": "AGENTS.md", "GEMINI.md": "AGENTS.md"},
         )
+        self.assertEqual([], errors)
+
+    def test_router_can_reference_relative_doc_paths(self) -> None:
+        errors = self.fixture({"docs/README.md": "| Route | `requirements/lesson.md` |\n"}, project_guards=True)
+        self.assertFalse(any("concrete route" in error for error in errors))
 
     def test_legacy_master_used_as_owner_fails(self) -> None:
         """Referencing LYREO_PLATFORM_SPEC.md as owner outside the allowed set must fail."""

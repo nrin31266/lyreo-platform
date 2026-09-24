@@ -1,8 +1,8 @@
 # PRD — Lyreo Platform
 
 Mục đích: owner của mục tiêu, giá trị, scope, ưu tiên và non-goals. Nghĩa vụ chi tiết nằm trong
-[requirements](../README.md#chọn-tài-liệu-theo-task), workflow nằm trong [`features/`](../features/lesson-build.md),
-và trạng thái implementation nằm trong [traceability](../requirements/traceability.md).
+[requirements](../README.md), workflow nằm trong [Lesson Build](../features/lesson-build.md).
+Implementation status belongs to current code and fresh verification.
 
 
 ## 1. Tóm tắt
@@ -10,6 +10,9 @@ và trạng thái implementation nằm trong [traceability](../requirements/trac
 Lyreo giúp learner biến nội dung tiếng Anh thực thành Lesson có Dictation, Shadowing, annotation,
 Vocabulary/Grammar practice và lộ trình học có cấu trúc. Admin quản lý nội dung và AI policy, trong
 khi Core giữ quyền quyết định nghiệp vụ và AI service chỉ thực thi capability.
+
+Mobile là trải nghiệm learner chính; Admin Web phục vụ operator/content manager. Learner Web được
+lên kế hoạch cho giai đoạn sau và chưa scaffold.
 
 ## 2. Bối cảnh và người liên quan
 
@@ -32,7 +35,7 @@ Tên cá nhân/người duyệt chưa được ghi nhận trong repository; khô
 - Cho Admin xây và quan sát nội dung dài mà không giữ HTTP request mở hoặc phụ thuộc UI để durable.
 
 Kết quả định lượng chưa được quyết định. Không có baseline hợp lệ để đặt SMART KPI; xem
-[GAP-007](../requirements/gaps.md#gap-007--kpi-va-nguong-nfr-chua-duoc-chot).
+[OQ-003](../requirements/open-questions.md#oq-003--nfr-targets-and-success-metrics).
 
 ## 4. Phân khúc theo nhu cầu
 
@@ -64,7 +67,7 @@ Các nhóm này là phân loại nhu cầu từ đặc tả, chưa phải market
 | P3 | English tutor Chat và speaking scenarios mở rộng |
 
 YouTube được liệt kê trong P0 Core Lesson nhưng roadmap cũ Phase 1 chỉ nêu Text/Audio. Quyết định
-release còn pending ở [GAP-001](../requirements/gaps.md#gap-001--youtube-p0-hay-sau-lesson-mvp);
+release còn pending ở [OQ-001](../requirements/open-questions.md#oq-001--youtube-in-the-first-lesson-release);
 khả năng adapter hiện có không tự quyết scope.
 
 ## 7. Solution outline
@@ -104,4 +107,4 @@ Non-goals hiện tại:
 - LLM-generate toàn bộ dictionary/Grammar questions hoặc pre-generate synthetic audio đại trà;
 - final mascot artwork hay một UI implementation dùng chung Web/Mobile.
 
-Chi tiết open decisions và implementation gaps: [gaps register](../requirements/gaps.md).
+Open decisions: [open questions](../requirements/open-questions.md).

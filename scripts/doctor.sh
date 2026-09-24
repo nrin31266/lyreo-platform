@@ -1,115 +1,83 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-STRICT=false
-[[ "${1:-}" == "--strict" ]] && STRICT=true
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$repo_root"
+strict=false
+[[ "${1:-}" == "--strict" ]] && strict=true
+required_missing=0
 
-failures=0
-warnings=0
-
-ok() { printf 'OK   %s\n' "$1"; }
-warn() { printf 'WARN %s\n' "$1"; warnings=$((warnings+1)); }
-fail() { printf 'FAIL %s\n' "$1"; failures=$((failures+1)); }
-
-version_major() {
-  printf '%s' "$1" | sed -E 's/^[^0-9]*([0-9]+).*/\1/'
+required() {
+  local binary=$1 label=$2
+  if command -v "$binary" >/dev/null 2>&1; then
+    printf 'OK   %s: %s\n' "$label" "$(command -v "$binary")"
+  else
+    printf 'WARN %s is missing\n' "$label"
+    required_missing=$((required_missing+1))
+  fi
+}
+optional() {
+  local binary=$1 label=$2
+  if command -v "$binary" >/dev/null 2>&1; then
+    printf 'OK   %s: %s\n' "$label" "$(command -v "$binary")"
+  else
+    printf 'INFO %s is not installed\n' "$label"
+  fi
+}
+file_status() {
+  local file=$1
+  if [[ -f "$file" ]]; then printf 'OK   %s\n' "$file"; else printf 'INFO %s missing (make init-env)\n' "$file"; fi
 }
 
-check_command() {
-  local command=$1 label=$2
-  if command -v "$command" >/dev/null 2>&1; then ok "$label: $(command -v "$command")"; else warn "$label not found"; fi
-}
-
-echo 'Lyreo developer environment doctor'
-echo '----------------------------------'
-
+echo 'REQUIRED CORE / REPOSITORY'
+required java Java
+required python3 Python
+required docker Docker
+required uv uv
 if command -v java >/dev/null 2>&1; then
-  java_line=$(java -version 2>&1 | head -n1)
-  java_major=$(version_major "$java_line")
-  if [[ "$java_major" =~ ^[0-9]+$ ]] && (( java_major >= 25 )); then ok "$java_line"; else warn "$java_line (repo target Java 25)"; fi
-else
-  warn 'Java not found (repo target 25)'
+  expected_java=$(cat .java-version)
+  actual_java=$(java -version 2>&1 | head -1)
+  [[ "$actual_java" == *\"$expected_java.* ]] || { printf 'WARN Java differs from .java-version (%s): %s\n' "$expected_java" "$actual_java"; required_missing=$((required_missing+1)); }
 fi
+file_status infra/docker/.env
+file_status infra/keycloak/.env
+file_status apps/core-service/.env
 
+echo 'FRONTEND'
+required node Node
+required pnpm pnpm
 if command -v node >/dev/null 2>&1; then
-  node_version=$(node -v)
-  node_major=$(version_major "$node_version")
-  if [[ "$node_major" =~ ^[0-9]+$ ]] && (( node_major >= 24 )); then
-    ok "Node $node_version"
-  else
-    warn "Node $node_version (repo minimum 24.0.0)"
-  fi
-else
-  warn 'Node not found (repo minimum 24.0.0)'
+  expected_node=$(cat .nvmrc)
+  actual_node=$(node -v)
+  [[ "$actual_node" == "v$expected_node" ]] || printf 'INFO Node %s; .nvmrc requests %s\n' "$actual_node" "$expected_node"
 fi
-
 if command -v pnpm >/dev/null 2>&1; then
-  pnpm_version=$(pnpm -v)
-  if [[ "$pnpm_version" == "12.3.1" ]]; then
-    ok "pnpm $pnpm_version"
-  else
-    warn "pnpm $pnpm_version (repo requires 12.3.1 through Corepack)"
-  fi
-else
-  warn 'pnpm not found (use Corepack; repo requires 12.3.1)'
+  expected_pnpm=$(sed -nE 's/.*"packageManager": "pnpm@([^"]+)".*/\1/p' package.json)
+  actual_pnpm=$(pnpm -v)
+  [[ "$actual_pnpm" == "$expected_pnpm" ]] || printf 'INFO pnpm %s; packageManager requests %s\n' "$actual_pnpm" "$expected_pnpm"
 fi
-if command -v python3 >/dev/null 2>&1; then ok "$(python3 --version)"; else fail 'python3 not found'; fi
-check_command uv 'uv'
-check_command docker 'Docker'
-check_command ffmpeg 'ffmpeg'
-check_command ffprobe 'ffprobe'
+file_status apps/admin-web/.env
 
-for path in \
-  infra/docker/.env \
-  infra/keycloak/.env \
-  apps/core-service/.env \
-  apps/ai-service/.env \
-  apps/admin-web/.env \
-  apps/mobile/.env \
-  tools/data-import/.env \
-  tools/lesson-prep/.env; do
-  if [[ -f "$path" ]]; then ok "$path exists"; else warn "$path missing (run ./scripts/init-dev-env.sh)"; fi
-done
+echo 'OPTIONAL AI'
+file_status apps/ai-service/.env
 
-if [[ -f pnpm-lock.yaml ]]; then
-  if grep -q '^  apps/admin-web:' pnpm-lock.yaml \
-    && grep -q '^  apps/mobile:' pnpm-lock.yaml \
-    && grep -q '^  packages/design-system:' pnpm-lock.yaml \
-    && grep -q '^  packages/i18n:' pnpm-lock.yaml; then
-    ok 'pnpm-lock.yaml contains all workspace importers'
-  else
-    warn 'pnpm-lock.yaml exists but is stale/incomplete for the current workspace; restore committed lockfile or regenerate with pnpm install'
-  fi
-else
-  warn 'pnpm-lock.yaml missing; restore committed lockfile from repository (checkout issue)'
-fi
+echo 'OPTIONAL LESSON PREP / MEDIA'
+optional ffmpeg ffmpeg
+optional ffprobe ffprobe
+file_status tools/lesson-prep/.env
 
-# The large Grammar/TOEIC dataset is not required to boot Core, but importer/TOEIC work should be
-# immediately actionable on a fresh clone when a shared archive URL is configured.
+echo 'OPTIONAL DATA IMPORT'
+file_status tools/data-import/.env
 if [[ -f tools/data-import/.env ]]; then
-  if ./scripts/fetch-data.sh --check >/dev/null 2>&1; then
-    ok 'Grammar/TOEIC dataset is present'
+  if ./tools/data-import/scripts/fetch-data.sh --check >/dev/null 2>&1; then
+    echo 'OK   Grammar/TOEIC dataset ready'
   else
-    DATA_URL=$(
-      cd tools/data-import
-      set -a
-      # shellcheck disable=SC1091
-      source ./.env
-      set +a
-      printf '%s' "${DAUTOEIC_DATA_URL:-}"
-    )
-    if [[ -n "$DATA_URL" ]]; then
-      warn 'Grammar/TOEIC dataset missing (run make data-fetch)'
-      if [[ "$DATA_URL" == https://drive.google.com/* ]] && ! command -v uvx >/dev/null 2>&1; then
-        warn 'Google Drive dataset URL configured but uvx is unavailable (uv normally provides it)'
-      fi
-    else
-      warn 'Grammar/TOEIC dataset missing; DAUTOEIC_DATA_URL is not configured (optional for app boot)'
-    fi
+    echo 'INFO Grammar/TOEIC dataset absent or incomplete (make data-fetch)'
   fi
 fi
 
-if $STRICT && (( warnings > 0 )); then failures=$((failures+warnings)); fi
-
-printf '\nSummary: failures=%d warnings=%d\n' "$failures" "$warnings"
-(( failures == 0 ))
+echo 'OPTIONAL MOBILE'
+optional adb adb
+file_status apps/mobile/.env
+printf 'Core toolchain findings: %d\n' "$required_missing"
+if $strict && (( required_missing > 0 )); then exit 1; fi

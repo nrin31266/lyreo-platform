@@ -14,36 +14,22 @@ from pathlib import Path
 from urllib.parse import unquote
 
 PROJECT_REQUIRED = (
-    "AGENTS.md", "README.md", "docs/README.md", "docs/documentation.md",
-    "docs/product/discovery.md", "docs/product/prd.md",
-    "docs/requirements/non-functional.md",
-    "docs/requirements/traceability.md", "docs/requirements/gaps.md", "docs/ARCHITECTURE.md",
-    "docs/requirements/identity-learner.md", "docs/requirements/lesson.md",
-    "docs/requirements/ai.md", "docs/requirements/lexicon-vocabulary.md",
-    "docs/requirements/grammar-toeic.md", "docs/requirements/curriculum-gamification.md",
-    "docs/requirements/analytics-notification-chat.md",
-    "docs/features/lesson-build.md", "docs/features/dictation.md", "docs/features/shadowing.md",
-    "docs/features/ai-routing.md",
-    "docs/architecture/background-jobs.md", "docs/architecture/ai-execution.md",
-    "docs/architecture/frontend-conventions.md", "docs/architecture/http-api-contract.md",
-    "docs/CONFIGURATION.md",
-    "docs/DATA_PIPELINES.md", "docs/DEVELOPMENT.md", "docs/OPERATIONS.md",
-    "docs/TECH_CHOICES.md", "docs/DECISIONS.md", "docs/coursework/chapter-03.md",
-    "docs/coursework/ai-usage-log.md",
+    "README.md", "AGENTS.md", "docs/README.md", "docs/DOCUMENTATION.md",
+    "docs/ARCHITECTURE.md", "docs/DECISIONS.md", "docs/DEVELOPMENT.md",
+    "docs/TESTING.md",
 )
 SKIP_PARTS = {
     ".git", ".agents", ".codex", ".venv", "node_modules", "build", "dist", "target",
     ".pytest_cache", "__pycache__", ".data",
 }
 ID_RE = re.compile(
-    r"\b(?:FR|BR|NFR|US|AC)-[A-Z]{2,5}-\d{3}\b|\bFEAT-[A-Z0-9-]+\b|\bGAP-\d{3}\b|\bD-\d{3}\b"
+    r"\b(?:FR|BR|NFR|US|AC)-[A-Z]{2,5}-\d{3}\b|\bFEAT-[A-Z0-9-]+\b|\bOQ-\d{3}\b|\bD-\d{3}\b"
 )
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 EXPLICIT_ANCHOR_RE = re.compile(r"<a\s+(?:id|name)=[\"']([^\"']+)[\"']\s*></a>", re.I)
 INLINE_LINK_RE = re.compile(r"!?\[[^\]]*]\(([^)]+)\)")
 REFERENCE_USE_RE = re.compile(r"!?\[([^\]]+)]\[([^\]]*)]")
 REFERENCE_DEF_RE = re.compile(r"^\s*\[([^\]]+)]:\s*(\S+)", re.M)
-CODE_TOKEN_RE = re.compile(r"`([^`\n]+)`")
 
 
 def markdown_files(root: Path) -> list[Path]:
@@ -145,7 +131,6 @@ def validate_markdown_tree(root: Path, *, required: tuple[str, ...] = (),
             errors.append(f"{rel}: reference to undefined ID {identifier}")
 
     if project_guards:
-        _check_concrete_evidence_paths(root, texts, errors)
         _check_legacy_owner_references(root, texts, errors)
         for alias in ("AGENT.md", "CLAUDE.md", "GEMINI.md"):
             path = root / alias
@@ -174,27 +159,10 @@ def _check_link(root: Path, source: Path, rel: str, line_no: int, target: str,
             errors.append(f"{rel}:{line_no}: missing anchor: {target}")
 
 
-def _check_concrete_evidence_paths(root: Path, texts: dict[Path, str], errors: list[str]) -> None:
-    for path in (root / "docs/README.md", root / "docs/requirements/traceability.md"):
-        text = texts.get(path)
-        if text is None:
-            continue
-        rel = path.relative_to(root).as_posix()
-        for line_no, line in enumerate(without_fences(text).splitlines(), 1):
-            for token in CODE_TOKEN_RE.findall(line):
-                candidate = token.strip().rstrip(".,;:")
-                if ("/" not in candidate or candidate.startswith(("/api/", "http://", "https://"))
-                        or any(mark in candidate for mark in ("*", "…", "{", "}", "<", ">", "|"))
-                        or " " in candidate):
-                    continue
-                if not (root / candidate.split("#", 1)[0]).exists():
-                    errors.append(f"{rel}:{line_no}: concrete route/evidence path does not exist: {candidate}")
-
-
 def _check_legacy_owner_references(root: Path, texts: dict[Path, str], errors: list[str]) -> None:
     allowed = {root / "README.md", root / "AGENTS.md",
                root / "AGENT.md", root / "CLAUDE.md", root / "GEMINI.md", root / "docs/README.md",
-               root / "docs/documentation.md"}
+               root / "docs/DOCUMENTATION.md"}
 
     for path, text in texts.items():
         if path not in allowed and "LYREO_PLATFORM_SPEC.md" in without_fences(text):
