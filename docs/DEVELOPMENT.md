@@ -72,6 +72,8 @@ have the Lyreo Dev Build already installed on your device or emulator.
 → make mobile-android-install`. The canonical AVD is `Lyreo_Pixel8_API36` (API 36, x86_64). KVM
 provides hardware acceleration; graphics defaults to auto (`-gpu auto`) with software fallback,
 and Mesa layer protection ensures reliability across Linux distributions (Ubuntu, Fedora, Arch).
+For a physical Android device, skip the emulator steps and use the USB `adb reverse` workflow in
+`apps/mobile/README.md` so Core, Keycloak, and Metro remain reachable at their local ports.
 
 **iOS (EAS cloud, no Xcode required on Linux/Fedora)**: iOS builds run entirely in the EAS cloud.
 Register the device UDID, trigger a cloud build, install the `.ipa` via the EAS URL.

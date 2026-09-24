@@ -2,7 +2,7 @@ import {
   apiErrorFromRequestFailure,
   apiErrorFromResponse,
   unauthorizedApiError,
-} from './errors.ts';
+} from './errors';
 
 export type ApiClient = {
   request: <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -21,7 +21,9 @@ export function createApiClient(dependencies: ApiClientDependencies): ApiClient 
 
   async function send(path: string, token: string, init: RequestInit): Promise<Response> {
     const headers = new Headers(init.headers);
-    headers.set('Accept', 'application/json, application/problem+json');
+    if (!headers.has('Accept')) {
+      headers.set('Accept', 'application/json, application/problem+json');
+    }
     headers.set('Authorization', `Bearer ${token}`);
     if (typeof init.body === 'string' && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');

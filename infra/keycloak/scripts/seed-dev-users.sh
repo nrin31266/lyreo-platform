@@ -12,6 +12,8 @@ create_or_update_user() {
   local email=$1
   local password=$2
   local role=$3
+  local first_name=$4
+  local last_name=$5
   local id
 
   id=$(user_id_by_username "$email" || true)
@@ -24,6 +26,12 @@ create_or_update_user() {
       >/dev/null
     id=$(user_id_by_username "$email")
   fi
+
+  # Keycloak's default profile requires these fields before issuing tokens.
+  kcadm update "users/$id" -r "$REALM" \
+    -s "firstName=$first_name" \
+    -s "lastName=$last_name" \
+    -s emailVerified=true >/dev/null
 
   # Local-only deterministic credentials. Production never uses this script for real users.
   kcadm set-password -r "$REALM" --userid "$id" --new-password "$password" >/dev/null
@@ -38,12 +46,12 @@ create_or_update_user() {
 ADMIN_ID=$(create_or_update_user \
   "${KEYCLOAK_SEED_ADMIN_EMAIL:?KEYCLOAK_SEED_ADMIN_EMAIL required}" \
   "${KEYCLOAK_SEED_ADMIN_PASSWORD:?KEYCLOAK_SEED_ADMIN_PASSWORD required}" \
-  ADMIN)
+  ADMIN Lyreo Admin)
 
 LEARNER_ID=$(create_or_update_user \
   "${KEYCLOAK_SEED_LEARNER_EMAIL:?KEYCLOAK_SEED_LEARNER_EMAIL required}" \
   "${KEYCLOAK_SEED_LEARNER_PASSWORD:?KEYCLOAK_SEED_LEARNER_PASSWORD required}" \
-  LEARNER)
+  LEARNER Lyreo Learner)
 
 echo "Seeded Keycloak dev users: admin=$ADMIN_ID learner=$LEARNER_ID"
 

@@ -43,6 +43,8 @@ export class SessionManager {
   private refreshInFlight: Promise<string | null> | null = null;
   private bootstrapInFlight: Promise<BootstrapResult> | null = null;
   private lastRefreshFailure: RefreshFailure = null;
+  private generation = 0;
+  private storageMutation: Promise<void> = Promise.resolve();
 
   constructor(dependencies: SessionManagerDependencies) {
     this.dependencies = dependencies;
@@ -76,7 +78,9 @@ export class SessionManager {
     return operation;
   }
 
-  async acceptTokenSet(tokens: TokenSet): Promise<string> {
+  async acceptTokenSet(tokens: TokenSet, expectedGeneration?: number): Promise<string> {
+    const generation = expectedGeneration ?? ++this.generation;
+    if (generation !== this.generation) throw new Error('Session operation was superseded');
     const refreshToken = tokens.refreshToken ?? this.persistentSession?.refreshToken;
     if (!refreshToken) {
       await this.invalidate();
@@ -89,11 +93,15 @@ export class SessionManager {
     };
 
     try {
-      await this.dependencies.storage.write(persistentSession);
+      await this.scheduleStorageMutation(async () => {
+        if (generation !== this.generation) throw new Error('Session operation was superseded');
+        await this.dependencies.storage.write(persistentSession);
+      });
     } catch (error) {
-      await this.invalidate();
+      if (generation === this.generation) await this.invalidate();
       throw error;
     }
+    if (generation !== this.generation) throw new Error('Session operation was superseded');
 
     this.persistentSession = persistentSession;
     this.accessSession = tokens;
@@ -121,14 +129,18 @@ export class SessionManager {
   }
 
   async invalidate(): Promise<void> {
+    this.generation += 1;
+    this.refreshInFlight = null;
     this.accessSession = null;
     this.persistentSession = null;
     this.lastRefreshFailure = null;
     this.updateSnapshot('unauthenticated');
-    await this.dependencies.storage.clear();
+    await this.scheduleStorageMutation(() => this.dependencies.storage.clear());
   }
 
   suspend(): void {
+    this.generation += 1;
+    this.refreshInFlight = null;
     this.accessSession = null;
     this.persistentSession = null;
     this.lastRefreshFailure = 'unavailable';
@@ -136,9 +148,11 @@ export class SessionManager {
   }
 
   private async performBootstrap(): Promise<BootstrapResult> {
+    const generation = this.generation;
     this.updateSnapshot('bootstrapping');
     await this.dependencies.storage.clearLegacyAccessToken();
     const persisted = await this.dependencies.storage.read();
+    if (generation !== this.generation) return 'empty';
     if (!persisted?.refreshToken) {
       await this.invalidate();
       return 'empty';
@@ -151,6 +165,7 @@ export class SessionManager {
   }
 
   private async performRefresh(): Promise<string | null> {
+    const generation = this.generation;
     const refreshToken = this.persistentSession?.refreshToken;
     if (!refreshToken) {
       await this.invalidate();
@@ -159,19 +174,29 @@ export class SessionManager {
 
     try {
       const tokens = await this.dependencies.refreshTokens(refreshToken);
-      return await this.acceptTokenSet(tokens);
+      if (generation !== this.generation) return null;
+      return await this.acceptTokenSet(tokens, generation);
     } catch (error) {
+      if (generation !== this.generation) return null;
       if (this.dependencies.isInvalidRefreshError(error)) {
+        const invalidatedGeneration = this.generation + 1;
         await this.invalidate();
-        this.lastRefreshFailure = 'invalid';
+        if (this.generation === invalidatedGeneration && this.snapshot.status === 'unauthenticated') {
+          this.lastRefreshFailure = 'invalid';
+        }
       } else {
         this.accessSession = null;
-        this.persistentSession = null;
         this.lastRefreshFailure = 'unavailable';
         this.updateSnapshot('unauthenticated');
       }
       return null;
     }
+  }
+
+  private scheduleStorageMutation(operation: () => Promise<void>): Promise<void> {
+    const next = this.storageMutation.then(operation);
+    this.storageMutation = next.catch(() => undefined);
+    return next;
   }
 
   private updateSnapshot(status: SessionStatus): void {

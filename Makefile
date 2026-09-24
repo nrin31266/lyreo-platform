@@ -2,7 +2,7 @@
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
         ai-local lesson-prep test-lesson-prep clean-prep clean-cache clean \
-        test-java verify-java test-ai test-importers test-docs test-tooling typecheck build-frontend validate-docs validate check prod-config verify-prod-env down-v
+        test-java verify-java test-ai test-importers test-docs test-tooling test-frontend typecheck build-frontend validate-docs validate check prod-config verify-prod-env down-v
 
 help:
 	@printf '%s\n' \
@@ -206,6 +206,9 @@ clean: clean-cache clean-prep
 typecheck:
 	pnpm typecheck
 
+test-frontend:
+	pnpm test
+
 build-frontend:
 	pnpm build
 
@@ -235,7 +238,7 @@ validate:
 	bash -n scripts/*.sh infra/keycloak/scripts/*.sh infra/postgres/init/*.sh
 	python3 tooling/validate_repo.py
 
-check: validate test-tooling verify-java test-ai test-importers test-lesson-prep typecheck build-frontend
+check: validate test-tooling verify-java test-ai test-importers test-lesson-prep typecheck test-frontend build-frontend
 
 verify-prod-env:
 	./scripts/verify-prod-env.sh

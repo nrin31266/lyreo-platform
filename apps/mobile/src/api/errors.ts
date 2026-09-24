@@ -1,6 +1,7 @@
 export type ApiErrorKind =
   | 'network'
   | 'timeout'
+  | 'aborted'
   | 'unauthorized'
   | 'forbidden'
   | 'validation'
@@ -75,7 +76,7 @@ export async function apiErrorFromResponse(response: Response): Promise<ApiError
 
 export function apiErrorFromRequestFailure(cause: unknown): ApiError {
   if (cause instanceof ApiError) return cause;
-  if (isAbortError(cause)) return new ApiError({ kind: 'timeout', cause });
+  if (isAbortError(cause)) return new ApiError({ kind: 'aborted', cause });
   if (cause instanceof TypeError) return new ApiError({ kind: 'network', cause });
   return new ApiError({ kind: 'unknown', cause });
 }

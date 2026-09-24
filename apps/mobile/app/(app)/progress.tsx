@@ -1,6 +1,6 @@
-import { Link } from 'expo-router';
-import { Pressable, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { BackButton } from '@/components/navigation/back-button';
 import { Text } from '@/components/ui/text';
 
 const skills = [
@@ -14,9 +14,7 @@ export default function ProgressScreen() {
   const { t } = useTranslation('mobile');
   return (
     <ScrollView className="flex-1 bg-background" contentContainerStyle={{ padding: 24, paddingTop: 54, gap: 16, paddingBottom: 60 }}>
-      <Link href="/" asChild>
-        <Pressable><Text className="font-bold text-primary">{t('progress.back')}</Text></Pressable>
-      </Link>
+      <BackButton label={t('progress.back')} />
       <Text className="mt-[18px] text-[40px] font-extrabold tracking-[-1.5px] text-foreground">{t('progress.title')}</Text>
       <Text className="leading-[22px] text-muted-foreground">{t('progress.lead')}</Text>
 

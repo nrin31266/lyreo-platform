@@ -96,3 +96,57 @@ test('fetch failures are normalized as network errors', async () => {
     error => error instanceof ApiError && error.kind === 'network',
   );
 });
+
+test('a missing access token fails before sending a request', async () => {
+  let fetchCount = 0;
+  const client = createApiClient({
+    baseUrl: 'http://core.test',
+    getValidAccessToken: async () => null,
+    refreshSession: async () => null,
+    invalidateSession: async () => {},
+    fetchImplementation: async () => {
+      fetchCount += 1;
+      return new Response();
+    },
+  });
+
+  await assert.rejects(
+    () => client.request('/api/v1/me'),
+    error => error instanceof ApiError && error.kind === 'unauthorized',
+  );
+  assert.equal(fetchCount, 0);
+});
+
+test('204 responses return undefined and preserve a custom Accept header', async () => {
+  let accept;
+  const client = createApiClient({
+    baseUrl: 'http://core.test',
+    getValidAccessToken: async () => 'access-1',
+    refreshSession: async () => null,
+    invalidateSession: async () => {},
+    fetchImplementation: async (_input, init) => {
+      accept = new Headers(init.headers).get('Accept');
+      return new Response(null, { status: 204 });
+    },
+  });
+
+  assert.equal(await client.request('/api/v1/audio', {
+    headers: { Accept: 'audio/mpeg' },
+  }), undefined);
+  assert.equal(accept, 'audio/mpeg');
+});
+
+test('non-JSON success bodies are reported as unknown response errors', async () => {
+  const client = createApiClient({
+    baseUrl: 'http://core.test',
+    getValidAccessToken: async () => 'access-1',
+    refreshSession: async () => null,
+    invalidateSession: async () => {},
+    fetchImplementation: async () => new Response('not-json', { status: 200 }),
+  });
+
+  await assert.rejects(
+    () => client.request('/api/v1/me'),
+    error => error instanceof ApiError && error.kind === 'unknown',
+  );
+});

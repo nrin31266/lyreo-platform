@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useApiClient } from '@/api/api-provider';
@@ -17,26 +17,32 @@ export function AccountSummary() {
   const client = useApiClient();
   const { t } = useTranslation('mobile');
   const [state, setState] = useState<AccountState>({ status: 'loading' });
+  const requestController = useRef<AbortController | null>(null);
 
-  const load = useCallback((signal?: AbortSignal) => {
+  const load = useCallback(() => {
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
     setState({ status: 'loading' });
-    void getCurrentUser(client, signal)
-      .then(user => setState({ status: 'loaded', user }))
+    void getCurrentUser(client, controller.signal)
+      .then(user => {
+        if (controller.signal.aborted) return;
+        setState({ status: 'loaded', user });
+      })
       .catch(() => {
-        if (signal?.aborted) return;
+        if (controller.signal.aborted) return;
         setState({ status: 'error' });
       });
   }, [client]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    load(controller.signal);
-    return () => controller.abort();
+    load();
+    return () => requestController.current?.abort();
   }, [load]);
 
   if (state.status === 'loading') return <LoadingState label={t('account.loading')} />;
   if (state.status === 'error') {
-    return <ErrorState message={t('account.loadFailed')} onRetry={() => load()} />;
+    return <ErrorState message={t('account.loadFailed')} onRetry={load} />;
   }
   if (!state.user.email) {
     return <EmptyState title={t('account.title')} message={t('account.noEmail')} />;

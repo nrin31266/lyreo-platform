@@ -82,9 +82,14 @@ test('an invalid refresh clears the persistent session', async () => {
 test('a temporary refresh failure preserves the persisted session for retry', async () => {
   const persisted = { refreshToken: 'persisted-refresh', idToken: 'persisted-id' };
   const memory = memoryStorage(persisted);
+  let attempts = 0;
   const manager = new SessionManager({
     storage: memory.storage,
-    refreshTokens: async () => { throw new TypeError('Network request failed'); },
+    refreshTokens: async () => {
+      attempts += 1;
+      if (attempts === 1) throw new TypeError('Network request failed');
+      return tokenSet({ accessToken: 'retry-access', refreshToken: 'retry-refresh' });
+    },
     isAccessTokenFresh: () => false,
     isInvalidRefreshError: () => false,
   });
@@ -93,6 +98,9 @@ test('a temporary refresh failure preserves the persisted session for retry', as
   assert.equal(manager.getSnapshot().status, 'unauthenticated');
   assert.deepEqual(memory.current(), persisted);
   assert.equal(manager.getLastRefreshFailure(), 'unavailable');
+  assert.equal(await manager.refreshSession(), 'retry-access');
+  assert.equal(manager.getSnapshot().status, 'authenticated');
+  assert.equal(memory.current().refreshToken, 'retry-refresh');
 });
 
 test('concurrent expired-token requests share one refresh and persist rotation', async () => {
@@ -135,4 +143,80 @@ test('fresh access tokens stay in memory and logout clears all session material'
   await manager.invalidate();
   assert.equal(manager.getSnapshot().status, 'unauthenticated');
   assert.equal(memory.current(), null);
+});
+
+test('a refresh response arriving after logout cannot restore the session', async () => {
+  const memory = memoryStorage();
+  let resolveRefresh;
+  const refreshResult = new Promise(resolve => { resolveRefresh = resolve; });
+  const manager = new SessionManager({
+    storage: memory.storage,
+    refreshTokens: () => refreshResult,
+    isAccessTokenFresh: () => false,
+    isInvalidRefreshError: () => false,
+  });
+  await manager.acceptTokenSet(tokenSet());
+
+  const pendingRefresh = manager.getValidAccessToken();
+  await manager.invalidate();
+  resolveRefresh(tokenSet({ accessToken: 'late-access', refreshToken: 'late-refresh' }));
+
+  assert.equal(await pendingRefresh, null);
+  assert.equal(manager.getSnapshot().status, 'unauthenticated');
+  assert.equal(memory.current(), null);
+});
+
+test('logout clears a rotated token even when its secure write is in progress', async () => {
+  const memory = memoryStorage();
+  const write = memory.storage.write;
+  let signalWriteStarted;
+  let finishWrite;
+  const writeStarted = new Promise(resolve => { signalWriteStarted = resolve; });
+  const writeBarrier = new Promise(resolve => { finishWrite = resolve; });
+  memory.storage.write = async session => {
+    if (session.refreshToken === 'rotated-refresh') {
+      signalWriteStarted();
+      await writeBarrier;
+    }
+    await write(session);
+  };
+  const manager = new SessionManager({
+    storage: memory.storage,
+    refreshTokens: async () => tokenSet({ refreshToken: 'rotated-refresh' }),
+    isAccessTokenFresh: () => false,
+    isInvalidRefreshError: () => false,
+  });
+  await manager.acceptTokenSet(tokenSet());
+
+  const pendingRefresh = manager.refreshSession();
+  await writeStarted;
+  const pendingLogout = manager.invalidate();
+  finishWrite();
+  await Promise.all([pendingRefresh, pendingLogout]);
+
+  assert.equal(manager.getSnapshot().status, 'unauthenticated');
+  assert.equal(memory.current(), null);
+});
+
+test('a late invalid refresh cannot clear a newer sign-in', async () => {
+  const memory = memoryStorage();
+  let rejectRefresh;
+  const refreshResult = new Promise((_resolve, reject) => { rejectRefresh = reject; });
+  const manager = new SessionManager({
+    storage: memory.storage,
+    refreshTokens: () => refreshResult,
+    isAccessTokenFresh: () => true,
+    isInvalidRefreshError: () => true,
+  });
+  await manager.acceptTokenSet(tokenSet());
+
+  const pendingRefresh = manager.refreshSession();
+  await manager.invalidate();
+  await manager.acceptTokenSet(tokenSet({ accessToken: 'new-access', refreshToken: 'new-refresh' }));
+  rejectRefresh(new Error('invalid_grant'));
+  await pendingRefresh;
+
+  assert.equal(manager.getSnapshot().status, 'authenticated');
+  assert.equal(await manager.getValidAccessToken(), 'new-access');
+  assert.equal(memory.current().refreshToken, 'new-refresh');
 });

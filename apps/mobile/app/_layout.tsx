@@ -11,14 +11,6 @@ function ThemedNavigator() {
   const { colors, mode } = useAppTheme();
   const { status } = useSession();
 
-  if (status === 'bootstrapping') {
-    return (
-      <View className="flex-1 justify-center bg-background">
-        <LoadingState />
-      </View>
-    );
-  }
-
   return (
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
@@ -34,8 +26,14 @@ function ThemedNavigator() {
         <Stack.Protected guard={status === 'authenticated'}>
           <Stack.Screen name="(app)" />
         </Stack.Protected>
+        <Stack.Screen name="auth/callback" />
         <Stack.Screen name="+not-found" />
       </Stack>
+      {status === 'bootstrapping' ? (
+        <View className="absolute inset-0 flex-1 justify-center bg-background">
+          <LoadingState />
+        </View>
+      ) : null}
     </>
   );
 }

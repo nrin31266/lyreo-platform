@@ -1,10 +1,10 @@
 import type { ThemePreference } from '@lyreo/design-system';
 import { supportedLocales, type SupportedLocale } from '@lyreo/i18n';
-import { Link } from 'expo-router';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Switch, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { BackButton } from '@/components/navigation/back-button';
 import { useApiClient } from '@/api/api-provider';
 import { useSession } from '@/auth/use-session';
 import { ErrorState } from '@/components/states/error-state';
@@ -27,7 +27,7 @@ const themePreferences: ThemePreference[] = ['system', 'light', 'dark'];
 export default function SettingsScreen() {
   const client = useApiClient();
   const session = useSession();
-  const { colors, preference: themePreference, setPreference: setThemePreference } = useAppTheme();
+  const { preference: themePreference, setPreference: setThemePreference } = useAppTheme();
   const { locale, setLocale } = useAppLocale();
   const { t } = useTranslation(['mobile', 'common']);
   const [preferences, setPreferences] = useState<LearnerPreferences>(defaultLearnerPreferences);
@@ -71,9 +71,7 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerStyle={{ padding: 24, paddingTop: 54, paddingBottom: 50, gap: 16 }}>
-      <Link href="/" asChild>
-        <Pressable><Text className="font-bold text-primary">{t('mobile:settings.back')}</Text></Pressable>
-      </Link>
+      <BackButton label={t('mobile:settings.back')} />
       <Text className="mt-[18px] text-[40px] font-extrabold tracking-[-1.5px] text-foreground">{t('mobile:settings.title')}</Text>
       <Text className="leading-[22px] text-muted-foreground">{t('mobile:settings.lead')}</Text>
 
@@ -105,17 +103,20 @@ export default function SettingsScreen() {
             <Toggle
               label={t('mobile:settings.thoughtGroups')}
               value={preferences.thoughtGroups}
-              set={thoughtGroups => setPreferences({ ...preferences, thoughtGroups })}
+              disabled={saving}
+              set={thoughtGroups => setPreferences(previous => ({ ...previous, thoughtGroups }))}
             />
             <Toggle
               label={t('mobile:settings.karaoke')}
               value={preferences.karaokeHighlighting}
-              set={karaokeHighlighting => setPreferences({ ...preferences, karaokeHighlighting })}
+              disabled={saving}
+              set={karaokeHighlighting => setPreferences(previous => ({ ...previous, karaokeHighlighting }))}
             />
             <Choice
               label={t('mobile:settings.sentenceIpa')}
               value={preferences.sentenceIpa}
-              onChange={sentenceIpa => setPreferences({ ...preferences, sentenceIpa })}
+              disabled={saving}
+              onChange={sentenceIpa => setPreferences(previous => ({ ...previous, sentenceIpa }))}
             />
           </Section>
 
@@ -123,12 +124,14 @@ export default function SettingsScreen() {
             <Toggle
               label={t('mobile:settings.properNounHints')}
               value={preferences.properNounHints}
-              set={properNounHints => setPreferences({ ...preferences, properNounHints })}
+              disabled={saving}
+              set={properNounHints => setPreferences(previous => ({ ...previous, properNounHints }))}
             />
             <Choice
               label={t('mobile:settings.translation')}
               value={preferences.translation}
-              onChange={translation => setPreferences({ ...preferences, translation })}
+              disabled={saving}
+              onChange={translation => setPreferences(previous => ({ ...previous, translation }))}
             />
           </Section>
 
@@ -136,12 +139,14 @@ export default function SettingsScreen() {
             <Choice
               label={t('mobile:settings.vocabularyNotes')}
               value={preferences.vocabularyNotes}
-              onChange={vocabularyNotes => setPreferences({ ...preferences, vocabularyNotes })}
+              disabled={saving}
+              onChange={vocabularyNotes => setPreferences(previous => ({ ...previous, vocabularyNotes }))}
             />
             <Choice
               label={t('mobile:settings.grammarNotes')}
               value={preferences.grammarNotes}
-              onChange={grammarNotes => setPreferences({ ...preferences, grammarNotes })}
+              disabled={saving}
+              onChange={grammarNotes => setPreferences(previous => ({ ...previous, grammarNotes }))}
             />
           </Section>
 
@@ -172,13 +177,24 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Toggle({ label, value, set }: { label: string; value: boolean; set: (value: boolean) => void }) {
+function Toggle({
+  label,
+  value,
+  disabled,
+  set,
+}: {
+  label: string;
+  value: boolean;
+  disabled?: boolean;
+  set: (value: boolean) => void;
+}) {
   const { colors } = useAppTheme();
   return (
     <View className="flex-row items-center justify-between border-b border-border py-2.5">
       <Text className="font-semibold text-foreground">{label}</Text>
       <Switch
         value={value}
+        disabled={disabled}
         onValueChange={set}
         trackColor={{ false: colors.input, true: colors.primary }}
         thumbColor={value ? colors.primaryForeground : colors.surface}
@@ -187,12 +203,23 @@ function Toggle({ label, value, set }: { label: string; value: boolean; set: (va
   );
 }
 
-function Choice({ label, value, onChange }: { label: string; value: DisplayTiming; onChange: (value: DisplayTiming) => void }) {
+function Choice({
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: DisplayTiming;
+  disabled?: boolean;
+  onChange: (value: DisplayTiming) => void;
+}) {
   const { t } = useTranslation('mobile');
   return (
     <ChoiceChips
       label={label}
       value={value}
+      disabled={disabled}
       values={displayTimings}
       renderLabel={option => t(`settings.displayTiming.${option}`)}
       onChange={onChange}
@@ -206,12 +233,14 @@ function ChoiceChips<T extends string>({
   values,
   renderLabel,
   onChange,
+  disabled,
 }: {
   label: string;
   value: T;
   values: readonly T[];
   renderLabel: (value: T) => string;
   onChange: (value: T) => void;
+  disabled?: boolean;
 }) {
   return (
     <View className="gap-2 border-b border-border py-3 last:border-b-0">
@@ -222,6 +251,7 @@ function ChoiceChips<T extends string>({
           return (
             <Pressable
               key={option}
+              disabled={disabled}
               onPress={() => onChange(option)}
               className={active
                 ? 'rounded-full border border-primary bg-primary px-2.5 py-2'

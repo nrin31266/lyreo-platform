@@ -135,7 +135,8 @@ lyreo-platform/
 
 ## 4. Toolchain
 
-The development host needs Java, the repository Maven Wrapper (`./mvnw`), Node/pnpm, `uv`,
+The development host needs Java, the repository Maven Wrapper (`./mvnw`), Node 24.20+ (see
+`.nvmrc`), pnpm 12.3.1 through Corepack, `uv`,
 Docker + Docker Compose, and Android Studio/Xcode when working on native mobile builds.
 
 Use the versions declared by repository toolchain files (`.java-version`, `.nvmrc`,

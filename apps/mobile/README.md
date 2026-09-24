@@ -8,6 +8,9 @@ Mobile is the **learner experience**, providing dictation, shadowing, SRS vocabu
 
 ## 1. Quick Start Guide
 
+Use Node.js 24.20+ (pinned in the repository root `.nvmrc`) and pnpm 12.3.1 through Corepack so
+local installs and checks match CI.
+
 > [!IMPORTANT]
 > **Expo Go is NOT supported.** Lyreo requires native audio recording and background execution via `expo-dev-client`. You must have the **Lyreo Development Build** installed on your device or emulator before Metro is useful.
 > **Metro Port**: Metro runs on port **8082** by default (to avoid port 8081 occupied by Keycloak).
@@ -21,7 +24,7 @@ cp apps/mobile/.env.example apps/mobile/.env
 
 Default addresses in `apps/mobile/.env`:
 - **Android Emulator**: Reaches host services via `10.0.2.2` (Core: `10.0.2.2:8080`, Keycloak: `10.0.2.2:8081`).
-- **Physical device**: Set `EXPO_PUBLIC_API_BASE_URL` and `EXPO_PUBLIC_KEYCLOAK_URL` to your machine's LAN IP, or use a development tunnel (`npx expo start --tunnel`).
+- **Physical Android via USB**: Use the `adb reverse` workflow below and set both service URLs to `localhost` on the device. A LAN IP requires Keycloak's advertised issuer and Core's expected issuer to match; do not change only the Mobile URL and assume authenticated API calls will work.
 
 All four `EXPO_PUBLIC_*` values in `.env.example` are required. Mobile validates them at startup;
 they are public endpoint/client metadata and must never contain secrets.
@@ -68,6 +71,24 @@ make mobile
    make mobile
    ```
    Press `a` in the Metro terminal or tap the **Lyreo** app on the emulator. Metro hot-reloads all TSX, components, and Tailwind styling instantly.
+
+### Physical Android via USB (no emulator)
+
+With USB debugging enabled and the device authorized, confirm `adb devices -l` lists it. Set
+`EXPO_PUBLIC_API_BASE_URL=http://localhost:8080` and
+`EXPO_PUBLIC_KEYCLOAK_URL=http://localhost:8081` in the ignored `apps/mobile/.env`, then run:
+
+```bash
+adb reverse tcp:8080 tcp:8080   # Core
+adb reverse tcp:8081 tcp:8081   # Keycloak
+adb reverse tcp:8082 tcp:8082   # Metro
+make mobile-android-install      # First install or native dependency change
+make mobile                      # Start Metro; open Lyreo on the phone
+```
+
+Start PostgreSQL, Keycloak, and Core using the root development workflow before testing login.
+Re-run `adb reverse` after reconnecting the phone. If multiple devices are listed, select the
+physical device explicitly with `adb -s <serial>` (and `ANDROID_SERIAL=<serial>` for the install).
 
 ---
 
