@@ -24,8 +24,8 @@ help:
 	  '  make mobile                      Run Expo Metro bundler (requires Dev Build installed on device/emulator)' \
 	  '' \
 	  'Data' \
-	  '  make data-fetch                  Download/install Grammar+TOEIC dataset when missing' \
-	  '  make data-check                  Validate the importer-facing Grammar+TOEIC dataset structure' \
+	  '  make data-fetch                  Download/verify the versioned Grammar+TOEIC clean release' \
+	  '  make data-check                  Verify the installed Grammar+TOEIC clean release' \
 	  '' \
 	  'Infrastructure' \
 	  '  make dev-infra                   Start PostgreSQL + Keycloak only' \
@@ -64,7 +64,7 @@ help:
 	  '  make dev-config                  Validate compose.dev.yml syntax/resolution' \
 	  '  make prod-config                 Validate compose.prod.yml syntax/resolution' \
 	  '' \
-	  'Dataset download is opt-in: make data-fetch, or WITH_DATA=1 make setup.' \
+	  'Clean release download is opt-in: make data-fetch, or WITH_DATA=1 make setup.' \
 	  '' \
 	  'Android first-time: make android-check -> make android-emulator-create -> make android-emulator -> make mobile-android-install -> make mobile' \
 	  'iOS first-time:     make mobile-ios-device-register -> make mobile-ios-build -> install IPA from EAS URL -> make mobile'
@@ -93,10 +93,10 @@ deps: deps-java
 setup:
 	$(MAKE) init-env
 	$(MAKE) doctor
+	$(MAKE) deps
 	@if [ "$${WITH_DATA:-0}" = "1" ]; then \
 		$(MAKE) data-fetch; \
 	fi
-	$(MAKE) deps
 	$(MAKE) dev-infra
 	$(MAKE) keycloak-seed
 	@printf '%s\n' \
@@ -236,6 +236,9 @@ validate:
 	    tools/data-import/import_grammar.py \
 	    tools/data-import/import_toeic.py \
 	    tools/data-import/import_lexicon.py \
+	    tools/data-import/build_grammar_toeic_release.py \
+	    tools/data-import/validate_grammar_toeic_release.py \
+	    tools/data-import/scripts/fetch_release.py \
 	    tools/data-import/common.py \
 	    tools/data-import/tests; \
 	  status=$$?; rm -rf "$$tmp"; exit $$status

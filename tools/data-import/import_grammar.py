@@ -25,8 +25,8 @@ def explanation_policy(row: dict) -> str:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Import Lyreo grammar bank from dautoeic/grammar_data")
-    ap.add_argument("--data-dir", default=os.getenv("DAUTOEIC_DATA_DIR"))
+    ap = argparse.ArgumentParser(description="Legacy raw Grammar import for release maintainers")
+    ap.add_argument("--data-dir", default=os.getenv("GRAMMAR_TOEIC_RAW_DIR"))
     ap.add_argument("--apply", action="store_true")
     args = ap.parse_args()
     root = Path(args.data_dir or "").expanduser()
