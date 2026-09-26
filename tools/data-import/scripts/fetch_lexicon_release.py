@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install a verified Grammar/TOEIC clean release from a versioned archive."""
+"""Install a verified Lexicon clean release from a versioned archive."""
 from __future__ import annotations
 
 import argparse
@@ -18,7 +18,7 @@ from urllib.parse import unquote, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fetch_utils import archive_root as util_archive_root, download_archive, safe_extract_archive, sha256_file
-from validate_grammar_toeic_release import validate  # noqa: E402
+from validate_lexicon_release import validate  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -32,7 +32,7 @@ class Config:
 
 
 def config_from_env(env: dict[str, str]) -> Config:
-    prefix = "GRAMMAR_TOEIC_RELEASE_"
+    prefix = "LEXICON_RELEASE_"
     version = env.get(prefix + "VERSION", "").strip()
     schema_version = env.get(prefix + "SCHEMA_VERSION", "").strip()
     directory = env.get(prefix + "DIR", "").strip()
@@ -43,8 +43,8 @@ def config_from_env(env: dict[str, str]) -> Config:
     if not directory:
         raise ValueError(f"{prefix}DIR is required")
     release_dir = Path(directory).expanduser().resolve()
-    if release_dir.name != version or release_dir.parent.name != "grammar-toeic":
-        raise ValueError(f"{prefix}DIR must end in grammar-toeic/{version}")
+    if release_dir.name != version or release_dir.parent.name != "lexicon":
+        raise ValueError(f"{prefix}DIR must end in lexicon/{version}")
     workspace = release_dir.parent.parent.parent / "dataset-fetch"
     return Config(
         version=version,
@@ -65,11 +65,11 @@ def download(url: str, target: Path) -> None:
 
 
 def archive_root(archive: Path, version: str) -> str:
-    return util_archive_root(archive, {f"grammar-toeic-{version}", version})
+    return util_archive_root(archive, {f"lexicon-{version}", version})
 
 
 def extract(archive: Path, destination: Path, version: str) -> Path:
-    return safe_extract_archive(archive, destination, {f"grammar-toeic-{version}", version})
+    return safe_extract_archive(archive, destination, {f"lexicon-{version}", version})
 
 
 def verify_release(config: Config, release: Path, archive: Path | None = None) -> None:
@@ -78,13 +78,13 @@ def verify_release(config: Config, release: Path, archive: Path | None = None) -
         raise ValueError(f"Release manifest missing: {manifest_path}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     package = manifest.get("package", {})
-    if package.get("domain") != "grammar-toeic" or package.get("version") != config.version:
-        raise ValueError(f"Expected grammar-toeic package {config.version}")
+    if package.get("domain") != "lexicon" or package.get("version") != config.version:
+        raise ValueError(f"Expected lexicon package {config.version}")
     if package.get("schema_version") != config.schema_version:
-        raise ValueError(f"Expected Grammar/TOEIC schema {config.schema_version}")
-    if manifest.get("validation", {}).get("status") not in ("PASS", "PASS_WITH_ISSUES"):
+        raise ValueError(f"Expected Lexicon schema {config.schema_version}")
+    if manifest.get("validation", {}).get("status") != "PASS":
         raise ValueError("Release validation status is not acceptable")
-    result = validate(release, None, archive)
+    result = validate(release, archive=archive)
     if result["status"] != "PASS":
         raise ValueError("Clean release validator did not pass")
 
@@ -95,7 +95,7 @@ def run(config: Config, check: bool = False, force: bool = False) -> None:
         if not target.is_dir():
             raise ValueError(f"Clean release missing: {target}")
         verify_release(config, target)
-        print(f"OK   Grammar/TOEIC release {config.version}: {target}")
+        print(f"OK   Lexicon release {config.version}: {target}")
         return
     if target.exists():
         try:
@@ -105,14 +105,14 @@ def run(config: Config, check: bool = False, force: bool = False) -> None:
                 raise ValueError(f"Existing release is invalid ({exc}); inspect it or use --force") from exc
         else:
             if not force:
-                print(f"OK   Grammar/TOEIC release {config.version} already installed: {target}")
+                print(f"OK   Lexicon release {config.version} already installed: {target}")
                 return
     if not config.url:
-        raise ValueError("GRAMMAR_TOEIC_RELEASE_URL is empty; set it to the uploaded clean archive URL")
+        raise ValueError("LEXICON_RELEASE_URL is empty; set it to the clean archive URL")
     if not re.fullmatch(r"[0-9a-f]{64}", config.archive_sha256):
-        raise ValueError("GRAMMAR_TOEIC_RELEASE_SHA256 must be the full 64-character archive checksum")
+        raise ValueError("LEXICON_RELEASE_SHA256 must be the full 64-character archive checksum")
     config.workspace.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="run.", dir=config.workspace) as temp:
+    with tempfile.TemporaryDirectory(prefix="lexicon_run.", dir=config.workspace) as temp:
         work = Path(temp)
         archive = work / "release.tar.gz"
         download(config.url, archive)
@@ -131,7 +131,7 @@ def run(config: Config, check: bool = False, force: bool = False) -> None:
             if backup.exists():
                 backup.rename(target)
             raise
-        print(f"OK   Grammar/TOEIC release {config.version} installed: {target}")
+        print(f"OK   Lexicon release {config.version} installed: {target}")
 
 
 def main() -> None:

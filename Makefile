@@ -1,4 +1,4 @@
-.PHONY: help init-env doctor setup deps deps-java data-fetch data-check dev-infra dev-config db-shell db-reset keycloak-seed down core ai admin mobile \
+.PHONY: help init-env doctor setup deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset keycloak-seed down core ai admin mobile \
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
         ai-local lesson-prep test-lesson-prep clean-prep clean-cache clean \
@@ -26,6 +26,8 @@ help:
 	  'Data' \
 	  '  make data-fetch                  Download/verify the versioned Grammar+TOEIC clean release' \
 	  '  make data-check                  Verify the installed Grammar+TOEIC clean release' \
+	  '  make lexicon-fetch               Download/verify the versioned Lexicon clean release' \
+	  '  make lexicon-check               Verify the installed Lexicon clean release' \
 	  '' \
 	  'Infrastructure' \
 	  '  make dev-infra                   Start PostgreSQL + Keycloak only' \
@@ -80,6 +82,12 @@ data-fetch:
 
 data-check:
 	./tools/data-import/scripts/fetch-data.sh --check
+
+lexicon-fetch:
+	./tools/data-import/scripts/fetch-lexicon.sh
+
+lexicon-check:
+	./tools/data-import/scripts/fetch-lexicon.sh --check
 
 deps-java:
 	./mvnw -B -pl apps/core-service -am -DskipTests install
@@ -239,6 +247,9 @@ validate:
 	    tools/data-import/build_grammar_toeic_release.py \
 	    tools/data-import/validate_grammar_toeic_release.py \
 	    tools/data-import/scripts/fetch_release.py \
+	    tools/data-import/build_lexicon_release.py \
+	    tools/data-import/validate_lexicon_release.py \
+	    tools/data-import/scripts/fetch_lexicon_release.py \
 	    tools/data-import/common.py \
 	    tools/data-import/tests; \
 	  status=$$?; rm -rf "$$tmp"; exit $$status

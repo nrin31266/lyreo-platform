@@ -87,36 +87,69 @@ No PostgreSQL import from the clean release is implemented yet.
 
 ## Global Lexicon
 
-Lexicon is a completely separate pipeline. Its source dataset has **not been downloaded/scraped for
-Lyreo yet**. Intended inputs are Kaikki/Wiktextract JSONL files from English/Vietnamese Wiktionary.
+The Lexicon v1 clean release is an offline, separate package. Its canonical maintainer-only inputs
+are `.data/datasets/lexicon/raw-wiktextract-data.jsonl.gz` (English Wiktionary dump dated
+2026-09-02; SHA-256 `5ab411b8859490789d0d002074cc029569648f901db940c0ab10e709932e1632`)
+and `.data/datasets/lexicon/vi-extract.jsonl.gz` (optional Vietnamese Wiktionary auxiliary dump
+dated 2026-09-01; SHA-256 `10e62bccdf3d85fc9e7472c1f85b2149602f97c75177b09523f4762c57ef7d3d`).
+The builder checks these pins by default. Keep raw data and SQLite staging outside Git under
+`.data/`; normal `lexicon-fetch` and `lexicon-check` use only the clean release.
 
-Strategy:
-
-1. broad English seed from English Wiktionary via Kaikki/Wiktextract;
-2. optional Vietnamese Wiktionary pass to fill Vietnamese glosses where possible;
-3. retain `translation_status=MISSING` when source data is incomplete;
-4. lazy enrichment later; do **not** spend one LLM call per dictionary word during seed;
-5. preserve source/license provenance;
-6. keep pronunciation external-audio metadata for lazy R2 caching.
-
-After those external files exist:
+From the repository root, after `uv sync --locked --extra dev` in `tools/data-import`, build and
+validate the pinned v1 release with the project Python 3.12 environment (Unicode database 15.0.0):
 
 ```bash
-uv run python import_lexicon.py \
-  --english "$KAIKKI_EN_JSONL" \
-  --vietnamese "$KAIKKI_VI_JSONL"
+tools/data-import/.venv/bin/python tools/data-import/build_lexicon_release.py \
+  --raw-en .data/datasets/lexicon/raw-wiktextract-data.jsonl.gz \
+  --raw-vi .data/datasets/lexicon/vi-extract.jsonl.gz \
+  --output .data/releases/lexicon/1.0.0 \
+  --archive .data/releases/lexicon-1.0.0.tar.gz \
+  --staging-dir .data/tmp \
+  --generated-at 2026-09-26T00:00:00Z
 
-uv run python import_lexicon.py \
-  --english "$KAIKKI_EN_JSONL" \
-  --vietnamese "$KAIKKI_VI_JSONL" \
-  --apply
+tools/data-import/.venv/bin/python tools/data-import/validate_lexicon_release.py \
+  --release .data/releases/lexicon/1.0.0 \
+  --raw-en .data/datasets/lexicon/raw-wiktextract-data.jsonl.gz \
+  --archive .data/releases/lexicon-1.0.0.tar.gz \
+  --report .data/releases/lexicon/1.0.0-verification.json
 ```
 
-Use `--limit 1000` while developing importer changes. The importer commits large lexicon batches
-instead of holding the entire dictionary transaction open.
+The builder refuses existing output paths; use new paths for a rebuild. Reuse the same
+`--generated-at` with unchanged inputs and builder when checking byte-for-byte reproducibility.
+Package version and schema version are both `1.0.0`. The release directory contains `manifest.json`,
+`validation_report.json`, `LICENSE`, and ID-sorted `entries.jsonl`, `items.jsonl`, `senses.jsonl`,
+`forms.jsonl`, `pronunciations.jsonl`, and `translations.jsonl`. The archive has one
+`lexicon-1.0.0/` root. `manifest.json` records source filenames, byte sizes, checksums, and dates;
+`LICENSE` carries attribution for both Wiktionary editions and a CC BY-SA 4.0 notice.
+Pronunciations reference external audio URLs; the
+archive contains no audio files. Preserve source and license provenance when distributing or
+importing the release.
 
-Vietnamese Wiktionary merge is best-effort: source revisions must be reviewed in dry-run before an
-applied import, and missing translations are a valid state rather than an import failure.
+Translations in `translations.jsonl` carry a `link_status`. `DIRECT_SENSE` and
+`QUALIFIER_MATCH` have a `sense_id`; the latter is a deterministic qualifier match, not proof of
+semantic accuracy. `ITEM_CANDIDATE` and `ENTRY_CANDIDATE` are unresolved candidates at the named
+scope. Do not present candidates as sense translations. Senses without a sense-linked translation
+retain `translation_status=MISSING`, even if a candidate exists.
+Entry IDs are designed to remain stable across snapshots based on case-preserving headword identity,
+but this is best effort. Duplicate lexical blocks use source-order `item_seq`; their item IDs are
+deterministic within a snapshot and may change if upstream order changes. A later importer must
+reconcile IDs across snapshots.
+
+The full pinned build measured about 594 MB peak RSS with SQLite staging; plan for under 750 MB
+peak RSS, at least 2 GB RAM, and at least 10 GB free disk on a maintainer machine. The builder is
+intended to stream the raw inputs with bounded memory.
+
+For a team member with `tools/data-import/.env` configured, the clean release commands are:
+
+```bash
+make lexicon-fetch
+make lexicon-check
+```
+
+`LEXICON_RELEASE_URL` remains blank until the archive is published. The version, schema version,
+installation directory, and archive SHA-256 are pinned in `.env.example`; raw input paths there
+are maintainer-only hints and are not read by the fetch/check commands. The older
+`import_lexicon.py` reads raw source exports and is not a clean-release PostgreSQL importer.
 
 ## Import observability
 

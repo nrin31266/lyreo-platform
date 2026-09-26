@@ -2,7 +2,7 @@
 
 This document defines the small envelope shared by independently versioned data packages. It does not define a universal content schema or a generic ingestion framework. Each domain owns its builder, records, validation rules, and release lifecycle.
 
-Archive filenames use the domain and full package version, for example `grammar-toeic-1.0.1.tar.gz`, later `lexicon-1.0.0.tar.gz` or another domain package. Install each version beside earlier versions under `.data/releases/<domain>/<package-version>/` so rollback does not depend on overwriting a mutable path. Those later packages are examples only; they are not built here.
+Archive filenames use the domain and full package version, for example `grammar-toeic-1.0.1.tar.gz` and `lexicon-1.0.0.tar.gz`. Install each version beside earlier versions under `.data/releases/<domain>/<package-version>/` so rollback does not depend on overwriting a mutable path.
 
 ## Package envelope
 
