@@ -146,8 +146,8 @@ make lexicon-fetch
 make lexicon-check
 ```
 
-`LEXICON_RELEASE_URL` remains blank until the archive is published. The version, schema version,
-installation directory, and archive SHA-256 are pinned in `.env.example`; raw input paths there
+`LEXICON_RELEASE_URL` points to the published Drive archive. The version, schema version,
+installation directory, URL, and archive SHA-256 are pinned in `.env.example`; raw input paths there
 are maintainer-only hints and are not read by the fetch/check commands. The older
 `import_lexicon.py` reads raw source exports and is not a clean-release PostgreSQL importer.
 
