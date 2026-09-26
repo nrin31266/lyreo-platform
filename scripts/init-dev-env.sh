@@ -85,6 +85,20 @@ set_env "$CORE_ENV" DATABASE_USERNAME "$DB_USER"
 set_env "$CORE_ENV" DATABASE_PASSWORD "$DB_PASSWORD"
 set_env "$DATA_ENV" DATABASE_URL "postgresql://${DB_USER}:${DB_PASSWORD}@localhost:${DB_PORT}/${DB_NAME}"
 
+# Existing local .env files predate clean releases; add the new keys without copying a raw
+# archive URL into the release URL or overwriting a developer's explicit release selection.
+for key in \
+  GRAMMAR_TOEIC_RELEASE_VERSION \
+  GRAMMAR_TOEIC_RELEASE_SCHEMA_VERSION \
+  GRAMMAR_TOEIC_RELEASE_DIR \
+  GRAMMAR_TOEIC_RELEASE_URL \
+  GRAMMAR_TOEIC_RELEASE_SHA256 \
+  GRAMMAR_TOEIC_RAW_DIR; do
+  if ! grep -q "^${key}=" "$DATA_ENV"; then
+    set_env "$DATA_ENV" "$key" "$(get_env "$DATA_ENV.example" "$key")"
+  fi
+done
+
 # AES-GCM provider credentials need a local 256-bit master key. Never copy it into frontend env.
 if [[ -z "$(get_env "$CORE_ENV" MASTER_ENCRYPTION_KEY)" ]]; then
   set_env "$CORE_ENV" MASTER_ENCRYPTION_KEY "$(openssl rand -base64 32 | tr -d '\n')"
@@ -113,10 +127,10 @@ echo 'Local environment files synchronized.'
 echo 'Local object storage is the default; R2_* values are only needed for R2 integration flows.'
 
 if [[ -f "$DATA_ENV" ]]; then
-  DATA_URL=$(get_env "$DATA_ENV" DAUTOEIC_DATA_URL)
+  DATA_URL=$(get_env "$DATA_ENV" GRAMMAR_TOEIC_RELEASE_URL)
   if [[ -n "$DATA_URL" ]]; then
-    echo 'Grammar/TOEIC shared dataset URL configured; run make data-fetch (or WITH_DATA=1 make setup).'
+    echo 'Grammar/TOEIC clean release URL configured; run make data-fetch (or WITH_DATA=1 make setup).'
   else
-    echo 'Grammar/TOEIC dataset URL is not configured; app development can continue, importer/data work needs a local dataset.'
+    echo 'Grammar/TOEIC clean release URL is not configured; add the uploaded archive URL before make data-fetch.'
   fi
 fi

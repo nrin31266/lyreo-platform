@@ -15,4 +15,4 @@ set -a
 source ./.env
 set +a
 
-exec uv run --locked --extra dev python scripts/fetch_release.py "$@"
+exec uv run --locked --extra dev python scripts/fetch_lexicon_release.py "$@"

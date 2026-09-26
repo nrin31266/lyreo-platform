@@ -10,7 +10,7 @@ sys.path.insert(0, str(IMPORT_ROOT))
 from import_grammar import explanation_policy, question_external_id  # noqa: E402
 
 
-def test_dautoeic_flat_question_identity_and_source_explanation_policy():
+def test_raw_flat_question_identity_and_source_explanation_policy():
     row = {
         "id": "bank:set-id:question-id",
         "question_id": "53fcfa34-1c21-4350-b0fc-9e3d4139dd6f",

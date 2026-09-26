@@ -11,152 +11,145 @@ From the repository root, initialize env files first:
 make init-env
 ```
 
-`tools/data-import/.env` controls dataset paths/download source, importer database access, and
-optional R2 credentials.
-
-The project-owner Grammar/TOEIC archive is configured in `.env.example` and installs into the
-Git-ignored `.data/datasets/toeic` path by default. A fresh clone can fetch it only when it is
-missing:
+`tools/data-import/.env` controls the Grammar/TOEIC clean release version, archive URL and SHA-256,
+installation path, importer database access, and optional R2 credentials. The uploaded release URL
+is intentionally blank until the archive is available on Google Drive. Fill it in, then run:
 
 ```bash
 make data-fetch
 make data-check
 ```
 
-Normal `make setup` does not download the dataset. To include it in first-clone setup, opt in:
+`make data-fetch` checks an installed release first. If missing, it downloads the pinned archive,
+checks its SHA-256, safely extracts one release root, and runs the domain validator before installing
+under `.data/releases/grammar-toeic/1.0.1/`. `make data-check` verifies the installed release
+without downloading. Both commands leave valid existing releases untouched. To replace a damaged
+installation after fixing the URL and SHA, run `./tools/data-import/scripts/fetch-data.sh --force`.
+Other package versions live beside `1.0.1`; the fetcher never overwrites a different version.
 
-```bash
-WITH_DATA=1 make setup
-```
+To include the release in first-clone setup, use `WITH_DATA=1 make setup`. Setup installs Python
+dependencies before it fetches. Raw Grammar/TOEIC source is not part of normal team setup.
 
-Then prepare the Python project environment:
+## Release configuration and Google Drive upload
 
-```bash
-cd tools/data-import
-uv sync --locked --extra dev
-set -a; source .env; set +a
-```
-
-## Grammar (`grammar_data`)
-
-`import_grammar.py` currently reads exactly:
-
-```text
-grammar_questions_flat.json
-grammar_topics.json
-grammar_subtopics.json
-grammar_bank_sets.json
-```
-
-The broader source export may contain CSV copies and additional metadata, but the importer only
-requires the files above today. Source explanations/translations/vocabulary notes are preserved;
-nullable topic/subtopic classification is valid input; `prefer_ai_explanation` maps to an
-explanation policy instead of regenerating the question bank.
-
-Dry-run first:
-
-```bash
-uv run python import_grammar.py --data-dir "$DAUTOEIC_DATA_DIR"
-```
-
-Apply only after reviewing the counts/checksum:
-
-```bash
-uv run python import_grammar.py --data-dir "$DAUTOEIC_DATA_DIR" --apply
-```
-
-## TOEIC (`mock_test_data`)
-
-`import_toeic.py` reads aggregate mock-test/passages/questions JSON:
-
-```text
-all_mock_tests.json
-all_passages.json
-all_questions_updated.json  # preferred when present
-all_questions.json          # supported fallback
-```
-
-`mock_test_data/downloads/` is catalogued when present so media can optionally be uploaded to R2;
-its absence does not invalidate JSON-only dry-run/import work.
-
-```bash
-uv run python import_toeic.py --data-dir "$DAUTOEIC_DATA_DIR"
-uv run python import_toeic.py --data-dir "$DAUTOEIC_DATA_DIR" --apply
-uv run python import_toeic.py --data-dir "$DAUTOEIC_DATA_DIR" --apply --upload-media
-```
-
-Database rows store normalized metadata/object keys, never absolute developer paths or signed URLs.
-
-## Shared Grammar/TOEIC dataset acquisition
-
-The current project-owner source is published as one Google Drive archive:
-
-```text
-https://drive.google.com/file/d/1FQgEswv3hUmT0Wv8Tyy9Jl_p9iLfoLZs/view?usp=sharing
-```
-
-Default importer env:
+The canonical archive ready for upload is `.data/releases/grammar-toeic-1.0.1.tar.gz`. Upload that
+single file to Google Drive and share it as a downloadable file. In `tools/data-import/.env`, set:
 
 ```dotenv
-DAUTOEIC_DATA_DIR=../../.data/datasets/toeic
-DAUTOEIC_DATA_URL=https://drive.google.com/file/d/1FQgEswv3hUmT0Wv8Tyy9Jl_p9iLfoLZs/view?usp=sharing
-DAUTOEIC_DATA_SHA256=
+GRAMMAR_TOEIC_RELEASE_VERSION=1.0.1
+GRAMMAR_TOEIC_RELEASE_SCHEMA_VERSION=1.0.0
+GRAMMAR_TOEIC_RELEASE_DIR=../../.data/releases/grammar-toeic/1.0.1
+GRAMMAR_TOEIC_RELEASE_URL=https://drive.google.com/file/d/YOUR_FILE_ID/view
+GRAMMAR_TOEIC_RELEASE_SHA256=95f4bb9471e7b7b07f17ccec21a4434e25c18c9adf3dd3b28829eebe21c5adf0
 ```
 
-`tools/data-import/scripts/fetch-data.sh`:
+The URL may instead be a `file://` URL or a local archive path for offline verification; relative
+local paths resolve from `tools/data-import/`. Google
+Drive file links use ephemeral `uvx gdown`; other HTTP(S) links use `curl`. The SHA pin is mandatory
+for download. Do not put private credentials or a source archive URL into `.env.example`.
 
-1. skips the download when the existing dataset already matches the importer contract;
-2. supports HTTP(S), Google Drive file shares, `file://`, and local archive paths;
-3. runs Google Drive download ephemerally through `uvx --from gdown gdown --fuzzy`;
-4. verifies `DAUTOEIC_DATA_SHA256` when pinned;
-5. accepts ZIP/tar archives, rejects path traversal, and rejects tar links;
-6. finds exactly one extracted root containing `grammar_data/` + `mock_test_data/`;
-7. validates the exact JSON files the current importers require before installing the dataset;
-8. installs atomically enough that the destination is only replaced after archive validation.
+## Clean Grammar/TOEIC release (offline builder)
 
-Useful modes:
+Maintainers may rebuild a future clean package from immutable raw input at `.data/datasets/toeic/`.
+`build_grammar_toeic_release.py` prepares a self-contained package;
+`validate_grammar_toeic_release.py` checks content, relations, checksums, and raw-source
+preservation. Neither tool writes the production database or uploads media. See the
+[release envelope convention](RELEASE_FORMAT.md) for versioning and manifest rules. Raw input stays
+under `.data/datasets/`; package versions live under Git-ignored `.data/releases/`.
+
+From the repo root, after `uv sync --locked --extra dev` in `tools/data-import`:
 
 ```bash
-./scripts/fetch-data.sh --check
-./scripts/fetch-data.sh --force
-./scripts/fetch-data.sh --required
+tools/data-import/.venv/bin/python tools/data-import/build_grammar_toeic_release.py \
+  --raw .data/datasets/toeic \
+  --output .data/releases/grammar-toeic/1.0.2 \
+  --archive .data/releases/grammar-toeic-1.0.2.tar.gz \
+  --generated-at 2026-09-25T15:44:28Z
+
+tools/data-import/.venv/bin/python tools/data-import/validate_grammar_toeic_release.py \
+  --release .data/releases/grammar-toeic/1.0.2 \
+  --raw .data/datasets/toeic \
+  --archive .data/releases/grammar-toeic-1.0.2.tar.gz \
+  --report .data/releases/grammar-toeic/1.0.2-verification.json
 ```
 
-Do not put private download credentials into `.env.example`. If the shared provider later requires
-private authentication, add an explicit secure mechanism instead of embedding credentials in URLs.
+Change the builder's package version before building `1.0.2`; the example paths alone do not
+change manifest metadata. Pass the same `--generated-at` when checking reproducibility. Package
+version and clean schema version are separate fields; the schema version changes only when the
+record contract changes.
+
+## Legacy raw scripts (maintainers only)
+
+The existing `import_grammar.py` and `import_toeic.py` read source exports under
+`GRAMMAR_TOEIC_RAW_DIR` or an explicit `--data-dir`. They do not read the clean release. Keep raw
+files only for release engineering and legacy diagnostics; `make data-fetch` never downloads them.
+No PostgreSQL import from the clean release is implemented yet.
 
 ## Global Lexicon
 
-Lexicon is a completely separate pipeline. Its source dataset has **not been downloaded/scraped for
-Lyreo yet**. Intended inputs are Kaikki/Wiktextract JSONL files from English/Vietnamese Wiktionary.
+The Lexicon v1 clean release is an offline, separate package. Its canonical maintainer-only inputs
+are `.data/datasets/lexicon/raw-wiktextract-data.jsonl.gz` (English Wiktionary dump dated
+2026-09-02; SHA-256 `5ab411b8859490789d0d002074cc029569648f901db940c0ab10e709932e1632`)
+and `.data/datasets/lexicon/vi-extract.jsonl.gz` (optional Vietnamese Wiktionary auxiliary dump
+dated 2026-09-01; SHA-256 `10e62bccdf3d85fc9e7472c1f85b2149602f97c75177b09523f4762c57ef7d3d`).
+The builder checks these pins by default. Keep raw data and SQLite staging outside Git under
+`.data/`; normal `lexicon-fetch` and `lexicon-check` use only the clean release.
 
-Strategy:
-
-1. broad English seed from English Wiktionary via Kaikki/Wiktextract;
-2. optional Vietnamese Wiktionary pass to fill Vietnamese glosses where possible;
-3. retain `translation_status=MISSING` when source data is incomplete;
-4. lazy enrichment later; do **not** spend one LLM call per dictionary word during seed;
-5. preserve source/license provenance;
-6. keep pronunciation external-audio metadata for lazy R2 caching.
-
-After those external files exist:
+From the repository root, after `uv sync --locked --extra dev` in `tools/data-import`, build and
+validate the pinned v1 release with the project Python 3.12 environment (Unicode database 15.0.0):
 
 ```bash
-uv run python import_lexicon.py \
-  --english "$KAIKKI_EN_JSONL" \
-  --vietnamese "$KAIKKI_VI_JSONL"
+tools/data-import/.venv/bin/python tools/data-import/build_lexicon_release.py \
+  --raw-en .data/datasets/lexicon/raw-wiktextract-data.jsonl.gz \
+  --raw-vi .data/datasets/lexicon/vi-extract.jsonl.gz \
+  --output .data/releases/lexicon/1.0.0 \
+  --archive .data/releases/lexicon-1.0.0.tar.gz \
+  --staging-dir .data/tmp \
+  --generated-at 2026-09-26T00:00:00Z
 
-uv run python import_lexicon.py \
-  --english "$KAIKKI_EN_JSONL" \
-  --vietnamese "$KAIKKI_VI_JSONL" \
-  --apply
+tools/data-import/.venv/bin/python tools/data-import/validate_lexicon_release.py \
+  --release .data/releases/lexicon/1.0.0 \
+  --raw-en .data/datasets/lexicon/raw-wiktextract-data.jsonl.gz \
+  --archive .data/releases/lexicon-1.0.0.tar.gz \
+  --report .data/releases/lexicon/1.0.0-verification.json
 ```
 
-Use `--limit 1000` while developing importer changes. The importer commits large lexicon batches
-instead of holding the entire dictionary transaction open.
+The builder refuses existing output paths; use new paths for a rebuild. Reuse the same
+`--generated-at` with unchanged inputs and builder when checking byte-for-byte reproducibility.
+Package version and schema version are both `1.0.0`. The release directory contains `manifest.json`,
+`validation_report.json`, `LICENSE`, and ID-sorted `entries.jsonl`, `items.jsonl`, `senses.jsonl`,
+`forms.jsonl`, `pronunciations.jsonl`, and `translations.jsonl`. The archive has one
+`lexicon-1.0.0/` root. `manifest.json` records source filenames, byte sizes, checksums, and dates;
+`LICENSE` carries attribution for both Wiktionary editions and a CC BY-SA 4.0 notice.
+Pronunciations reference external audio URLs; the
+archive contains no audio files. Preserve source and license provenance when distributing or
+importing the release.
 
-Vietnamese Wiktionary merge is best-effort: source revisions must be reviewed in dry-run before an
-applied import, and missing translations are a valid state rather than an import failure.
+Translations in `translations.jsonl` carry a `link_status`. `DIRECT_SENSE` and
+`QUALIFIER_MATCH` have a `sense_id`; the latter is a deterministic qualifier match, not proof of
+semantic accuracy. `ITEM_CANDIDATE` and `ENTRY_CANDIDATE` are unresolved candidates at the named
+scope. Do not present candidates as sense translations. Senses without a sense-linked translation
+retain `translation_status=MISSING`, even if a candidate exists.
+Entry IDs are designed to remain stable across snapshots based on case-preserving headword identity,
+but this is best effort. Duplicate lexical blocks use source-order `item_seq`; their item IDs are
+deterministic within a snapshot and may change if upstream order changes. A later importer must
+reconcile IDs across snapshots.
+
+The full pinned build measured about 594 MB peak RSS with SQLite staging; plan for under 750 MB
+peak RSS, at least 2 GB RAM, and at least 10 GB free disk on a maintainer machine. The builder is
+intended to stream the raw inputs with bounded memory.
+
+For a team member with `tools/data-import/.env` configured, the clean release commands are:
+
+```bash
+make lexicon-fetch
+make lexicon-check
+```
+
+`LEXICON_RELEASE_URL` points to the published Drive archive. The version, schema version,
+installation directory, URL, and archive SHA-256 are pinned in `.env.example`; raw input paths there
+are maintainer-only hints and are not read by the fetch/check commands. The older
+`import_lexicon.py` reads raw source exports and is not a clean-release PostgreSQL importer.
 
 ## Import observability
 

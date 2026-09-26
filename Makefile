@@ -1,4 +1,4 @@
-.PHONY: help init-env doctor setup deps deps-java data-fetch data-check dev-infra dev-config db-shell db-reset keycloak-seed down core ai admin mobile \
+.PHONY: help init-env doctor setup deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset keycloak-seed down core ai admin mobile \
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
         ai-local lesson-prep test-lesson-prep clean-prep clean-cache clean \
@@ -24,8 +24,10 @@ help:
 	  '  make mobile                      Run Expo Metro bundler (requires Dev Build installed on device/emulator)' \
 	  '' \
 	  'Data' \
-	  '  make data-fetch                  Download/install Grammar+TOEIC dataset when missing' \
-	  '  make data-check                  Validate the importer-facing Grammar+TOEIC dataset structure' \
+	  '  make data-fetch                  Download/verify the versioned Grammar+TOEIC clean release' \
+	  '  make data-check                  Verify the installed Grammar+TOEIC clean release' \
+	  '  make lexicon-fetch               Download/verify the versioned Lexicon clean release' \
+	  '  make lexicon-check               Verify the installed Lexicon clean release' \
 	  '' \
 	  'Infrastructure' \
 	  '  make dev-infra                   Start PostgreSQL + Keycloak only' \
@@ -64,7 +66,7 @@ help:
 	  '  make dev-config                  Validate compose.dev.yml syntax/resolution' \
 	  '  make prod-config                 Validate compose.prod.yml syntax/resolution' \
 	  '' \
-	  'Dataset download is opt-in: make data-fetch, or WITH_DATA=1 make setup.' \
+	  'Clean release download is opt-in: make data-fetch, or WITH_DATA=1 make setup.' \
 	  '' \
 	  'Android first-time: make android-check -> make android-emulator-create -> make android-emulator -> make mobile-android-install -> make mobile' \
 	  'iOS first-time:     make mobile-ios-device-register -> make mobile-ios-build -> install IPA from EAS URL -> make mobile'
@@ -81,6 +83,12 @@ data-fetch:
 data-check:
 	./tools/data-import/scripts/fetch-data.sh --check
 
+lexicon-fetch:
+	./tools/data-import/scripts/fetch-lexicon.sh
+
+lexicon-check:
+	./tools/data-import/scripts/fetch-lexicon.sh --check
+
 deps-java:
 	./mvnw -B -pl apps/core-service -am -DskipTests install
 
@@ -93,10 +101,10 @@ deps: deps-java
 setup:
 	$(MAKE) init-env
 	$(MAKE) doctor
+	$(MAKE) deps
 	@if [ "$${WITH_DATA:-0}" = "1" ]; then \
 		$(MAKE) data-fetch; \
 	fi
-	$(MAKE) deps
 	$(MAKE) dev-infra
 	$(MAKE) keycloak-seed
 	@printf '%s\n' \
@@ -236,6 +244,12 @@ validate:
 	    tools/data-import/import_grammar.py \
 	    tools/data-import/import_toeic.py \
 	    tools/data-import/import_lexicon.py \
+	    tools/data-import/build_grammar_toeic_release.py \
+	    tools/data-import/validate_grammar_toeic_release.py \
+	    tools/data-import/scripts/fetch_release.py \
+	    tools/data-import/build_lexicon_release.py \
+	    tools/data-import/validate_lexicon_release.py \
+	    tools/data-import/scripts/fetch_lexicon_release.py \
 	    tools/data-import/common.py \
 	    tools/data-import/tests; \
 	  status=$$?; rm -rf "$$tmp"; exit $$status

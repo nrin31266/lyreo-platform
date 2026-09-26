@@ -19,6 +19,8 @@ Global dictionary entries belong to Lexicon. Vocabulary SRS references Lexicon a
 
 Grammar datasets provide taxonomy, bank sets, questions, answers, and explanations where available. TOEIC datasets provide tests, passages, questions, answer keys, and media references. Importers normalize queryable structure in PostgreSQL and put large media in object storage. Missing or unapproved scaled-score conversion data must not be invented by the importer; see [OQ-004](requirements/open-questions.md#oq-004--toeic-scaled-score-conversion).
 
+The offline Grammar/TOEIC builder prepares a validated, versioned clean release from immutable raw source before any production import. Its package envelope (manifest, checksums, provenance, issue report) follows the [dataset release convention](../tools/data-import/RELEASE_FORMAT.md); its content collections and lifecycle remain domain-owned. Normal developer setup fetches the pinned clean archive into `.data/releases/grammar-toeic/<package-version>/` and verifies the archive checksum and package manifest. Raw source under `.data/datasets/` is maintainer input for rebuilding, not a team setup dependency. The existing legacy import scripts still read raw source and are not the production importer for the clean contract; the clean release is not evidence of data already loaded in Core.
+
 ## Curriculum and artifacts
 
 Curriculum content references existing owners rather than copying their durable records. Stable small defaults may use Flyway; large paths and learning content use versioned imports. PostgreSQL owns normalized/queryable records, object storage holds immutable media and raw debug artifacts, and databases persist keys rather than signed URLs.
