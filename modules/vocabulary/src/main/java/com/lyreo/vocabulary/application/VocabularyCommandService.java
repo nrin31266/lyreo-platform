@@ -28,11 +28,11 @@ public class VocabularyCommandService {
 
     public VocabularyCard add(
         UUID learnerId,
-        UUID lexiconEntryId,
+        UUID headwordId,
         String contextType,
         UUID contextId
     ) {
-        return repository.addIfAbsent(learnerId, lexiconEntryId, contextType, contextId, Instant.now());
+        return repository.addIfAbsent(learnerId, headwordId, contextType, contextId, Instant.now());
     }
 
     public List<VocabularyCard> due(UUID learnerId, int limit) {
@@ -51,7 +51,7 @@ public class VocabularyCommandService {
         var result = scheduler.schedule(card, rating, at);
         repository.applyReview(card.id(), rating, result, at);
         events.publishEvent(new VocabularyReviewCompletedEvent(
-            learnerId, card.lexiconEntryId(), rating.name(), rating != SpacedRepetitionScheduler.Rating.AGAIN, at
+            learnerId, card.headwordId(), rating.name(), rating != SpacedRepetitionScheduler.Rating.AGAIN, at
         ));
         return result;
     }

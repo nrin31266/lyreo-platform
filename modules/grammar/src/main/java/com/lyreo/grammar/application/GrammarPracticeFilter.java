@@ -7,8 +7,12 @@ import java.util.UUID;
  * Owned by the application layer; the repository accepts it as a persistence port input.
  */
 public record GrammarPracticeFilter(
-    UUID topicId,
-    UUID subtopicId,
-    UUID bankSetId,
+    UUID topicCatalogId,
+    UUID subtopicCatalogId,
+    UUID bankCatalogId,
     Integer difficultyLevel
-) {}
+) {
+    public boolean hasCatalogFilter() {
+        return topicCatalogId != null || subtopicCatalogId != null || bankCatalogId != null;
+    }
+}

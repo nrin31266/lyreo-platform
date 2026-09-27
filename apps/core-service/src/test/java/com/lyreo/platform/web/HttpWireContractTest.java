@@ -43,6 +43,8 @@ import com.lyreo.platform.jobs.domain.BackgroundJobStatus;
 import com.lyreo.platform.observability.CorrelationIdFilter;
 import com.lyreo.toeic.api.ToeicAttemptController;
 import com.lyreo.toeic.application.ToeicAttemptService;
+import com.lyreo.toeic.application.ToeicTestQueryService;
+import com.lyreo.toeic.domain.ToeicTestContent;
 import com.lyreo.vocabulary.api.VocabularyController;
 import com.lyreo.vocabulary.application.port.SpacedRepetitionScheduler;
 import com.lyreo.vocabulary.application.VocabularyCommandService;
@@ -72,6 +74,7 @@ class HttpWireContractTest {
     private LessonPracticeService lessonPracticeService;
     private GrammarPracticeService grammarPracticeService;
     private ToeicAttemptService toeicAttemptService;
+    private ToeicTestQueryService toeicTestQueryService;
     private VocabularyCommandService vocabularyCommandService;
     private AiAdminService aiAdminService;
     private AppUserProvisioningService provisioningService;
@@ -147,7 +150,8 @@ class HttpWireContractTest {
 
         // TOEIC
         toeicAttemptService = mock(ToeicAttemptService.class);
-        toeicMvc = MockMvcBuilders.standaloneSetup(new ToeicAttemptController(toeicAttemptService, provisioningService))
+        toeicTestQueryService = mock(ToeicTestQueryService.class);
+        toeicMvc = MockMvcBuilders.standaloneSetup(new ToeicAttemptController(toeicAttemptService, toeicTestQueryService, provisioningService))
             .setCustomArgumentResolvers(jwtResolver)
             .setControllerAdvice(new ApiExceptionHandler())
             .addFilters(new CorrelationIdFilter())
@@ -339,7 +343,7 @@ class HttpWireContractTest {
         UUID qId = UUID.randomUUID();
         UUID topicId = UUID.randomUUID();
         UUID subtopicId = UUID.randomUUID();
-        when(grammarPracticeService.practice(any(), any()))
+        when(grammarPracticeService.practice(any(), any(), any()))
             .thenReturn(List.of(new GrammarPracticeService.QuestionView(
                 qId,
                 "Choose the correct modal verb",
@@ -351,15 +355,15 @@ class HttpWireContractTest {
 
         grammarMvc.perform(get("/api/v1/grammar/questions"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].id").value(qId.toString()))
+            .andExpect(jsonPath("$[0].itemId").value(qId.toString()))
             .andExpect(jsonPath("$[0].questionText").value("Choose the correct modal verb"))
             .andExpect(jsonPath("$[0].options[0].key").value("A"))
             .andExpect(jsonPath("$[0].options[0].text").value("must"))
             .andExpect(jsonPath("$[0].options[1].key").value("B"))
             .andExpect(jsonPath("$[0].options[1].text").value("ought"))
             .andExpect(jsonPath("$[0].difficultyLevel").value(2))
-            .andExpect(jsonPath("$[0].topicId").value(topicId.toString()))
-            .andExpect(jsonPath("$[0].subtopicId").value(subtopicId.toString()));
+            .andExpect(jsonPath("$[0].topicCatalogId").value(topicId.toString()))
+            .andExpect(jsonPath("$[0].subtopicCatalogId").value(subtopicId.toString()));
     }
 
     @Test
@@ -379,7 +383,7 @@ class HttpWireContractTest {
                 .content("{\"answer\": \"A\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.attemptId").value(attemptId.toString()))
-            .andExpect(jsonPath("$.questionId").value(qId.toString()))
+            .andExpect(jsonPath("$.itemId").value(qId.toString()))
             .andExpect(jsonPath("$.correct").value(true))
             .andExpect(jsonPath("$.correctAnswer").value("A"))
             .andExpect(jsonPath("$.explanationVi").value("Giai thich chi tiet"))
@@ -387,6 +391,48 @@ class HttpWireContractTest {
             .andExpect(jsonPath("$.answerTranslationVi").value("Dich dap an"))
             .andExpect(jsonPath("$.vocabularyNote").value("Tu vung note"))
             .andExpect(jsonPath("$.explanationPolicy").value("SOURCE"));
+    }
+
+    @Test
+    void toeicGetReturnsActiveHierarchyAndObjectKeysWithoutAnswerKey() throws Exception {
+        UUID catalogId = UUID.randomUUID();
+        UUID versionId = UUID.randomUUID();
+        UUID groupId = UUID.randomUUID();
+        UUID placementId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        ToeicTestContent.MediaAsset audio = new ToeicTestContent.MediaAsset(
+            "a".repeat(64), "audio", 1, "media/sha256/aa/" + "a".repeat(64), "audio/mpeg", 256L
+        );
+        ToeicTestContent content = new ToeicTestContent(
+            catalogId, versionId,
+            new ToeicTestContent.TestMetadata("Test 1", 2025, 1, UUID.randomUUID(), 1,
+                "Source test", 2700, 4500, 200, 3, 1),
+            List.of(new ToeicTestContent.StimulusGroup(
+                groupId, 3, "AUDIO", "Conversation", 1, 3, List.of(32),
+                null, "PARSED", 1,
+                List.of(new ToeicTestContent.Document(UUID.randomUUID(), 1, "TEXT", "<p>Document</p>", "PARSED")),
+                List.of(audio)
+            )),
+            List.of(new ToeicTestContent.Placement(
+                placementId, groupId, "listening", 3, 32, null, 1,
+                new ToeicTestContent.Item(itemId, "MULTIPLE_CHOICE", "Question",
+                    List.of(new ToeicTestContent.Option("A", "Option A")), 3, List.of())
+            ))
+        );
+        when(toeicTestQueryService.getActiveTest(any(), eq(catalogId))).thenReturn(content);
+
+        toeicMvc.perform(get("/api/v1/toeic/tests/" + catalogId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.catalogId").value(catalogId.toString()))
+            .andExpect(jsonPath("$.testVersionId").value(versionId.toString()))
+            .andExpect(jsonPath("$.groups[0].documents[0].html").value("<p>Document</p>"))
+            .andExpect(jsonPath("$.groups[0].media[0].storageObjectKey").value(audio.storageObjectKey()))
+            .andExpect(jsonPath("$.placements[0].item.options[0].text").value("Option A"))
+            .andExpect(jsonPath("$..correctOption").doesNotExist())
+            .andExpect(jsonPath("$..transcriptEn").doesNotExist())
+            .andExpect(jsonPath("$..contentTranslationVi").doesNotExist())
+            .andExpect(jsonPath("$..vocabularyNoteVi").doesNotExist())
+            .andExpect(jsonPath("$..sourceReference").doesNotExist());
     }
 
     @Test
@@ -432,7 +478,7 @@ class HttpWireContractTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[0].id").value(cardId.toString()))
             .andExpect(jsonPath("$[0].learnerId").value(learnerId.toString()))
-            .andExpect(jsonPath("$[0].lexiconEntryId").value(lexiconId.toString()))
+            .andExpect(jsonPath("$[0].headwordId").value(lexiconId.toString()))
             .andExpect(jsonPath("$[0].sourceContextType").value("LESSON"))
             .andExpect(jsonPath("$[0].nextReviewAt").value("2026-09-12T10:00:00Z"))
             .andExpect(jsonPath("$[0].stability").value(2.5))
@@ -538,29 +584,42 @@ class HttpWireContractTest {
     void lexiconDetailAndSearchReturnExactWireShape() throws Exception {
         UUID entryId = UUID.randomUUID();
         UUID senseId = UUID.randomUUID();
-        UUID sourceId = UUID.randomUUID();
+        UUID headwordId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
 
         LexiconEntry entry = new LexiconEntry(
             entryId,
+            headwordId,
             "resilient",
             "resilient",
             LexiconEntry.EntryType.WORD,
             "en",
+            "{}",
+            "CC BY-SA",
+            List.of(new LexiconEntry.LexiconItem(itemId, "adjective", "Adjective", null, null, 1)),
+            List.of(),
             List.of(new LexiconEntry.LexiconSense(
                 senseId,
+                itemId,
+                1,
                 "adjective",
                 "Able to withstand or recover quickly from difficult conditions.",
                 "kiên cường, có khả năng phục hồi",
                 LexiconEntry.TranslationStatus.VERIFIED,
-                sourceId
+                "[]", "[]", "[]", null
             )),
             List.of(new LexiconEntry.Pronunciation(
+                UUID.randomUUID(),
+                itemId,
                 "US",
                 "/rɪˈzɪl.jənt/",
+                "resilient.mp3",
+                "https://audio.example.com/resilient.mp3",
                 "https://audio.example.com/resilient.mp3",
                 "audio/lexicon/resilient_us.mp3",
-                sourceId
-            ))
+                "[]"
+            )),
+            List.of()
         );
 
         when(lexiconSearchService.findById(entryId)).thenReturn(Optional.of(entry));
@@ -569,16 +628,17 @@ class HttpWireContractTest {
         lexiconMvc.perform(get("/api/v1/lexicon/" + entryId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.id").value(entryId.toString()))
+            .andExpect(jsonPath("$.headwordId").value(headwordId.toString()))
             .andExpect(jsonPath("$.canonicalForm").value("resilient"))
             .andExpect(jsonPath("$.normalizedForm").value("resilient"))
             .andExpect(jsonPath("$.type").value("WORD"))
             .andExpect(jsonPath("$.language").value("en"))
+            .andExpect(jsonPath("$.licenseText").value("CC BY-SA"))
             .andExpect(jsonPath("$.senses[0].id").value(senseId.toString()))
             .andExpect(jsonPath("$.senses[0].partOfSpeech").value("adjective"))
             .andExpect(jsonPath("$.senses[0].definitionEn").value("Able to withstand or recover quickly from difficult conditions."))
             .andExpect(jsonPath("$.senses[0].translationVi").value("kiên cường, có khả năng phục hồi"))
             .andExpect(jsonPath("$.senses[0].translationStatus").value("VERIFIED"))
-            .andExpect(jsonPath("$.senses[0].sourceId").value(sourceId.toString()))
             .andExpect(jsonPath("$.pronunciations[0].accent").value("US"))
             .andExpect(jsonPath("$.pronunciations[0].ipa").value("/rɪˈzɪl.jənt/"))
             .andExpect(jsonPath("$.pronunciations[0].cachedAudioObjectKey").value("audio/lexicon/resilient_us.mp3"));

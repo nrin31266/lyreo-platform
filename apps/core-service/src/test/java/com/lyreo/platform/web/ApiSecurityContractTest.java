@@ -3,6 +3,8 @@ package com.lyreo.platform.web;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.lyreo.platform.bootstrap.KeycloakJwtAuthenticationConverter;
+import com.lyreo.entitlement.api.FeatureEntitlementRequiredException;
+import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.platform.observability.CorrelationIdAccessor;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -64,6 +66,18 @@ class ApiSecurityContractTest {
         assertThat(body).contains("\"correlationId\":\"corr-sec-403\"");
         assertThat(body).contains("\"type\":\"urn:lyreo:problem:access-denied\"");
         assertThat(body).doesNotContain("\"properties\"");
+    }
+
+    @Test
+    void featureEntitlementDenialUsesSpecific403Code() {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/toeic/tests/test/attempts");
+        var response = new ApiExceptionHandler().handleAccessDenied(
+            new FeatureEntitlementRequiredException(FeatureKey.of("toeic.full-access")), request);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getType()).hasToString("urn:lyreo:problem:access-denied");
+        assertThat(response.getBody().getProperties()).containsEntry(
+            "code", ApiErrorCodes.FEATURE_ENTITLEMENT_REQUIRED);
     }
 
     @Test

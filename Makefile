@@ -2,7 +2,8 @@
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
         ai-local lesson-prep test-lesson-prep clean-prep clean-cache clean \
-        test-java verify-java test-ai test-data-import test-tooling test-frontend typecheck build-web validate-docs validate-repo validate check prod-config verify-prod-env down-v
+        test-java verify-java test-ai test-data-import test-tooling test-frontend typecheck build-web validate-docs validate-repo validate check prod-config verify-prod-env down-v \
+        import-clean-lexicon import-clean-grammar-toeic
 
 help:
 	@printf '%s\n' \
@@ -28,6 +29,8 @@ help:
 	  '  make data-check                  Verify the installed Grammar+TOEIC clean release' \
 	  '  make lexicon-fetch               Download/verify the versioned Lexicon clean release' \
 	  '  make lexicon-check               Verify the installed Lexicon clean release' \
+	  '  make import-clean-lexicon        Validate/dry-run the Lexicon release (ARGS="--apply --activate --activated-by operator" to write)' \
+	  '  make import-clean-grammar-toeic  Validate/dry-run the Grammar+TOEIC release (ARGS="--apply --activate --activated-by operator" to write)' \
 	  '' \
 	  'Infrastructure' \
 	  '  make dev-infra                   Start PostgreSQL + Keycloak only' \
@@ -88,6 +91,12 @@ lexicon-fetch:
 
 lexicon-check:
 	./tools/data-import/scripts/fetch-lexicon.sh --check
+
+import-clean-lexicon:
+	./tools/data-import/scripts/import-clean-lexicon.sh $(ARGS)
+
+import-clean-grammar-toeic:
+	./tools/data-import/scripts/import-clean-grammar-toeic.sh $(ARGS)
 
 deps-java:
 	./mvnw -B -pl apps/core-service -am -DskipTests install
@@ -244,6 +253,9 @@ validate:
 	    tools/data-import/import_grammar.py \
 	    tools/data-import/import_toeic.py \
 	    tools/data-import/import_lexicon.py \
+	    tools/data-import/clean_import_common.py \
+	    tools/data-import/import_clean_lexicon.py \
+	    tools/data-import/import_clean_grammar_toeic.py \
 	    tools/data-import/build_grammar_toeic_release.py \
 	    tools/data-import/validate_grammar_toeic_release.py \
 	    tools/data-import/scripts/fetch_release.py \

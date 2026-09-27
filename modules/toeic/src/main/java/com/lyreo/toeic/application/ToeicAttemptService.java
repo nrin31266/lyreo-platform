@@ -3,6 +3,8 @@ package com.lyreo.toeic.application;
 import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent;
+import com.lyreo.entitlement.api.EntitlementService;
+import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.toeic.application.port.ToeicAttemptRepository;
 import com.lyreo.toeic.application.port.ToeicAttemptRepository.QuestionKey;
 import com.lyreo.toeic.application.port.ToeicAttemptRepository.ScoreSummary;
@@ -27,48 +29,64 @@ public class ToeicAttemptService {
 
     private final ToeicAttemptRepository repository;
     private final ApplicationEventPublisher events;
+    private final EntitlementService entitlements;
 
     public ToeicAttemptService(
         ToeicAttemptRepository repository,
-        ApplicationEventPublisher events
+        ApplicationEventPublisher events,
+        EntitlementService entitlements
     ) {
         this.repository = repository;
         this.events = events;
+        this.entitlements = entitlements;
     }
 
     @Transactional
     public SubmitResult submit(
         UUID learnerId,
-        UUID testId,
+        UUID catalogId,
         Mode mode,
         Map<UUID, String> answers
     ) {
-        if (learnerId == null || testId == null || mode == null) {
-            throw new RequestValidationException("learnerId, testId and mode are required");
+        if (learnerId == null || catalogId == null || mode == null) {
+            throw new RequestValidationException("learnerId, catalogId and mode are required");
+        }
+        var test = repository.findActiveTest(catalogId)
+            .orElseThrow(() -> new ResourceNotFoundException("TOEIC test not found in the active release: " + catalogId));
+        if (!"PUBLISHED".equals(test.publicationStatus())) {
+            throw new ResourceNotFoundException("TOEIC test is not published: " + catalogId);
+        }
+        if ("FEATURE".equals(test.accessMode())) {
+            entitlements.requireFeature(learnerId, FeatureKey.of(test.requiredFeatureKey()));
         }
         Map<UUID, String> safeAnswers = answers == null
             ? Map.of()
             : normalizeAnswers(answers);
 
-        Set<UUID> requestedQuestionIds = mode == Mode.DRILL
+        Set<UUID> requestedPlacementIds = mode == Mode.DRILL
             ? Set.copyOf(safeAnswers.keySet())
             : Set.of();
-        if (mode == Mode.DRILL && requestedQuestionIds.isEmpty()) {
+        if (mode == Mode.DRILL && requestedPlacementIds.isEmpty()) {
             throw new RequestValidationException("DRILL submission requires at least one answer");
         }
 
-        List<QuestionKey> answerKey = repository.answerKey(testId, requestedQuestionIds);
+        List<QuestionKey> answerKey = repository.answerKey(test.testVersionId(), requestedPlacementIds);
         if (answerKey.isEmpty()) {
             throw new ResourceNotFoundException("No TOEIC questions found for this submission");
         }
-        if (mode == Mode.DRILL && answerKey.size() != requestedQuestionIds.size()) {
+        if (mode == Mode.DRILL && answerKey.size() != requestedPlacementIds.size()) {
             throw new RequestValidationException("One or more drill questions do not belong to the test");
+        }
+        if (mode == Mode.FULL_TEST
+            && !answerKey.stream().map(QuestionKey::placementId).collect(java.util.stream.Collectors.toSet())
+                .containsAll(safeAnswers.keySet())) {
+            throw new RequestValidationException("One or more answer placements do not belong to the test");
         }
 
         ScoreSummary score = score(answerKey, safeAnswers);
         UUID attemptId = repository.saveCompletedAttempt(
             learnerId,
-            testId,
+            test.testVersionId(),
             mode.name(),
             score,
             safeAnswers,
@@ -79,7 +97,7 @@ public class ToeicAttemptService {
         events.publishEvent(new ToeicAttemptCompletedEvent(
             learnerId,
             attemptId,
-            testId,
+            catalogId,
             mode.name(),
             score.listeningCorrect(),
             score.listeningTotal(),
@@ -107,7 +125,7 @@ public class ToeicAttemptService {
             boolean reading = question.part() != null && question.part() >= 5 && question.part() <= 7;
             if (!listening && !reading) continue;
 
-            String actual = answers.getOrDefault(question.questionId(), "");
+            String actual = answers.getOrDefault(question.placementId(), "");
             boolean correct = question.correctAnswer() != null
                 && question.correctAnswer().equalsIgnoreCase(actual);
 
@@ -132,13 +150,13 @@ public class ToeicAttemptService {
 
     private static Map<UUID, String> normalizeAnswers(Map<UUID, String> answers) {
         Map<UUID, String> normalized = new LinkedHashMap<>();
-        answers.forEach((questionId, answer) -> {
-            if (questionId == null) return;
+        answers.forEach((placementId, answer) -> {
+            if (placementId == null) return;
             String value = answer == null ? "" : answer.strip().toUpperCase(Locale.ROOT);
             if (!value.isEmpty() && !Set.of("A", "B", "C", "D").contains(value)) {
                 throw new RequestValidationException("TOEIC answer must be A, B, C or D");
             }
-            normalized.put(questionId, value);
+            normalized.put(placementId, value);
         });
         return Map.copyOf(normalized);
     }

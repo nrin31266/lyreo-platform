@@ -14,6 +14,9 @@ import com.lyreo.ai.domain.AiRoute;
 import com.lyreo.identity.application.AppUserProvisioningService;
 import com.lyreo.identity.application.ProvisionedUser;
 import com.lyreo.identity.application.port.AppUserRepository;
+import com.lyreo.entitlement.api.EntitlementService;
+import com.lyreo.entitlement.api.FeatureKey;
+import com.lyreo.entitlement.application.port.UserEntitlementGrantRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModule;
 import org.springframework.modulith.core.ApplicationModules;
@@ -34,6 +37,12 @@ class ArchitectureTest {
         assertThat(identity.isExposed(AppUserProvisioningService.class)).isTrue();
         assertThat(identity.isExposed(ProvisionedUser.class)).isTrue();
         assertThat(identity.isExposed(AppUserRepository.class)).isFalse();
+
+        ApplicationModule entitlement = modules.getModuleByType(EntitlementService.class)
+            .orElseThrow(() -> new AssertionError("entitlement module not found"));
+        assertThat(entitlement.isExposed(EntitlementService.class)).isTrue();
+        assertThat(entitlement.isExposed(FeatureKey.class)).isTrue();
+        assertThat(entitlement.isExposed(UserEntitlementGrantRepository.class)).isFalse();
 
         ApplicationModule ai = modules.getModuleByType(AiInvocationService.class)
             .orElseThrow(() -> new AssertionError("ai module not found"));

@@ -3,6 +3,8 @@ package com.lyreo.grammar;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.lyreo.contracts.grammar.GrammarQuestionAnsweredEvent;
+import com.lyreo.entitlement.api.EntitlementService;
+import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.grammar.application.GrammarPracticeFilter;
 import com.lyreo.grammar.application.GrammarPracticeScorer;
 import com.lyreo.grammar.application.GrammarPracticeService;
@@ -12,9 +14,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.access.AccessDeniedException;
 
 class GrammarPracticeServiceTest {
     @Test
@@ -45,12 +49,14 @@ class GrammarPracticeServiceTest {
         GrammarPracticeService service = new GrammarPracticeService(
             repository,
             new GrammarPracticeScorer(),
-            publisher
+            publisher,
+            new AllowNoFeatures()
         );
 
         var before = service.practice(
             new GrammarPracticeFilter(null, null, null, 3),
-            10
+            10,
+            UUID.randomUUID()
         );
         assertThat(before).singleElement().satisfies(view -> {
             assertThat(view.questionText()).contains("lecture");
@@ -64,34 +70,86 @@ class GrammarPracticeServiceTest {
         assertThat(events).singleElement().isInstanceOf(GrammarQuestionAnsweredEvent.class);
     }
 
+    @Test
+    void blocksFeatureGatedItemWhenLearnerHasNoGrant() {
+        UUID itemId = UUID.randomUUID();
+        FakeRepository repository = new FakeRepository(new GrammarQuestion(
+            itemId, "A stem", List.of(new GrammarQuestion.Option("A", "one")), "A",
+            null, null, null, null, 1, null, null, GrammarQuestion.ExplanationPolicy.SOURCE
+        ));
+        repository.accessRequirements = List.of(new GrammarPracticeRepository.AccessRequirement(true, List.of("grammar.advanced")));
+        repository.requiredFeatures = List.of("grammar.advanced");
+        GrammarPracticeService service = new GrammarPracticeService(
+            repository,
+            new GrammarPracticeScorer(),
+            event -> {},
+            new AllowNoFeatures()
+        );
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.submit(UUID.randomUUID(), itemId, "A"))
+            .isInstanceOf(AccessDeniedException.class);
+        assertThat(repository.savedItemId).isNull();
+    }
+
     private static final class FakeRepository implements GrammarPracticeRepository {
         private final GrammarQuestion question;
         private String lastSavedAnswer;
+        private UUID savedItemId;
+        private List<AccessRequirement> accessRequirements = List.of(new AccessRequirement(true, List.of()));
+        private List<String> requiredFeatures = List.of();
 
         private FakeRepository(GrammarQuestion question) {
             this.question = question;
         }
 
         @Override
-        public List<GrammarQuestion> findPracticeQuestions(GrammarPracticeFilter filter, int limit) {
+        public List<String> findRequiredFeatureKeys() {
+            return requiredFeatures;
+        }
+
+        @Override
+        public List<CatalogAccess> findCatalogAccessPolicies(GrammarPracticeFilter filter) {
+            return List.of();
+        }
+
+        @Override
+        public List<AccessRequirement> findAccessRequirements(UUID itemId) {
+            return accessRequirements;
+        }
+
+        @Override
+        public List<GrammarQuestion> findPracticeQuestions(GrammarPracticeFilter filter, Set<String> allowedFeatureKeys, int limit) {
             return List.of(question);
         }
 
         @Override
-        public Optional<GrammarQuestion> findQuestion(UUID questionId) {
-            return question.id().equals(questionId) ? Optional.of(question) : Optional.empty();
+        public Optional<GrammarQuestion> findQuestion(UUID itemId, Set<String> allowedFeatureKeys) {
+            return question.itemId().equals(itemId) ? Optional.of(question) : Optional.empty();
         }
 
         @Override
         public UUID saveAttempt(
             UUID learnerId,
-            UUID questionId,
+            UUID itemId,
             String submittedAnswer,
             boolean correct,
             Instant answeredAt
         ) {
+            this.savedItemId = itemId;
             this.lastSavedAnswer = submittedAnswer;
             return UUID.randomUUID();
+        }
+    }
+
+    private static final class AllowNoFeatures implements EntitlementService {
+        @Override
+        public boolean hasFeature(UUID userId, FeatureKey featureKey) {
+            return false;
+        }
+
+        @Override
+        public void requireFeature(UUID userId, FeatureKey featureKey) {
+            throw new AccessDeniedException("No grant");
         }
     }
 }

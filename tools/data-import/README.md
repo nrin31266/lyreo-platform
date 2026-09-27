@@ -78,12 +78,58 @@ change manifest metadata. Pass the same `--generated-at` when checking reproduci
 version and clean schema version are separate fields; the schema version changes only when the
 record contract changes.
 
+## Clean release PostgreSQL import
+
+The production importers read only validated clean release directories. Default invocation runs
+the domain validator and reports a dry-run plan without opening PostgreSQL or object storage. The
+Lexicon importer streams all six canonical JSONL files in bounded batches; it does not filter entries
+by Vietnamese translation coverage. Grammar/TOEIC import preserves all active clean collections and
+records exact counts for `quarantine/` and `source_only/` collections it skips.
+
+```bash
+# From the repository root; --release is optional when *_RELEASE_DIR is set in .env.
+tools/data-import/scripts/import-clean-lexicon.sh [--release .data/releases/lexicon/1.0.0]
+tools/data-import/scripts/import-clean-grammar-toeic.sh [--release .data/releases/grammar-toeic/1.0.1]
+
+# APPLY, with optional activation after count and hierarchy reconciliation.
+tools/data-import/scripts/import-clean-lexicon.sh --apply --batch-size 1000
+tools/data-import/scripts/import-clean-grammar-toeic.sh --apply --batch-size 500
+tools/data-import/scripts/import-clean-lexicon.sh --apply --activate --activated-by operator
+tools/data-import/scripts/import-clean-grammar-toeic.sh --apply --rollback --activated-by operator
+
+# Change the active release later, after revalidating an already imported package.
+tools/data-import/scripts/import-clean-lexicon.sh --activate-only --activated-by operator
+tools/data-import/scripts/import-clean-grammar-toeic.sh --rollback-only --activated-by operator
+```
+
+The equivalent root targets are `make import-clean-lexicon` and
+`make import-clean-grammar-toeic`; pass CLI options with `ARGS="..."`.
+
+Both importers require `DATABASE_URL` for APPLY. Grammar/TOEIC APPLY also requires `R2_ENDPOINT`,
+`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET`; each media file is rehashed before
+upload and stored under `media/sha256/{prefix}/{sha256}`. Existing content-addressed objects are
+verified and reused. Presigned URLs are never written to PostgreSQL.
+
+The clean validator runs as a separate preflight process before writes. Each database batch is a
+bounded transaction, so a failed APPLY can be retried with the same manifest checksum and stable
+release-scoped IDs. Lexicon reruns after a successful APPLY skip the bulk insert once validation,
+counts, and hierarchy pass; partial retries use no-op conflicts. Final reconciliation rechecks all
+release table counts and parent relationships before marking APPLY successful. Once a release has a
+successful APPLY, database triggers reject new or changed snapshot rows. The first successful
+release for a domain confirms its source-seeded catalog policy. New catalog identities in later
+releases remain `DRAFT`/`PROVISIONAL`; known catalog policy stays under runtime ownership.
+An interrupted `RUNNING` attempt for the same release is marked `FAILED` when a retry acquires
+the domain import lock, preserving the earlier checkpoint in the audit table.
+
+`--activate` and `--rollback` require `--apply`; standalone `--activate-only` and `--rollback-only`
+are for completed releases and recheck checksum, successful run, and row counts. Lexicon
+pronunciation audio URLs remain source provenance; no audio files are fetched.
+
 ## Legacy raw scripts (maintainers only)
 
 The existing `import_grammar.py` and `import_toeic.py` read source exports under
 `GRAMMAR_TOEIC_RAW_DIR` or an explicit `--data-dir`. They do not read the clean release. Keep raw
 files only for release engineering and legacy diagnostics; `make data-fetch` never downloads them.
-No PostgreSQL import from the clean release is implemented yet.
 
 ## Global Lexicon
 
@@ -149,13 +195,14 @@ make lexicon-check
 `LEXICON_RELEASE_URL` points to the published Drive archive. The version, schema version,
 installation directory, URL, and archive SHA-256 are pinned in `.env.example`; raw input paths there
 are maintainer-only hints and are not read by the fetch/check commands. The older
-`import_lexicon.py` reads raw source exports and is not a clean-release PostgreSQL importer.
+`import_lexicon.py` reads raw source exports; use `import-clean-lexicon.sh` for production imports.
 
 ## Import observability
 
-Every applied importer writes/updates `dataset_import` with a content checksum, status, counts, and
-error message. Raw datasets remain outside Git. Failed large imports stay visible instead of being
-hidden behind an ad-hoc script run.
+Every clean-release APPLY creates a `dataset_import_run` with the release checksum, status, exact
+manifest and database counts, intentionally skipped collection counts, and hierarchy-orphan probes.
+Raw datasets/releases remain outside Git. Failed large imports stay visible with an error message
+and can be retried using the same validated release.
 
 Dataset storage/download location does not affect AI token cost. AI cost is created by actual
 provider/model capability calls, not by whether source/result bytes live on local disk or R2.
