@@ -258,10 +258,9 @@ validate:
 	    tools/data-import/import_clean_grammar_toeic.py \
 	    tools/data-import/build_grammar_toeic_release.py \
 	    tools/data-import/validate_grammar_toeic_release.py \
-	    tools/data-import/scripts/fetch_release.py \
+	    tools/data-import/scripts \
 	    tools/data-import/build_lexicon_release.py \
 	    tools/data-import/validate_lexicon_release.py \
-	    tools/data-import/scripts/fetch_lexicon_release.py \
 	    tools/data-import/common.py \
 	    tools/data-import/tests; \
 	  status=$$?; rm -rf "$$tmp"; exit $$status

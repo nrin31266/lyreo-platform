@@ -39,7 +39,7 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Proves the database and testing foundation on fresh PostgreSQL:
  * 1. Testcontainers provisions real PostgreSQL 18 (alpine).
- * 2. Spring Boot Flyway applies the consolidated baseline and production cutover (V001..V004).
+ * 2. Spring Boot Flyway applies the consolidated baseline and production cutover (V001..V005).
  * 3. Asserts migration status, essential schema objects, indexes, constraints, and reference data.
  */
 @SpringBootTest(classes = FlywayMigrationIT.TestConfig.class)
@@ -68,8 +68,8 @@ class FlywayMigrationIT {
         MigrationInfo[] applied = flyway.info().applied();
 
         assertThat(applied)
-            .as("Four migrations must be applied")
-            .hasSize(4);
+            .as("Five migrations must be applied")
+            .hasSize(5);
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
@@ -85,9 +85,11 @@ class FlywayMigrationIT {
 
         assertThat(applied[3].getVersion().getVersion()).isEqualTo("004");
         assertThat(applied[3].getState()).isEqualTo(MigrationState.SUCCESS);
+        assertThat(applied[4].getVersion().getVersion()).isEqualTo("005");
+        assertThat(applied[4].getState()).isEqualTo(MigrationState.SUCCESS);
         assertThat(flyway.info().current().getVersion().getVersion())
-            .as("Current Flyway version must be 004")
-            .isEqualTo("004");
+            .as("Current Flyway version must be 005")
+            .isEqualTo("005");
     }
 
     @Test
@@ -228,9 +230,24 @@ class FlywayMigrationIT {
             "lesson_activity_progress_activity_idx",
             "lexicon_entry_lookup_idx",
             "lexicon_form_lookup_idx",
+            "lexicon_sense_entry_idx",
+            "lexicon_form_entry_idx",
+            "lexicon_pronunciation_entry_idx",
             "grammar_membership_topic_idx",
             "toeic_placement_test_idx"
         );
+        for (String index : List.of(
+            "lexicon_sense_entry_idx",
+            "lexicon_form_entry_idx",
+            "lexicon_pronunciation_entry_idx"
+        )) {
+            String definition = jdbcTemplate.queryForObject(
+                "SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexname = ?",
+                String.class,
+                index
+            );
+            assertThat(definition).contains("(release_id, entry_id)");
+        }
     }
 
     @Test

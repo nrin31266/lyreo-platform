@@ -30,6 +30,16 @@ def index(data: list[dict], name: str) -> dict[str, dict]:
     return result
 
 
+def validate_membership_hierarchy(membership: dict, subtopics: dict[str, dict]) -> None:
+    subtopic_id = membership["subtopic_id"]
+    if subtopic_id:
+        require(subtopic_id in subtopics, f"Unknown subtopic: {membership['id']}")
+        require(
+            subtopics[subtopic_id]["topic_id"] == membership["topic_id"],
+            f"Subtopic topic mismatch: {membership['id']}",
+        )
+
+
 def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     require(manifest["format"] == "lyreo.dataset-release" and manifest["manifest_schema_version"] == 1, "Unsupported manifest envelope")
@@ -147,8 +157,7 @@ def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
         require(membership["mode"] in ("topic", "bank", "difficulty"), f"Unknown Grammar mode: {membership['id']}")
         if membership["topic_id"]:
             require(membership["topic_id"] in topics, f"Unknown topic: {membership['id']}")
-        if membership["subtopic_id"]:
-            require(membership["subtopic_id"] in subtopics, f"Unknown subtopic: {membership['id']}")
+        validate_membership_hierarchy(membership, subtopics)
         if membership["bank_set_id"]:
             require(membership["bank_set_id"] in banks, f"Unknown bank: {membership['id']}")
         if membership["difficulty_level"]:

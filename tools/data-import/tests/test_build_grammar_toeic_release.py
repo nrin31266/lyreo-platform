@@ -16,9 +16,22 @@ from build_grammar_toeic_release import (  # noqa: E402
     validate_item,
     visible_tokens,
 )
+from validate_grammar_toeic_release import validate_membership_hierarchy  # noqa: E402
 
 
 class ReleaseContentTest(unittest.TestCase):
+    def test_membership_subtopic_must_belong_to_topic(self):
+        subtopics = {"subtopic-a": {"topic_id": "topic-a"}}
+        validate_membership_hierarchy(
+            {"id": "valid", "topic_id": "topic-a", "subtopic_id": "subtopic-a"},
+            subtopics,
+        )
+        with self.assertRaisesRegex(ValueError, "Subtopic topic mismatch: invalid"):
+            validate_membership_hierarchy(
+                {"id": "invalid", "topic_id": "topic-b", "subtopic_id": "subtopic-a"},
+                subtopics,
+            )
+
     def test_shared_part_five_content_uses_meaning_not_misnamed_field(self):
         source = {
             "id": "shared-1", "part": 5, "question_text": "What is -------? ",

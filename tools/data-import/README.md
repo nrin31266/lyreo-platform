@@ -193,8 +193,8 @@ make lexicon-check
 ```
 
 `LEXICON_RELEASE_URL` points to the published Drive archive. The version, schema version,
-installation directory, URL, and archive SHA-256 are pinned in `.env.example`; raw input paths there
-are maintainer-only hints and are not read by the fetch/check commands. The older
+installation directory, URL, and archive SHA-256 are pinned in `.env.example`. Maintainers
+pass raw input paths explicitly to the builder as shown above. The older
 `import_lexicon.py` reads raw source exports; use `import-clean-lexicon.sh` for production imports.
 
 ## Import observability
