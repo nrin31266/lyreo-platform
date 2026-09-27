@@ -180,6 +180,15 @@ Before merging, verify:
 - External links support methodology references; they do not validate Lyreo features.
 - Do not reference machine-local scratch directories, home paths, or out-of-repo plans.
 
+## 12. Language convention
+
+Keep code identifiers, APIs, schema names, and configuration keys in English. Write new technical
+comments in English by default. Preserve the established prose language of a canonical document
+when editing it; new documents follow the language of their owning documentation area. Product and
+requirements documents may remain Vietnamese, including established English domain terms such as
+TOEIC, Grammar, learner, and API. Avoid arbitrary language switching within one section or
+sentence. Do not mass-translate existing documents solely for consistency.
+
 ---
 
 Routing lives in [docs/README.md](README.md); engineering invariants live in [AGENTS.md](../AGENTS.md).

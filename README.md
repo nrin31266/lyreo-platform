@@ -26,7 +26,7 @@ Use the versions in `.java-version`, `.nvmrc`, and `package.json#packageManager`
 make setup
 ```
 
-Setup creates owner-specific local `.env` files, syncs dependencies, starts PostgreSQL/Keycloak, and seeds the development realm. The versioned Grammar/TOEIC clean release is optional: run `make data-fetch` when needed, or use `WITH_DATA=1 make setup` to fetch it during setup after dependencies are ready. Application source runs on the host; start each process in its own terminal:
+Setup creates owner-specific local `.env` files, syncs dependencies, starts PostgreSQL/Keycloak, and seeds the development realm. The versioned Grammar/TOEIC clean release is optional: run `make data-fetch` when needed, or use `WITH_DATA=1 make setup` to fetch it during setup after dependencies are ready. Fetching verifies files on disk; importing requires an explicit APPLY, with an optional activation flag described in the [Data Import guide](tools/data-import/README.md). Application source runs on the host; start each process in its own terminal:
 
 ```bash
 make core

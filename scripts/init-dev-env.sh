@@ -85,8 +85,7 @@ set_env "$CORE_ENV" DATABASE_USERNAME "$DB_USER"
 set_env "$CORE_ENV" DATABASE_PASSWORD "$DB_PASSWORD"
 set_env "$DATA_ENV" DATABASE_URL "postgresql://${DB_USER}:${DB_PASSWORD}@localhost:${DB_PORT}/${DB_NAME}"
 
-# Existing local .env files predate clean releases; add the new keys without copying a raw
-# archive URL into the release URL or overwriting a developer's explicit release selection.
+# Backfill clean-release and R2 region defaults without overwriting local selections.
 for key in \
   GRAMMAR_TOEIC_RELEASE_VERSION \
   GRAMMAR_TOEIC_RELEASE_SCHEMA_VERSION \
@@ -98,7 +97,8 @@ for key in \
   LEXICON_RELEASE_SCHEMA_VERSION \
   LEXICON_RELEASE_DIR \
   LEXICON_RELEASE_URL \
-  LEXICON_RELEASE_SHA256; do
+  LEXICON_RELEASE_SHA256 \
+  R2_REGION; do
   if ! grep -q "^${key}=" "$DATA_ENV"; then
     set_env "$DATA_ENV" "$key" "$(get_env "$DATA_ENV.example" "$key")"
   fi

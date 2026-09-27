@@ -19,3 +19,21 @@ The server enforces authorization and owns scores, XP, and rewards. Keep provide
 ## Change and verification
 
 Keep each fact with its owner. Internal refactors with unchanged contracts need no ceremonial docs edit. Check consumers when changing an API, event, schema, or configuration. Use the applicable tests and validators; `make validate` is the offline minimum and `make check` is the full verification interface. Report any required check that could not run with its exact blocker. Never call a scaffold feature complete based only on starter tests.
+
+## Decisions
+
+Decide and continue on reversible implementation details, choices implied by accepted contracts,
+and repository-consistent names, layouts, and test mechanics. Ask before choosing ambiguous product
+semantics, destructive data operations beyond an authorized dev reset/import, security or credential
+policy, irreversible external actions, or conflicting authoritative requirements that change behavior.
+Complete independent work before asking for the blocking decision.
+
+## Definition of Done
+
+- Check the canonical owner and affected contracts; complete implementation and relevant tests.
+- Update consumers, configuration, schema migrations, and owner documentation when contracts change.
+- Exclude secrets, datasets, generated artifacts, and unrelated files from the change.
+- Run targeted verification and `make validate`; run `make check` when appropriate. Report blocked
+  checks explicitly and never claim an unrun check passed.
+- Review the final diff and Git status. Follow the documentation impact checklist in
+  [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md#10-pr-documentation-impact-checklist).

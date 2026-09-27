@@ -12,7 +12,7 @@ make init-env
 ```
 
 `tools/data-import/.env` controls the Grammar/TOEIC clean release version, archive URL and SHA-256,
-installation path, importer database access, and optional R2 credentials. The uploaded release URL
+installation path, importer database access, and R2 credentials for Grammar/TOEIC APPLY. The uploaded release URL
 is intentionally blank until the archive is available on Google Drive. Fill it in, then run:
 
 ```bash
@@ -105,10 +105,24 @@ tools/data-import/scripts/import-clean-grammar-toeic.sh --rollback-only --activa
 The equivalent root targets are `make import-clean-lexicon` and
 `make import-clean-grammar-toeic`; pass CLI options with `ARGS="..."`.
 
+For full local integration, each developer uses their own PostgreSQL database and credentials in
+their ignored `tools/data-import/.env`, while the team shares the Cloudflare R2 `lyreo-dev`
+bucket. Keep real credentials out of Git and command examples. Core can still use its local
+filesystem storage mode for lightweight development; this does not replace R2 for a
+Grammar/TOEIC APPLY. Lexicon APPLY does not upload media to R2.
+
+```bash
+make import-clean-grammar-toeic
+make import-clean-grammar-toeic ARGS="--apply --activate --activated-by local-dev --batch-size 500"
+```
+
 Both importers require `DATABASE_URL` for APPLY. Grammar/TOEIC APPLY also requires `R2_ENDPOINT`,
-`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET`; each media file is rehashed before
+`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET`; `R2_REGION` defaults to `auto`.
+Each media file is rehashed before
 upload and stored under `media/sha256/{prefix}/{sha256}`. Existing content-addressed objects are
-verified and reused. Presigned URLs are never written to PostgreSQL.
+verified by size and SHA-256 metadata (or streamed byte hash when metadata is absent) and reused.
+An identical APPLY inserts no duplicate rows or media objects. Presigned URLs are never written
+to PostgreSQL.
 
 The clean validator runs as a separate preflight process before writes. Each database batch is a
 bounded transaction, so a failed APPLY can be retried with the same manifest checksum and stable
