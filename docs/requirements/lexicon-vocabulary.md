@@ -10,7 +10,7 @@ forms/lemma, senses, pronunciation, source/license và Vietnamese translation st
 ### BR-LEX-001 — Lexicon không phải Vocabulary
 
 Lexicon là global knowledge; Vocabulary là learner-owned SRS card tham chiếu
-`lexiconEntryId`. Vocabulary không sở hữu dictionary definition.
+`headwordId` trường tồn qua các release. Vocabulary không sở hữu dictionary definition.
 
 ### FR-LEX-002 — Contextual lexical resolution
 

@@ -5,7 +5,7 @@ import java.util.UUID;
 
 /** Canonical imported Grammar Bank question. The answer key never leaves pre-submit APIs. */
 public record GrammarQuestion(
-    UUID id,
+    UUID itemId,
     String questionText,
     List<Option> options,
     String correctAnswer,
@@ -14,8 +14,8 @@ public record GrammarQuestion(
     String answerTranslationVi,
     String vocabularyNote,
     int difficultyLevel,
-    UUID topicId,
-    UUID subtopicId,
+    UUID topicCatalogId,
+    UUID subtopicCatalogId,
     ExplanationPolicy explanationPolicy
 ) {
     public record Option(String key, String text) {}

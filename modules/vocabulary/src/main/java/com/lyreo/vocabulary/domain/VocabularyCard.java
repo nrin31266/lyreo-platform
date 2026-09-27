@@ -6,7 +6,7 @@ import java.util.UUID;
 public record VocabularyCard(
     UUID id,
     UUID learnerId,
-    UUID lexiconEntryId,
+    UUID headwordId,
     String sourceContextType,
     UUID sourceContextId,
     Instant nextReviewAt,

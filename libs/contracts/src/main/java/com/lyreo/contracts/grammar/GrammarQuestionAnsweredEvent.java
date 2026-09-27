@@ -12,9 +12,9 @@ import java.util.UUID;
 public record GrammarQuestionAnsweredEvent(
     UUID learnerId,
     UUID attemptId,
-    UUID questionId,
-    UUID topicId,
-    UUID subtopicId,
+    UUID itemId,
+    UUID topicCatalogId,
+    UUID subtopicCatalogId,
     int difficultyLevel,
     boolean correct,
     Instant occurredAt

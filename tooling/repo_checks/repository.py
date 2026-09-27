@@ -116,16 +116,22 @@ def check_required_files(root: Path, errors: list[str]) -> None:
 
 
 def check_data_env(root: Path, errors: list[str]) -> None:
-    """Verify data import env template keys and gitignore exclusion of raw data."""
+    """Verify clean-release env template keys and exclusion of local data."""
     data_env = root / "tools/data-import/.env.example"
     if data_env.exists():
         data_env_text = data_env.read_text(encoding="utf-8")
-        for required_key in ("DAUTOEIC_DATA_DIR=", "DAUTOEIC_DATA_URL=", "DAUTOEIC_DATA_SHA256="):
+        for required_key in (
+            "GRAMMAR_TOEIC_RELEASE_VERSION=",
+            "GRAMMAR_TOEIC_RELEASE_SCHEMA_VERSION=",
+            "GRAMMAR_TOEIC_RELEASE_DIR=",
+            "GRAMMAR_TOEIC_RELEASE_URL=",
+            "GRAMMAR_TOEIC_RELEASE_SHA256=",
+        ):
             if required_key not in data_env_text:
                 errors.append(f"data importer env example missing {required_key[:-1]}")
-        data_url_match = re.search(r"^DAUTOEIC_DATA_URL=(.+)$", data_env_text, re.MULTILINE)
-        if not data_url_match or not data_url_match.group(1).strip():
-            errors.append("data importer env example must provide a non-empty DAUTOEIC_DATA_URL")
+        checksum_match = re.search(r"^GRAMMAR_TOEIC_RELEASE_SHA256=([0-9a-f]{64})$", data_env_text, re.MULTILINE)
+        if not checksum_match:
+            errors.append("data importer env example must pin the clean release SHA-256")
 
     gitignore = root / ".gitignore"
     if gitignore.exists() and ".data/" not in gitignore.read_text(encoding="utf-8"):

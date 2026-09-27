@@ -33,29 +33,32 @@ public class GrammarPracticeController {
 
     @GetMapping("/questions")
     public List<GrammarQuestionResponse> questions(
-        @RequestParam(required = false) UUID topicId,
-        @RequestParam(required = false) UUID subtopicId,
-        @RequestParam(required = false) UUID bankSetId,
-        @RequestParam(required = false) Integer difficulty,
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestParam(required = false) UUID topicCatalogId,
+        @RequestParam(required = false) UUID subtopicCatalogId,
+        @RequestParam(required = false) UUID bankCatalogId,
+        @RequestParam(required = false) Integer difficultyLevel,
         @RequestParam(required = false) Integer limit
     ) {
+        UUID learnerId = users.provision(jwt.getSubject(), jwt.getClaimAsString("email")).id();
         return practice.practice(
-            new GrammarPracticeFilter(topicId, subtopicId, bankSetId, difficulty),
-            limit
+            new GrammarPracticeFilter(topicCatalogId, subtopicCatalogId, bankCatalogId, difficultyLevel),
+            limit,
+            learnerId
         ).stream().map(GrammarQuestionResponse::from).toList();
     }
 
-    @PostMapping("/questions/{questionId}/attempts")
+    @PostMapping("/questions/{itemId}/attempts")
     public GrammarSubmitResponse submit(
         @AuthenticationPrincipal Jwt jwt,
-        @PathVariable UUID questionId,
+        @PathVariable UUID itemId,
         @Valid @RequestBody SubmitRequest request
     ) {
         UUID learnerId = users.provision(
             jwt.getSubject(),
             jwt.getClaimAsString("email")
         ).id();
-        return GrammarSubmitResponse.from(practice.submit(learnerId, questionId, request.answer()));
+        return GrammarSubmitResponse.from(practice.submit(learnerId, itemId, request.answer()));
     }
 
     public record SubmitRequest(
@@ -69,30 +72,30 @@ public class GrammarPracticeController {
     ) {}
 
     public record GrammarQuestionResponse(
-        UUID id,
+        UUID itemId,
         String questionText,
         List<QuestionOptionResponse> options,
         int difficultyLevel,
-        UUID topicId,
-        UUID subtopicId
+        UUID topicCatalogId,
+        UUID subtopicCatalogId
     ) {
         public static GrammarQuestionResponse from(GrammarPracticeService.QuestionView view) {
             return new GrammarQuestionResponse(
-                view.id(),
+                view.itemId(),
                 view.questionText(),
                 view.options().stream()
                     .map(o -> new QuestionOptionResponse(o.key(), o.text()))
                     .toList(),
                 view.difficultyLevel(),
-                view.topicId(),
-                view.subtopicId()
+                view.topicCatalogId(),
+                view.subtopicCatalogId()
             );
         }
     }
 
     public record GrammarSubmitResponse(
         UUID attemptId,
-        UUID questionId,
+        UUID itemId,
         boolean correct,
         String correctAnswer,
         String explanationVi,
@@ -104,7 +107,7 @@ public class GrammarPracticeController {
         public static GrammarSubmitResponse from(GrammarPracticeService.SubmitResult result) {
             return new GrammarSubmitResponse(
                 result.attemptId(),
-                result.questionId(),
+                result.itemId(),
                 result.correct(),
                 result.correctAnswer(),
                 result.explanationVi(),

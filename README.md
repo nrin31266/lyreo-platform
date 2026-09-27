@@ -26,7 +26,7 @@ Use the versions in `.java-version`, `.nvmrc`, and `package.json#packageManager`
 make setup
 ```
 
-Setup creates owner-specific local `.env` files, syncs dependencies, starts PostgreSQL/Keycloak, and seeds the development realm. The large Grammar/TOEIC dataset is optional: run `make data-fetch` when needed, or use `WITH_DATA=1 make setup` to fetch it during setup. Application source runs on the host; start each process in its own terminal:
+Setup creates owner-specific local `.env` files, syncs dependencies, starts PostgreSQL/Keycloak, and seeds the development realm. The versioned Grammar/TOEIC clean release is optional: run `make data-fetch` when needed, or use `WITH_DATA=1 make setup` to fetch it during setup after dependencies are ready. Application source runs on the host; start each process in its own terminal:
 
 ```bash
 make core
@@ -44,7 +44,7 @@ make mobile
 | `make init-env`, `make doctor`, `make deps` | Initialize and inspect local dependencies |
 | `make dev-infra`, `make keycloak-seed` | Run local PostgreSQL/Keycloak and seed the realm |
 | `make db-shell`, `make db-reset` | Inspect or deliberately reset the local app database |
-| `make data-check`, `make data-fetch` | Validate or acquire optional importer data |
+| `make data-check`, `make data-fetch` | Verify or acquire the optional clean Grammar/TOEIC release |
 | `make lesson-prep` | Run the local Lesson source workstation |
 | `make validate`, `make check` | Offline guards or full verification |
 | `make validate-docs`, `make validate-repo`, `make test-tooling` | Target repository policy checks |

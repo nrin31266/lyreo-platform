@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Import the scraped dautoeic mock-test dataset into Lyreo.
+"""Legacy import of raw TOEIC mock-test source into Lyreo.
 
 The scraper output is an external dataset, not a Flyway seed. This importer:
 - validates referential relationships before mutating the DB;
@@ -197,8 +197,8 @@ def media_value(row: dict[str, Any], kind: str) -> Any:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Import dautoeic TOEIC mock tests into Lyreo")
-    parser.add_argument("--data-dir", default=os.getenv("DAUTOEIC_DATA_DIR"))
+    parser = argparse.ArgumentParser(description="Legacy raw TOEIC import for release maintainers")
+    parser.add_argument("--data-dir", default=os.getenv("GRAMMAR_TOEIC_RAW_DIR"))
     parser.add_argument("--apply", action="store_true", help="Write to PostgreSQL")
     parser.add_argument(
         "--upload-media",

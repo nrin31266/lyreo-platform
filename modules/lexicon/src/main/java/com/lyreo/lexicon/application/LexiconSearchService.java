@@ -5,7 +5,6 @@ import com.lyreo.lexicon.domain.LexiconEntry;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.cache.annotation.Cacheable;
 
 public class LexiconSearchService {
     private final LexiconRepository repository;
@@ -14,7 +13,6 @@ public class LexiconSearchService {
         this.repository = repository;
     }
 
-    @Cacheable(cacheNames = "lexiconHotEntries", key = "#rawQuery + ':' + #limit")
     public List<LexiconEntry> search(String rawQuery, int limit) {
         String query = rawQuery == null ? "" : rawQuery.strip().toLowerCase();
         if (query.length() < 1) return List.of();

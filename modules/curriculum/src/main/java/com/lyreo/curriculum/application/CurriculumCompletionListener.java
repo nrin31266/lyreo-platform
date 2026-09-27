@@ -26,7 +26,7 @@ public class CurriculumCompletionListener {
         ContentType type = "DRILL".equals(event.mode())
             ? ContentType.TOEIC_DRILL
             : ContentType.TOEIC_TEST;
-        completeReferences(event.learnerId(), type, event.testId());
+        completeReferences(event.learnerId(), type, event.testCatalogId());
     }
 
     private void completeReferences(UUID learnerId, ContentType type, UUID contentId) {

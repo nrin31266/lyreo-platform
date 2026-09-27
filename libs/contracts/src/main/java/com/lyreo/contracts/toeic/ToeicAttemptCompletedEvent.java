@@ -13,7 +13,7 @@ import java.util.UUID;
 public record ToeicAttemptCompletedEvent(
     UUID learnerId,
     UUID attemptId,
-    UUID testId,
+    UUID testCatalogId,
     String mode,
     int listeningCorrect,
     int listeningTotal,

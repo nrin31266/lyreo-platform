@@ -17,6 +17,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import com.lyreo.entitlement.api.FeatureEntitlementRequiredException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -265,12 +266,14 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ProblemDetail> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        String code = ex instanceof FeatureEntitlementRequiredException
+            ? ApiErrorCodes.FEATURE_ENTITLEMENT_REQUIRED : ApiErrorCodes.ACCESS_DENIED;
         ProblemDetail problem = ApiProblemFactory.create(
             HttpStatus.FORBIDDEN,
             "access-denied",
             "Access denied",
             "Access is denied to this resource.",
-            ApiErrorCodes.ACCESS_DENIED,
+            code,
             request,
             null
         );

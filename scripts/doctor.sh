@@ -69,10 +69,19 @@ file_status tools/lesson-prep/.env
 echo 'OPTIONAL DATA IMPORT'
 file_status tools/data-import/.env
 if [[ -f tools/data-import/.env ]]; then
-  if ./tools/data-import/scripts/fetch-data.sh --check >/dev/null 2>&1; then
-    echo 'OK   Grammar/TOEIC dataset ready'
+  if [[ ! -x tools/data-import/.venv/bin/python ]]; then
+    echo 'INFO Clean release checks need data-import dependencies (make deps)'
   else
-    echo 'INFO Grammar/TOEIC dataset absent or incomplete (make data-fetch)'
+    if ./tools/data-import/scripts/fetch-data.sh --check >/dev/null 2>&1; then
+      echo 'OK   Grammar/TOEIC clean release ready'
+    else
+      echo 'INFO Grammar/TOEIC clean release absent or invalid (make data-fetch)'
+    fi
+    if ./tools/data-import/scripts/fetch-lexicon.sh --check >/dev/null 2>&1; then
+      echo 'OK   Lexicon clean release ready'
+    else
+      echo 'INFO Lexicon clean release absent or invalid (make lexicon-fetch)'
+    fi
   fi
 fi
 

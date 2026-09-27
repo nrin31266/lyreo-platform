@@ -37,7 +37,7 @@ public class VocabularyController {
     ) {
         UUID learnerId = learnerId(jwt);
         return VocabularyCardResponse.from(
-            vocabulary.add(learnerId, request.lexiconEntryId(), request.sourceContextType(), request.sourceContextId())
+            vocabulary.add(learnerId, request.headwordId(), request.sourceContextType(), request.sourceContextId())
         );
     }
 
@@ -71,8 +71,8 @@ public class VocabularyController {
     }
 
     public record AddCardRequest(
-        @NotNull(message = "lexiconEntryId is required")
-        UUID lexiconEntryId,
+        @NotNull(message = "headwordId is required")
+        UUID headwordId,
         String sourceContextType,
         UUID sourceContextId
     ) {}
@@ -92,7 +92,7 @@ public class VocabularyController {
     public record VocabularyCardResponse(
         UUID id,
         UUID learnerId,
-        UUID lexiconEntryId,
+        UUID headwordId,
         String sourceContextType,
         UUID sourceContextId,
         Instant nextReviewAt,
@@ -105,7 +105,7 @@ public class VocabularyController {
             return new VocabularyCardResponse(
                 card.id(),
                 card.learnerId(),
-                card.lexiconEntryId(),
+                card.headwordId(),
                 card.sourceContextType(),
                 card.sourceContextId(),
                 card.nextReviewAt(),

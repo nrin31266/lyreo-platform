@@ -163,6 +163,7 @@
     <module>platform/security</module>
     <module>platform/observability</module>
     <module>modules/identity</module>
+    <module>modules/entitlement</module>
     <module>modules/learner</module>
     <module>modules/ai</module>
     <module>modules/lesson</module>
