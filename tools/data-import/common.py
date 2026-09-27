@@ -92,5 +92,5 @@ def s3_client():
         endpoint_url=endpoint,
         aws_access_key_id=key,
         aws_secret_access_key=secret,
-        region_name="auto",
+        region_name=os.getenv("R2_REGION", "auto"),
     )

@@ -6,7 +6,10 @@ Lyreo runs application source locally for debugging and hot reload. Docker devel
 
 Run `make init-env`, `make doctor`, and the needed dependency/setup targets from the root README. Start `make dev-infra` before Core. Run `make core`, `make ai`, `make admin`, or `make mobile` in separate terminals as needed. Mobile needs an installed Expo development build; see [Mobile](../apps/mobile/README.md). Lesson Prep needs AI Service and media tools; see [Lesson Prep](../tools/lesson-prep/README.md). Optional data acquisition lives in [Data Import](../tools/data-import/README.md).
 
-Mock AI and local filesystem storage are the normal development defaults. Live model runtimes and R2 are optional and require owner-specific configuration. Do not infer model quality or production behavior from mock responses.
+Mock AI and local filesystem storage are the normal development defaults. Live model runtimes and
+R2 require owner-specific configuration; full Grammar/TOEIC import integration uses the shared
+development R2 bucket as described in [Data Import](../tools/data-import/README.md). Do not
+infer model quality or production behavior from mock responses.
 
 ## Database workflow
 

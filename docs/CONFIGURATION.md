@@ -24,7 +24,12 @@ Learner preferences are persistent, cross-device study choices within the Admin 
 
 ## Storage and jobs
 
-Development defaults to local filesystem storage; R2 is an optional S3-compatible adapter. PostgreSQL stores object keys, never expiring access URLs. Storage mode changes where bytes live, not the authority of normalized state or AI cost accounting.
+Development defaults to local filesystem storage. Full Grammar/TOEIC import integration uses
+each developer's local PostgreSQL database and the team's shared `lyreo-dev` Cloudflare R2
+bucket; production also uses R2. Each developer keeps R2 credentials in ignored local env files.
+PostgreSQL stores object keys, never expiring access URLs. Storage mode changes where bytes live,
+not the authority of normalized state or AI cost accounting. See [Data Import](../tools/data-import/README.md)
+for the import workflow.
 
 Job polling, lease, and concurrency are deployment tuning settings constrained by the [jobs protocol](architecture/background-jobs.md). Heartbeats, durable cancellation, idempotency, and fencing are invariants, not toggles.
 
