@@ -3,6 +3,7 @@ package com.lyreo.lexicon.api;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.lexicon.application.LexiconSearchService;
 import com.lyreo.lexicon.domain.LexiconEntry;
+import com.lyreo.lexicon.domain.LexiconSearchResult;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,10 +21,22 @@ public class LexiconController {
     public LexiconController(LexiconSearchService search) { this.search = search; }
 
     @GetMapping("/search")
-    public List<LexiconEntryResponse> search(@RequestParam("q") String query,
-                                             @RequestParam(defaultValue = "20") int limit) {
-        return search.search(query, limit).stream().map(LexiconEntryResponse::from).toList();
+    public LexiconSearchResponse search(@RequestParam("q") String query,
+                                        @RequestParam(defaultValue = "20") int limit) {
+        LexiconSearchResult result = search.search(query, limit);
+        return new LexiconSearchResponse(result.results().stream()
+            .map(hit -> new LexiconSearchHitResponse(hit.entryId(), hit.headword(),
+                hit.entryType().name(), hit.partsOfSpeech(), hit.matchType().name(),
+                hit.matchedText())).toList(), result.hasMore(), result.sourceMetadataJson(),
+            result.licenseText());
     }
+
+    public record LexiconSearchResponse(List<LexiconSearchHitResponse> results, boolean hasMore,
+                                        String sourceMetadataJson, String licenseText) {}
+
+    public record LexiconSearchHitResponse(UUID entryId, String headword, String entryType,
+                                           List<String> partsOfSpeech, String matchType,
+                                           String matchedText) {}
 
     @GetMapping("/{id}")
     public LexiconEntryResponse get(@PathVariable UUID id) {

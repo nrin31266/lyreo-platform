@@ -37,6 +37,7 @@ import com.lyreo.lesson.domain.content.LessonSourceType;
 import com.lyreo.lexicon.api.LexiconController;
 import com.lyreo.lexicon.application.LexiconSearchService;
 import com.lyreo.lexicon.domain.LexiconEntry;
+import com.lyreo.lexicon.domain.LexiconSearchResult;
 import com.lyreo.platform.jobs.application.BackgroundJobService;
 import com.lyreo.platform.jobs.domain.BackgroundJob;
 import com.lyreo.platform.jobs.domain.BackgroundJobStatus;
@@ -623,7 +624,10 @@ class HttpWireContractTest {
         );
 
         when(lexiconSearchService.findById(entryId)).thenReturn(Optional.of(entry));
-        when(lexiconSearchService.search("resilient", 20)).thenReturn(List.of(entry));
+        when(lexiconSearchService.search("resilient", 20)).thenReturn(new LexiconSearchResult(
+            List.of(new LexiconSearchResult.Hit(entryId, "resilient", LexiconEntry.EntryType.WORD,
+                List.of("adjective"), LexiconSearchResult.MatchType.EXACT_HEADWORD, "resilient")),
+            false, "{}", "CC BY-SA"));
 
         lexiconMvc.perform(get("/api/v1/lexicon/" + entryId))
             .andExpect(status().isOk())
@@ -645,8 +649,14 @@ class HttpWireContractTest {
 
         lexiconMvc.perform(get("/api/v1/lexicon/search").param("q", "resilient"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].id").value(entryId.toString()))
-            .andExpect(jsonPath("$[0].canonicalForm").value("resilient"));
+            .andExpect(jsonPath("$.results[0].entryId").value(entryId.toString()))
+            .andExpect(jsonPath("$.results[0].headword").value("resilient"))
+            .andExpect(jsonPath("$.results[0].partsOfSpeech[0]").value("adjective"))
+            .andExpect(jsonPath("$.results[0].matchType").value("EXACT_HEADWORD"))
+            .andExpect(jsonPath("$.results[0].matchedText").value("resilient"))
+            .andExpect(jsonPath("$.results[0].senses").doesNotExist())
+            .andExpect(jsonPath("$.hasMore").value(false))
+            .andExpect(jsonPath("$.licenseText").value("CC BY-SA"));
     }
 
     @Test

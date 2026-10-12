@@ -52,8 +52,16 @@ Là learner, tôi muốn tra word/phrase và xem nghĩa/phát âm/provenance đ�
 
 #### AC-LEX-001 — Search result
 
-Given query hợp lệ, when search, then kết quả trả entry types/forms/senses/pronunciation hiện có và
-không bịa Vietnamese translation khi source thiếu.
+Given query hợp lệ, when search, then kết quả trả summary có entry ID, headword,
+entry type, các part of speech, loại/text match, trạng thái còn kết quả và attribution
+theo release. Khi mở detail của entry thuộc active release, response trả forms/senses/
+pronunciation/source/license hiện có và không bịa Vietnamese translation khi source thiếu.
+
+Search ưu tiên headword exact cùng case, form exact cùng case, headword exact đã
+normalize, form exact đã normalize, prefix headword, rồi prefix form. Kết quả có
+thứ tự deterministic và dedup theo entry ID; các entry khác ID không bị gộp vì cùng
+text. Limit mặc định 20, tối đa 50; `hasMore` được xác định bằng một kết quả unique
+bổ sung. Lookup dùng NFKC và full casefold theo clean release.
 
 #### AC-LEX-002 — Unresolved lesson phrase
 

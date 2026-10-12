@@ -3,10 +3,13 @@ package com.lyreo.lexicon.infrastructure.persistence;
 import com.lyreo.lexicon.application.port.LexiconRepository;
 import com.lyreo.lexicon.domain.LexiconEntry;
 import com.lyreo.lexicon.domain.LexiconEntry.*;
+import com.lyreo.lexicon.domain.LexiconSearchResult;
+import com.lyreo.lexicon.domain.LexiconSearchResult.MatchType;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +22,8 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 /** Reads content from the active immutable Lexicon release. */
 public final class JdbcLexiconRepository implements LexiconRepository {
+    private static final int MAX_SEARCH_BATCH = 128;
+
     private static final String BASE = """
         SELECT e.id, e.release_id, e.headword_id, e.display_form, e.lookup_form,
                e.entry_type, h.language, r.manifest_json->'source' AS source_metadata,
@@ -41,33 +46,78 @@ public final class JdbcLexiconRepository implements LexiconRepository {
     }
 
     @Override
-    public List<LexiconEntry> search(String query, int limit) {
-        List<LexiconHeader> headers = jdbc.query("""
-            WITH active AS (
-                SELECT release_id FROM dataset_active_release WHERE domain = 'lexicon'
-            ), candidates AS (
-                SELECT e.id, e.release_id
-                  FROM lexicon_entry e JOIN active a ON a.release_id = e.release_id
-                 WHERE e.lookup_form LIKE :prefix ESCAPE '!'
-                UNION
-                SELECT f.entry_id AS id, f.release_id
-                  FROM lexicon_form f JOIN active a ON a.release_id = f.release_id
-                 WHERE f.normalized_form LIKE :prefix ESCAPE '!'
-            )
-            SELECT e.id, e.release_id, e.headword_id, e.display_form, e.lookup_form,
-                   e.entry_type, h.language, r.manifest_json->'source' AS source_metadata,
-                   r.license_text
-              FROM candidates c
-              JOIN lexicon_entry e ON e.id = c.id AND e.release_id = c.release_id
-              JOIN lexicon_headword h ON h.id = e.headword_id
-              JOIN dataset_release r ON r.id = e.release_id
-            ORDER BY CASE WHEN e.lookup_form = :query THEN 0
-                          WHEN e.lookup_form LIKE :prefix ESCAPE '!' THEN 1 ELSE 2 END,
-                     length(e.display_form), e.display_form
-            LIMIT :limit
-            """, new MapSqlParameterSource().addValue("query", query)
-                .addValue("prefix", escapedPrefix(query)).addValue("limit", limit), this::mapHeader);
-        return hydrate(headers);
+    public LexiconSearchResult search(String displayQuery, String lookupQuery, int limit) {
+        List<ActiveRelease> active = jdbc.query("""
+            SELECT ar.release_id, r.manifest_json->'source' AS source_metadata, r.license_text
+              FROM dataset_active_release ar
+              JOIN dataset_release r ON r.id = ar.release_id
+             WHERE ar.domain = 'lexicon'
+            """, Map.of(), (rs, row) -> new ActiveRelease(
+                rs.getObject("release_id", UUID.class), rs.getString("source_metadata"),
+                rs.getString("license_text")));
+        if (active.isEmpty()) return LexiconSearchResult.empty();
+
+        ActiveRelease release = active.getFirst();
+        int target = limit + 1;
+        Map<UUID, SearchCandidate> unique = new LinkedHashMap<>();
+        for (SearchPhase phase : SearchPhase.values()) {
+            int offset = 0;
+            while (unique.size() < target) {
+                int batch = Math.max(16, Math.min(MAX_SEARCH_BATCH, (target - unique.size()) * 2));
+                MapSqlParameterSource parameters = new MapSqlParameterSource()
+                    .addValue("release", release.id())
+                    .addValue("display", displayQuery)
+                    .addValue("query", lookupQuery)
+                    .addValue("prefix", escapedPrefix(lookupQuery))
+                    .addValue("batch", batch)
+                    .addValue("offset", offset);
+                // Forms may repeat for one entry across items. Excluding selected identities
+                // makes every nonempty form batch advance without rescanning growing offsets.
+                String sql = phase.sql.replace("/* exclude selected entries */", unique.isEmpty()
+                    ? "" : "AND f.entry_id NOT IN (:excluded)");
+                parameters.addValue("excluded", unique.keySet());
+                List<SearchCandidate> page = jdbc.query(sql, parameters,
+                    (rs, row) -> new SearchCandidate(rs.getObject("id", UUID.class),
+                        rs.getString("display_form"), EntryType.valueOf(rs.getString("entry_type")),
+                        phase.matchType, rs.getString("matched_text")));
+                for (SearchCandidate candidate : page) {
+                    unique.putIfAbsent(candidate.id(), candidate);
+                    if (unique.size() == target) break;
+                }
+                if (!phase.formPhase) offset += page.size();
+                if (page.size() < batch) break;
+            }
+            if (unique.size() == target) break;
+        }
+
+        List<SearchCandidate> selected = unique.values().stream().limit(limit).toList();
+        Map<UUID, List<String>> partsOfSpeech = loadPartsOfSpeech(release.id(),
+            selected.stream().map(SearchCandidate::id).toList());
+        List<LexiconSearchResult.Hit> hits = selected.stream().map(candidate ->
+            new LexiconSearchResult.Hit(candidate.id(), candidate.displayForm(), candidate.entryType(),
+                partsOfSpeech.getOrDefault(candidate.id(), List.of()), candidate.matchType(),
+                candidate.matchedText())).toList();
+        return new LexiconSearchResult(hits, unique.size() > limit,
+            release.sourceMetadata(), release.licenseText());
+    }
+
+    private Map<UUID, List<String>> loadPartsOfSpeech(UUID releaseId, List<UUID> entryIds) {
+        if (entryIds.isEmpty()) return Map.of();
+        Map<UUID, List<String>> byEntry = new HashMap<>();
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+            .addValue("release", releaseId).addValue("entries", entryIds);
+        jdbc.query("""
+            SELECT entry_id, part_of_speech
+              FROM lexicon_item
+             WHERE release_id = :release AND entry_id IN (:entries)
+             GROUP BY entry_id, part_of_speech
+             ORDER BY entry_id, part_of_speech
+            """, parameters, rs -> {
+                UUID entryId = rs.getObject("entry_id", UUID.class);
+                byEntry.computeIfAbsent(entryId, ignored -> new ArrayList<>())
+                    .add(rs.getString("part_of_speech"));
+            });
+        return byEntry;
     }
 
     private static String escapedPrefix(String query) {
@@ -196,4 +246,82 @@ public final class JdbcLexiconRepository implements LexiconRepository {
         String sourceMetadata,
         String licenseText
     ) {}
+
+    private record ActiveRelease(UUID id, String sourceMetadata, String licenseText) {}
+
+    private record SearchCandidate(UUID id, String displayForm, EntryType entryType,
+                                   MatchType matchType, String matchedText) {}
+
+    /** Earlier phases win when one entry matches several paths. */
+    private enum SearchPhase {
+        EXACT_HEADWORD_CASE(MatchType.EXACT_HEADWORD, """
+            SELECT e.id, e.display_form, e.entry_type, e.display_form AS matched_text
+              FROM lexicon_entry e
+             WHERE e.release_id = :release AND e.lookup_form = :query
+               AND e.display_form = :display
+             ORDER BY e.display_form, e.id
+             LIMIT :batch OFFSET :offset
+            """),
+        EXACT_FORM_CASE(MatchType.EXACT_FORM, """
+            SELECT e.id, e.display_form, e.entry_type, f.form AS matched_text
+              FROM lexicon_form f
+              JOIN lexicon_entry e ON e.id = f.entry_id AND e.release_id = f.release_id
+             WHERE f.release_id = :release AND f.normalized_form = :query
+               AND f.form = :display
+               /* exclude selected entries */
+             ORDER BY char_length(e.display_form), e.display_form, e.id, f.id
+             LIMIT :batch OFFSET :offset
+            """),
+        EXACT_HEADWORD_NORMALIZED(MatchType.EXACT_HEADWORD, """
+            SELECT e.id, e.display_form, e.entry_type, e.display_form AS matched_text
+              FROM lexicon_entry e
+             WHERE e.release_id = :release AND e.lookup_form = :query
+               AND e.display_form <> :display
+             ORDER BY char_length(e.display_form), e.display_form, e.id
+             LIMIT :batch OFFSET :offset
+            """),
+        EXACT_FORM_NORMALIZED(MatchType.EXACT_FORM, """
+            SELECT e.id, e.display_form, e.entry_type, f.form AS matched_text
+              FROM lexicon_form f
+              JOIN lexicon_entry e ON e.id = f.entry_id AND e.release_id = f.release_id
+             WHERE f.release_id = :release AND f.normalized_form = :query
+               AND f.form <> :display
+               /* exclude selected entries */
+             ORDER BY char_length(e.display_form), e.display_form, e.id, f.id
+             LIMIT :batch OFFSET :offset
+            """),
+        PREFIX_HEADWORD(MatchType.PREFIX_HEADWORD, """
+            SELECT e.id, e.display_form, e.entry_type, e.display_form AS matched_text
+              FROM lexicon_entry e
+             WHERE e.release_id = :release AND e.lookup_form LIKE :prefix ESCAPE '!'
+               AND e.lookup_form <> :query
+             ORDER BY e.lookup_form USING ~<~, e.display_form, e.id
+             LIMIT :batch OFFSET :offset
+            """),
+        PREFIX_FORM(MatchType.PREFIX_FORM, """
+            WITH page AS MATERIALIZED (
+                SELECT f.id AS form_id, f.entry_id, f.normalized_form, f.form
+                  FROM lexicon_form f
+                 WHERE f.release_id = :release AND f.normalized_form LIKE :prefix ESCAPE '!'
+                   AND f.normalized_form <> :query
+                   /* exclude selected entries */
+                 ORDER BY f.normalized_form USING ~<~, f.form, f.id
+                 LIMIT :batch OFFSET :offset
+            )
+            SELECT e.id, e.display_form, e.entry_type, p.form AS matched_text
+              FROM page p
+              JOIN lexicon_entry e ON e.id = p.entry_id AND e.release_id = :release
+             ORDER BY p.normalized_form USING ~<~, p.form, p.form_id
+            """);
+
+        private final MatchType matchType;
+        private final String sql;
+        private final boolean formPhase;
+
+        SearchPhase(MatchType matchType, String sql) {
+            this.matchType = matchType;
+            this.sql = sql;
+            this.formPhase = matchType == MatchType.EXACT_FORM || matchType == MatchType.PREFIX_FORM;
+        }
+    }
 }
