@@ -63,6 +63,17 @@ thứ tự deterministic và dedup theo entry ID; các entry khác ID không b�
 text. Limit mặc định 20, tối đa 50; `hasMore` được xác định bằng một kết quả unique
 bổ sung. Lookup dùng NFKC và full casefold theo clean release.
 
+Trong từng nhóm exact form, xếp sau các match có tag trực tiếp `archaic`, `obsolete`,
+`dialectal`, `nonstandard`, `misspelling` hoặc `dated`; cũng áp dụng nếu matching item
+có senses và mọi sense đều có ít nhất một tag này. Item không có sense hoặc có bất kỳ
+sense không gắn các tag này không bị xếp sau theo rule item. Không suy ra popularity
+hay xác nhận standard usage từ việc thiếu tag, không lan nhãn sang item khác hoặc toàn entry.
+
+Detail giữ item/sense references, raw glosses, examples, usage tags, matched qualifier
+và pronunciation tags để client trình bày đúng context. Translation candidates giữ
+source/scope/link status; `AVAILABLE` không đồng nghĩa đã được curator xác minh.
+Cached audio object keys thuộc nội bộ server, không xuất hiện trong detail response.
+
 #### AC-LEX-002 — Unresolved lesson phrase
 
 Given Lesson phát hiện phrase chưa có entry, when enrichment hoàn tất, then Lesson giữ contextual

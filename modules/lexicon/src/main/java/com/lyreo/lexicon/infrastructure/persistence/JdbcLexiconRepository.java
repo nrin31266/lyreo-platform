@@ -269,7 +269,19 @@ public final class JdbcLexiconRepository implements LexiconRepository {
              WHERE f.release_id = :release AND f.normalized_form = :query
                AND f.form = :display
                /* exclude selected entries */
-             ORDER BY char_length(e.display_form), e.display_form, e.id, f.id
+             ORDER BY CASE WHEN jsonb_exists_any(f.tags,
+                          ARRAY['archaic','obsolete','dialectal','nonstandard','misspelling','dated'])
+                          OR (EXISTS (
+                              SELECT 1 FROM lexicon_sense s
+                               WHERE s.release_id = f.release_id AND s.item_id = f.item_id
+                          ) AND NOT EXISTS (
+                              SELECT 1 FROM lexicon_sense s
+                               WHERE s.release_id = f.release_id AND s.item_id = f.item_id
+                                 AND NOT jsonb_exists_any(s.tags,
+                                     ARRAY['archaic','obsolete','dialectal','nonstandard','misspelling','dated'])
+                          ))
+                          THEN 1 ELSE 0 END,
+                      char_length(e.display_form), e.display_form, e.id, f.id
              LIMIT :batch OFFSET :offset
             """),
         EXACT_HEADWORD_NORMALIZED(MatchType.EXACT_HEADWORD, """
@@ -287,7 +299,19 @@ public final class JdbcLexiconRepository implements LexiconRepository {
              WHERE f.release_id = :release AND f.normalized_form = :query
                AND f.form <> :display
                /* exclude selected entries */
-             ORDER BY char_length(e.display_form), e.display_form, e.id, f.id
+             ORDER BY CASE WHEN jsonb_exists_any(f.tags,
+                          ARRAY['archaic','obsolete','dialectal','nonstandard','misspelling','dated'])
+                          OR (EXISTS (
+                              SELECT 1 FROM lexicon_sense s
+                               WHERE s.release_id = f.release_id AND s.item_id = f.item_id
+                          ) AND NOT EXISTS (
+                              SELECT 1 FROM lexicon_sense s
+                               WHERE s.release_id = f.release_id AND s.item_id = f.item_id
+                                 AND NOT jsonb_exists_any(s.tags,
+                                     ARRAY['archaic','obsolete','dialectal','nonstandard','misspelling','dated'])
+                          ))
+                          THEN 1 ELSE 0 END,
+                      char_length(e.display_form), e.display_form, e.id, f.id
              LIMIT :batch OFFSET :offset
             """),
         PREFIX_HEADWORD(MatchType.PREFIX_HEADWORD, """

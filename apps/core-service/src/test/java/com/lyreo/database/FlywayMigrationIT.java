@@ -725,6 +725,90 @@ class FlywayMigrationIT {
         });
     }
 
+    @Test
+    void lexiconExactFormRanksExplicitUsageMarkersWithoutPenalizingMixedForms() {
+        new TransactionTemplate(transactions).executeWithoutResult(status -> {
+            UUID release = UUID.randomUUID();
+            insertRelease(release, "lexicon", "usage-" + release.toString().substring(0, 8),
+                release.toString().replace("-", "").repeat(2));
+            // Tags and relations reproduce lexicon-1.0.0 records, not inferred popularity.
+            insertLexiconSearchEntry(release, "albe", "albe", "noun");
+            LexiconSearchFixture alb = insertLexiconSearchEntry(release, "alb", "alb", "noun");
+            LexiconSearchFixture albeit = insertLexiconSearchEntry(release, "albeit", "albeit", "conj");
+            insertLexiconSearchForm(release, alb, "albe", "albe", "[\"alternative\",\"obsolete\"]");
+            insertLexiconSearchForm(release, albeit, "albe", "albe", "[\"alternative\"]");
+            insertLexiconSearchEntry(release, "went", "went", "verb");
+            LexiconSearchFixture go = insertLexiconSearchEntry(release, "go", "go", "verb");
+            LexiconSearchFixture gan = insertLexiconSearchEntry(release, "gan", "gan", "verb");
+            insertLexiconSearchForm(release, go, "went", "went", "[\"past\"]");
+            insertLexiconSearchForm(release, go, "went", "went",
+                "[\"nonstandard\",\"participle\",\"past\"]");
+            insertLexiconSearchForm(release, gan, "went", "went", "[\"past\"]");
+            for (String[] sourceCase : List.of(
+                new String[]{"ran", "rin", "run", "dialectal", "verb", "[\"past\"]"},
+                new String[]{"took", "tek", "take", "dated", "verb", "[\"past\"]"},
+                new String[]{"made", "mak", "make", "dialectal", "verb", "[\"past\"]"},
+                new String[]{"better", "we'll", "well", "misspelling", "adv", "[\"comparative\"]"}
+            )) {
+                String query = sourceCase[0];
+                insertLexiconSearchEntry(release, query, query, sourceCase[4]);
+                LexiconSearchFixture restricted = insertLexiconSearchEntry(
+                    release, sourceCase[1], sourceCase[1], sourceCase[4]);
+                LexiconSearchFixture mixed = insertLexiconSearchEntry(
+                    release, sourceCase[2], sourceCase[2], sourceCase[4]);
+                insertLexiconSearchForm(release, restricted, query, query, sourceCase[5]);
+                insertLexiconSearchForm(release, mixed, query, query, sourceCase[5]);
+                insertLexiconSearchSense(release, restricted, "[\"" + sourceCase[3] + "\"]");
+                insertLexiconSearchSense(release, mixed, "[]");
+                insertLexiconSearchSense(release, mixed, "[\"obsolete\"]");
+                UUID unmarkedOtherItem = insertLexiconSearchItem(release, restricted.id(), "noun");
+                insertLexiconSearchSense(release,
+                    new LexiconSearchFixture(restricted.id(), unmarkedOtherItem), "[]");
+                // An unrelated restricted item must not taint the matching mixed item.
+                UUID otherItem = insertLexiconSearchItem(release, mixed.id(), "noun");
+                insertLexiconSearchSense(release, new LexiconSearchFixture(mixed.id(), otherItem),
+                    "[\"archaic\"]");
+            }
+            LexiconSearchFixture bettor = insertLexiconSearchEntry(release, "bettor", "bettor", "noun");
+            insertLexiconSearchForm(release, bettor, "better", "better", "[\"alternative\"]");
+            jdbcTemplate.update("""
+                INSERT INTO dataset_import_run(id,release_id,run_type,status,completed_at)
+                VALUES(?,?,'APPLY','SUCCEEDED',now())
+                """, UUID.randomUUID(), release);
+            jdbcTemplate.update("""
+                INSERT INTO dataset_active_release(domain,release_id,activated_by)
+                VALUES('lexicon',?,'test')
+                ON CONFLICT(domain) DO UPDATE SET release_id=excluded.release_id, activated_by='test'
+                """, release);
+            var search = new LexiconSearchService(new JdbcLexiconRepository(
+                new NamedParameterJdbcTemplate(jdbcTemplate.getDataSource())));
+
+            assertThat(search.search("albe", 20).results()).extracting("headword")
+                .containsExactly("albe", "albeit", "alb");
+            assertThat(search.search("ALBE", 20).results()).extracting("headword")
+                .containsExactly("albe", "albeit", "alb");
+            var wents = search.search("went", 20);
+            assertThat(wents.results()).extracting("headword").containsExactly("went", "go", "gan");
+            assertThat(wents.results().get(1).matchedText()).isEqualTo("went");
+            assertThat(wents.results()).extracting("entryId").doesNotHaveDuplicates();
+            for (String[] sourceCase : List.of(
+                new String[]{"ran", "run", "rin"}, new String[]{"took", "take", "tek"},
+                new String[]{"made", "make", "mak"}
+            )) {
+                assertThat(search.search(sourceCase[0], 20).results()).extracting("headword")
+                    .containsExactly(sourceCase[0], sourceCase[1], sourceCase[2]);
+                assertThat(search.search(sourceCase[0].toUpperCase(java.util.Locale.ROOT), 20).results())
+                    .extracting("headword").containsExactly(sourceCase[0], sourceCase[1], sourceCase[2]);
+            }
+            assertThat(search.search("better", 20).results()).extracting("headword")
+                .containsExactly("better", "well", "bettor", "we'll");
+            assertThat(search.search("BETTER", 20).results()).extracting("headword")
+                .containsExactly("better", "well", "bettor", "we'll");
+            assertThat(search.search("albe", 1).hasMore()).isTrue();
+            status.setRollbackOnly();
+        });
+    }
+
     private LexiconSearchFixture insertLexiconSearchEntry(
         UUID release, String displayForm, String lookupForm, String partOfSpeech
     ) {
@@ -753,15 +837,28 @@ class FlywayMigrationIT {
 
     private void insertLexiconSearchForm(UUID release, LexiconSearchFixture entry,
                                          String form, String normalizedForm) {
+        insertLexiconSearchForm(release, entry, form, normalizedForm, "[]");
+    }
+
+    private void insertLexiconSearchForm(UUID release, LexiconSearchFixture entry,
+                                         String form, String normalizedForm, String tagsJson) {
         jdbcTemplate.update("""
             INSERT INTO lexicon_form(id,release_id,entry_id,item_id,package_form_id,
-                                     form,normalized_form)
-            VALUES(?,?,?,?,?,?,?)
+                                     form,normalized_form,tags)
+            VALUES(?,?,?,?,?,?,?,?::jsonb)
             """, UUID.randomUUID(), release, entry.id(), entry.itemId(), UUID.randomUUID(),
-            form, normalizedForm);
+            form, normalizedForm, tagsJson);
     }
 
     private record LexiconSearchFixture(UUID id, UUID itemId) {}
+
+    private void insertLexiconSearchSense(UUID release, LexiconSearchFixture entry, String tagsJson) {
+        jdbcTemplate.update("""
+            INSERT INTO lexicon_sense(id,release_id,entry_id,item_id,package_sense_id,
+                                      position,definition_en,translation_status,tags)
+            VALUES(?,?,?,?,?,1,'fixture sense','MISSING',?::jsonb)
+            """, UUID.randomUUID(), release, entry.id(), entry.itemId(), UUID.randomUUID(), tagsJson);
+    }
 
     @Test
     void servesGrammarAndToeicFromActiveRelease() {

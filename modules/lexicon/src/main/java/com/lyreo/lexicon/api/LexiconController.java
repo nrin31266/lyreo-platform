@@ -63,19 +63,22 @@ public class LexiconController {
     }
 
     public record SenseResponse(UUID id, UUID itemId, int position, String partOfSpeech,
-                                String definitionEn, String translationVi, String translationStatus) {
+                                String definitionEn, String translationVi, String translationStatus,
+                                String rawGlossesJson, String examplesJson, String tagsJson,
+                                String matchedQualifier) {
         static SenseResponse from(LexiconEntry.LexiconSense sense) {
             return new SenseResponse(sense.id(), sense.itemId(), sense.position(), sense.partOfSpeech(),
-                sense.definitionEn(), sense.translationVi(), sense.translationStatus().name());
+                sense.definitionEn(), sense.translationVi(), sense.translationStatus().name(),
+                sense.rawGlossesJson(), sense.examplesJson(), sense.tagsJson(), sense.matchedQualifier());
         }
     }
 
     public record PronunciationResponse(UUID id, UUID itemId, String accent, String ipa,
                                         String audioFile, String audioUrl, String sourceUrl,
-                                        String cachedAudioObjectKey) {
+                                        String tagsJson) {
         static PronunciationResponse from(LexiconEntry.Pronunciation p) {
             return new PronunciationResponse(p.id(), p.itemId(), p.accent(), p.ipa(), p.audioFile(),
-                p.audioUrl(), p.sourceUrl(), p.cachedAudioObjectKey());
+                p.audioUrl(), p.sourceUrl(), p.tagsJson());
         }
     }
 }
