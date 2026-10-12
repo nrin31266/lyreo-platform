@@ -2,6 +2,7 @@ package com.lyreo.gamification.infrastructure.persistence;
 
 import com.lyreo.gamification.application.port.DiamondLedger;
 import com.lyreo.gamification.domain.DiamondTransaction;
+import java.sql.Timestamp;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -47,7 +48,7 @@ public class JdbcDiamondLedger implements DiamondLedger {
                 .addValue("idempotencyKey", transaction.idempotencyKey())
                 .addValue("referenceType", transaction.referenceType())
                 .addValue("referenceId", transaction.referenceId())
-                .addValue("createdAt", transaction.createdAt())
+                .addValue("createdAt", Timestamp.from(transaction.createdAt()))
         );
 
         // Never apply the wallet delta twice when the idempotency key already existed.

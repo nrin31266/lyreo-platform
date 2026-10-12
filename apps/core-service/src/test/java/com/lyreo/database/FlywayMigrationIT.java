@@ -14,6 +14,12 @@ import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.entitlement.application.internal.DefaultEntitlementService;
 import com.lyreo.entitlement.infrastructure.persistence.JdbcFeatureRepository;
 import com.lyreo.entitlement.infrastructure.persistence.JdbcUserEntitlementGrantRepository;
+import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent;
+import com.lyreo.gamification.application.MissionEventListener;
+import com.lyreo.gamification.application.MissionProgressService;
+import com.lyreo.gamification.infrastructure.persistence.JdbcDiamondLedger;
+import com.lyreo.gamification.infrastructure.persistence.JdbcMissionProgressRepository;
+import com.lyreo.gamification.infrastructure.GamificationConfiguration;
 import com.lyreo.vocabulary.application.port.SpacedRepetitionScheduler;
 import com.lyreo.vocabulary.infrastructure.persistence.JdbcVocabularyRepository;
 import com.lyreo.toeic.application.port.ToeicAttemptRepository.ScoreSummary;
@@ -30,9 +36,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
@@ -54,6 +64,7 @@ class FlywayMigrationIT {
 
     @Configuration(proxyBeanMethods = false)
     @EnableAutoConfiguration
+    @Import({GamificationConfiguration.class, MissionEventListener.class})
     static class TestConfig {
     }
 
@@ -62,6 +73,12 @@ class FlywayMigrationIT {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private ApplicationEventPublisher events;
+
+    @Autowired
+    private PlatformTransactionManager transactions;
 
     @Test
     void verifiesConsolidatedBaselineMigrationsSucceeded() {
@@ -437,6 +454,86 @@ class FlywayMigrationIT {
             ) VALUES(?,?,'grammar.advanced','ACTIVE',?,?, 'MANUAL','test')
             """, UUID.randomUUID(), learner, java.sql.Timestamp.from(now.plusSeconds(60)),
             java.sql.Timestamp.from(now.minusSeconds(60)))).isInstanceOf(Exception.class);
+    }
+
+    @Test
+    void toeicDrillMissionWritesDiamondRewardOnlyOnce() {
+        UUID learner = UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO app_user(id,keycloak_subject) VALUES(?,?)",
+            learner, "mission-" + learner);
+        try {
+            var named = new NamedParameterJdbcTemplate(jdbcTemplate.getDataSource());
+            var listener = new MissionEventListener(new MissionProgressService(
+                new JdbcMissionProgressRepository(named), new JdbcDiamondLedger(named)));
+            var event = new ToeicAttemptCompletedEvent(
+                learner, UUID.randomUUID(), UUID.randomUUID(), "DRILL",
+                1, 1, 1, 1, null, null, Instant.now());
+
+            listener.toeic(event);
+            listener.toeic(event);
+
+            assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM diamond_transaction
+                 WHERE learner_id = ? AND transaction_type = 'MISSION_REWARD'
+                """, Integer.class, learner)).isEqualTo(1);
+            assertThat(jdbcTemplate.queryForObject(
+                "SELECT cached_balance FROM diamond_wallet WHERE learner_id = ?",
+                Integer.class, learner)).isEqualTo(4);
+            assertThat(jdbcTemplate.queryForObject("""
+                SELECT progress FROM mission_progress
+                 WHERE learner_id = ? AND mission_id = '10000000-0000-0000-0000-000000000003'
+                """, Integer.class, learner)).isEqualTo(1);
+        } finally {
+            jdbcTemplate.update("DELETE FROM app_user WHERE id = ?", learner);
+        }
+    }
+
+    @Test
+    void toeicDrillMissionPublicationCompletesAndDoesNotDuplicateReward() throws InterruptedException {
+        UUID learner = UUID.randomUUID();
+        UUID attempt = UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO app_user(id,keycloak_subject) VALUES(?,?)",
+            learner, "mission-publication-" + learner);
+        try {
+            var event = new ToeicAttemptCompletedEvent(
+                learner, attempt, UUID.randomUUID(), "DRILL",
+                1, 1, 1, 1, null, null, Instant.now());
+            new TransactionTemplate(transactions).executeWithoutResult(status -> events.publishEvent(event));
+
+            String publicationStatus = null;
+            for (int i = 0; i < 100; i++) {
+                publicationStatus = jdbcTemplate.query("""
+                    SELECT status FROM event_publication
+                     WHERE serialized_event LIKE ? AND listener_id LIKE '%MissionEventListener%'
+                    """, rs -> rs.next() ? rs.getString(1) : null, "%" + attempt + "%");
+                if ("COMPLETED".equals(publicationStatus)) break;
+                Thread.sleep(50);
+            }
+            assertThat(publicationStatus).isEqualTo("COMPLETED");
+
+            new TransactionTemplate(transactions).executeWithoutResult(status -> events.publishEvent(event));
+            Integer completedPublications = 0;
+            for (int i = 0; i < 100; i++) {
+                completedPublications = jdbcTemplate.queryForObject("""
+                    SELECT count(*) FROM event_publication
+                     WHERE serialized_event LIKE ? AND listener_id LIKE '%MissionEventListener%'
+                       AND status = 'COMPLETED'
+                    """, Integer.class, "%" + attempt + "%");
+                if (completedPublications != null && completedPublications >= 2) break;
+                Thread.sleep(50);
+            }
+            assertThat(completedPublications).isEqualTo(2);
+            assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM diamond_transaction WHERE learner_id = ?
+                """, Integer.class, learner)).isEqualTo(1);
+            assertThat(jdbcTemplate.queryForObject(
+                "SELECT cached_balance FROM diamond_wallet WHERE learner_id = ?",
+                Integer.class, learner)).isEqualTo(4);
+        } finally {
+            jdbcTemplate.update("DELETE FROM event_publication WHERE serialized_event LIKE ?",
+                "%" + attempt + "%");
+            jdbcTemplate.update("DELETE FROM app_user WHERE id = ?", learner);
+        }
     }
 
     @Test
