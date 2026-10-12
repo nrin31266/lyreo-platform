@@ -215,25 +215,35 @@ public final class JdbcToeicTestContentRepository implements ToeicTestContentRep
     private List<ScopedMedia> findMedia(UUID testVersionId, UUID releaseId) {
         return jdbc.query(
             """
+            WITH target_groups AS (
+                SELECT g.id
+                  FROM toeic_stimulus_group g
+                 WHERE g.test_version_id = :testVersionId
+                   AND g.release_id = :releaseId
+            ),
+            target_items AS (
+                SELECT DISTINCT p.item_id
+                  FROM toeic_placement p
+                 WHERE p.test_version_id = :testVersionId
+                   AND p.release_id = :releaseId
+            ),
+            scoped_uses AS (
+                SELECT mau.release_id, mau.group_id, mau.item_id, mau.asset_id, mau.role, mau.media_version
+                  FROM target_groups g
+                  JOIN media_asset_use mau
+                    ON mau.release_id = :releaseId AND mau.group_id = g.id
+                UNION ALL
+                SELECT mau.release_id, mau.group_id, mau.item_id, mau.asset_id, mau.role, mau.media_version
+                  FROM target_items i
+                  JOIN media_asset_use mau
+                    ON mau.release_id = :releaseId AND mau.item_id = i.item_id
+            )
             SELECT DISTINCT mau.group_id, mau.item_id, rma.package_asset_id, mau.role,
                    mau.media_version, mb.storage_object_key, mb.mime_type, mb.size_bytes
-              FROM toeic_test_version tv
-              JOIN media_asset_use mau ON mau.release_id = tv.release_id
+              FROM scoped_uses mau
               JOIN release_media_asset rma
                 ON rma.release_id = mau.release_id AND rma.package_asset_id = mau.asset_id
               JOIN media_blob mb ON mb.sha256 = rma.blob_sha256
-             WHERE tv.id = :testVersionId
-               AND tv.release_id = :releaseId
-               AND (
-                   mau.group_id IN (
-                       SELECT g.id FROM toeic_stimulus_group g
-                        WHERE g.test_version_id = tv.id AND g.release_id = tv.release_id
-                   )
-                   OR mau.item_id IN (
-                       SELECT p.item_id FROM toeic_placement p
-                        WHERE p.test_version_id = tv.id AND p.release_id = tv.release_id
-                   )
-               )
              ORDER BY mau.group_id NULLS LAST, mau.item_id NULLS LAST, mau.role, rma.package_asset_id
             """,
             new MapSqlParameterSource()

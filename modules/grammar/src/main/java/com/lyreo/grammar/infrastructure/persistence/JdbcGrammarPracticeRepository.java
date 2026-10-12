@@ -117,6 +117,28 @@ public final class JdbcGrammarPracticeRepository implements GrammarPracticeRepos
     }
 
     @Override
+    public boolean subtopicBelongsToTopic(UUID topicCatalogId, UUID subtopicCatalogId) {
+        Boolean matches = jdbc.queryForObject(
+            """
+            SELECT EXISTS (
+                SELECT 1
+              FROM grammar_subtopic_catalog sc
+              JOIN grammar_subtopic_version sv ON sv.catalog_id = sc.id
+              JOIN dataset_active_release ar ON ar.release_id = sv.release_id AND ar.domain = 'grammar-toeic'
+              JOIN grammar_topic_version tv ON tv.catalog_id = sc.topic_catalog_id AND tv.release_id = sv.release_id
+             WHERE sc.id = :subtopicCatalogId
+               AND sc.topic_catalog_id = :topicCatalogId
+            )
+            """,
+            new MapSqlParameterSource()
+                .addValue("topicCatalogId", topicCatalogId)
+                .addValue("subtopicCatalogId", subtopicCatalogId),
+            Boolean.class
+        );
+        return Boolean.TRUE.equals(matches);
+    }
+
+    @Override
     public List<AccessRequirement> findAccessRequirements(UUID itemId) {
         return jdbc.query(
             """

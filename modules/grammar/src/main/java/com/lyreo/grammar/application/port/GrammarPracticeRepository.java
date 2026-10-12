@@ -14,6 +14,8 @@ public interface GrammarPracticeRepository {
 
     List<CatalogAccess> findCatalogAccessPolicies(GrammarPracticeFilter filter);
 
+    boolean subtopicBelongsToTopic(UUID topicCatalogId, UUID subtopicCatalogId);
+
     List<AccessRequirement> findAccessRequirements(UUID itemId);
 
     List<GrammarQuestion> findPracticeQuestions(

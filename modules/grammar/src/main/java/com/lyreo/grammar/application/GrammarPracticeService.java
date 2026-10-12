@@ -55,10 +55,13 @@ public class GrammarPracticeService {
             ? new GrammarPracticeFilter(null, null, null, null)
             : filter;
         validateFilter(safeFilter);
+        if (requestedLimit != null && requestedLimit <= 0) {
+            throw new RequestValidationException("Grammar limit must be greater than zero");
+        }
         enforceSelectedCatalogAccess(safeFilter, learnerId);
         int limit = requestedLimit == null
             ? DEFAULT_LIMIT
-            : Math.max(1, Math.min(MAX_LIMIT, requestedLimit));
+            : Math.min(MAX_LIMIT, requestedLimit);
         Set<String> allowedFeatures = grantedFeatureKeys(learnerId);
         return repository.findPracticeQuestions(safeFilter, allowedFeatures, limit).stream()
             .map(QuestionView::from)
@@ -128,6 +131,10 @@ public class GrammarPracticeService {
     }
 
     private void validateFilter(GrammarPracticeFilter filter) {
+        if (filter.difficultyLevel() != null
+            && (filter.difficultyLevel() < 1 || filter.difficultyLevel() > 5)) {
+            throw new RequestValidationException("Grammar difficultyLevel must be between 1 and 5");
+        }
         if (filter.bankCatalogId() != null
             && (filter.topicCatalogId() != null || filter.subtopicCatalogId() != null)) {
             throw new RequestValidationException("Choose a Grammar topic/subtopic catalog or a bank catalog");
@@ -156,6 +163,11 @@ public class GrammarPracticeService {
                 }
                 entitlements.requireFeature(learnerId, FeatureKey.of(policy.requiredFeatureKey()));
             }
+        }
+        if (filter.topicCatalogId() != null
+            && filter.subtopicCatalogId() != null
+            && !repository.subtopicBelongsToTopic(filter.topicCatalogId(), filter.subtopicCatalogId())) {
+            throw new RequestValidationException("Grammar subtopic does not belong to the selected topic");
         }
     }
 
