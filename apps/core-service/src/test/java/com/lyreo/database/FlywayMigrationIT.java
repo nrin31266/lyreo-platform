@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.List;
 import java.util.UUID;
 import com.lyreo.lexicon.infrastructure.persistence.JdbcLexiconRepository;
+import com.lyreo.lexicon.api.LexiconController;
 import com.lyreo.lexicon.application.LexiconSearchService;
 import com.lyreo.lexicon.domain.LexiconSearchResult.MatchType;
 import com.lyreo.grammar.application.GrammarPracticeFilter;
@@ -590,6 +591,75 @@ class FlywayMigrationIT {
         vocabulary.applyReview(card.id(), SpacedRepetitionScheduler.Rating.GOOD,
             new SpacedRepetitionScheduler.ScheduleResult(now.plusSeconds(86400), 2.0, 4.0), now);
         assertThat(vocabulary.due(learner, now, 10)).isEmpty();
+    }
+
+    @Test
+    void lexiconCanonicalJsonSurvivesJdbcAndHttpMapping() {
+        new TransactionTemplate(transactions).executeWithoutResult(status -> {
+            UUID release = UUID.randomUUID();
+            insertRelease(release, "lexicon", "json-" + release.toString().substring(0, 8), "c".repeat(64));
+            var entry = insertLexiconSearchEntry(release, "bank", "bank", "noun");
+            UUID verbItem = insertLexiconSearchItem(release, entry.id(), "verb");
+            UUID sense = UUID.randomUUID();
+            insertLexiconSearchForm(release, entry, "banks", "banks", "[\"plural\",\"countable\"]");
+            jdbcTemplate.update("""
+                INSERT INTO lexicon_sense(id,release_id,entry_id,item_id,package_sense_id,
+                    position,definition_en,translation_vi,translation_status,raw_glosses,examples,tags,matched_qualifier)
+                VALUES(?,?,?,?,?,1,'financial institution','ngân hàng','AVAILABLE',
+                    '["financial institution","place for deposits"]'::jsonb,
+                    '[{"text":"At the bank","ref":null,"type":"example","extra":{"tags":["source"]}}]'::jsonb,
+                    '["countable"]'::jsonb,'financial institution')
+                """, sense, release, entry.id(), entry.itemId(), UUID.randomUUID());
+            insertLexiconSearchSense(release, new LexiconSearchFixture(entry.id(), verbItem), "[]");
+            jdbcTemplate.update("""
+                INSERT INTO lexicon_pronunciation(id,release_id,entry_id,item_id,package_pronunciation_id,
+                    ipa,source_url,cached_audio_object_key,tags)
+                VALUES(?,?,?,?,?,'/bæŋk/','https://source.example/bank','private/audio/key','["UK"]'::jsonb)
+                """, UUID.randomUUID(), release, entry.id(), verbItem, UUID.randomUUID());
+            jdbcTemplate.update("""
+                INSERT INTO lexicon_translation(id,release_id,entry_id,item_id,sense_id,package_translation_id,
+                    word_vi,source,source_scope,source_sense_qualifier,link_status,tags)
+                VALUES(?,?,?,?,?,?,'ngân hàng','enwiktionary','item','financial institution',
+                    'QUALIFIER_MATCH','["finance"]'::jsonb)
+                """, UUID.randomUUID(), release, entry.id(), entry.itemId(), sense, UUID.randomUUID());
+            jdbcTemplate.update("""
+                INSERT INTO dataset_import_run(id,release_id,run_type,status,completed_at)
+                VALUES(?,?,'APPLY','SUCCEEDED',now())
+                """, UUID.randomUUID(), release);
+            jdbcTemplate.update("""
+                INSERT INTO dataset_active_release(domain,release_id,activated_by)
+                VALUES('lexicon',?,'test')
+                ON CONFLICT(domain) DO UPDATE SET release_id=excluded.release_id,activated_by='test'
+                """, release);
+            var repository = new JdbcLexiconRepository(new NamedParameterJdbcTemplate(jdbcTemplate.getDataSource()));
+            var found = repository.findById(entry.id()).orElseThrow();
+            var mapper = new ObjectMapper();
+            var wire = mapper.valueToTree(new LexiconController(new LexiconSearchService(repository), mapper).get(entry.id()));
+            assertThat(wire.get("items").size()).isEqualTo(2);
+            assertThat(wire.get("forms").get(0).get("tags").isArray()).isTrue();
+            assertThat(wire.get("forms").get(0).get("itemId").asString()).isEqualTo(entry.itemId().toString());
+            var senseWire = wire.get("senses").valueStream()
+                .filter(n -> n.get("id").asString().equals(sense.toString())).findFirst().orElseThrow();
+            var foundSense = found.senses().stream().filter(n -> n.id().equals(sense)).findFirst().orElseThrow();
+            assertThat(senseWire.get("id").asString()).isEqualTo(sense.toString());
+            assertThat(senseWire.get("rawGlosses")).isEqualTo(mapper.readTree(foundSense.rawGlossesJson()));
+            assertThat(senseWire.get("examples")).isEqualTo(mapper.readTree(foundSense.examplesJson()));
+            assertThat(senseWire.get("tags")).isEqualTo(mapper.readTree(foundSense.tagsJson()));
+            assertThat(senseWire.get("translationStatus").asString()).isEqualTo("AVAILABLE");
+            assertThat(senseWire.get("matchedQualifier").asString()).isEqualTo("financial institution");
+            var pronunciation = wire.get("pronunciations").get(0);
+            assertThat(pronunciation.get("itemId").asString()).isEqualTo(verbItem.toString());
+            assertThat(pronunciation.has("cachedAudioObjectKey")).isFalse();
+            assertThat(pronunciation.get("tags")).isEqualTo(mapper.readTree(found.pronunciations().getFirst().tagsJson()));
+            var translation = wire.get("translations").get(0);
+            assertThat(translation.get("tags")).isEqualTo(mapper.readTree(found.translations().getFirst().tagsJson()));
+            assertThat(translation.get("senseId").asString()).isEqualTo(sense.toString());
+            assertThat(translation.get("linkStatus").asString()).isEqualTo("QUALIFIER_MATCH");
+            assertThat(translation.get("source").asString()).isEqualTo("enwiktionary");
+            assertThat(wire.get("sourceMetadataJson")).isEqualTo(mapper.valueToTree(found.sourceMetadataJson()));
+            assertThat(wire.get("licenseText")).isEqualTo(mapper.valueToTree(found.licenseText()));
+            status.setRollbackOnly();
+        });
     }
 
     @Test

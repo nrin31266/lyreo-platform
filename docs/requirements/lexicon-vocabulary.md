@@ -72,6 +72,12 @@ hay xác nhận standard usage từ việc thiếu tag, không lan nhãn sang it
 Detail giữ item/sense references, raw glosses, examples, usage tags, matched qualifier
 và pronunciation tags để client trình bày đúng context. Translation candidates giữ
 source/scope/link status; `AVAILABLE` không đồng nghĩa đã được curator xác minh.
+Detail HTTP trả `rawGlosses` và `tags` dưới dạng array string, `examples` dưới dạng
+array object; giữ mọi thuộc tính example nguồn, kể cả null và JSON nested. Canonical JSON
+sai cú pháp hoặc sai kiểu trả lỗi server chuẩn, không được thay bằng array rỗng hay ép kiểu.
+Đây là clean cutover của pre-production detail contract từ các field `*Json`, không có
+compatibility layer. `sourceMetadataJson` vẫn là opaque release provenance string và
+`licenseText` giữ nguyên trong search/detail response.
 Cached audio object keys thuộc nội bộ server, không xuất hiện trong detail response.
 
 #### AC-LEX-002 — Unresolved lesson phrase

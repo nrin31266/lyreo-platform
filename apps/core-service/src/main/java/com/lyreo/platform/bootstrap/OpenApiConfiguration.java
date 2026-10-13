@@ -89,6 +89,7 @@ public class OpenApiConfiguration {
             // Register component schemas at customizer time, before adding any $ref.
             // This prevents springdoc from pruning schemas that have no references yet.
             ensureProblemSchemas(openApi);
+            allowLexiconExampleProperties(openApi);
 
             if (openApi.getPaths() == null) {
                 return;
@@ -185,6 +186,17 @@ public class OpenApiConfiguration {
                 });
             });
         };
+    }
+
+    private static void allowLexiconExampleProperties(OpenAPI openApi) {
+        Schema<?> sense = openApi.getComponents().getSchemas().get("SenseResponse");
+        if (sense == null || sense.getProperties() == null) return;
+        Schema<?> examples = sense.getProperties().get("examples");
+        if (examples != null && examples.getItems() != null) {
+            // Map<String, Object> otherwise constrains every source value to an object in Swagger.
+            // Example properties can also be strings, numbers, arrays, booleans or explicit nulls.
+            examples.getItems().setAdditionalProperties(true);
+        }
     }
 
     /**
