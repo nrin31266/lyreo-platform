@@ -6,6 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.List;
 import java.util.UUID;
 import com.lyreo.lexicon.infrastructure.persistence.JdbcLexiconRepository;
+import com.lyreo.lexicon.application.LexiconSearchService;
+import com.lyreo.lexicon.domain.LexiconSearchResult.MatchType;
 import com.lyreo.grammar.application.GrammarPracticeFilter;
 import com.lyreo.grammar.infrastructure.persistence.JdbcGrammarPracticeRepository;
 import com.lyreo.toeic.infrastructure.persistence.JdbcToeicAttemptRepository;
@@ -574,7 +576,8 @@ class FlywayMigrationIT {
         assertThat(found.headwordId()).isEqualTo(headword);
         assertThat(found.items()).hasSize(1);
         assertThat(found.senses()).hasSize(1);
-        assertThat(repository.search("smoke", 10)).extracting("id").contains(entry);
+        assertThat(repository.search("smoke", "smoke", 10).results())
+            .extracting("entryId").contains(entry);
 
         UUID learner = UUID.randomUUID();
         jdbcTemplate.update("INSERT INTO app_user(id,keycloak_subject) VALUES(?,?)",
@@ -587,6 +590,274 @@ class FlywayMigrationIT {
         vocabulary.applyReview(card.id(), SpacedRepetitionScheduler.Rating.GOOD,
             new SpacedRepetitionScheduler.ScheduleResult(now.plusSeconds(86400), 2.0, 4.0), now);
         assertThat(vocabulary.due(learner, now, 10)).isEmpty();
+    }
+
+    @Test
+    void lexiconSearchRanksExactFormsBeforeNormalizedHeadwordsAndStaysOnActiveRelease() {
+        new TransactionTemplate(transactions).executeWithoutResult(status -> {
+            UUID release = UUID.randomUUID();
+            UUID otherRelease = UUID.randomUUID();
+            jdbcTemplate.update("""
+                INSERT INTO dataset_release(id,domain,package_version,schema_version,checksum_sha256,
+                                            manifest_json,license_text)
+                VALUES(?,'lexicon',?,'1.0.0',?,
+                       '{"source":{"name":"fixture"}}'::jsonb,'fixture license')
+                """, release, "search-" + release.toString().substring(0, 8), "f".repeat(64));
+            insertRelease(otherRelease, "lexicon",
+                "search-" + otherRelease.toString().substring(0, 8), "0".repeat(64));
+
+            LexiconSearchFixture apple = insertLexiconSearchEntry(release, "apple", "apple", "noun");
+            insertLexiconSearchItem(release, apple.id(), "verb");
+            insertLexiconSearchForm(release, apple, "apple", "apple");
+            LexiconSearchFixture capitalApple = insertLexiconSearchEntry(release, "Apple", "apple", "name");
+            insertLexiconSearchEntry(release, "appling", "appling", "noun");
+            insertLexiconSearchEntry(release, "Appling", "appling", "name");
+            insertLexiconSearchEntry(release, "appling up", "appling up", "verb");
+            insertLexiconSearchForm(release, apple, "appling", "appling");
+            LexiconSearchFixture went = insertLexiconSearchEntry(release, "went", "went", "verb");
+            insertLexiconSearchEntry(release, "Went", "went", "name");
+            LexiconSearchFixture go = insertLexiconSearchEntry(release, "go", "go", "verb");
+            insertLexiconSearchForm(release, go, "went", "went");
+            insertLexiconSearchForm(release, go, "went", "went");
+            for (int index = 0; index < 30; index++) {
+                String prefix = "wentprefix" + index;
+                insertLexiconSearchEntry(release, prefix, prefix, "noun");
+            }
+            insertLexiconSearchEntry(release, "running", "running", "noun");
+            insertLexiconSearchEntry(release, "Running", "running", "name");
+            LexiconSearchFixture run = insertLexiconSearchEntry(release, "run", "run", "verb");
+            insertLexiconSearchForm(release, run, "running", "running");
+            insertLexiconSearchEntry(release, "children", "children", "noun");
+            insertLexiconSearchEntry(release, "Children", "children", "name");
+            LexiconSearchFixture child = insertLexiconSearchEntry(release, "child", "child", "noun");
+            insertLexiconSearchForm(release, child, "children", "children");
+            LexiconSearchFixture bergstrasse = insertLexiconSearchEntry(
+                release, "Bergstraße", "bergstrasse", "noun");
+            LexiconSearchFixture firstTwin = insertLexiconSearchEntry(release, "twin", "twin", "noun");
+            LexiconSearchFixture secondTwin = insertLexiconSearchEntry(release, "twin", "twin", "verb");
+            LexiconSearchFixture repeatedForm = insertLexiconSearchEntry(
+                release, "unrelated", "unrelated", "noun");
+            LexiconSearchFixture nextForm = insertLexiconSearchEntry(
+                release, "second candidate", "second candidate", "noun");
+            LexiconSearchFixture lastForm = insertLexiconSearchEntry(
+                release, "third candidate", "third candidate", "noun");
+            for (int index = 0; index < 50; index++) {
+                insertLexiconSearchForm(release, repeatedForm, "zzzzformx", "zzzzformx");
+            }
+            insertLexiconSearchForm(release, nextForm, "zzzzformy", "zzzzformy");
+            insertLexiconSearchForm(release, lastForm, "zzzzformz", "zzzzformz");
+            UUID sense = UUID.randomUUID();
+            jdbcTemplate.update("""
+                INSERT INTO lexicon_sense(id,release_id,entry_id,item_id,package_sense_id,
+                                          position,definition_en,translation_status)
+                VALUES(?,?,?,?,?,1,'fruit','MISSING')
+                """, sense, release, apple.id(), apple.itemId(), UUID.randomUUID());
+            LexiconSearchFixture shadow = insertLexiconSearchEntry(
+                otherRelease, "wentshadow", "wentshadow", "noun");
+
+            for (UUID importedRelease : List.of(release, otherRelease)) {
+                jdbcTemplate.update("""
+                    INSERT INTO dataset_import_run(id,release_id,run_type,status,completed_at)
+                    VALUES(?,?,'APPLY','SUCCEEDED',now())
+                    """, UUID.randomUUID(), importedRelease);
+            }
+
+            jdbcTemplate.update("""
+                INSERT INTO dataset_active_release(domain,release_id,activated_by)
+                VALUES('lexicon',?,'test')
+                ON CONFLICT(domain) DO UPDATE SET release_id=excluded.release_id, activated_by='test'
+                """, release);
+            var repository = new JdbcLexiconRepository(
+                new NamedParameterJdbcTemplate(jdbcTemplate.getDataSource()));
+            var search = new LexiconSearchService(repository);
+
+            var apples = search.search("apple", 20);
+            assertThat(apples.results()).extracting("headword").startsWith("apple", "Apple");
+            assertThat(apples.results().getFirst().entryId()).isEqualTo(apple.id());
+            assertThat(apples.results().getFirst().partsOfSpeech()).containsExactly("noun", "verb");
+            assertThat(apples.results().get(1).entryId()).isEqualTo(capitalApple.id());
+            assertThat(apples.results()).filteredOn(hit -> hit.entryId().equals(apple.id())).hasSize(1);
+            assertThat(apples.licenseText()).isEqualTo("fixture license");
+            var twins = search.search("twin", 20);
+            assertThat(twins.results()).extracting("entryId")
+                .containsExactlyInAnyOrder(firstTwin.id(), secondTwin.id());
+            assertThat(search.search("twin", 20)).isEqualTo(twins);
+
+            var wents = search.search("went", 20);
+            assertThat(wents.results()).extracting("headword").startsWith("went", "go", "Went");
+            assertThat(wents.results().getFirst().entryId()).isEqualTo(went.id());
+            assertThat(wents.results().get(1).matchType()).isEqualTo(MatchType.EXACT_FORM);
+            assertThat(wents.results().get(1).matchedText()).isEqualTo("went");
+            assertThat(wents.results()).filteredOn(hit -> hit.entryId().equals(go.id())).hasSize(1);
+            assertThat(search.search("went", 20)).isEqualTo(wents);
+
+            var appling = search.search("appling", 20);
+            assertThat(appling.results()).extracting("headword")
+                .startsWith("appling", "apple", "Appling", "appling up");
+            assertThat(appling.results().get(1).entryId()).isEqualTo(apple.id());
+            assertThat(appling.results().get(1).matchedText()).isEqualTo("appling");
+            assertThat(appling.results()).extracting("entryId").doesNotHaveDuplicates();
+            assertThat(search.search("running", 20).results())
+                .extracting("headword").startsWith("running", "run", "Running");
+            assertThat(search.search("children", 20).results())
+                .extracting("headword").startsWith("children", "child", "Children");
+            assertThat(search.search("Bergstraße", 20).results())
+                .extracting("entryId").contains(bergstrasse.id());
+
+            var one = search.search("went", 1);
+            assertThat(one.results()).hasSize(1);
+            assertThat(one.hasMore()).isTrue();
+            assertThat(search.search("Bergstraße", 20).hasMore()).isFalse();
+            var formPage = search.search("zzzzform", 1);
+            assertThat(formPage.results()).extracting("entryId").containsExactly(repeatedForm.id());
+            assertThat(formPage.hasMore()).isTrue();
+            assertThat(search.search("zzzzform", 20).results()).extracting("entryId")
+                .containsExactly(repeatedForm.id(), nextForm.id(), lastForm.id());
+            assertThat(repository.findById(apple.id()).orElseThrow().senses())
+                .extracting("definitionEn").containsExactly("fruit");
+
+            jdbcTemplate.update("UPDATE dataset_active_release SET release_id=? WHERE domain='lexicon'",
+                otherRelease);
+            assertThat(search.search("went", 20).results()).extracting("entryId")
+                .containsExactly(shadow.id());
+            assertThat(repository.findById(apple.id())).isEmpty();
+            status.setRollbackOnly();
+        });
+    }
+
+    @Test
+    void lexiconExactFormRanksExplicitUsageMarkersWithoutPenalizingMixedForms() {
+        new TransactionTemplate(transactions).executeWithoutResult(status -> {
+            UUID release = UUID.randomUUID();
+            insertRelease(release, "lexicon", "usage-" + release.toString().substring(0, 8),
+                release.toString().replace("-", "").repeat(2));
+            // Tags and relations reproduce lexicon-1.0.0 records, not inferred popularity.
+            insertLexiconSearchEntry(release, "albe", "albe", "noun");
+            LexiconSearchFixture alb = insertLexiconSearchEntry(release, "alb", "alb", "noun");
+            LexiconSearchFixture albeit = insertLexiconSearchEntry(release, "albeit", "albeit", "conj");
+            insertLexiconSearchForm(release, alb, "albe", "albe", "[\"alternative\",\"obsolete\"]");
+            insertLexiconSearchForm(release, albeit, "albe", "albe", "[\"alternative\"]");
+            insertLexiconSearchEntry(release, "went", "went", "verb");
+            LexiconSearchFixture go = insertLexiconSearchEntry(release, "go", "go", "verb");
+            LexiconSearchFixture gan = insertLexiconSearchEntry(release, "gan", "gan", "verb");
+            insertLexiconSearchForm(release, go, "went", "went", "[\"past\"]");
+            insertLexiconSearchForm(release, go, "went", "went",
+                "[\"nonstandard\",\"participle\",\"past\"]");
+            insertLexiconSearchForm(release, gan, "went", "went", "[\"past\"]");
+            for (String[] sourceCase : List.of(
+                new String[]{"ran", "rin", "run", "dialectal", "verb", "[\"past\"]"},
+                new String[]{"took", "tek", "take", "dated", "verb", "[\"past\"]"},
+                new String[]{"made", "mak", "make", "dialectal", "verb", "[\"past\"]"},
+                new String[]{"better", "we'll", "well", "misspelling", "adv", "[\"comparative\"]"}
+            )) {
+                String query = sourceCase[0];
+                insertLexiconSearchEntry(release, query, query, sourceCase[4]);
+                LexiconSearchFixture restricted = insertLexiconSearchEntry(
+                    release, sourceCase[1], sourceCase[1], sourceCase[4]);
+                LexiconSearchFixture mixed = insertLexiconSearchEntry(
+                    release, sourceCase[2], sourceCase[2], sourceCase[4]);
+                insertLexiconSearchForm(release, restricted, query, query, sourceCase[5]);
+                insertLexiconSearchForm(release, mixed, query, query, sourceCase[5]);
+                insertLexiconSearchSense(release, restricted, "[\"" + sourceCase[3] + "\"]");
+                insertLexiconSearchSense(release, mixed, "[]");
+                insertLexiconSearchSense(release, mixed, "[\"obsolete\"]");
+                UUID unmarkedOtherItem = insertLexiconSearchItem(release, restricted.id(), "noun");
+                insertLexiconSearchSense(release,
+                    new LexiconSearchFixture(restricted.id(), unmarkedOtherItem), "[]");
+                // An unrelated restricted item must not taint the matching mixed item.
+                UUID otherItem = insertLexiconSearchItem(release, mixed.id(), "noun");
+                insertLexiconSearchSense(release, new LexiconSearchFixture(mixed.id(), otherItem),
+                    "[\"archaic\"]");
+            }
+            LexiconSearchFixture bettor = insertLexiconSearchEntry(release, "bettor", "bettor", "noun");
+            insertLexiconSearchForm(release, bettor, "better", "better", "[\"alternative\"]");
+            jdbcTemplate.update("""
+                INSERT INTO dataset_import_run(id,release_id,run_type,status,completed_at)
+                VALUES(?,?,'APPLY','SUCCEEDED',now())
+                """, UUID.randomUUID(), release);
+            jdbcTemplate.update("""
+                INSERT INTO dataset_active_release(domain,release_id,activated_by)
+                VALUES('lexicon',?,'test')
+                ON CONFLICT(domain) DO UPDATE SET release_id=excluded.release_id, activated_by='test'
+                """, release);
+            var search = new LexiconSearchService(new JdbcLexiconRepository(
+                new NamedParameterJdbcTemplate(jdbcTemplate.getDataSource())));
+
+            assertThat(search.search("albe", 20).results()).extracting("headword")
+                .containsExactly("albe", "albeit", "alb");
+            assertThat(search.search("ALBE", 20).results()).extracting("headword")
+                .containsExactly("albe", "albeit", "alb");
+            var wents = search.search("went", 20);
+            assertThat(wents.results()).extracting("headword").containsExactly("went", "go", "gan");
+            assertThat(wents.results().get(1).matchedText()).isEqualTo("went");
+            assertThat(wents.results()).extracting("entryId").doesNotHaveDuplicates();
+            for (String[] sourceCase : List.of(
+                new String[]{"ran", "run", "rin"}, new String[]{"took", "take", "tek"},
+                new String[]{"made", "make", "mak"}
+            )) {
+                assertThat(search.search(sourceCase[0], 20).results()).extracting("headword")
+                    .containsExactly(sourceCase[0], sourceCase[1], sourceCase[2]);
+                assertThat(search.search(sourceCase[0].toUpperCase(java.util.Locale.ROOT), 20).results())
+                    .extracting("headword").containsExactly(sourceCase[0], sourceCase[1], sourceCase[2]);
+            }
+            assertThat(search.search("better", 20).results()).extracting("headword")
+                .containsExactly("better", "well", "bettor", "we'll");
+            assertThat(search.search("BETTER", 20).results()).extracting("headword")
+                .containsExactly("better", "well", "bettor", "we'll");
+            assertThat(search.search("albe", 1).hasMore()).isTrue();
+            status.setRollbackOnly();
+        });
+    }
+
+    private LexiconSearchFixture insertLexiconSearchEntry(
+        UUID release, String displayForm, String lookupForm, String partOfSpeech
+    ) {
+        UUID headword = UUID.randomUUID();
+        UUID entry = UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO lexicon_headword(id,language,identity_form) VALUES(?,'en',?)",
+            headword, release + ":" + displayForm + ":" + headword);
+        jdbcTemplate.update("""
+            INSERT INTO lexicon_entry(id,release_id,headword_id,package_entry_id,
+                                      display_form,lookup_form,entry_type)
+            VALUES(?,?,?,?,?,?,'WORD')
+            """, entry, release, headword, UUID.randomUUID(), displayForm, lookupForm);
+        return new LexiconSearchFixture(entry,
+            insertLexiconSearchItem(release, entry, partOfSpeech));
+    }
+
+    private UUID insertLexiconSearchItem(UUID release, UUID entry, String partOfSpeech) {
+        UUID item = UUID.randomUUID();
+        jdbcTemplate.update("""
+            INSERT INTO lexicon_item(id,release_id,entry_id,package_item_id,
+                                     part_of_speech,pos_title,order_index)
+            VALUES(?,?,?,?,?,?,1)
+            """, item, release, entry, UUID.randomUUID(), partOfSpeech, partOfSpeech);
+        return item;
+    }
+
+    private void insertLexiconSearchForm(UUID release, LexiconSearchFixture entry,
+                                         String form, String normalizedForm) {
+        insertLexiconSearchForm(release, entry, form, normalizedForm, "[]");
+    }
+
+    private void insertLexiconSearchForm(UUID release, LexiconSearchFixture entry,
+                                         String form, String normalizedForm, String tagsJson) {
+        jdbcTemplate.update("""
+            INSERT INTO lexicon_form(id,release_id,entry_id,item_id,package_form_id,
+                                     form,normalized_form,tags)
+            VALUES(?,?,?,?,?,?,?,?::jsonb)
+            """, UUID.randomUUID(), release, entry.id(), entry.itemId(), UUID.randomUUID(),
+            form, normalizedForm, tagsJson);
+    }
+
+    private record LexiconSearchFixture(UUID id, UUID itemId) {}
+
+    private void insertLexiconSearchSense(UUID release, LexiconSearchFixture entry, String tagsJson) {
+        jdbcTemplate.update("""
+            INSERT INTO lexicon_sense(id,release_id,entry_id,item_id,package_sense_id,
+                                      position,definition_en,translation_status,tags)
+            VALUES(?,?,?,?,?,1,'fixture sense','MISSING',?::jsonb)
+            """, UUID.randomUUID(), release, entry.id(), entry.itemId(), UUID.randomUUID(), tagsJson);
     }
 
     @Test

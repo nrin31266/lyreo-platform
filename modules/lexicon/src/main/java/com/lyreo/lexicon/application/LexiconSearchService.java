@@ -2,7 +2,7 @@ package com.lyreo.lexicon.application;
 
 import com.lyreo.lexicon.application.port.LexiconRepository;
 import com.lyreo.lexicon.domain.LexiconEntry;
-import java.util.List;
+import com.lyreo.lexicon.domain.LexiconSearchResult;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -13,10 +13,11 @@ public class LexiconSearchService {
         this.repository = repository;
     }
 
-    public List<LexiconEntry> search(String rawQuery, int limit) {
-        String query = rawQuery == null ? "" : rawQuery.strip().toLowerCase();
-        if (query.length() < 1) return List.of();
-        return repository.search(query, Math.min(Math.max(limit, 1), 50));
+    public LexiconSearchResult search(String rawQuery, int limit) {
+        String displayQuery = LexiconLookupNormalizer.displayQuery(rawQuery);
+        if (displayQuery.isEmpty()) return LexiconSearchResult.empty();
+        return repository.search(displayQuery, LexiconLookupNormalizer.lookupQuery(displayQuery),
+            Math.min(Math.max(limit, 1), 50));
     }
 
     public Optional<LexiconEntry> findById(UUID id) {

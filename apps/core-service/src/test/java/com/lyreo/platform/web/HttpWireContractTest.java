@@ -1,5 +1,6 @@
 package com.lyreo.platform.web;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -37,6 +38,7 @@ import com.lyreo.lesson.domain.content.LessonSourceType;
 import com.lyreo.lexicon.api.LexiconController;
 import com.lyreo.lexicon.application.LexiconSearchService;
 import com.lyreo.lexicon.domain.LexiconEntry;
+import com.lyreo.lexicon.domain.LexiconSearchResult;
 import com.lyreo.platform.jobs.application.BackgroundJobService;
 import com.lyreo.platform.jobs.domain.BackgroundJob;
 import com.lyreo.platform.jobs.domain.BackgroundJobStatus;
@@ -584,8 +586,10 @@ class HttpWireContractTest {
     void lexiconDetailAndSearchReturnExactWireShape() throws Exception {
         UUID entryId = UUID.randomUUID();
         UUID senseId = UUID.randomUUID();
+        UUID secondSenseId = UUID.randomUUID();
         UUID headwordId = UUID.randomUUID();
         UUID itemId = UUID.randomUUID();
+        UUID secondItemId = UUID.randomUUID();
 
         LexiconEntry entry = new LexiconEntry(
             entryId,
@@ -596,34 +600,74 @@ class HttpWireContractTest {
             "en",
             "{}",
             "CC BY-SA",
-            List.of(new LexiconEntry.LexiconItem(itemId, "adjective", "Adjective", null, null, 1)),
-            List.of(),
-            List.of(new LexiconEntry.LexiconSense(
-                senseId,
-                itemId,
-                1,
-                "adjective",
-                "Able to withstand or recover quickly from difficult conditions.",
-                "kiên cường, có khả năng phục hồi",
-                LexiconEntry.TranslationStatus.VERIFIED,
-                "[]", "[]", "[]", null
+            List.of(
+                new LexiconEntry.LexiconItem(itemId, "adjective", "Adjective", null, null, 1),
+                new LexiconEntry.LexiconItem(secondItemId, "noun", "Noun", 2, "From Latin", 2)
+            ),
+            List.of(new LexiconEntry.LexiconForm(
+                UUID.randomUUID(), secondItemId, "resiliences", "resiliences", "[\"plural\"]"
             )),
+            List.of(
+                new LexiconEntry.LexiconSense(
+                    senseId,
+                    itemId,
+                    1,
+                    "adjective",
+                    "Able to withstand or recover quickly from difficult conditions.",
+                    "kiên cường",
+                    LexiconEntry.TranslationStatus.AVAILABLE,
+                    "[\"able to recover\"]",
+                    "[{\"text\":\"A resilient learner keeps practicing.\"}]",
+                    "[\"figurative\"]",
+                    "able to recover quickly"
+                ),
+                new LexiconEntry.LexiconSense(
+                    secondSenseId,
+                    secondItemId,
+                    1,
+                    "noun",
+                    "The ability to recover.",
+                    null,
+                    LexiconEntry.TranslationStatus.MISSING,
+                    "[\"ability to recover\"]",
+                    "[]",
+                    "[]",
+                    null
+                )
+            ),
             List.of(new LexiconEntry.Pronunciation(
                 UUID.randomUUID(),
-                itemId,
+                secondItemId,
                 "US",
                 "/rɪˈzɪl.jənt/",
                 "resilient.mp3",
-                "https://audio.example.com/resilient.mp3",
+                null,
                 "https://audio.example.com/resilient.mp3",
                 "audio/lexicon/resilient_us.mp3",
-                "[]"
+                "[\"regional\"]"
             )),
-            List.of()
+            List.of(
+                new LexiconEntry.LexiconTranslation(
+                    UUID.randomUUID(), itemId, senseId, "kiên cường", "enwiktionary", "item",
+                    "able to recover quickly", "QUALIFIER_MATCH", null, "[\"informal\"]"
+                ),
+                new LexiconEntry.LexiconTranslation(
+                    UUID.randomUUID(), itemId, null, "bền bỉ", "enwiktionary", "item", null,
+                    "ITEM_CANDIDATE", "NO_SENSE_QUALIFIER", "[]"
+                ),
+                new LexiconEntry.LexiconTranslation(
+                    UUID.randomUUID(), null, null, "khả năng phục hồi", "viwiktionary",
+                    "viwiktionary_gloss", null, "ENTRY_CANDIDATE",
+                    "AUXILIARY_VIWIKTIONARY_GLOSS", "[]"
+                )
+            )
         );
 
         when(lexiconSearchService.findById(entryId)).thenReturn(Optional.of(entry));
-        when(lexiconSearchService.search("resilient", 20)).thenReturn(List.of(entry));
+        when(lexiconSearchService.search("resilient", 20)).thenReturn(new LexiconSearchResult(
+            List.of(new LexiconSearchResult.Hit(entryId, "resilient", LexiconEntry.EntryType.WORD,
+                List.of("adjective"), LexiconSearchResult.MatchType.EXACT_HEADWORD, "resilient")),
+            false, "{}", "CC BY-SA"));
 
         lexiconMvc.perform(get("/api/v1/lexicon/" + entryId))
             .andExpect(status().isOk())
@@ -634,19 +678,62 @@ class HttpWireContractTest {
             .andExpect(jsonPath("$.type").value("WORD"))
             .andExpect(jsonPath("$.language").value("en"))
             .andExpect(jsonPath("$.licenseText").value("CC BY-SA"))
+            .andExpect(jsonPath("$.items[0].id").value(itemId.toString()))
+            .andExpect(jsonPath("$.items[1].id").value(secondItemId.toString()))
+            .andExpect(jsonPath("$.items[1].orderIndex").value(2))
+            .andExpect(jsonPath("$.forms[0].itemId").value(secondItemId.toString()))
+            .andExpect(jsonPath("$.forms[0].tagsJson").value("[\"plural\"]"))
             .andExpect(jsonPath("$.senses[0].id").value(senseId.toString()))
+            .andExpect(jsonPath("$.senses[0].itemId").value(itemId.toString()))
             .andExpect(jsonPath("$.senses[0].partOfSpeech").value("adjective"))
             .andExpect(jsonPath("$.senses[0].definitionEn").value("Able to withstand or recover quickly from difficult conditions."))
-            .andExpect(jsonPath("$.senses[0].translationVi").value("kiên cường, có khả năng phục hồi"))
-            .andExpect(jsonPath("$.senses[0].translationStatus").value("VERIFIED"))
+            .andExpect(jsonPath("$.senses[0].translationVi").value("kiên cường"))
+            .andExpect(jsonPath("$.senses[0].translationStatus").value("AVAILABLE"))
+            .andExpect(jsonPath("$.senses[0].rawGlossesJson").value("[\"able to recover\"]"))
+            .andExpect(jsonPath("$.senses[0].examplesJson").value("[{\"text\":\"A resilient learner keeps practicing.\"}]"))
+            .andExpect(jsonPath("$.senses[0].tagsJson").value("[\"figurative\"]"))
+            .andExpect(jsonPath("$.senses[0].matchedQualifier").value("able to recover quickly"))
+            .andExpect(jsonPath("$.senses[1].itemId").value(secondItemId.toString()))
+            .andExpect(jsonPath("$.senses[1].translationVi").value(nullValue()))
+            .andExpect(jsonPath("$.senses[1].translationStatus").value("MISSING"))
             .andExpect(jsonPath("$.pronunciations[0].accent").value("US"))
             .andExpect(jsonPath("$.pronunciations[0].ipa").value("/rɪˈzɪl.jənt/"))
-            .andExpect(jsonPath("$.pronunciations[0].cachedAudioObjectKey").value("audio/lexicon/resilient_us.mp3"));
+            .andExpect(jsonPath("$.pronunciations[0].itemId").value(secondItemId.toString()))
+            .andExpect(jsonPath("$.pronunciations[0].tagsJson").value("[\"regional\"]"))
+            .andExpect(jsonPath("$.pronunciations[0].cachedAudioObjectKey").doesNotExist())
+            .andExpect(jsonPath("$.translations[0].senseId").value(senseId.toString()))
+            .andExpect(jsonPath("$.translations[0].itemId").value(itemId.toString()))
+            .andExpect(jsonPath("$.translations[0].linkStatus").value("QUALIFIER_MATCH"))
+            .andExpect(jsonPath("$.translations[0].source").value("enwiktionary"))
+            .andExpect(jsonPath("$.translations[0].sourceScope").value("item"))
+            .andExpect(jsonPath("$.translations[0].sourceSenseQualifier").value("able to recover quickly"))
+            .andExpect(jsonPath("$.translations[1].senseId").value(nullValue()))
+            .andExpect(jsonPath("$.translations[1].itemId").value(itemId.toString()))
+            .andExpect(jsonPath("$.translations[1].linkStatus").value("ITEM_CANDIDATE"))
+            .andExpect(jsonPath("$.translations[2].senseId").value(nullValue()))
+            .andExpect(jsonPath("$.translations[2].itemId").value(nullValue()))
+            .andExpect(jsonPath("$.translations[2].linkStatus").value("ENTRY_CANDIDATE"))
+            .andExpect(jsonPath("$.translations[2].source").value("viwiktionary"))
+            .andExpect(jsonPath("$.translations[2].sourceScope").value("viwiktionary_gloss"));
 
         lexiconMvc.perform(get("/api/v1/lexicon/search").param("q", "resilient"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].id").value(entryId.toString()))
-            .andExpect(jsonPath("$[0].canonicalForm").value("resilient"));
+            .andExpect(jsonPath("$.results[0].entryId").value(entryId.toString()))
+            .andExpect(jsonPath("$.results[0].headword").value("resilient"))
+            .andExpect(jsonPath("$.results[0].partsOfSpeech[0]").value("adjective"))
+            .andExpect(jsonPath("$.results[0].matchType").value("EXACT_HEADWORD"))
+            .andExpect(jsonPath("$.results[0].matchedText").value("resilient"))
+            .andExpect(jsonPath("$.results[0].senses").doesNotExist())
+            .andExpect(jsonPath("$.results[0].forms").doesNotExist())
+            .andExpect(jsonPath("$.results[0].pronunciations").doesNotExist())
+            .andExpect(jsonPath("$.results[0].translations").doesNotExist())
+            .andExpect(jsonPath("$.results[0].translationVi").doesNotExist())
+            .andExpect(jsonPath("$.results[0].pronunciationPreview").doesNotExist())
+            .andExpect(jsonPath("$.results[0].translationPreview").doesNotExist())
+            .andExpect(jsonPath("$.results[0].sourceMetadataJson").doesNotExist())
+            .andExpect(jsonPath("$.results[0].licenseText").doesNotExist())
+            .andExpect(jsonPath("$.hasMore").value(false))
+            .andExpect(jsonPath("$.licenseText").value("CC BY-SA"));
     }
 
     @Test
