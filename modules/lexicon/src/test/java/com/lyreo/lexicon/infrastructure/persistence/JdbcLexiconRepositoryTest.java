@@ -14,6 +14,9 @@ import java.sql.ResultSet;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.jdbc.core.RowMapper;
@@ -22,6 +25,35 @@ import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 
 class JdbcLexiconRepositoryTest {
     private static final UUID RELEASE_ID = UUID.fromString("e9aefec1-1e22-49d2-9281-bd367a1b36b3");
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"noun", "verb"})
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void detailPreservesSourcePosWithoutInferringItFromTarget(String sourcePos) throws Exception {
+        NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
+        UUID entryId = UUID.randomUUID();
+        ResultSet header = headerRow(entryId, "bank");
+        ResultSet translation = mock(ResultSet.class);
+        org.mockito.Mockito.when(translation.next()).thenReturn(true, false);
+        org.mockito.Mockito.when(translation.getObject("entry_id", UUID.class)).thenReturn(entryId);
+        org.mockito.Mockito.when(translation.getObject("id", UUID.class)).thenReturn(UUID.randomUUID());
+        org.mockito.Mockito.when(translation.getString("source_pos")).thenReturn(sourcePos);
+        org.mockito.Mockito.when(translation.getString("link_status")).thenReturn("ENTRY_CANDIDATE");
+        doAnswer(invocation -> List.of(((RowMapper) invocation.getArgument(2)).mapRow(header, 0)))
+            .when(jdbc).query(anyString(), any(java.util.Map.class), any(RowMapper.class));
+        doAnswer(invocation -> java.util.Map.of())
+            .when(jdbc).query(anyString(), any(SqlParameterSource.class), any(ResultSetExtractor.class));
+        doAnswer(invocation -> ((ResultSetExtractor) invocation.getArgument(2)).extractData(translation))
+            .when(jdbc).query(contains("FROM lexicon_translation"), any(SqlParameterSource.class),
+                any(ResultSetExtractor.class));
+
+        var found = new JdbcLexiconRepository(jdbc).findById(entryId).orElseThrow().translations().getFirst();
+        assertThat(found.sourcePos()).isEqualTo(sourcePos);
+        assertThat(found.itemId()).isNull();
+        assertThat(found.senseId()).isNull();
+        verify(translation, org.mockito.Mockito.never()).getString("source_context");
+    }
 
     @Test
     @SuppressWarnings({"rawtypes", "unchecked"})
@@ -57,7 +89,8 @@ class JdbcLexiconRepositoryTest {
             .anySatisfy(sql -> assertThat(sql).contains("FROM lexicon_form"))
             .anySatisfy(sql -> assertThat(sql).contains("FROM lexicon_sense"))
             .anySatisfy(sql -> assertThat(sql).contains("FROM lexicon_pronunciation"))
-            .anySatisfy(sql -> assertThat(sql).contains("FROM lexicon_translation"));
+            .anySatisfy(sql -> assertThat(sql).contains("FROM lexicon_translation", "source_pos")
+                .doesNotContain("source_context"));
         assertThat(childParameters.getAllValues()).allSatisfy(parameters -> {
             assertThat(parameters.getValue("release")).isEqualTo(RELEASE_ID);
             assertThat(parameters.getValue("entries")).isEqualTo(List.of(firstId));

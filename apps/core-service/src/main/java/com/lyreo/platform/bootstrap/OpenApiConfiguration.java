@@ -90,6 +90,7 @@ public class OpenApiConfiguration {
             // This prevents springdoc from pruning schemas that have no references yet.
             ensureProblemSchemas(openApi);
             allowLexiconExampleProperties(openApi);
+            describeLexiconSourcePos(openApi);
 
             if (openApi.getPaths() == null) {
                 return;
@@ -196,6 +197,17 @@ public class OpenApiConfiguration {
             // Map<String, Object> otherwise constrains every source value to an object in Swagger.
             // Example properties can also be strings, numbers, arrays, booleans or explicit nulls.
             examples.getItems().setAdditionalProperties(true);
+        }
+    }
+
+    private static void describeLexiconSourcePos(OpenAPI openApi) {
+        Schema<?> translation = openApi.getComponents().getSchemas().get("TranslationResponse");
+        if (translation == null || translation.getProperties() == null) return;
+        Schema<?> sourcePos = translation.getProperties().get("sourcePos");
+        if (sourcePos != null) {
+            sourcePos.setNullable(true);
+            sourcePos.setDescription("Normalized source part of speech, when known; null for legacy records. "
+                + "Does not identify a lexical item or sense.");
         }
     }
 

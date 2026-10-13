@@ -45,6 +45,7 @@ class LexiconDetailMapperTest {
               "extra":{"values":[false,3,null,{"label":"nested"}],"decimal":1.1234567890123456789}},
              {"text":"second","type":"quotation","ref":"source"}]
             """));
+        assertThat(response.translations().getFirst().sourcePos()).isNull();
         assertThat(response.forms().getFirst().tags()).containsExactly("plural", "rare", "plural");
         assertThat(response.senses().getFirst().rawGlosses()).containsExactly("first", "second");
         var examples = new ObjectMapper().valueToTree(response.senses().getFirst().examples());
@@ -73,6 +74,6 @@ class LexiconDetailMapperTest {
                 null, null, null, "internal/key", field.equals("pronunciation.tags") ? value : "[]")),
             List.of(new LexiconEntry.LexiconTranslation(UUID.randomUUID(), item, sense, "ngân hàng",
                 "enwiktionary", "item", "bank", "QUALIFIER_MATCH", null,
-                field.equals("translation.tags") ? value : "[]")));
+                field.equals("translation.tags") ? value : "[]", null)));
     }
 }

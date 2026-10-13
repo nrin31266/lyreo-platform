@@ -15,6 +15,7 @@ from build_lexicon_release import (  # noqa: E402
     determine_entry_type,
     identity_normalization,
     lookup_normalization,
+    sha256_file,
 )
 from validate_lexicon_release import validate  # noqa: E402
 
@@ -70,8 +71,8 @@ class LexiconBuilderTest(unittest.TestCase):
     def test_build_sample_release_end_to_end(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp = Path(temp_dir)
-            out_dir = temp / "lexicon-1.0.0"
-            archive_path = temp / "lexicon-1.0.0.tar.gz"
+            out_dir = temp / "lexicon-1.0.1"
+            archive_path = temp / "lexicon-1.0.1.tar.gz"
             staging_dir = temp / "staging"
             timestamp = "2026-09-26T00:00:00Z"
 
@@ -84,6 +85,19 @@ class LexiconBuilderTest(unittest.TestCase):
                 enforce_checksum=False,
             )
 
+            # Structural data and EN translations retain exact baseline bytes from
+            # ea94a98. In particular, auxiliary rules must not alter QUALIFIER_MATCH.
+            baseline_sha256 = {
+                "entries": "fc0943ac0d7a727c8341fbe7c2d498f1a2a94b21701c4917ff6508e86c0a458a",
+                "items": "d4f0ce06f4a415d4a32c68d2697e86c92a5908fb7b07104891ed4c40692da102",
+                "senses": "d2ec09fe364fba2f6c0687e955b29864bf260cc52a5572b5001685665c8e902b",
+                "forms": "7a083778e79daf8d21258b019d2fbbaba419549788a612a0d37a80de4cb9ebf1",
+                "pronunciations": "6ddf383c870370f20d1f80f54d44a3d2d7356fe1f7e178baad244d23f7f8c387",
+                "translations": "84be4930f4c23fb339f550bc2c0aa3a0104924b8e2329575acb19a2c520ffe00",
+            }
+            for collection, expected in baseline_sha256.items():
+                self.assertEqual(sha256_file(out_dir / f"{collection}.jsonl"), expected)
+
             # Check output files
             self.assertTrue(archive_path.is_file())
             self.assertTrue((out_dir / "manifest.json").is_file())
@@ -91,7 +105,7 @@ class LexiconBuilderTest(unittest.TestCase):
             self.assertTrue((out_dir / "LICENSE").is_file())
 
             # Read entries
-            entries = [json.loads(line) for line in (out_dir / "entries.jsonl").open()]
+            entries = [json.loads(line) for line in (out_dir / "entries.jsonl").read_text().splitlines()]
             entries_by_word = {e["identity_form"]: e for e in entries}
 
             # Polish vs polish: separate entries
@@ -106,13 +120,13 @@ class LexiconBuilderTest(unittest.TestCase):
             bank_entry = entries_by_word["bank"]
 
             # Read items
-            items = [json.loads(line) for line in (out_dir / "items.jsonl").open()]
+            items = [json.loads(line) for line in (out_dir / "items.jsonl").read_text().splitlines()]
             bank_items = [i for i in items if i["entry_id"] == bank_entry["id"]]
             # bank has 3 items: noun etym 1, verb etym 1, noun etym 2
             self.assertEqual(len(bank_items), 3)
 
             # Read senses
-            senses = [json.loads(line) for line in (out_dir / "senses.jsonl").open()]
+            senses = [json.loads(line) for line in (out_dir / "senses.jsonl").read_text().splitlines()]
             # All senses must have valid item_id and entry_id
             for s in senses:
                 self.assertIsNotNone(s.get("item_id"))
@@ -140,7 +154,7 @@ class LexiconBuilderTest(unittest.TestCase):
             self.assertEqual(senses_by_ordinal[3]["translation_status"], "MISSING")
 
             # Read translations.jsonl
-            translations = [json.loads(line) for line in (out_dir / "translations.jsonl").open()]
+            translations = [json.loads(line) for line in (out_dir / "translations.jsonl").read_text().splitlines()]
             trans_by_word = {t["word_vi"]: t for t in translations}
 
             self.assertIn("ngân hàng", trans_by_word)
@@ -159,7 +173,7 @@ class LexiconBuilderTest(unittest.TestCase):
                 self.assertIsNotNone(t.get("entry_id"))
 
             # Read forms: forms with same surface across items/tags have distinct IDs
-            forms = [json.loads(line) for line in (out_dir / "forms.jsonl").open()]
+            forms = [json.loads(line) for line in (out_dir / "forms.jsonl").read_text().splitlines()]
             bank_forms = [f for f in forms if f["form"] == "banks"]
             self.assertEqual(len(bank_forms), 3)
             # All 3 have unique IDs
@@ -167,7 +181,7 @@ class LexiconBuilderTest(unittest.TestCase):
             self.assertEqual(len(form_ids), 3)
 
             # Read pronunciations: multiple sounds (US and UK)
-            prons = [json.loads(line) for line in (out_dir / "pronunciations.jsonl").open()]
+            prons = [json.loads(line) for line in (out_dir / "pronunciations.jsonl").read_text().splitlines()]
             bank_prons = [p for p in prons if p["entry_id"] == bank_entry["id"]]
             self.assertEqual(len(bank_prons), 2)
             accents = {p["accent"] for p in bank_prons}

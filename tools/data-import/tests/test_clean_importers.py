@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sys
 import tempfile
 import unittest
@@ -11,7 +12,7 @@ from types import SimpleNamespace
 TOOLS_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS_DIR))
 
-from clean_import_common import ReleasePackage, scoped_id  # noqa: E402
+from clean_import_common import ReleasePackage, insert_values, scoped_id  # noqa: E402
 from import_clean_grammar_toeic import (  # noqa: E402
     access_fields,
     asset_row,
@@ -23,9 +24,34 @@ from import_clean_grammar_toeic import (  # noqa: E402
 )
 from import_clean_lexicon import dry_run_report as lexicon_dry_run_report  # noqa: E402
 from import_clean_lexicon import entry_row  # noqa: E402
+from import_clean_lexicon import translation_row  # noqa: E402
+from import_clean_lexicon import reconcile_translation_provenance  # noqa: E402
 
 
 class CleanImporterTest(unittest.TestCase):
+    def test_wide_translation_batches_respect_postgresql_parameter_limit(self):
+        class Cursor:
+            received = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+            def execute(self, sql, params):
+                self_limit = 65_535
+                if len(params) > self_limit:
+                    raise ValueError("PostgreSQL parameter limit exceeded")
+                self.received.extend(params[::15])
+                self.rowcount = len(params) // 15
+
+        cursor = Cursor()
+        database = SimpleNamespace(cursor=lambda: cursor)
+        rows = [(i,) + (None,) * 14 for i in range(5000)]
+        self.assertEqual(5000, insert_values(database, "lexicon_translation", tuple(f"c{i}" for i in range(15)), rows))
+        self.assertEqual(list(range(5000)), cursor.received)
+
     def package(self, root: Path, *, domain: str, counts: dict[str, int]) -> ReleasePackage:
         manifest = {
             "package": {"domain": domain, "version": "1.0.0", "schema_version": "1.0.0"},
@@ -73,6 +99,67 @@ class CleanImporterTest(unittest.TestCase):
         first = scoped_id(uuid.UUID(int=1), "assessment-item", key)
         self.assertEqual(first, scoped_id(uuid.UUID(int=1), "assessment-item", key))
         self.assertNotEqual(first, scoped_id(uuid.UUID(int=2), "assessment-item", key))
+
+    def test_lexicon_translation_preserves_internal_context_without_inference(self):
+        package = self.package(Path("."), domain="lexicon", counts={})
+        package.manifest["package"]["schema_version"] = "1.1.0"
+        context = {"record_line": 3, "sense_ordinal": 1, "gloss_ordinal": 2,
+                   "record_context": {"pos": "noun", "pos_title": "Danh từ"},
+                   "sense_context": {"glosses": ["Bờ.", "Bờ."],
+                                     "examples": [{"text": "bank", "ref": {"edition": None}}]}}
+        row = {"id": str(uuid.UUID(int=11)), "entry_id": str(uuid.UUID(int=12)),
+               "item_id": None, "sense_id": None, "word_vi": "Bờ.", "source": "viwiktionary",
+               "source_scope": "viwiktionary_gloss", "source_sense_qualifier": None,
+               "link_status": "ENTRY_CANDIDATE", "reason": "AUXILIARY_VI_AMBIGUOUS_POS_ITEMS",
+               "tags": [], "source_pos": "noun", "source_context": context}
+        mapped = translation_row(package, row)
+        self.assertEqual(scoped_id(package.release_id, "lexicon-translation", row["id"]), mapped[0])
+        self.assertIsNone(mapped[3])
+        self.assertIsNone(mapped[4])
+        self.assertEqual("ENTRY_CANDIDATE", mapped[10])
+        self.assertEqual("noun", mapped[-2])
+        self.assertEqual(context, mapped[-1].obj)
+
+    def test_lexicon_legacy_translation_provenance_stays_sql_null(self):
+        package = self.package(Path("."), domain="lexicon", counts={})
+        row = {"id": str(uuid.UUID(int=11)), "entry_id": str(uuid.UUID(int=12)),
+               "item_id": str(uuid.UUID(int=13)), "sense_id": None, "word_vi": "một nghĩa",
+               "source": "enwiktionary", "source_scope": "item", "link_status": "ITEM_CANDIDATE",
+               "reason": "NO_SENSE_QUALIFIER", "tags": []}
+        mapped = translation_row(package, row)
+        self.assertIsNone(mapped[-2])
+        self.assertIsNone(mapped[-1])
+
+    def test_lexicon_converter_rejects_unsupported_schema(self):
+        package = self.package(Path("."), domain="lexicon", counts={})
+        package.manifest["package"]["schema_version"] = "9.0.0"
+        with self.assertRaisesRegex(ValueError, "Unsupported.*schema"):
+            translation_row(package, {})
+
+    def test_lexicon_reconciliation_detects_persisted_provenance_drift(self):
+        class Database:
+            def __init__(self, rows):
+                self.rows = rows
+
+            def execute(self, query, params):
+                return [row for row in self.rows if row[0] in params[1]]
+
+        with tempfile.TemporaryDirectory() as directory:
+            package = self.package(Path(directory), domain="lexicon", counts={"translations.jsonl": 1})
+            package.manifest["package"]["schema_version"] = "1.1.0"
+            key = uuid.UUID(int=11)
+            context = {"sense_context": {"glosses": ["Bờ."], "examples": [{"ref": None}]}}
+            row = {"id": str(key), "source_pos": "noun", "source_context": context}
+            (package.root / "translations.jsonl").write_text(json.dumps(row) + "\n")
+            self.assertEqual({"rows_checked": 1, "mismatch_count": 0},
+                             reconcile_translation_provenance(Database([(key, "noun", context)]), package, 1))
+            for persisted in ([], [(key, "verb", context)], [(key, "noun", {})]):
+                with self.subTest(persisted=persisted), self.assertRaisesRegex(ValueError, "provenance reconciliation mismatch"):
+                    reconcile_translation_provenance(Database(persisted), package, 1)
+            package.manifest["package"]["schema_version"] = "1.0.0"
+            self.assertEqual(1, reconcile_translation_provenance(Database([(key, None, None)]), package, 1)["rows_checked"])
+            with self.assertRaisesRegex(ValueError, "provenance reconciliation mismatch"):
+                reconcile_translation_provenance(Database([(key, "noun", context)]), package, 1)
 
     def test_unknown_catalogs_stage_draft_and_source_access_maps_to_capability(self):
         self.assertEqual("DRAFT", initial_catalog_publication_status())

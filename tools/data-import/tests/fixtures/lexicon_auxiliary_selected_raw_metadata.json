@@ -1,0 +1,77 @@
+{
+  "attribution": [
+    "English Wiktionary contributors: https://en.wiktionary.org/",
+    "Vietnamese Wiktionary contributors: https://vi.wiktionary.org/",
+    "Tatu Ylönen, Wiktextract / Kaikki.org: https://kaikki.org/"
+  ],
+  "content_license": "CC BY-SA 4.0; https://creativecommons.org/licenses/by-sa/4.0/",
+  "fixtures": {
+    "en": {
+      "fixture": "lexicon_auxiliary_en_selected_raw.jsonl",
+      "fixture_sha256": "11f35b888c4fe9828501b98bef03db9a1768c93e7590ebf46cdd683c39e9eafd",
+      "headword_counts": {
+        "bank": 7,
+        "bark": 7,
+        "bass": 5,
+        "fan": 4,
+        "lead": 6,
+        "match": 3,
+        "palm": 3,
+        "rock": 8,
+        "saw": 4,
+        "seal": 5,
+        "spring": 4,
+        "tear": 4,
+        "watch": 2
+      },
+      "pinned_compressed_source_sha256": "5ab411b8859490789d0d002074cc029569648f901db940c0ab10e709932e1632",
+      "projection_fields": [
+        "word",
+        "lang_code",
+        "pos",
+        "pos_title",
+        "etymology_number",
+        "senses[0].glosses",
+        "senses[0].raw_glosses"
+      ],
+      "records": 62
+    },
+    "vi": {
+      "fixture": "lexicon_auxiliary_vi_selected_raw.jsonl",
+      "fixture_sha256": "096d116764436980887a82357d5c1ab34004f451c7b04698aded393a2aaf961d",
+      "headword_counts": {
+        "bank": 2,
+        "bark": 5,
+        "bass": 4,
+        "fan": 4,
+        "lead": 6,
+        "match": 4,
+        "palm": 3,
+        "rock": 3,
+        "saw": 3,
+        "seal": 4,
+        "spring": 3,
+        "tear": 4,
+        "watch": 4
+      },
+      "pinned_compressed_source_sha256": "10e62bccdf3d85fc9e7472c1f85b2149602f97c75177b09523f4762c57ef7d3d",
+      "records": 49
+    }
+  },
+  "purpose": "English-language records selected by exact word from pinned EN and VI Wiktextract dumps. EN records project lexical identity/POS/etymology and first sense gloss fields; every selected record and its relative source order is preserved. VI records preserve original selected source objects. JSON keys are sorted. Fixture physical lines have their own fixture checksum identity, not upstream line identity. EN-native behavior is protected separately by lexicon_sample.jsonl baseline collection checksums.",
+  "selected_headwords": [
+    "bank",
+    "bark",
+    "bass",
+    "fan",
+    "lead",
+    "match",
+    "palm",
+    "rock",
+    "saw",
+    "seal",
+    "spring",
+    "tear",
+    "watch"
+  ]
+}
