@@ -72,6 +72,15 @@ hay xác nhận standard usage từ việc thiếu tag, không lan nhãn sang it
 Detail giữ item/sense references, raw glosses, examples, usage tags, matched qualifier
 và pronunciation tags để client trình bày đúng context. Translation candidates giữ
 source/scope/link status; `AVAILABLE` không đồng nghĩa đã được curator xác minh.
+Auxiliary Vietnamese translation chỉ là `ITEM_CANDIDATE` khi known source POS có
+đúng một compatible item trong canonical entry. Nhiều items cùng POS, không có
+compatible item hoặc thiếu/unknown POS phải giữ `ENTRY_CANDIDATE` với item/sense
+reference null; không chọn first item hoặc map theo source order. POS đã biết
+được giữ độc lập qua nullable `sourcePos`; đây không phải verified item/sense link.
+Mỗi auxiliary source occurrence giữ identity/context riêng trong canonical data.
+`source_context` và record/sense/gloss locator chỉ phục vụ audit/enrichment nội bộ,
+không hydrate hoặc expose qua learner Detail. Public translation response chỉ thêm
+`sourcePos`; sourceMetadataJson/licenseText giữ contract hiện có.
 Detail HTTP trả `rawGlosses` và `tags` dưới dạng array string, `examples` dưới dạng
 array object; giữ mọi thuộc tính example nguồn, kể cả null và JSON nested. Canonical JSON
 sai cú pháp hoặc sai kiểu trả lỗi server chuẩn, không được thay bằng array rỗng hay ép kiểu.

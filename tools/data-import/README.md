@@ -88,7 +88,7 @@ records exact counts for `quarantine/` and `source_only/` collections it skips.
 
 ```bash
 # From the repository root; --release is optional when *_RELEASE_DIR is set in .env.
-tools/data-import/scripts/import-clean-lexicon.sh [--release .data/releases/lexicon/1.0.0]
+tools/data-import/scripts/import-clean-lexicon.sh [--release .data/releases/lexicon/1.0.1]
 tools/data-import/scripts/import-clean-grammar-toeic.sh [--release .data/releases/grammar-toeic/1.0.1]
 
 # APPLY, with optional activation after count and hierarchy reconciliation.
@@ -162,24 +162,26 @@ validate the pinned v1 release with the project Python 3.12 environment (Unicode
 tools/data-import/.venv/bin/python tools/data-import/build_lexicon_release.py \
   --raw-en .data/datasets/lexicon/raw-wiktextract-data.jsonl.gz \
   --raw-vi .data/datasets/lexicon/vi-extract.jsonl.gz \
-  --output .data/releases/lexicon/1.0.0 \
-  --archive .data/releases/lexicon-1.0.0.tar.gz \
+  --output .data/builds/lexicon/1.0.1 \
+  --archive .data/builds/lexicon-1.0.1.tar.gz \
   --staging-dir .data/tmp \
-  --generated-at 2026-09-26T00:00:00Z
+  --generated-at 2026-10-13T16:21:52Z
 
 tools/data-import/.venv/bin/python tools/data-import/validate_lexicon_release.py \
-  --release .data/releases/lexicon/1.0.0 \
+  --release .data/builds/lexicon/1.0.1 \
   --raw-en .data/datasets/lexicon/raw-wiktextract-data.jsonl.gz \
-  --archive .data/releases/lexicon-1.0.0.tar.gz \
-  --report .data/releases/lexicon/1.0.0-verification.json
+  --raw-vi .data/datasets/lexicon/vi-extract.jsonl.gz \
+  --archive .data/builds/lexicon-1.0.1.tar.gz \
+  --report .data/builds/lexicon-1.0.1-verification.json
 ```
 
 The builder refuses existing output paths; use new paths for a rebuild. Reuse the same
 `--generated-at` with unchanged inputs and builder when checking byte-for-byte reproducibility.
-Package version and schema version are both `1.0.0`. The release directory contains `manifest.json`,
+Package/builder version is `1.0.1`, canonical schema is `1.1.0`; immutable `1.0.0`
+remains supported for rollback. The release directory contains `manifest.json`,
 `validation_report.json`, `LICENSE`, and ID-sorted `entries.jsonl`, `items.jsonl`, `senses.jsonl`,
 `forms.jsonl`, `pronunciations.jsonl`, and `translations.jsonl`. The archive has one
-`lexicon-1.0.0/` root. `manifest.json` records source filenames, byte sizes, checksums, and dates;
+`lexicon-1.0.1/` root. `manifest.json` records source filenames, byte sizes, checksums, and dates;
 `LICENSE` carries attribution for both Wiktionary editions and a CC BY-SA 4.0 notice.
 Pronunciations reference external audio URLs; the
 archive contains no audio files. Preserve source and license provenance when distributing or
@@ -188,12 +190,18 @@ importing the release.
 Translations in `translations.jsonl` carry a `link_status`. `DIRECT_SENSE` and
 `QUALIFIER_MATCH` have a `sense_id`; the latter is a deterministic qualifier match, not proof of
 semantic accuracy. `ITEM_CANDIDATE` and `ENTRY_CANDIDATE` are unresolved candidates at the named
-scope. Do not present candidates as sense translations. Senses without a sense-linked translation
+scope. Auxiliary VI only selects an item when known source POS has exactly one compatible
+English item. Otherwise retain an entry candidate and source POS, without arbitrary first-item
+or ordinal mapping. Each source occurrence has its own ID and selected internal provenance;
+duplicate text is not deduplicated across occurrences. Learner Detail adds `sourcePos` only,
+and never hydrates/returns `source_context`. See the [canonical schema](RELEASE_FORMAT.md#lexicon-clean-schema-110)
+for the allowlist, locator and publication verifier. Do not present candidates as sense translations.
+Senses without a sense-linked translation
 retain `translation_status=MISSING`, even if a candidate exists.
-Entry IDs are designed to remain stable across snapshots based on case-preserving headword identity,
+Canonical entry IDs are designed to remain stable across snapshots based on case-preserving headword identity,
 but this is best effort. Duplicate lexical blocks use source-order `item_seq`; their item IDs are
-deterministic within a snapshot and may change if upstream order changes. A later importer must
-reconcile IDs across snapshots.
+deterministic within a snapshot and may change if upstream order changes. The importer preserves
+package IDs but creates release-scoped PostgreSQL/API IDs; lifetime `headwordId` stays stable.
 
 The full pinned build measured about 594 MB peak RSS with SQLite staging; plan for under 750 MB
 peak RSS, at least 2 GB RAM, and at least 10 GB free disk on a maintainer machine. The builder is
@@ -211,10 +219,25 @@ installation directory, URL, and archive SHA-256 are pinned in `.env.example`. M
 pass raw input paths explicitly to the builder as shown above. The older
 `import_lexicon.py` reads raw source exports; use `import-clean-lexicon.sh` for production imports.
 
+For publication, build twice in separate output directories with the same timestamp and
+compare canonical files, manifest and archive SHA before upload. Upload the single versioned
+archive to the existing Lexicon Google Drive release folder and make it downloadable, following
+the Google Drive workflow above. Never overwrite an earlier published version. Set the new
+`LEXICON_RELEASE_VERSION`, `SCHEMA_VERSION`, `URL`, `SHA256` and installation `DIR` in the
+ignored local `.env`, then run `make lexicon-fetch` into a fresh installation path. Builder
+outputs under `.data/builds/` are separate so an already-installed shortcut cannot bypass
+download-back verification. Import the fetched `.data/releases/lexicon/<version>` package,
+not the builder output. Reconcile inactive first; explicit local/dev activation and rollback
+use the importer commands above. Keep all old snapshots and package paths intact.
+
 ## Import observability
 
 Every clean-release APPLY creates a `dataset_import_run` with the release checksum, status, exact
 manifest and database counts, intentionally skipped collection counts, and hierarchy-orphan probes.
+Lexicon also compares every translation's source POS and internal context with canonical values,
+including zero-write reruns of completed snapshots; mismatches fail reconciliation.
+Insert statements split at PostgreSQL's bind-parameter limit while preserving the requested
+batch transaction boundary, so wider provenance rows remain safe with larger batch sizes.
 Raw datasets/releases remain outside Git. Failed large imports stay visible with an error message
 and can be retried using the same validated release.
 
