@@ -1,6 +1,7 @@
 package com.lyreo.platform.web;
 
 import static org.hamcrest.Matchers.nullValue;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -51,6 +52,8 @@ import com.lyreo.vocabulary.api.VocabularyController;
 import com.lyreo.vocabulary.application.port.SpacedRepetitionScheduler;
 import com.lyreo.vocabulary.application.VocabularyCommandService;
 import com.lyreo.vocabulary.domain.VocabularyCard;
+import io.swagger.v3.oas.models.media.Schema;
+import com.lyreo.platform.bootstrap.OpenApiConfiguration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -185,7 +188,7 @@ class HttpWireContractTest {
 
         // Lexicon
         lexiconSearchService = mock(LexiconSearchService.class);
-        lexiconMvc = MockMvcBuilders.standaloneSetup(new LexiconController(lexiconSearchService))
+        lexiconMvc = MockMvcBuilders.standaloneSetup(new LexiconController(lexiconSearchService, TestMappers.productionJsonMapper()))
             .setControllerAdvice(new ApiExceptionHandler())
             .addFilters(new CorrelationIdFilter())
             .build();
@@ -617,7 +620,10 @@ class HttpWireContractTest {
                     "kiên cường",
                     LexiconEntry.TranslationStatus.AVAILABLE,
                     "[\"able to recover\"]",
-                    "[{\"text\":\"A resilient learner keeps practicing.\"}]",
+                    """
+                    [{"text":"A resilient learner keeps practicing.","ref":null,"type":"example",
+                      "extra":{"labels":["quoted","Tiếng Việt"],"verified":false}}]
+                    """,
                     "[\"figurative\"]",
                     "able to recover quickly"
                 ),
@@ -682,16 +688,29 @@ class HttpWireContractTest {
             .andExpect(jsonPath("$.items[1].id").value(secondItemId.toString()))
             .andExpect(jsonPath("$.items[1].orderIndex").value(2))
             .andExpect(jsonPath("$.forms[0].itemId").value(secondItemId.toString()))
-            .andExpect(jsonPath("$.forms[0].tagsJson").value("[\"plural\"]"))
+            .andExpect(jsonPath("$.forms[0].tags").isArray())
+            .andExpect(jsonPath("$.forms[0].tags[0]").value("plural"))
+            .andExpect(jsonPath("$.forms[0].tagsJson").doesNotExist())
             .andExpect(jsonPath("$.senses[0].id").value(senseId.toString()))
             .andExpect(jsonPath("$.senses[0].itemId").value(itemId.toString()))
             .andExpect(jsonPath("$.senses[0].partOfSpeech").value("adjective"))
             .andExpect(jsonPath("$.senses[0].definitionEn").value("Able to withstand or recover quickly from difficult conditions."))
             .andExpect(jsonPath("$.senses[0].translationVi").value("kiên cường"))
             .andExpect(jsonPath("$.senses[0].translationStatus").value("AVAILABLE"))
-            .andExpect(jsonPath("$.senses[0].rawGlossesJson").value("[\"able to recover\"]"))
-            .andExpect(jsonPath("$.senses[0].examplesJson").value("[{\"text\":\"A resilient learner keeps practicing.\"}]"))
-            .andExpect(jsonPath("$.senses[0].tagsJson").value("[\"figurative\"]"))
+            .andExpect(jsonPath("$.senses[0].rawGlosses").isArray())
+            .andExpect(jsonPath("$.senses[0].rawGlosses[0]").value("able to recover"))
+            .andExpect(jsonPath("$.senses[0].examples").isArray())
+            .andExpect(jsonPath("$.senses[0].examples[0]").isMap())
+            .andExpect(jsonPath("$.senses[0].examples[0].text").value("A resilient learner keeps practicing."))
+            .andExpect(jsonPath("$.senses[0].examples[0].ref").value(nullValue()))
+            .andExpect(jsonPath("$.senses[0].examples[0].type").value("example"))
+            .andExpect(jsonPath("$.senses[0].examples[0].extra.labels[1]").value("Tiếng Việt"))
+            .andExpect(jsonPath("$.senses[0].examples[0].extra.verified").value(false))
+            .andExpect(jsonPath("$.senses[0].tags").isArray())
+            .andExpect(jsonPath("$.senses[0].tags[0]").value("figurative"))
+            .andExpect(jsonPath("$.senses[0].rawGlossesJson").doesNotExist())
+            .andExpect(jsonPath("$.senses[0].examplesJson").doesNotExist())
+            .andExpect(jsonPath("$.senses[0].tagsJson").doesNotExist())
             .andExpect(jsonPath("$.senses[0].matchedQualifier").value("able to recover quickly"))
             .andExpect(jsonPath("$.senses[1].itemId").value(secondItemId.toString()))
             .andExpect(jsonPath("$.senses[1].translationVi").value(nullValue()))
@@ -699,8 +718,17 @@ class HttpWireContractTest {
             .andExpect(jsonPath("$.pronunciations[0].accent").value("US"))
             .andExpect(jsonPath("$.pronunciations[0].ipa").value("/rɪˈzɪl.jənt/"))
             .andExpect(jsonPath("$.pronunciations[0].itemId").value(secondItemId.toString()))
-            .andExpect(jsonPath("$.pronunciations[0].tagsJson").value("[\"regional\"]"))
+            .andExpect(jsonPath("$.pronunciations[0].tags").isArray())
+            .andExpect(jsonPath("$.pronunciations[0].tags[0]").value("regional"))
+            .andExpect(jsonPath("$.pronunciations[0].tagsJson").doesNotExist())
             .andExpect(jsonPath("$.pronunciations[0].cachedAudioObjectKey").doesNotExist())
+            .andExpect(jsonPath("$.translations[0].tags").isArray())
+            .andExpect(jsonPath("$.translations[0].tags[0]").value("informal"))
+            .andExpect(jsonPath("$.translations[0].tagsJson").doesNotExist())
+            .andExpect(jsonPath("$.translations[1].tags").isEmpty())
+            .andExpect(jsonPath("$.senses[1].examples").isEmpty())
+            .andExpect(jsonPath("$.senses[1].tags").isEmpty())
+            .andExpect(jsonPath("$.sourceMetadataJson").value("{}"))
             .andExpect(jsonPath("$.translations[0].senseId").value(senseId.toString()))
             .andExpect(jsonPath("$.translations[0].itemId").value(itemId.toString()))
             .andExpect(jsonPath("$.translations[0].linkStatus").value("QUALIFIER_MATCH"))
@@ -732,8 +760,51 @@ class HttpWireContractTest {
             .andExpect(jsonPath("$.results[0].translationPreview").doesNotExist())
             .andExpect(jsonPath("$.results[0].sourceMetadataJson").doesNotExist())
             .andExpect(jsonPath("$.results[0].licenseText").doesNotExist())
+            .andExpect(jsonPath("$.sourceMetadataJson").value("{}"))
             .andExpect(jsonPath("$.hasMore").value(false))
             .andExpect(jsonPath("$.licenseText").value("CC BY-SA"));
+    }
+
+    @Test
+    void lexiconDetailSchemaDescribesJsonArraysWithoutParserInternals() {
+        var schemas = io.swagger.v3.core.converter.ModelConverters.getInstance()
+            .readAll(LexiconController.LexiconEntryResponse.class);
+        var openApi = new io.swagger.v3.oas.models.OpenAPI()
+            .components(new io.swagger.v3.oas.models.Components().schemas(new java.util.LinkedHashMap<>(schemas)));
+        new OpenApiConfiguration().lyreoOpenApiCustomizer().customise(openApi);
+        Schema<?> senseSchema = schemas.get("SenseResponse");
+        var senseProperties = senseSchema.getProperties();
+        var examples = senseProperties.get("examples");
+        assertThat(examples.getType()).isEqualTo("array");
+        assertThat(examples.getItems().getType()).isEqualTo("object");
+        assertThat(examples.getItems().getAdditionalProperties()).isEqualTo(Boolean.TRUE);
+        assertThat(schemas).doesNotContainKey("JsonNode");
+        assertThat(senseProperties).doesNotContainKeys("examplesJson", "rawGlossesJson", "tagsJson");
+        for (String response : List.of("FormResponse", "SenseResponse", "PronunciationResponse", "TranslationResponse")) {
+            Schema<?> responseSchema = schemas.get(response);
+            var tags = responseSchema.getProperties().get("tags");
+            assertThat(tags.getType()).isEqualTo("array");
+            assertThat(tags.getItems().getType()).isEqualTo("string");
+            assertThat(responseSchema.getProperties()).doesNotContainKey("tagsJson");
+        }
+        assertThat(senseProperties.get("rawGlosses").getItems().getType()).isEqualTo("string");
+    }
+
+    @Test
+    void lexiconMalformedCanonicalJsonReturnsSafeServerError() throws Exception {
+        UUID id = UUID.randomUUID();
+        var entry = new LexiconEntry(id, UUID.randomUUID(), "bank", "bank",
+            LexiconEntry.EntryType.WORD, "en", "{}", "CC BY-SA", List.of(),
+            List.of(new LexiconEntry.LexiconForm(UUID.randomUUID(), null, "banks", "banks",
+                "[invalid-canonical-data]")), List.of(), List.of(), List.of());
+        when(lexiconSearchService.findById(id)).thenReturn(Optional.of(entry));
+        lexiconMvc.perform(get("/api/v1/lexicon/" + id))
+            .andExpect(status().isInternalServerError())
+            .andExpect(header().string("Content-Type", "application/problem+json"))
+            .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
+            .andExpect(jsonPath("$.detail").value("An unexpected server error occurred."))
+            .andExpect(jsonPath("$.forms").doesNotExist())
+            .andExpect(jsonPath("$.stackTrace").doesNotExist());
     }
 
     @Test
