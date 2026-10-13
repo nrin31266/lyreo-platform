@@ -52,7 +52,7 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Proves the database and testing foundation on fresh PostgreSQL:
  * 1. Testcontainers provisions real PostgreSQL 18 (alpine).
- * 2. Spring Boot Flyway applies the consolidated baseline and production cutover (V001..V005).
+ * 2. Spring Boot Flyway applies the consolidated baseline and production cutover (V001..V006).
  * 3. Asserts migration status, essential schema objects, indexes, constraints, and reference data.
  */
 @SpringBootTest(classes = FlywayMigrationIT.TestConfig.class)
@@ -88,8 +88,8 @@ class FlywayMigrationIT {
         MigrationInfo[] applied = flyway.info().applied();
 
         assertThat(applied)
-            .as("Five migrations must be applied")
-            .hasSize(5);
+            .as("Six migrations must be applied")
+            .hasSize(6);
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
@@ -107,9 +107,11 @@ class FlywayMigrationIT {
         assertThat(applied[3].getState()).isEqualTo(MigrationState.SUCCESS);
         assertThat(applied[4].getVersion().getVersion()).isEqualTo("005");
         assertThat(applied[4].getState()).isEqualTo(MigrationState.SUCCESS);
+        assertThat(applied[5].getVersion().getVersion()).isEqualTo("006");
+        assertThat(applied[5].getState()).isEqualTo(MigrationState.SUCCESS);
         assertThat(flyway.info().current().getVersion().getVersion())
-            .as("Current Flyway version must be 005")
-            .isEqualTo("005");
+            .as("Current Flyway version must be 006")
+            .isEqualTo("006");
     }
 
     @Test
@@ -341,6 +343,77 @@ class FlywayMigrationIT {
         assertThatThrownBy(() -> jdbcTemplate.update(
             "UPDATE lexicon_entry SET display_form='changed' WHERE id=?", entry))
             .isInstanceOf(Exception.class);
+    }
+
+    @Test
+    void translationProvenanceRetainsLegacyNullsAndEnforcesCandidateScopes() {
+        UUID release = UUID.randomUUID();
+        UUID otherRelease = UUID.randomUUID();
+        insertRelease(release, "lexicon", "provenance-" + release.toString().substring(0, 8), "d".repeat(64));
+        insertRelease(otherRelease, "lexicon", "provenance-" + otherRelease.toString().substring(0, 8), "e".repeat(64));
+        var entry = insertLexiconSearchEntry(release, "provenance", "provenance", "noun");
+        var otherEntry = insertLexiconSearchEntry(otherRelease, "other", "other", "noun");
+        UUID legacyTranslation = insertCandidateTranslation(release, entry.id(), entry.itemId(),
+            null, "ITEM_CANDIDATE", null, null);
+        assertThat(jdbcTemplate.queryForMap(
+            "SELECT source_pos,source_context FROM lexicon_translation WHERE id=?", legacyTranslation))
+            .containsEntry("source_pos", null).containsEntry("source_context", null);
+        UUID ambiguous = insertCandidateTranslation(release, entry.id(), null, null,
+            "ENTRY_CANDIDATE", "noun", "{\"record_line\":7}");
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT source_context->>'record_line' FROM lexicon_translation WHERE id=?", String.class, ambiguous))
+            .isEqualTo("7");
+        assertThatThrownBy(() -> insertCandidateTranslation(release, entry.id(), null, null,
+            "ITEM_CANDIDATE", "noun", "{}"))
+            .hasMessageContaining("lexicon_translation_item_candidate_scope");
+        assertThatThrownBy(() -> insertCandidateTranslation(release, entry.id(), entry.itemId(), null,
+            "ENTRY_CANDIDATE", "noun", "{}"))
+            .hasMessageContaining("lexicon_translation_entry_candidate_scope");
+        UUID sense = UUID.randomUUID();
+        jdbcTemplate.update("""
+            INSERT INTO lexicon_sense(id,release_id,entry_id,item_id,package_sense_id,position,
+                definition_en,translation_status)
+            VALUES(?,?,?,?,?,1,'candidate','MISSING')
+            """, sense, release, entry.id(), entry.itemId(), UUID.randomUUID());
+        assertThatThrownBy(() -> insertCandidateTranslation(release, entry.id(), entry.itemId(), sense,
+            "ITEM_CANDIDATE", "noun", "{}"))
+            .hasMessageContaining("lexicon_translation_item_candidate_scope");
+        assertThatThrownBy(() -> insertCandidateTranslation(release, entry.id(), entry.itemId(), sense,
+            "ENTRY_CANDIDATE", "noun", "{}"))
+            .hasMessageContaining("lexicon_translation_entry_candidate_scope");
+        for (String context : List.of("[]", "null", "\"text\"", "1")) {
+            assertThatThrownBy(() -> insertCandidateTranslation(release, entry.id(), null, null,
+                "ENTRY_CANDIDATE", "noun", context))
+                .hasMessageContaining("lexicon_translation_source_context_object");
+        }
+        assertThatThrownBy(() -> insertCandidateTranslation(release, entry.id(), otherEntry.itemId(), null,
+            "ITEM_CANDIDATE", "noun", "{}"))
+            .isInstanceOf(Exception.class);
+
+        jdbcTemplate.update("""
+            INSERT INTO dataset_import_run(id,release_id,run_type,status,completed_at)
+            VALUES(?,?,'APPLY','SUCCEEDED',now())
+            """, UUID.randomUUID(), release);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+            "UPDATE lexicon_translation SET source_pos='verb' WHERE id=?", ambiguous))
+            .isInstanceOf(Exception.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+            "UPDATE lexicon_translation SET source_context='{}'::jsonb WHERE id=?", ambiguous))
+            .isInstanceOf(Exception.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+            "DELETE FROM lexicon_translation WHERE id=?", legacyTranslation))
+            .isInstanceOf(Exception.class);
+    }
+
+    private UUID insertCandidateTranslation(UUID release, UUID entry, UUID item, UUID sense,
+                                            String linkStatus, String sourcePos, String context) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update("""
+            INSERT INTO lexicon_translation(id,release_id,entry_id,item_id,sense_id,package_translation_id,
+                word_vi,source,source_scope,link_status,source_pos,source_context)
+            VALUES(?,?,?,?,?,?,'candidate','viwiktionary','viwiktionary_gloss',?,?,?::jsonb)
+            """, id, release, entry, item, sense, UUID.randomUUID(), linkStatus, sourcePos, context);
+        return id;
     }
 
     @Test
@@ -622,6 +695,21 @@ class FlywayMigrationIT {
                 VALUES(?,?,?,?,?,?,'ngân hàng','enwiktionary','item','financial institution',
                     'QUALIFIER_MATCH','["finance"]'::jsonb)
                 """, UUID.randomUUID(), release, entry.id(), entry.itemId(), sense, UUID.randomUUID());
+            UUID auxiliaryTranslation = UUID.randomUUID();
+            String sourceContext = """
+                {"record_line":42,"sense_ordinal":2,"gloss_ordinal":1,
+                 "record_context":{"pos":"noun","pos_title":"Danh từ"},
+                 "sense_context":{"glosses":["bờ sông"],"examples":[
+                    {"text":"river bank","translation":null,"ref":{"source":"internal"}}]}}
+                """;
+            jdbcTemplate.update("""
+                INSERT INTO lexicon_translation(id,release_id,entry_id,package_translation_id,
+                    word_vi,source,source_scope,link_status,source_pos,source_context)
+                VALUES(?,?,?,?,'bờ sông','viwiktionary','viwiktionary_gloss','ENTRY_CANDIDATE','noun',?::jsonb)
+                """, auxiliaryTranslation, release, entry.id(), UUID.randomUUID(), sourceContext);
+            assertThat(new ObjectMapper().readTree(jdbcTemplate.queryForObject(
+                "SELECT source_context::text FROM lexicon_translation WHERE id=?", String.class, auxiliaryTranslation)))
+                .isEqualTo(new ObjectMapper().readTree(sourceContext));
             jdbcTemplate.update("""
                 INSERT INTO dataset_import_run(id,release_id,run_type,status,completed_at)
                 VALUES(?,?,'APPLY','SUCCEEDED',now())
@@ -651,11 +739,24 @@ class FlywayMigrationIT {
             assertThat(pronunciation.get("itemId").asString()).isEqualTo(verbItem.toString());
             assertThat(pronunciation.has("cachedAudioObjectKey")).isFalse();
             assertThat(pronunciation.get("tags")).isEqualTo(mapper.readTree(found.pronunciations().getFirst().tagsJson()));
-            var translation = wire.get("translations").get(0);
-            assertThat(translation.get("tags")).isEqualTo(mapper.readTree(found.translations().getFirst().tagsJson()));
+            var translation = wire.get("translations").valueStream()
+                .filter(n -> n.get("linkStatus").asString().equals("QUALIFIER_MATCH")).findFirst().orElseThrow();
+            var foundTranslation = found.translations().stream()
+                .filter(t -> t.linkStatus().equals("QUALIFIER_MATCH")).findFirst().orElseThrow();
+            assertThat(translation.get("tags")).isEqualTo(mapper.readTree(foundTranslation.tagsJson()));
             assertThat(translation.get("senseId").asString()).isEqualTo(sense.toString());
             assertThat(translation.get("linkStatus").asString()).isEqualTo("QUALIFIER_MATCH");
             assertThat(translation.get("source").asString()).isEqualTo("enwiktionary");
+            assertThat(translation.get("sourcePos").isNull()).isTrue();
+            var auxiliaryWire = wire.get("translations").valueStream()
+                .filter(n -> n.get("id").asString().equals(auxiliaryTranslation.toString())).findFirst().orElseThrow();
+            assertThat(auxiliaryWire.get("sourcePos").asString()).isEqualTo("noun");
+            assertThat(auxiliaryWire.get("itemId").isNull()).isTrue();
+            assertThat(auxiliaryWire.get("senseId").isNull()).isTrue();
+            assertThat(auxiliaryWire.get("linkStatus").asString()).isEqualTo("ENTRY_CANDIDATE");
+            assertThat(auxiliaryWire.properties().stream().map(Map.Entry::getKey).toList())
+                .containsExactlyInAnyOrder("id", "itemId", "senseId", "wordVi", "source", "sourceScope",
+                    "sourceSenseQualifier", "linkStatus", "unlinkedReason", "tags", "sourcePos");
             assertThat(wire.get("sourceMetadataJson")).isEqualTo(mapper.valueToTree(found.sourceMetadataJson()));
             assertThat(wire.get("licenseText")).isEqualTo(mapper.valueToTree(found.licenseText()));
             status.setRollbackOnly();

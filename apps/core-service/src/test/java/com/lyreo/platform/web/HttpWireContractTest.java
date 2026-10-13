@@ -655,16 +655,16 @@ class HttpWireContractTest {
             List.of(
                 new LexiconEntry.LexiconTranslation(
                     UUID.randomUUID(), itemId, senseId, "kiên cường", "enwiktionary", "item",
-                    "able to recover quickly", "QUALIFIER_MATCH", null, "[\"informal\"]"
+                    "able to recover quickly", "QUALIFIER_MATCH", null, "[\"informal\"]", null
                 ),
                 new LexiconEntry.LexiconTranslation(
                     UUID.randomUUID(), itemId, null, "bền bỉ", "enwiktionary", "item", null,
-                    "ITEM_CANDIDATE", "NO_SENSE_QUALIFIER", "[]"
+                    "ITEM_CANDIDATE", "NO_SENSE_QUALIFIER", "[]", null
                 ),
                 new LexiconEntry.LexiconTranslation(
                     UUID.randomUUID(), null, null, "khả năng phục hồi", "viwiktionary",
                     "viwiktionary_gloss", null, "ENTRY_CANDIDATE",
-                    "AUXILIARY_VIWIKTIONARY_GLOSS", "[]"
+                    "AUXILIARY_VIWIKTIONARY_GLOSS", "[]", "noun"
                 )
             )
         );
@@ -734,6 +734,7 @@ class HttpWireContractTest {
             .andExpect(jsonPath("$.translations[0].linkStatus").value("QUALIFIER_MATCH"))
             .andExpect(jsonPath("$.translations[0].source").value("enwiktionary"))
             .andExpect(jsonPath("$.translations[0].sourceScope").value("item"))
+            .andExpect(jsonPath("$.translations[0].sourcePos").value(nullValue()))
             .andExpect(jsonPath("$.translations[0].sourceSenseQualifier").value("able to recover quickly"))
             .andExpect(jsonPath("$.translations[1].senseId").value(nullValue()))
             .andExpect(jsonPath("$.translations[1].itemId").value(itemId.toString()))
@@ -742,7 +743,10 @@ class HttpWireContractTest {
             .andExpect(jsonPath("$.translations[2].itemId").value(nullValue()))
             .andExpect(jsonPath("$.translations[2].linkStatus").value("ENTRY_CANDIDATE"))
             .andExpect(jsonPath("$.translations[2].source").value("viwiktionary"))
-            .andExpect(jsonPath("$.translations[2].sourceScope").value("viwiktionary_gloss"));
+            .andExpect(jsonPath("$.translations[2].sourceScope").value("viwiktionary_gloss"))
+            .andExpect(jsonPath("$.translations[2].sourcePos").value("noun"))
+            .andExpect(jsonPath("$.translations[2].sourceContext").doesNotExist())
+            .andExpect(jsonPath("$.translations[2].record_line").doesNotExist());
 
         lexiconMvc.perform(get("/api/v1/lexicon/search").param("q", "resilient"))
             .andExpect(status().isOk())
@@ -788,6 +792,13 @@ class HttpWireContractTest {
             assertThat(responseSchema.getProperties()).doesNotContainKey("tagsJson");
         }
         assertThat(senseProperties.get("rawGlosses").getItems().getType()).isEqualTo("string");
+        Schema<?> translationSchema = schemas.get("TranslationResponse");
+        var translationProperties = translationSchema.getProperties();
+        assertThat(translationProperties.get("sourcePos").getType()).isEqualTo("string");
+        assertThat(translationProperties.get("sourcePos").getNullable()).isTrue();
+        assertThat(translationProperties.keySet()).containsExactlyInAnyOrder("id", "itemId", "senseId",
+            "wordVi", "source", "sourceScope", "sourceSenseQualifier", "linkStatus", "unlinkedReason",
+            "tags", "sourcePos");
     }
 
     @Test

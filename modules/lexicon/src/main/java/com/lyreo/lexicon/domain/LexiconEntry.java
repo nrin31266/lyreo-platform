@@ -57,5 +57,5 @@ public record LexiconEntry(
 
     public record LexiconTranslation(UUID id, UUID itemId, UUID senseId, String wordVi,
                                      String source, String sourceScope, String sourceSenseQualifier,
-                                     String linkStatus, String unlinkedReason, String tagsJson) {}
+                                     String linkStatus, String unlinkedReason, String tagsJson, String sourcePos) {}
 }

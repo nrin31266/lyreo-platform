@@ -73,5 +73,5 @@ public class LexiconController {
 
     public record TranslationResponse(UUID id, UUID itemId, UUID senseId, String wordVi,
                                       String source, String sourceScope, String sourceSenseQualifier,
-                                      String linkStatus, String unlinkedReason, List<String> tags) {}
+                                      String linkStatus, String unlinkedReason, List<String> tags, String sourcePos) {}
 }

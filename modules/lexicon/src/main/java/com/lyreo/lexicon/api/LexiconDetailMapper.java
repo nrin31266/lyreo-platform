@@ -40,7 +40,7 @@ final class LexiconDetailMapper {
             entry.translations().stream().map(t -> new LexiconController.TranslationResponse(
                 t.id(), t.itemId(), t.senseId(), t.wordVi(), t.source(), t.sourceScope(),
                 t.sourceSenseQualifier(), t.linkStatus(), t.unlinkedReason(),
-                strings(t.tagsJson(), "translation.tags"))).toList());
+                strings(t.tagsJson(), "translation.tags"), t.sourcePos())).toList());
     }
 
     private List<String> strings(String value, String field) {
