@@ -24,11 +24,20 @@ import uuid
 from pathlib import Path
 from typing import Iterator
 
+from lexicon_vi_context import (
+    inventory_raw_record,
+    new_field_inventory,
+    normalized_source_pos,
+    occurrence_id,
+    project_source_context,
+    stream_physical_jsonl,
+)
+
 BUILDER_NAME = "build_lexicon_release.py"
-BUILDER_VERSION = "1.0.0"
+BUILDER_VERSION = "1.0.1"
 PACKAGE_DOMAIN = "lexicon"
-PACKAGE_VERSION = "1.0.0"
-SCHEMA_VERSION = "1.0.0"
+PACKAGE_VERSION = "1.0.1"
+SCHEMA_VERSION = "1.1.0"
 PINNED_RAW_EN_SHA256 = "5ab411b8859490789d0d002074cc029569648f901db940c0ab10e709932e1632"
 PINNED_RAW_EN_DUMP_DATE = "2026-09-02"
 PINNED_RAW_VI_SHA256 = "10e62bccdf3d85fc9e7472c1f85b2149602f97c75177b09523f4762c57ef7d3d"
@@ -51,7 +60,7 @@ def sha256_file(path: Path) -> str:
 
 
 def canonical_json(value: object) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
 def identity_normalization(text: str) -> str:
@@ -289,8 +298,10 @@ def build(
     vi_raw_senses_total = 0
     vi_empty_gloss_skipped = 0
     vi_unmatched_entries_skipped = 0
-    vi_exact_dup_skipped = 0
-    vi_multi_gloss_net = 0
+    vi_raw_gloss_occurrences = 0
+    vi_empty_senses = 0
+    vi_field_inventory = new_field_inventory()
+    vi_reason_counts = {}
     vi_emitted = 0
 
     # Disambiguation mapping: (entry_id, pos, etym_num) -> count of items encountered
@@ -331,7 +342,14 @@ def build(
             conn.executemany("INSERT OR REPLACE INTO pronunciations VALUES (?, ?, ?, ?, ?, ?, ?)", batch_pronunciations)
             batch_pronunciations = []
         if batch_translations:
-            conn.executemany("INSERT OR REPLACE INTO translations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", batch_translations)
+            # Auxiliary occurrence IDs must never silently replace another row.
+            en_translations = [row for row in batch_translations if row[5] != "viwiktionary"]
+            vi_translations = [row for row in batch_translations if row[5] == "viwiktionary"]
+            conn.executemany("INSERT OR REPLACE INTO translations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", en_translations)
+            try:
+                conn.executemany("INSERT INTO translations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", vi_translations)
+            except sqlite3.IntegrityError as exc:
+                raise ValueError("Auxiliary VI occurrence ID collision; refusing to replace provenance") from exc
             batch_translations = []
         conn.commit()
 
@@ -725,51 +743,46 @@ def build(
     if raw_vi_path and raw_vi_path.is_file():
         print(f"Ingesting auxiliary Vietnamese candidate definitions from {raw_vi_path.name}...")
         vi_start_time = time.time()
-        seen_vi_trans = set()
-        for vi_item in stream_jsonl(raw_vi_path):
+        for record_line, vi_item in stream_physical_jsonl(raw_vi_path):
             if vi_item.get("lang_code") != "en":
                 continue
+            inventory_raw_record(vi_item, record_line, vi_field_inventory)
             vi_word = identity_normalization(str(vi_item.get("word") or ""))
-            if not vi_word:
-                continue
-
             entry_id = str(uuid.uuid5(NAMESPACE_LYREO, f"lyreo:lexicon:entry:en:{vi_word}"))
-            # Check if this entry exists in our primary dictionary
-            entry_row = conn.execute("SELECT 1 FROM entries WHERE id = ?", (entry_id,)).fetchone()
+            entry_row = conn.execute("SELECT 1 FROM entries WHERE id = ?", (entry_id,)).fetchone() if vi_word else None
+            vi_pos = normalized_source_pos(vi_item.get("pos"))
+            compatible_items = conn.execute(
+                "SELECT id FROM items WHERE entry_id = ? AND pos = ?", (entry_id, vi_pos)
+            ).fetchall() if vi_pos else []
+            matched_item_id = compatible_items[0][0] if len(compatible_items) == 1 else None
+            if vi_pos is None:
+                reason = "AUXILIARY_VI_UNKNOWN_POS"
+            elif len(compatible_items) == 1:
+                reason = "AUXILIARY_VI_UNIQUE_POS_ITEM"
+            elif len(compatible_items) > 1:
+                reason = "AUXILIARY_VI_AMBIGUOUS_POS_ITEMS"
+            else:
+                reason = "AUXILIARY_VI_NO_COMPATIBLE_POS_ITEM"
 
-            vi_pos = str(vi_item.get("pos") or "").strip().lower()
-            # Find candidate item under this entry matching pos
-            matched_item = conn.execute("SELECT id FROM items WHERE entry_id = ? AND pos = ? ORDER BY order_index LIMIT 1", (entry_id, vi_pos)).fetchone()
-            matched_item_id = matched_item[0] if matched_item else None
-
-            for vi_s in vi_item.get("senses") or []:
-                if not isinstance(vi_s, dict):
-                    continue
+            for sense_ordinal, vi_s in enumerate(vi_item.get("senses") or [], start=1):
                 vi_raw_senses_total += 1
                 raw_glosses = vi_s.get("glosses") or []
-                valid_glosses = [identity_normalization(str(g)).strip() for g in raw_glosses if identity_normalization(str(g)).strip()]
-                if not valid_glosses:
-                    vi_empty_gloss_skipped += 1
-                    continue
-                if len(valid_glosses) > 1:
-                    vi_multi_gloss_net += (len(valid_glosses) - 1)
-
-                if not entry_row:
-                    vi_unmatched_entries_skipped += 1
-                    continue
-
-                for gloss in valid_glosses:
-                    k = (entry_id, matched_item_id, gloss)
-                    if k in seen_vi_trans:
-                        vi_exact_dup_skipped += 1
+                if not raw_glosses:
+                    vi_empty_senses += 1
+                for gloss_ordinal, raw_gloss in enumerate(raw_glosses, start=1):
+                    vi_raw_gloss_occurrences += 1
+                    gloss = identity_normalization(raw_gloss)
+                    if not gloss:
+                        vi_empty_gloss_skipped += 1
                         continue
-                    seen_vi_trans.add(k)
+                    if not entry_row:
+                        vi_unmatched_entries_skipped += 1
+                        continue
                     vi_emitted += 1
                     vi_candidates_count += 1
+                    vi_reason_counts[reason] = vi_reason_counts.get(reason, 0) + 1
                     link_status = "ITEM_CANDIDATE" if matched_item_id else "ENTRY_CANDIDATE"
-                    gloss_hash = hashlib.sha256(gloss.encode("utf-8")).hexdigest()[:12]
-                    trans_id = str(uuid.uuid5(NAMESPACE_LYREO, f"lyreo:lexicon:trans:viwiktionary:{entry_id}:{matched_item_id or 'none'}:{gloss_hash}"))
-
+                    trans_id = occurrence_id(source_vi_sha, record_line, sense_ordinal, gloss_ordinal)
                     trans_payload = {
                         "id": trans_id,
                         "entry_id": entry_id,
@@ -779,22 +792,18 @@ def build(
                         "source": "viwiktionary",
                         "source_scope": "viwiktionary_gloss",
                         "source_sense_qualifier": None,
+                        "source_pos": vi_pos,
+                        "source_context": project_source_context(
+                            vi_item, record_line, vi_s, sense_ordinal, gloss_ordinal
+                        ),
                         "link_status": link_status,
-                        "reason": "AUXILIARY_VIWIKTIONARY_GLOSS",
+                        "reason": reason,
                         "tags": vi_s.get("tags") or [],
                     }
                     batch_translations.append((
-                        trans_id,
-                        entry_id,
-                        matched_item_id,
-                        None,
-                        gloss,
-                        "viwiktionary",
-                        "viwiktionary_gloss",
-                        None,
-                        link_status,
-                        "AUXILIARY_VIWIKTIONARY_GLOSS",
-                        canonical_json(trans_payload),
+                        trans_id, entry_id, matched_item_id, None, gloss,
+                        "viwiktionary", "viwiktionary_gloss", None,
+                        link_status, reason, canonical_json(trans_payload),
                     ))
                     if len(batch_translations) >= BATCH_SIZE:
                         flush_batches()
@@ -880,7 +889,21 @@ def build(
     entry_type_stats = dict(cursor.fetchall())
 
     en_diff_unrec = en_vi_raw_total - (en_vi_empty_skipped + en_vi_exact_dup_skipped + en_vi_emitted)
-    vi_diff_unrec = (vi_raw_senses_total + vi_multi_gloss_net) - (vi_empty_gloss_skipped + vi_unmatched_entries_skipped + vi_exact_dup_skipped + vi_emitted)
+    vi_diff_unrec = vi_raw_gloss_occurrences - (vi_empty_gloss_skipped + vi_unmatched_entries_skipped + vi_emitted)
+
+    for reason, explanation in (
+        ("AUXILIARY_VI_AMBIGUOUS_POS_ITEMS", "Multiple compatible POS items; entry candidate preserves uncertainty."),
+        ("AUXILIARY_VI_NO_COMPATIBLE_POS_ITEM", "No compatible POS item; source POS is retained at entry scope."),
+        ("AUXILIARY_VI_UNKNOWN_POS", "Source POS is missing or unknown; no item association is inferred."),
+    ):
+        if vi_reason_counts.get(reason, 0):
+            issues.append({
+                "code": reason,
+                "status": "UNRESOLVED",
+                "id": "viwiktionary",
+                "count": vi_reason_counts[reason],
+                "message": explanation,
+            })
 
     report = {
         "status": "PASS",
@@ -903,14 +926,17 @@ def build(
             "enwiktionary_emitted_records": en_vi_emitted,
             "enwiktionary_difference_unreconciled": en_diff_unrec,
             "viwiktionary_total_raw_senses": vi_raw_senses_total,
-            "viwiktionary_empty_gloss_skipped": vi_empty_gloss_skipped,
-            "viwiktionary_unmatched_headwords_skipped": vi_unmatched_entries_skipped,
-            "viwiktionary_duplicate_glosses_deduped": vi_exact_dup_skipped,
-            "viwiktionary_multi_gloss_net": vi_multi_gloss_net,
+            "viwiktionary_empty_gloss_occurrences": vi_empty_gloss_skipped,
+            "viwiktionary_unmatched_entry_gloss_occurrences": vi_unmatched_entries_skipped,
+            "viwiktionary_gloss_occurrences_total": vi_raw_gloss_occurrences,
+            "viwiktionary_senses_without_glosses": vi_empty_senses,
+            "viwiktionary_duplicate_glosses_deduped": 0,
+            "viwiktionary_emitted_by_reason": vi_reason_counts,
             "viwiktionary_emitted_records": vi_emitted,
             "viwiktionary_difference_unreconciled": vi_diff_unrec,
             "total_translations_emitted": counts["translations.jsonl"],
         },
+        "vi_source_field_inventory": vi_field_inventory,
         "vietnamese_coverage": {
             "entries_total": total_entries,
             "entries_with_vi": entries_with_vi,
@@ -933,7 +959,7 @@ def build(
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     # Write LICENSE and ATTRIBUTION notices
-    license_text = """Lyreo Lexicon Data Release (v1.0.0)
+    license_text = """Lyreo Lexicon Data Release (v1.0.1)
 
 This dataset incorporates content extracted from Wiktionary (English edition)
 and optionally Vietnamese Wiktionary via the Wiktextract parser by Tatu Ylönen (Kaikki.org).

@@ -137,18 +137,21 @@ def insert_values(
     """Insert one bounded multi-value batch; conflicts are immutable/idempotent no-ops."""
     if not rows:
         return 0
+    # PostgreSQL's extended protocol limits a statement to 65,535 parameters.
+    # New provenance columns must not make a previously safe operator batch fail.
+    if not columns or len(columns) > 65_535:
+        raise ValueError("Invalid insert column count")
     # Identifiers are fixed by importer code, never supplied by the release.
     column_sql = ",".join(columns)
     placeholder = "(" + ",".join(["%s"] * len(columns)) + ")"
-    sql = (
-        f"INSERT INTO {table} ({column_sql}) VALUES "
-        + ",".join([placeholder] * len(rows))
-        + " ON CONFLICT DO NOTHING"
-    )
-    params = [value for row in rows for value in row]
+    inserted = 0
     with conn.cursor() as cursor:
-        cursor.execute(sql, params)
-        return cursor.rowcount
+        for batch in chunks(rows, 65_535 // len(columns)):
+            sql = (f"INSERT INTO {table} ({column_sql}) VALUES "
+                   + ",".join([placeholder] * len(batch)) + " ON CONFLICT DO NOTHING")
+            cursor.execute(sql, [value for row in batch for value in row])
+            inserted += cursor.rowcount
+    return inserted
 
 
 def register_release(conn, package: ReleasePackage) -> None:

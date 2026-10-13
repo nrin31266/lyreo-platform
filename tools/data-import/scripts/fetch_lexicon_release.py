@@ -119,6 +119,7 @@ def run(config: Config, check: bool = False, force: bool = False) -> None:
         actual_hash = sha256(archive)
         if actual_hash != config.archive_sha256:
             raise ValueError(f"Release archive SHA-256 mismatch: expected {config.archive_sha256}, got {actual_hash}")
+        print(f"OK   Lexicon downloaded archive SHA-256: {actual_hash}")
         extracted = extract(archive, work / "extracted", config.version)
         verify_release(config, extracted, archive)
         target.parent.mkdir(parents=True, exist_ok=True)

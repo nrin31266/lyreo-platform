@@ -260,6 +260,7 @@ validate:
 	    tools/data-import/validate_grammar_toeic_release.py \
 	    tools/data-import/scripts \
 	    tools/data-import/build_lexicon_release.py \
+	    tools/data-import/lexicon_vi_context.py \
 	    tools/data-import/validate_lexicon_release.py \
 	    tools/data-import/common.py \
 	    tools/data-import/tests; \
