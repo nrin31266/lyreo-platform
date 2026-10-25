@@ -4,18 +4,11 @@ import {
   supportedLocales,
   type SupportedLocale,
 } from '@lyreo/i18n';
-import {
-  Menu,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Sun,
-  Moon,
-  Monitor,
-} from 'lucide-react';
+import { Sun, Moon, Monitor } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { DialogTrigger } from '@/components/ui/dialog';
+import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
+import { Separator } from '@/components/ui/separator';
 import {
   Select,
   SelectContent,
@@ -28,13 +21,9 @@ import { persistAdminLocale } from '@/i18n';
 import { useAppTheme } from '@/app/providers/AppThemeProvider';
 import { getNavTitleKey } from './admin-navigation';
 
-export function AdminHeader({
-  collapsed,
-  onToggleSidebar,
-}: {
-  collapsed: boolean;
-  onToggleSidebar: () => void;
-}) {
+export function AdminHeader() {
+  const { open, openMobile, isMobile } = useSidebar();
+  const collapsed = !open;
   const location = useLocation();
   const { t, i18n } = useTranslation(['admin', 'common']);
   const { preference, setPreference } = useAppTheme();
@@ -43,37 +32,18 @@ export function AdminHeader({
   return (
     <header className="admin-header">
       <div className="flex min-w-0 items-center gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="hidden md:inline-flex"
+        <SidebarTrigger
           aria-label={t(
-            collapsed
-              ? 'admin:shell.expandSidebar'
-              : 'admin:shell.collapseSidebar',
+            isMobile
+              ? 'admin:shell.openNavigation'
+              : collapsed
+                ? 'admin:shell.expandSidebar'
+                : 'admin:shell.collapseSidebar',
           )}
           aria-controls="desktop-navigation"
-          aria-expanded={!collapsed}
-          onClick={onToggleSidebar}
-        >
-          {collapsed ? (
-            <PanelLeftOpen aria-hidden="true" className="size-4" />
-          ) : (
-            <PanelLeftClose aria-hidden="true" className="size-4" />
-          )}
-        </Button>
-        <DialogTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            aria-label={t('admin:shell.openNavigation')}
-          >
-            <Menu aria-hidden="true" className="size-5" />
-          </Button>
-        </DialogTrigger>
+          aria-expanded={isMobile ? openMobile : open}
+        />
+        <Separator orientation="vertical" className="h-4" />
         <span className="header-title">
           {t(getNavTitleKey(location.pathname))}
         </span>

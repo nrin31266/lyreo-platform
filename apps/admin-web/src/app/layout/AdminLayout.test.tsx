@@ -69,6 +69,7 @@ describe('shared Admin navigation', () => {
     await user.click(menu);
     expect(menu).toHaveAttribute('aria-expanded', 'true');
     const dialog = screen.getByRole('dialog', { name: 'Main navigation' });
+    expect(dialog.id).toBe(menu.getAttribute('aria-controls'));
     expect(dialog).toContainElement(document.activeElement as HTMLElement);
     expect(within(dialog).getByRole('navigation')).toBeInTheDocument();
     await user.keyboard('{Escape}');
@@ -103,6 +104,32 @@ describe('shared Admin navigation', () => {
       screen.getByRole('combobox', { name: 'Language' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Theme' })).toBeInTheDocument();
+    const desktopTrigger = screen.getByRole('button', {
+      name: 'Collapse sidebar',
+    });
+    expect(
+      document.getElementById(desktopTrigger.getAttribute('aria-controls')!),
+    ).toBeInTheDocument();
+    desktop = false;
+    await act(async () => {
+      resize();
+    });
+    const mobileTrigger = screen.getByRole('button', {
+      name: 'Open navigation',
+    });
+    expect(mobileTrigger).toHaveAttribute('aria-expanded', 'false');
+    await user.click(mobileTrigger);
+    expect(screen.getByRole('dialog').id).toBe(
+      mobileTrigger.getAttribute('aria-controls'),
+    );
+    desktop = true;
+    await act(async () => {
+      resize();
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Collapse sidebar' }),
+    ).toHaveAttribute('aria-expanded', 'true');
   });
   it('collapses desktop navigation, keeps links named and restores the saved preference', async () => {
     const user = userEvent.setup();

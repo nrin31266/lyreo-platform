@@ -1,27 +1,14 @@
-import { AudioLines, ShieldAlert } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
+import { LoginForm } from '@/components/login-form';
 import { useAuth } from './AuthProvider';
 
 export function Login() {
-  const { t } = useTranslation('admin');
-  const { login } = useAuth();
   return (
     <main className="login-page">
-      <section className="login-form" aria-labelledby="login-form-title">
-        <div className="brand-mark">
-          <AudioLines aria-hidden="true" />
-        </div>
-        <div>
-          <h1 id="login-form-title">{t('login.welcome')}</h1>
-          <p>{t('login.access')}</p>
-        </div>
-        <Button size="lg" onClick={() => void login()}>
-          {t('signIn')}
-        </Button>
-        <p className="login-note">{t('login.note')}</p>
-      </section>
+      <LoginForm />
     </main>
   );
 }

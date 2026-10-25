@@ -12,7 +12,7 @@ pnpm --filter @lyreo/admin-web test
 pnpm --filter @lyreo/admin-web build
 ```
 
-Tests use Vitest, React Testing Library, and jsdom. The initial smoke test checks only the testing rail.
+Tests use Vitest, React Testing Library, and jsdom. Tests cover editor polling/checkpoint behavior, source errors and navigation focus/collapse persistence.
 
 ## Local conventions
 
@@ -23,23 +23,40 @@ Admin owns its Web components and accessibility adapters. Use shared semantic li
 
 ## Workspace UI
 
-The compact console uses the shared `adminThemes` slate/indigo maps and self-hosted IBM Plex Sans
-Variable (Fontsource, OFL-1.1, Latin/Vietnamese subsets). The 49 px header and collapsible
-216/56 px desktop navigation follow shadcn sidebar/dashboard composition. Mobile navigation remains
-a labelled Radix dialog with focus restoration and Escape dismissal. Named tooltips make collapsed
-links discoverable; the skip link remains first in keyboard order.
+The compact console uses neutral/blue `adminThemes` and self-hosted IBM Plex Sans Variable
+(Fontsource, OFL-1.1, Latin/Vietnamese subsets). The 48 px header and 216/48 px navigation
+use the actual official `sidebar-07` block customized for React Router/auth/i18n. Mobile navigation
+uses shadcn Sidebar's labelled Sheet, Escape dismissal, close control and focus restoration.
+The login screen customizes official `login-03` with the existing OIDC entrypoint.
 
-Use 16–20 px page gutters, 12–16 px panel insets and 32–36 px controls. Transcript editing and
-semantic review occupy separate Radix tabs beside the player. State belongs to the parent so tab
-changes do not discard unsaved edits. Content-sized textareas have a two-row fallback for older
-browsers. Tables scroll within labelled regions rather than expanding the page. The overview links
-to implemented operations and does not invent counts or analytics.
+The full 54-file Radix/new-york component set was installed with `pnpm dlx shadcn@latest add --all`.
+Existing components were previewed with `--dry-run`, `--diff` and `--view`, then merged preserving
+the compact control styles, invalid states and translated `DialogContent.closeLabel` contract.
+Blocks were installed with `pnpm dlx shadcn@latest add @shadcn/sidebar-07 @shadcn/login-03`;
+unused team/project demonstration components and sample data were removed.
 
-Global CSS owns the keyboard outline and reduced-motion behavior. Keep palette values in the
-[shared theme package](../../packages/design-system/README.md), not feature pages. Mobile continues
-to use learner `semanticThemes`; Admin palette/font changes do not change that runtime adapter.
+Use 16 px page gutters, 12 px panel insets and 32–36 px desktop controls; mobile touch targets
+are at least 44 px. At 1200 px and above, official Resizable panels start at a 1/3 player and 2/3
+editor split. Narrower screens stack the same mounted panels, so changing width does not discard
+edits or recreate the player. Transcript and semantic review occupy separate Radix tabs.
+State belongs to the parent so tab changes do not discard unsaved edits.
+Tables scroll within labelled regions rather than expanding the page. The overview links to
+implemented operations and does not invent counts or analytics.
 
-Regression checks cover collapse persistence, mobile focus, tabs, checkpoint/polling conflicts
-and theme contrast. Browser visual checks use fixture sessions/drafts and are not evidence for
-live OIDC, YouTube playback or AI quality. Consult the [plan completion audit](../../docs/features/lesson-build.md#plan-completion-audit--2026-10-25)
-for incomplete research, verified anchor recovery defect, replacement and retirement work.
+`AppThemeProvider` remains the single theme owner. CSS aliases map its semantic tokens into
+shadcn card/popover/accent/sidebar/chart roles. Sonner also reads this existing provider.
+The installed Resizable adapter uses the installed react-resizable-panels v4 API (`Group`,
+`Panel`, `Separator`) rather than the older API returned by the legacy new-york registry.
+Unused components are available in source without a barrel import into the application.
+
+Source inspection shows translated errors beside the URL and preserves the request correlation ID.
+Source confirmation records operator responsibility and does not assert verified permission:
+“Nguồn do người vận hành lựa chọn để phát triển và kiểm thử nội bộ. Người vận hành chịu trách nhiệm
+xin phép và bảo đảm quyền sử dụng trước khi khai thác hoặc phát hành.”
+
+Global CSS owns keyboard focus and reduced-motion behavior. Mobile continues to use learner
+`semanticThemes`; Admin palette/font changes do not change that runtime adapter.
+
+Browser fixture sessions are not evidence for live OIDC, YouTube playback or AI quality.
+Consult the [plan completion audit](../../docs/features/lesson-build.md#plan-completion-audit--2026-10-25)
+for verified live OIDC/player/publication checks, source retirement and remaining human quality/billing gates.

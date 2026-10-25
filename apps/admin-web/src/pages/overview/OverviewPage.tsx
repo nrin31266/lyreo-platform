@@ -1,6 +1,7 @@
 import { BookOpen, ListChecks, Plus, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
 export function OverviewPage() {
@@ -25,37 +26,42 @@ export function OverviewPage() {
         </Button>
       </div>
       <div className="console-overview">
-        <section className="console-panel" aria-labelledby="workspace-areas">
-          <div className="console-panel-heading">
-            <h2 id="workspace-areas">{t('overview.areasTitle')}</h2>
-          </div>
-          {areas.map(({ path, key, Icon }) => (
-            <Link to={path} className="console-row" key={key}>
-              <Icon aria-hidden="true" />
-              <div>
-                <strong>{t(`overview.links.${key}.title`)}</strong>
-                <p>{t(`overview.links.${key}.description`)}</p>
-              </div>
-              <span className="console-row-action">{t('overview.open')}</span>
-            </Link>
-          ))}
-        </section>
-        <section
-          className="console-panel"
-          aria-labelledby="authoring-flow-title"
-        >
-          <div className="console-panel-heading">
-            <h2 id="authoring-flow-title">{t('overview.workflowTitle')}</h2>
-          </div>
-          <ol className="authoring-path">
-            {(['source', 'review', 'publish'] as const).map((step) => (
-              <li key={step}>
-                <h3>{t(`overview.steps.${step}.title`)}</h3>
-                <p>{t(`overview.steps.${step}.description`)}</p>
-              </li>
+        <Card aria-labelledby="workspace-areas">
+          <CardHeader>
+            <CardTitle id="workspace-areas">
+              {t('overview.areasTitle')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {areas.map(({ path, key, Icon }) => (
+              <Link to={path} className="console-row" key={key}>
+                <Icon aria-hidden="true" />
+                <div>
+                  <strong>{t(`overview.links.${key}.title`)}</strong>
+                  <p>{t(`overview.links.${key}.description`)}</p>
+                </div>
+                <span className="console-row-action">{t('overview.open')}</span>
+              </Link>
             ))}
-          </ol>
-        </section>
+          </CardContent>
+        </Card>
+        <Card aria-labelledby="authoring-flow-title">
+          <CardHeader>
+            <CardTitle id="authoring-flow-title">
+              {t('overview.workflowTitle')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ol className="authoring-path">
+              {(['source', 'review', 'publish'] as const).map((step) => (
+                <li key={step}>
+                  <h3>{t(`overview.steps.${step}.title`)}</h3>
+                  <p>{t(`overview.steps.${step}.description`)}</p>
+                </li>
+              ))}
+            </ol>
+          </CardContent>
+        </Card>
       </div>
     </section>
   );

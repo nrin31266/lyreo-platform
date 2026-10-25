@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { playbackAction } from './authoring-editor';
 import type { AuthoringSentence } from './lesson-builder.types';
 
@@ -103,7 +104,7 @@ export function YouTubePreview({ videoId, startMs, endMs, sentences, seek, onTim
 
   return <div className="flex flex-col gap-2">
     <div ref={host} aria-label={t('lessonAuthoring.player')} className="aspect-video w-full [&_iframe]:size-full" />
-    {error ? <p role="alert" className="text-destructive">{t('lessonAuthoring.playerError')}</p> : null}
+    {error ? <Alert variant="destructive"><AlertDescription>{t('lessonAuthoring.playerError')}</AlertDescription></Alert> : null}
     <p className="text-sm text-muted-foreground">{t('lessonAuthoring.playerNote')}</p>
   </div>;
 }

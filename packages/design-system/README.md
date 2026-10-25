@@ -36,21 +36,21 @@ share DOM and React Native component implementations.
 
 ## Admin workspace direction
 
-Admin is a dense content console. Its palette uses slate background `#F4F6F9`, white surface
-`#FFFFFF`, ink `#1B2433`, muted text `#536176`, indigo primary `#4558C8` and pale indigo selection
-`#EDF0FF`. Dark mode uses slate surfaces with a lighter indigo action. Input boundaries meet 3:1;
+Admin is a dense content console. Its palette uses neutral background `#FAFAFA`, white surface
+`#FFFFFF`, text `#18181B`, muted text `#52525B`, blue primary `#2563EB` and pale blue selection
+`#EFF6FF`. Dark mode uses neutral surfaces with a lighter blue action. Input boundaries meet 3:1;
 primary, muted and functional text meet 4.5:1 on supported surfaces in the Admin regression test.
 Learner themes remain independently defined.
 
-The 49 px header and 216 px sidebar reserve space for work. Desktop navigation can collapse to
-56 px icons with named links/tooltips; mobile uses the existing modal drawer. Page gutters are
-16–20 px, panel insets 12–16 px, and ordinary controls 32–36 px. Transcript rows use dividers,
+The 48 px header and 216 px sidebar reserve space for work. Desktop navigation can collapse to
+48 px icons with named links/tooltips; mobile uses the official shadcn Sheet. Page gutters are
+16 px, panel insets 12 px, and ordinary controls 32–36 px. Transcript rows use dividers,
 compact tools and content-sized textareas; the player stays beside the transcript/content tabs.
 Controls retain visible focus, safe keyboard behavior and responsive wrapping.
 
 Admin self-hosts IBM Plex Sans Variable through Fontsource (OFL-1.1), loading only Latin and
 Vietnamese normal-weight subsets. Font assets ship with the app instead of requesting Google Fonts
 at runtime. The Admin stylesheet owns this Web typography adapter; Mobile font loading is separate.
-Sidebar composition references [shadcn sidebar-07](https://ui.shadcn.com/blocks/sidebar), customized
+Sidebar composition uses the installed official [shadcn sidebar-07](https://ui.shadcn.com/blocks/sidebar), customized
 for the existing React Router/auth/i18n stack. Avoid promotional hero spacing, fake metrics and
 sample analytics in operational screens.

@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -11,6 +17,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Empty, EmptyDescription } from '@/components/ui/empty';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { cancelJob, fetchJob } from './jobs.api';
 import type { Job } from './jobs.types';
@@ -73,62 +85,107 @@ export function JobsPage() {
       <h1>{t('jobs.title')}</h1>
       <p className="lead">{t('jobs.lead')}</p>
 
-      <Card className="mt-6">
-        <CardContent className="pt-6">
-          <div className="row">
-            <Input
-              className="flex-1"
-              value={id}
-              onChange={event => setId(event.target.value)}
-              placeholder={t('jobs.jobUuid')}
-              aria-label={t('jobs.jobUuid')}
-              disabled={loading}
-              onKeyDown={event => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  void load();
-                }
-              }}
-            />
-            <Button disabled={loading} onClick={() => void load()}>
-              {loading ? t('common:status.loading') : t('jobs.inspect')}
-            </Button>
-          </div>
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>{t('jobs.inspect')}</CardTitle>
+          <CardDescription>{t('jobs.enterUuid')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup>
+            <Field orientation="responsive">
+              <FieldLabel htmlFor="job-id" className="sr-only">
+                {t('jobs.jobUuid')}
+              </FieldLabel>
+              <Input
+                id="job-id"
+                className="flex-1"
+                value={id}
+                onChange={(event) => setId(event.target.value)}
+                placeholder={t('jobs.jobUuid')}
+                aria-label={t('jobs.jobUuid')}
+                disabled={loading}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void load();
+                  }
+                }}
+              />
+              <Button disabled={loading} onClick={() => void load()}>
+                {loading ? t('common:status.loading') : t('jobs.inspect')}
+              </Button>
+            </Field>
+          </FieldGroup>
 
-          {error ? <p className="danger mt-4">{error}</p> : null}
+          {error ? (
+            <Alert variant="destructive" className="mt-3">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
+          {loading ? (
+            <div role="status" aria-label={t('common:status.loading')}>
+              <Skeleton className="mt-3 h-20" />
+            </div>
+          ) : null}
 
           {!job && !error && !loading ? (
-            <p className="muted mt-4">{t('jobs.enterUuid')}</p>
+            <Empty className="mt-3">
+              <EmptyDescription>{t('jobs.enterUuid')}</EmptyDescription>
+            </Empty>
           ) : null}
 
           {job ? (
             <div className="job">
-              <strong>{job.status}</strong>
+              <Badge variant="secondary" className="w-fit">
+                {job.status}
+              </Badge>
               <span>
                 {job.currentStep ?? t('jobs.waiting')} · {job.progressPercent}%
               </span>
-              <progress value={job.progressPercent} max="100" />
+              <Progress
+                value={job.progressPercent}
+                aria-label={job.currentStep ?? t('jobs.waiting')}
+              />
               <small>
-                {t('jobs.attempt', { current: job.attemptCount, max: job.maxAttempts })}
+                {t('jobs.attempt', {
+                  current: job.attemptCount,
+                  max: job.maxAttempts,
+                })}
               </small>
               {cancellable.has(job.status) ? (
                 <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
                   <DialogTrigger asChild>
-                    <Button className="w-fit" variant="destructive" disabled={cancelling}>
+                    <Button
+                      className="w-fit"
+                      variant="destructive"
+                      disabled={cancelling}
+                    >
                       {t('jobs.requestCancellation')}
                     </Button>
                   </DialogTrigger>
                   <DialogContent closeLabel={t('common:actions.close')}>
                     <DialogHeader>
                       <DialogTitle>{t('jobs.cancelDialog.title')}</DialogTitle>
-                      <DialogDescription>{t('jobs.cancelDialog.description')}</DialogDescription>
+                      <DialogDescription>
+                        {t('jobs.cancelDialog.description')}
+                      </DialogDescription>
                     </DialogHeader>
                     <div className="flex justify-end gap-2">
-                      <Button variant="outline" disabled={cancelling} onClick={() => setConfirmOpen(false)}>
+                      <Button
+                        variant="outline"
+                        disabled={cancelling}
+                        onClick={() => setConfirmOpen(false)}
+                      >
                         {t('common:actions.cancel')}
                       </Button>
-                      <Button variant="destructive" disabled={cancelling} onClick={() => void cancel()}>
-                        {cancelling ? t('common:status.loading') : t('jobs.cancelDialog.confirm')}
+                      <Button
+                        variant="destructive"
+                        disabled={cancelling}
+                        onClick={() => void cancel()}
+                      >
+                        {cancelling
+                          ? t('common:status.loading')
+                          : t('jobs.cancelDialog.confirm')}
                       </Button>
                     </div>
                   </DialogContent>

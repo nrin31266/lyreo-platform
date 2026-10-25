@@ -130,10 +130,10 @@
     "endSeconds": "Kết thúc (giây)",
     "usedRanges": "Các bài học đã dùng video này",
     "overlap": "Đoạn này trùng với một bài học đã có. Bạn vẫn có thể tiếp tục.",
-    "rights": "Tôi xác nhận có quyền phù hợp để tải và xử lý nội dung này.",
+    "rights": "Tôi chịu trách nhiệm về quyền sử dụng nguồn này và việc xin phép trước khi khai thác hoặc phát hành.",
     "prepare": "Chuẩn bị bản chép lời",
     "embedBlocked": "Video này không cho phép nhúng. Hãy chọn nguồn khác.",
-    "invalidRange": "Nhập tên bài, chọn đoạn hợp lệ trong video và xác nhận quyền sử dụng nội dung.",
+    "invalidRange": "Nhập tiêu đề, chọn đoạn hợp lệ trong video và xác nhận trách nhiệm sử dụng nguồn.",
     "loading": "Đang tải bài học đã lưu…",
     "status": "Trạng thái: {{status}}",
     "revision": "Phiên bản {{revision}}",
@@ -231,7 +231,19 @@
     },
     "retryAt": "Dự kiến chạy tiếp: {{time}}",
     "transcriptTab": "Bản chép lời",
-    "contentTab": "Nội dung học"
+    "contentTab": "Nội dung học",
+    "retryInspect": "Thử kiểm tra lại",
+    "resizePanels": "Điều chỉnh khung video và biên tập",
+    "requestId": "Mã yêu cầu {{id}}",
+    "sourceErrors": {
+      "YOUTUBE_MEDIA_TOOL_DISABLED": "Chức năng lấy media đang tắt. Bật trong môi trường Core phát triển rồi thử lại.",
+      "YOUTUBE_MEDIA_TOOL_UNAVAILABLE": "Core chưa có công cụ media. Kiểm tra yt-dlp và FFmpeg rồi thử lại.",
+      "YOUTUBE_MEDIA_TIMEOUT": "YouTube phản hồi quá lâu. Vui lòng thử kiểm tra lại.",
+      "YOUTUBE_MEDIA_FAILED": "Không thể kiểm tra video. Kiểm tra video có công khai và còn truy cập được rồi thử lại.",
+      "YOUTUBE_MEDIA_INTERRUPTED": "Kiểm tra bị gián đoạn. Vui lòng thử lại.",
+      "generic": "Không thể kiểm tra nguồn YouTube. Kiểm tra URL và kết nối dịch vụ rồi thử lại."
+    },
+    "jobHistory": "Lịch sử xử lý"
   },
   "shell": {
     "skipToContent": "Chuyển đến nội dung",

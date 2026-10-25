@@ -130,10 +130,10 @@
     "endSeconds": "End (seconds)",
     "usedRanges": "Existing lessons from this video",
     "overlap": "This segment overlaps an existing lesson. You may continue.",
-    "rights": "I confirm I have the appropriate rights to acquire and process this media.",
+    "rights": "I take responsibility for the right to use this source and for obtaining permission before exploitation or publication.",
     "prepare": "Prepare transcript",
     "embedBlocked": "This video cannot be embedded. Choose another source.",
-    "invalidRange": "Enter a title, a valid segment within the video, and confirm media rights.",
+    "invalidRange": "Enter a title, a valid segment within the video, and accept responsibility for source use.",
     "loading": "Loading saved lesson…",
     "status": "Status: {{status}}",
     "revision": "Revision {{revision}}",
@@ -231,7 +231,19 @@
     },
     "retryAt": "Scheduled to resume: {{time}}",
     "transcriptTab": "Transcript",
-    "contentTab": "Learning content"
+    "contentTab": "Learning content",
+    "retryInspect": "Retry inspection",
+    "resizePanels": "Resize player and editor",
+    "requestId": "Request {{id}}",
+    "sourceErrors": {
+      "YOUTUBE_MEDIA_TOOL_DISABLED": "Media acquisition is disabled. Enable it in the Core development environment and retry.",
+      "YOUTUBE_MEDIA_TOOL_UNAVAILABLE": "The Core media tools are unavailable. Check yt-dlp and FFmpeg, then retry.",
+      "YOUTUBE_MEDIA_TIMEOUT": "YouTube took too long to respond. Retry inspection.",
+      "YOUTUBE_MEDIA_FAILED": "This video could not be inspected. Check that it is public and available, then retry.",
+      "YOUTUBE_MEDIA_INTERRUPTED": "Inspection was interrupted. Retry inspection.",
+      "generic": "Could not inspect this YouTube source. Check the URL and service connection, then retry."
+    },
+    "jobHistory": "Job history"
   },
   "shell": {
     "skipToContent": "Skip to content",

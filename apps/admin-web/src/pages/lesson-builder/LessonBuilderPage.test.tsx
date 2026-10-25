@@ -103,15 +103,13 @@ beforeEach(async () => {
   vi.mocked(api.fetchDraft).mockImplementation(async () =>
     structuredClone(current),
   );
-  await i18n
-    .use(initReactI18next)
-    .init({
-      resources: adminI18nResources,
-      lng: 'en',
-      fallbackLng: 'en',
-      ns: ['admin', 'common'],
-      interpolation: { escapeValue: false },
-    });
+  await i18n.use(initReactI18next).init({
+    resources: adminI18nResources,
+    lng: 'en',
+    fallbackLng: 'en',
+    ns: ['admin', 'common'],
+    interpolation: { escapeValue: false },
+  });
 });
 afterEach(() => {
   cleanup();
@@ -388,7 +386,7 @@ describe('lesson authoring checkpoints', () => {
     ).toBeInTheDocument();
   });
 
-  it('inspects YouTube first and requires explicit media rights before preparation', async () => {
+  it('inspects YouTube first and requires operator responsibility before preparation', async () => {
     vi.mocked(api.inspectSource).mockResolvedValue({
       videoId: 'abcdefghijk',
       title: 'Video',
@@ -425,11 +423,185 @@ describe('lesson authoring checkpoints', () => {
     ).toBeDisabled();
     fireEvent.click(
       screen.getByRole('checkbox', {
-        name: /I confirm I have the appropriate rights/,
+        name: /I take responsibility for the right to use this source/,
       }),
     );
     expect(
       screen.getByRole('button', { name: 'Prepare transcript' }),
     ).toBeEnabled();
+  });
+  it('shows a translated source error beside the URL and retries without leaking tool details', async () => {
+    vi.mocked(api.inspectSource)
+      .mockRejectedValueOnce(
+        new ApiError(
+          503,
+          'private downloader stderr',
+          'YOUTUBE_MEDIA_TOOL_UNAVAILABLE',
+          undefined,
+          'request-123',
+        ),
+      )
+      .mockResolvedValueOnce({
+        videoId: 'abcdefghijk',
+        title: 'Recovered video',
+        durationMs: 120000,
+        embedAllowed: true,
+        usedRanges: [],
+      });
+    await show('/lessons/new');
+    fireEvent.change(screen.getByLabelText('YouTube URL'), {
+      target: { value: 'https://youtu.be/abcdefghijk' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Inspect video' }));
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'The Core media tools are unavailable',
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Request request-123');
+    expect(
+      screen.queryByText('private downloader stderr'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText('YouTube URL')).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Retry inspection' }));
+    });
+    expect(api.inspectSource).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('Recovered video')).toBeInTheDocument();
+  });
+  it('clears an earlier preparation error when inspecting another source', async () => {
+    vi.mocked(api.inspectSource).mockResolvedValue({
+      videoId: 'abcdefghijk',
+      title: 'Video',
+      durationMs: 120000,
+      embedAllowed: true,
+      usedRanges: [],
+    });
+    await show('/lessons/new');
+    fireEvent.change(screen.getByLabelText('YouTube URL'), {
+      target: { value: 'https://youtu.be/abcdefghijk' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Inspect video' }));
+    });
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /I take responsibility/ }),
+    );
+    fireEvent.change(screen.getByLabelText('End (seconds)'), {
+      target: { value: '0' },
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Prepare transcript' }),
+      );
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Enter a title, a valid segment within the video',
+    );
+    fireEvent.change(screen.getByLabelText('YouTube URL'), {
+      target: { value: 'https://youtu.be/lmnopqrstuv' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Inspect video' }));
+    });
+    expect(api.inspectSource).toHaveBeenLastCalledWith(
+      'https://youtu.be/lmnopqrstuv',
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+  it('collapses successful history while keeping running, failed and cancelled jobs visible', async () => {
+    current.jobs = [
+      {
+        jobId: 'completed-job',
+        operation: 'PREPARE',
+        status: 'SUCCEEDED',
+        usage: [],
+      },
+      {
+        jobId: 'running-job',
+        operation: 'ALIGN',
+        status: 'RUNNING',
+        currentStep: 'Active alignment',
+        usage: [],
+      },
+      {
+        jobId: 'failed-job',
+        operation: 'SEMANTIC',
+        status: 'FAILED',
+        errorMessage: 'Failed attempt stays visible',
+        usage: [],
+      },
+      {
+        jobId: 'cancelled-job',
+        operation: 'ALIGN',
+        status: 'CANCELLED',
+        errorMessage: 'Cancelled attempt stays visible',
+        usage: [],
+      },
+    ];
+    await show();
+    const history = screen.getByRole('button', {
+      name: /Job history.*1/,
+    });
+    expect(history).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('Active alignment')).toBeVisible();
+    expect(screen.getByText('Failed attempt stays visible')).toBeVisible();
+    expect(screen.getByText('Cancelled attempt stays visible')).toBeVisible();
+    expect(
+      document.querySelector('a[href="/jobs?job=completed-job"]'),
+    ).not.toBeInTheDocument();
+    fireEvent.click(history);
+    expect(history).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      document.querySelector('a[href="/jobs?job=completed-job"]'),
+    ).toBeVisible();
+    expect(screen.getByText('Active alignment')).toBeVisible();
+    fireEvent.click(history);
+    expect(history).toHaveAttribute('aria-expanded', 'false');
+  });
+  it('keeps mixed terminal job details in collapsed history after publication', async () => {
+    current.status = 'PUBLISHED';
+    current.jobs = [
+      {
+        jobId: 'old-failure',
+        operation: 'SEMANTIC',
+        status: 'FAILED',
+        errorMessage: 'Earlier content attempt failed',
+        usage: [],
+      },
+      {
+        jobId: 'completed-retry',
+        operation: 'SEMANTIC',
+        status: 'SUCCEEDED',
+        usage: [],
+      },
+      {
+        jobId: 'old-cancellation',
+        operation: 'ALIGN',
+        status: 'CANCELLED',
+        errorMessage: 'Earlier alignment was cancelled',
+        usage: [],
+      },
+    ];
+    await show();
+    const history = screen.getByRole('button', { name: /Job history.*3/ });
+    expect(history).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.queryByText('Earlier content attempt failed'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Earlier alignment was cancelled'),
+    ).not.toBeInTheDocument();
+    fireEvent.click(history);
+    expect(history).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Earlier content attempt failed')).toBeVisible();
+    expect(screen.getByText('Earlier alignment was cancelled')).toBeVisible();
+    expect(
+      document.querySelector('a[href="/jobs?job=completed-retry"]'),
+    ).toBeVisible();
   });
 });

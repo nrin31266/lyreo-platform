@@ -5,13 +5,21 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code?: string;
   readonly detail?: string;
+  readonly correlationId?: string;
 
-  constructor(status: number, message: string, code?: string, detail?: string) {
+  constructor(
+    status: number,
+    message: string,
+    code?: string,
+    detail?: string,
+    correlationId?: string,
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.detail = detail;
+    this.correlationId = correlationId;
   }
 }
 
@@ -31,16 +39,20 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     let message = `API request failed with status ${response.status}`;
     let code: string | undefined;
     let detail: string | undefined;
+    let correlationId: string | undefined;
 
     if (rawText) {
       try {
         const data = JSON.parse(rawText) as {
+          correlationId?: unknown;
           detail?: unknown;
           title?: unknown;
           code?: unknown;
           message?: unknown;
         };
         if (typeof data === 'object' && data !== null) {
+          if (typeof data.correlationId === 'string')
+            correlationId = data.correlationId;
           if (typeof data.code === 'string') {
             code = data.code;
           }
@@ -58,7 +70,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       }
     }
 
-    throw new ApiError(response.status, message, code, detail);
+    throw new ApiError(response.status, message, code, detail, correlationId);
   }
 
   const text = await response.text();

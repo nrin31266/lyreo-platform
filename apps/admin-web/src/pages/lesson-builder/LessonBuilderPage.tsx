@@ -14,6 +14,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from '@/components/ui/resizable';
 import { ApiError } from '@/lib/api';
 import { cancelJob } from '@/pages/jobs/jobs.api';
 import { mergeSentence, splitSentence } from './authoring-editor';
@@ -100,7 +116,7 @@ function JobProgress({
     >
       <div className="flex flex-wrap items-center gap-3">
         <strong>{describe(job.operation)}</strong>
-        <span>{describe(job.status)}</span>
+        <Badge variant="secondary">{describe(job.status)}</Badge>
         <span>{job.currentStep ? describe(job.currentStep) : null}</span>
         {activeJob(job) ? (
           <>
@@ -149,7 +165,7 @@ function JobProgress({
 }
 
 export function LessonBuilderPage() {
-  const { t } = useTranslation('admin');
+  const { t } = useTranslation(['admin', 'common']);
   const describe = useCodeLabel();
   const navigate = useNavigate();
   const { lessonId } = useParams<{ lessonId: string }>();
@@ -180,6 +196,7 @@ export function LessonBuilderPage() {
   const [contentReviewed, setContentReviewed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [inspectError, setInspectError] = useState('');
   const [currentMs, setCurrentMs] = useState(0);
   const [seek, setSeek] = useState<{ atMs: number; sequence: number } | null>(
     null,
@@ -281,12 +298,37 @@ export function LessonBuilderPage() {
 
   async function inspect(event: FormEvent) {
     event.preventDefault();
-    await perform(async () => {
+    setError('');
+    setBusy(true);
+    setInspectError('');
+    setInspection(null);
+    try {
       const next = await authoring.inspectSource(sourceReference.trim());
       setInspection(next);
       if (!title.trim()) setTitle(next.title);
       setEndSeconds(String(Math.min(next.durationMs / 1000, 120)));
-    });
+    } catch (cause) {
+      const code = cause instanceof ApiError ? cause.code : undefined;
+      const known =
+        code &&
+        [
+          'YOUTUBE_MEDIA_TOOL_DISABLED',
+          'YOUTUBE_MEDIA_TOOL_UNAVAILABLE',
+          'YOUTUBE_MEDIA_TIMEOUT',
+          'YOUTUBE_MEDIA_FAILED',
+          'YOUTUBE_MEDIA_INTERRUPTED',
+        ].includes(code);
+      const message = known
+        ? t(`lessonAuthoring.sourceErrors.${code}`)
+        : t('lessonAuthoring.sourceErrors.generic');
+      setInspectError(
+        cause instanceof ApiError && cause.correlationId
+          ? `${message} · ${t('lessonAuthoring.requestId', { id: cause.correlationId })}`
+          : message,
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function create(event: FormEvent) {
@@ -356,6 +398,29 @@ export function LessonBuilderPage() {
     setContentReviewed(false);
   }
 
+  const isHistoricalJob = (job: AuthoringJob) =>
+    job.status === 'SUCCEEDED' ||
+    (published && ['FAILED', 'CANCELLED'].includes(job.status));
+  const historyJobs = draft?.jobs.filter(isHistoricalJob) ?? [];
+  function renderJob(job: AuthoringJob) {
+    if (!draft) return null;
+    return (
+      <JobProgress
+        key={job.jobId}
+        job={job}
+        onCancel={() =>
+          void perform(async () => {
+            await cancelJob(job.jobId);
+            acceptDraft(
+              await authoring.fetchDraft(draft.id),
+              !dirtyRef.current,
+            );
+          })
+        }
+      />
+    );
+  }
+
   return (
     <section className="lesson-authoring flex flex-col gap-3">
       <div className="authoring-heading">
@@ -367,12 +432,9 @@ export function LessonBuilderPage() {
         ) : null}
       </div>
       {error ? (
-        <p
-          role="alert"
-          className="rounded-lg border border-destructive p-3 text-sm text-destructive"
-        >
-          {error}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
       {!lessonId ? (
         <>
@@ -385,28 +447,52 @@ export function LessonBuilderPage() {
                 onSubmit={inspect}
                 className="authoring-source-toolbar flex flex-col items-end gap-3 sm:flex-row"
               >
-                <label className="flex w-full flex-1 flex-col gap-1">
-                  {t('lessonAuthoring.youtubeUrl')}
-                  <Input
-                    type="url"
-                    required
-                    value={sourceReference}
-                    onChange={(event) => {
-                      setSourceReference(event.target.value);
-                      setInspection(null);
-                      setRightsConfirmed(false);
-                    }}
-                    placeholder="https://www.youtube.com/watch?v=…"
-                  />
-                </label>
+                <FieldGroup className="flex-1">
+                  <Field data-invalid={Boolean(inspectError)}>
+                    <FieldLabel htmlFor="youtube-source">
+                      {t('lessonAuthoring.youtubeUrl')}
+                    </FieldLabel>
+                    <Input
+                      id="youtube-source"
+                      disabled={busy}
+                      aria-invalid={Boolean(inspectError)}
+                      aria-describedby={
+                        inspectError ? 'source-inspect-error' : undefined
+                      }
+                      type="url"
+                      required
+                      value={sourceReference}
+                      onChange={(event) => {
+                        setSourceReference(event.target.value);
+                        setInspectError('');
+                        setInspection(null);
+                        setRightsConfirmed(false);
+                      }}
+                      placeholder="https://www.youtube.com/watch?v=…"
+                    />
+                  </Field>
+                </FieldGroup>
                 <Button
                   type="submit"
                   className="w-full sm:w-auto"
                   disabled={busy || !sourceReference.trim()}
                 >
-                  {t('lessonAuthoring.inspect')}
+                  {busy
+                    ? t('common:status.loading')
+                    : inspectError
+                      ? t('lessonAuthoring.retryInspect')
+                      : t('lessonAuthoring.inspect')}
                 </Button>
               </form>
+              {inspectError ? (
+                <Alert
+                  id="source-inspect-error"
+                  variant="destructive"
+                  className="mt-3"
+                >
+                  <AlertDescription>{inspectError}</AlertDescription>
+                </Alert>
+              ) : null}
             </CardContent>
           </Card>
           {inspection ? (
@@ -417,9 +503,11 @@ export function LessonBuilderPage() {
               <CardContent>
                 <form onSubmit={create} className="flex flex-col gap-3">
                   {!inspection.embedAllowed ? (
-                    <p role="alert" className="text-destructive">
-                      {t('lessonAuthoring.embedBlocked')}
-                    </p>
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        {t('lessonAuthoring.embedBlocked')}
+                      </AlertDescription>
+                    </Alert>
                   ) : null}
                   <p>
                     {t('lessonAuthoring.duration', {
@@ -446,18 +534,24 @@ export function LessonBuilderPage() {
                       <div />
                     )}
                     <div className="flex flex-col gap-3">
-                      <label className="flex flex-col gap-1">
-                        {t('lessonAuthoring.lessonTitle')}
+                      <Field>
+                        <FieldLabel htmlFor="source-lessonTitle">
+                          {t('lessonAuthoring.lessonTitle')}
+                        </FieldLabel>
                         <Input
+                          id="source-lessonTitle"
                           required
                           value={title}
                           onChange={(event) => setTitle(event.target.value)}
                         />
-                      </label>
+                      </Field>
                       <div className="grid grid-cols-2 gap-3">
-                        <label className="flex flex-col gap-1">
-                          {t('lessonAuthoring.startSeconds')}
+                        <Field>
+                          <FieldLabel htmlFor="source-startSeconds">
+                            {t('lessonAuthoring.startSeconds')}
+                          </FieldLabel>
                           <Input
+                            id="source-startSeconds"
                             type="number"
                             min="0"
                             step="0.001"
@@ -467,10 +561,13 @@ export function LessonBuilderPage() {
                               setStartSeconds(event.target.value)
                             }
                           />
-                        </label>
-                        <label className="flex flex-col gap-1">
-                          {t('lessonAuthoring.endSeconds')}
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor="source-endSeconds">
+                            {t('lessonAuthoring.endSeconds')}
+                          </FieldLabel>
                           <Input
+                            id="source-endSeconds"
                             type="number"
                             min="0"
                             max={inspection.durationMs / 1000}
@@ -481,7 +578,7 @@ export function LessonBuilderPage() {
                               setEndSeconds(event.target.value)
                             }
                           />
-                        </label>
+                        </Field>
                       </div>
                       {overlap ? (
                         <p role="status" className="text-warning">
@@ -505,11 +602,10 @@ export function LessonBuilderPage() {
                         </div>
                       ) : null}
                       <label className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={rightsConfirmed}
-                          onChange={(event) =>
-                            setRightsConfirmed(event.target.checked)
+                          onCheckedChange={(checked) =>
+                            setRightsConfirmed(checked === true)
                           }
                         />
                         {t('lessonAuthoring.rights')}
@@ -530,13 +626,15 @@ export function LessonBuilderPage() {
           ) : null}
         </>
       ) : !draft ? (
-        <p role="status">{t('lessonAuthoring.loading')}</p>
+        <div role="status" aria-label={t('lessonAuthoring.loading')}>
+          <Skeleton className="h-40 w-full" />
+        </div>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <strong>
+            <Badge variant="secondary">
               {t('lessonAuthoring.status', { status: describe(draft.status) })}
-            </strong>
+            </Badge>
             <span>
               {t('lessonAuthoring.revision', { revision: draft.revision })}
             </span>
@@ -564,21 +662,24 @@ export function LessonBuilderPage() {
             </p>
           ) : null}
           <div className="grid gap-2">
-            {draft.jobs.map((job) => (
-              <JobProgress
-                key={job.jobId}
-                job={job}
-                onCancel={() =>
-                  void perform(async () => {
-                    await cancelJob(job.jobId);
-                    acceptDraft(
-                      await authoring.fetchDraft(draft.id),
-                      !dirtyRef.current,
-                    );
-                  })
-                }
-              />
-            ))}
+            {draft.jobs.filter((job) => !isHistoricalJob(job)).map(renderJob)}
+            {historyJobs.length ? (
+              <Accordion type="single" collapsible>
+                <AccordionItem value="job-history">
+                  <AccordionTrigger className="py-2">
+                    <span className="flex items-center gap-2">
+                      {t('lessonAuthoring.jobHistory')}
+                      <Badge variant="secondary">{historyJobs.length}</Badge>
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="grid gap-2">
+                      {historyJobs.map(renderJob)}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            ) : null}
           </div>
           {!draft.sentences.length ? (
             <Card>
@@ -602,597 +703,376 @@ export function LessonBuilderPage() {
               </CardContent>
             </Card>
           ) : null}
-          <div className="authoring-workspace grid items-start gap-3 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-            <Card className="authoring-player xl:sticky xl:top-16">
-              <CardHeader>
-                <CardTitle>{t('lessonAuthoring.karaokeTitle')}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                <YouTubePreview
-                  videoId={draft.videoId}
-                  startMs={draft.startMs}
-                  endMs={draft.endMs}
-                  sentences={dirty ? [] : draft.sentences}
-                  seek={seek}
-                  onTimeChange={setCurrentMs}
-                  onAvailabilityChange={setPlayerAvailable}
-                />
-                <p>
-                  {formatTime(currentMs)} /{' '}
-                  {formatTime(draft.endMs - draft.startMs)}
-                </p>
-                <p>
-                  {t('lessonAuthoring.timing', {
-                    status: describe(draft.timingStatus),
-                  })}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {t('lessonAuthoring.reviewTiming')}
-                </p>
-                <label className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    checked={karaokeConfirmed}
+          <ResizablePanelGroup
+            orientation="horizontal"
+            className="authoring-workspace"
+          >
+            <ResizablePanel
+              defaultSize="33%"
+              minSize="25%"
+              className="authoring-player-pane"
+            >
+              <Card className="authoring-player">
+                <CardHeader>
+                  <CardTitle>{t('lessonAuthoring.karaokeTitle')}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  <YouTubePreview
+                    videoId={draft.videoId}
+                    startMs={draft.startMs}
+                    endMs={draft.endMs}
+                    sentences={dirty ? [] : draft.sentences}
+                    seek={seek}
+                    onTimeChange={setCurrentMs}
+                    onAvailabilityChange={setPlayerAvailable}
+                  />
+                  <p>
+                    {formatTime(currentMs)} /{' '}
+                    {formatTime(draft.endMs - draft.startMs)}
+                  </p>
+                  <p>
+                    {t('lessonAuthoring.timing', {
+                      status: describe(draft.timingStatus),
+                    })}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {t('lessonAuthoring.reviewTiming')}
+                  </p>
+                  <label className="flex items-start gap-2">
+                    <Checkbox
+                      checked={karaokeConfirmed}
+                      disabled={
+                        blocked ||
+                        dirty ||
+                        !approved ||
+                        !timingValid ||
+                        !playerAvailable
+                      }
+                      onCheckedChange={(checked) =>
+                        setKaraokeConfirmed(checked === true)
+                      }
+                    />
+                    {t('lessonAuthoring.karaokeConfirmed')}
+                  </label>
+                  <Button
+                    type="button"
                     disabled={
                       blocked ||
                       dirty ||
                       !approved ||
                       !timingValid ||
-                      !playerAvailable
+                      !playerAvailable ||
+                      !karaokeConfirmed ||
+                      karaokeReviewed
                     }
-                    onChange={(event) =>
-                      setKaraokeConfirmed(event.target.checked)
+                    onClick={() =>
+                      void perform(async () =>
+                        acceptDraft(
+                          await authoring.reviewKaraoke(
+                            draft.id,
+                            draft.revision,
+                          ),
+                        ),
+                      )
                     }
-                  />
-                  {t('lessonAuthoring.karaokeConfirmed')}
-                </label>
-                <Button
-                  type="button"
-                  disabled={
-                    blocked ||
-                    dirty ||
-                    !approved ||
-                    !timingValid ||
-                    !playerAvailable ||
-                    !karaokeConfirmed ||
-                    karaokeReviewed
-                  }
-                  onClick={() =>
-                    void perform(async () =>
-                      acceptDraft(
-                        await authoring.reviewKaraoke(draft.id, draft.revision),
-                      ),
-                    )
-                  }
-                >
-                  {karaokeReviewed
-                    ? t('lessonAuthoring.karaokeApproved')
-                    : t('lessonAuthoring.approveKaraoke')}
-                </Button>
-              </CardContent>
-            </Card>
-            <Tabs defaultValue="transcript" className="authoring-tabs min-w-0">
-              <TabsList aria-label={t('lessonAuthoring.title')}>
-                <TabsTrigger value="transcript">
-                  {t('lessonAuthoring.transcriptTab')}
-                </TabsTrigger>
-                <TabsTrigger value="content">
-                  {t('lessonAuthoring.contentTab')}
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="transcript">
-                <Card>
-                  <CardContent className="flex flex-col gap-3">
-                    <p className="text-sm text-muted-foreground">
-                      {t('lessonAuthoring.transcriptNote')}
-                    </p>
-                    <div className="authoring-editor-toolbar flex flex-wrap items-center gap-2">
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={issuesOnly}
-                          onChange={(event) =>
-                            setIssuesOnly(event.target.checked)
-                          }
-                        />
-                        {t('lessonAuthoring.issuesOnly')}
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          disabled={blocked}
-                          checked={
-                            sentences.length > 0 &&
-                            selectedRows.length === sentences.length
-                          }
-                          onChange={(event) =>
-                            setSelectedRows(
-                              event.target.checked
-                                ? sentences.map((_, i) => i)
-                                : [],
-                            )
-                          }
-                        />
-                        {t('lessonAuthoring.selectAll')}
-                      </label>
-                      {usages.map((usage) => (
-                        <Button
-                          key={usage}
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={blocked || !selectedRows.length}
-                          onClick={() =>
-                            updateSentences(
-                              sentences.map((sentence, index) =>
-                                selectedRows.includes(index)
-                                  ? { ...sentence, usage }
-                                  : sentence,
-                              ),
-                            )
-                          }
-                        >
-                          {t(`lessonAuthoring.usages.${usage}`)}
-                        </Button>
-                      ))}
-                    </div>
-                    <div className="authoring-sentence-list divide-y divide-border">
-                      {sentences.map((sentence, index) => {
-                        const saved = draft.sentences.find(
-                          (s) => s.id === sentence.id,
-                        );
-                        if (issuesOnly && !saved?.issues.length) return null;
-                        return (
-                          <div
-                            key={sentence.id ?? `new-${index}`}
-                            className="authoring-sentence-row flex flex-col gap-2 py-3 first:pt-0 last:pb-0"
+                  >
+                    {karaokeReviewed
+                      ? t('lessonAuthoring.karaokeApproved')
+                      : t('lessonAuthoring.approveKaraoke')}
+                  </Button>
+                </CardContent>
+              </Card>
+            </ResizablePanel>
+            <ResizableHandle
+              withHandle
+              aria-label={t('lessonAuthoring.resizePanels')}
+            />
+            <ResizablePanel defaultSize="67%" minSize="40%">
+              <Tabs
+                defaultValue="transcript"
+                className="authoring-tabs min-w-0"
+              >
+                <TabsList aria-label={t('lessonAuthoring.title')}>
+                  <TabsTrigger value="transcript">
+                    {t('lessonAuthoring.transcriptTab')}
+                  </TabsTrigger>
+                  <TabsTrigger value="content">
+                    {t('lessonAuthoring.contentTab')}
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="transcript">
+                  <Card>
+                    <CardContent className="flex flex-col gap-3">
+                      <p className="text-sm text-muted-foreground">
+                        {t('lessonAuthoring.transcriptNote')}
+                      </p>
+                      <div className="authoring-editor-toolbar flex flex-wrap items-center gap-2">
+                        <label className="flex items-center gap-2">
+                          <Checkbox
+                            checked={issuesOnly}
+                            onCheckedChange={(checked) =>
+                              setIssuesOnly(checked === true)
+                            }
+                          />
+                          {t('lessonAuthoring.issuesOnly')}
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <Checkbox
+                            disabled={blocked}
+                            checked={
+                              sentences.length > 0 &&
+                              selectedRows.length === sentences.length
+                            }
+                            onCheckedChange={(checked) =>
+                              setSelectedRows(
+                                checked === true
+                                  ? sentences.map((_, i) => i)
+                                  : [],
+                              )
+                            }
+                          />
+                          {t('lessonAuthoring.selectAll')}
+                        </label>
+                        {usages.map((usage) => (
+                          <Button
+                            key={usage}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={blocked || !selectedRows.length}
+                            onClick={() =>
+                              updateSentences(
+                                sentences.map((sentence, index) =>
+                                  selectedRows.includes(index)
+                                    ? { ...sentence, usage }
+                                    : sentence,
+                                ),
+                              )
+                            }
                           >
-                            <div className="authoring-sentence-heading flex flex-wrap items-center gap-2">
-                              <label className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
+                            {t(`lessonAuthoring.usages.${usage}`)}
+                          </Button>
+                        ))}
+                      </div>
+                      <div className="authoring-sentence-list divide-y divide-border">
+                        {sentences.map((sentence, index) => {
+                          const saved = draft.sentences.find(
+                            (s) => s.id === sentence.id,
+                          );
+                          if (issuesOnly && !saved?.issues.length) return null;
+                          return (
+                            <div
+                              key={sentence.id ?? `new-${index}`}
+                              className="authoring-sentence-row flex flex-col gap-2 py-3 first:pt-0 last:pb-0"
+                            >
+                              <div className="authoring-sentence-heading flex flex-wrap items-center gap-2">
+                                <label className="flex items-center gap-2">
+                                  <Checkbox
+                                    disabled={blocked}
+                                    checked={selectedRows.includes(index)}
+                                    onCheckedChange={(checked) =>
+                                      setSelectedRows(
+                                        checked === true
+                                          ? [...selectedRows, index]
+                                          : selectedRows.filter(
+                                              (i) => i !== index,
+                                            ),
+                                      )
+                                    }
+                                  />
+                                  {t('lessonAuthoring.sentence', {
+                                    number: index + 1,
+                                  })}
+                                </label>
+                                <Select
+                                  value={sentence.usage}
                                   disabled={blocked}
-                                  checked={selectedRows.includes(index)}
-                                  onChange={(event) =>
-                                    setSelectedRows(
-                                      event.target.checked
-                                        ? [...selectedRows, index]
-                                        : selectedRows.filter(
-                                            (i) => i !== index,
-                                          ),
+                                  onValueChange={(usage) =>
+                                    updateSentences(
+                                      sentences.map((s, i) =>
+                                        i === index
+                                          ? {
+                                              ...s,
+                                              usage: usage as SentenceUsage,
+                                            }
+                                          : s,
+                                      ),
                                     )
                                   }
-                                />
-                                {t('lessonAuthoring.sentence', {
+                                >
+                                  <SelectTrigger
+                                    className="authoring-sentence-usage w-auto min-w-32"
+                                    aria-label={t(
+                                      'lessonAuthoring.sentenceUsage',
+                                      { number: index + 1 },
+                                    )}
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectGroup>
+                                      {usages.map((usage) => (
+                                        <SelectItem value={usage} key={usage}>
+                                          {t(`lessonAuthoring.usages.${usage}`)}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectGroup>
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={dirty || !saved?.words.length}
+                                  onClick={() =>
+                                    setSeek({
+                                      atMs: saved!.words[0].startMs,
+                                      sequence: Date.now(),
+                                    })
+                                  }
+                                >
+                                  {t('lessonAuthoring.seek')}
+                                </Button>
+                                <div className="authoring-sentence-actions flex flex-wrap gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={blocked}
+                                    onClick={() => {
+                                      const offset = splitOffsets[index] ?? 0;
+                                      const next = splitSentence(
+                                        sentences,
+                                        index,
+                                        offset,
+                                      );
+                                      if (next === sentences)
+                                        setError(
+                                          t('lessonAuthoring.splitCaret'),
+                                        );
+                                      else {
+                                        updateSentences(next);
+                                        setSelectedRows([]);
+                                      }
+                                    }}
+                                  >
+                                    {t('lessonAuthoring.split')}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={
+                                      blocked ||
+                                      index === sentences.length - 1 ||
+                                      sentence.usage !==
+                                        sentences[index + 1]?.usage
+                                    }
+                                    onClick={() => {
+                                      updateSentences(
+                                        mergeSentence(sentences, index),
+                                      );
+                                      setSelectedRows([]);
+                                    }}
+                                  >
+                                    {t('lessonAuthoring.merge')}
+                                  </Button>
+                                </div>
+                              </div>
+                              <Textarea
+                                className="authoring-sentence-text min-h-0"
+                                rows={2}
+                                aria-label={t('lessonAuthoring.sentenceText', {
                                   number: index + 1,
                                 })}
-                              </label>
-                              <Select
-                                value={sentence.usage}
                                 disabled={blocked}
-                                onValueChange={(usage) =>
+                                value={sentence.text}
+                                onSelect={(event) => {
+                                  const offset =
+                                    event.currentTarget.selectionStart;
+                                  setSplitOffsets((previous) => ({
+                                    ...previous,
+                                    [index]: offset,
+                                  }));
+                                }}
+                                onChange={(event) =>
                                   updateSentences(
                                     sentences.map((s, i) =>
                                       i === index
-                                        ? {
-                                            ...s,
-                                            usage: usage as SentenceUsage,
-                                          }
+                                        ? { ...s, text: event.target.value }
                                         : s,
                                     ),
                                   )
                                 }
-                              >
-                                <SelectTrigger
-                                  className="authoring-sentence-usage w-auto min-w-32"
-                                  aria-label={t(
-                                    'lessonAuthoring.sentenceUsage',
-                                    { number: index + 1 },
-                                  )}
+                              />
+                              {!dirty && saved?.words.length ? (
+                                <p
+                                  aria-label={t('lessonAuthoring.wordTiming')}
+                                  className="flex flex-wrap gap-x-1"
                                 >
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectGroup>
-                                    {usages.map((usage) => (
-                                      <SelectItem value={usage} key={usage}>
-                                        {t(`lessonAuthoring.usages.${usage}`)}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectGroup>
-                                </SelectContent>
-                              </Select>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                disabled={dirty || !saved?.words.length}
-                                onClick={() =>
-                                  setSeek({
-                                    atMs: saved!.words[0].startMs,
-                                    sequence: Date.now(),
-                                  })
-                                }
-                              >
-                                {t('lessonAuthoring.seek')}
-                              </Button>
-                              <div className="authoring-sentence-actions flex flex-wrap gap-2">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={blocked}
-                                  onClick={() => {
-                                    const offset = splitOffsets[index] ?? 0;
-                                    const next = splitSentence(
-                                      sentences,
-                                      index,
-                                      offset,
-                                    );
-                                    if (next === sentences)
-                                      setError(t('lessonAuthoring.splitCaret'));
-                                    else {
-                                      updateSentences(next);
-                                      setSelectedRows([]);
-                                    }
-                                  }}
-                                >
-                                  {t('lessonAuthoring.split')}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={
-                                    blocked ||
-                                    index === sentences.length - 1 ||
-                                    sentence.usage !==
-                                      sentences[index + 1]?.usage
-                                  }
-                                  onClick={() => {
-                                    updateSentences(
-                                      mergeSentence(sentences, index),
-                                    );
-                                    setSelectedRows([]);
-                                  }}
-                                >
-                                  {t('lessonAuthoring.merge')}
-                                </Button>
-                              </div>
+                                  {saved.words.map((word, wi) => (
+                                    <span
+                                      key={wi}
+                                      className={
+                                        currentMs >= word.startMs &&
+                                        currentMs < word.endMs
+                                          ? 'rounded bg-secondary text-secondary-foreground'
+                                          : ''
+                                      }
+                                    >
+                                      {word.text}
+                                    </span>
+                                  ))}
+                                </p>
+                              ) : null}
+                              {saved?.issues.length ? (
+                                <ul className="text-sm text-warning">
+                                  {saved.issues.map((issue, i) => (
+                                    <li key={i}>{describe(issue)}</li>
+                                  ))}
+                                </ul>
+                              ) : null}
                             </div>
-                            <Textarea
-                              className="authoring-sentence-text min-h-0"
-                              rows={2}
-                              aria-label={t('lessonAuthoring.sentenceText', {
-                                number: index + 1,
-                              })}
-                              disabled={blocked}
-                              value={sentence.text}
-                              onSelect={(event) => {
-                                const offset =
-                                  event.currentTarget.selectionStart;
-                                setSplitOffsets((previous) => ({
-                                  ...previous,
-                                  [index]: offset,
-                                }));
-                              }}
-                              onChange={(event) =>
-                                updateSentences(
-                                  sentences.map((s, i) =>
-                                    i === index
-                                      ? { ...s, text: event.target.value }
-                                      : s,
-                                  ),
-                                )
-                              }
-                            />
-                            {!dirty && saved?.words.length ? (
-                              <p
-                                aria-label={t('lessonAuthoring.wordTiming')}
-                                className="flex flex-wrap gap-x-1"
-                              >
-                                {saved.words.map((word, wi) => (
-                                  <span
-                                    key={wi}
-                                    className={
-                                      currentMs >= word.startMs &&
-                                      currentMs < word.endMs
-                                        ? 'rounded bg-secondary text-secondary-foreground'
-                                        : ''
-                                    }
-                                  >
-                                    {word.text}
-                                  </span>
-                                ))}
-                              </p>
-                            ) : null}
-                            {saved?.issues.length ? (
-                              <ul className="text-sm text-warning">
-                                {saved.issues.map((issue, i) => (
-                                  <li key={i}>{describe(issue)}</li>
-                                ))}
-                              </ul>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {dirty ? (
-                      <p role="status" className="text-warning">
-                        {t('lessonAuthoring.unsaved')}
-                      </p>
-                    ) : null}
-                    <div className="authoring-editor-actions flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        disabled={
-                          blocked ||
-                          !dirty ||
-                          sentences.some((s) => !s.text.trim())
-                        }
-                        onClick={() =>
-                          void perform(async () =>
-                            acceptDraft(
-                              await authoring.saveTranscript(
-                                draft.id,
-                                editorRevision,
-                                sentences,
-                              ),
-                            ),
-                          )
-                        }
-                      >
-                        {t('lessonAuthoring.saveTranscript')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={
-                          blocked || dirty || !sentences.length || approved
-                        }
-                        onClick={() =>
-                          void perform(async () =>
-                            acceptDraft(
-                              await authoring.approveTranscript(
-                                draft.id,
-                                draft.revision,
-                              ),
-                            ),
-                          )
-                        }
-                      >
-                        {approved
-                          ? t('lessonAuthoring.transcriptApproved')
-                          : t('lessonAuthoring.approveTranscript')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={blocked || dirty || !approved}
-                        onClick={() =>
-                          void perform(async () => {
-                            await authoring.alignTranscript(
-                              draft.id,
-                              draft.revision,
-                            );
-                            acceptDraft(await authoring.fetchDraft(draft.id));
-                            setKaraokeConfirmed(false);
-                          })
-                        }
-                      >
-                        {timingValid
-                          ? t('lessonAuthoring.realign')
-                          : t('lessonAuthoring.align')}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-              <TabsContent value="content">
-                <Card>
-                  <CardContent className="flex flex-col gap-3">
-                    <Button
-                      type="button"
-                      disabled={
-                        blocked || dirty || !approved || !karaokeReviewed
-                      }
-                      onClick={() =>
-                        void perform(async () => {
-                          await authoring.generateSemantic(
-                            draft.id,
-                            draft.revision,
                           );
-                          setContentReviewed(false);
-                          acceptDraft(await authoring.fetchDraft(draft.id));
-                        })
-                      }
-                    >
-                      {semanticReady
-                        ? t('lessonAuthoring.regenerate')
-                        : t('lessonAuthoring.generate')}
-                    </Button>
-                    {!semanticReady ? (
-                      <p className="text-muted-foreground">
-                        {t('lessonAuthoring.generationGate')}
-                      </p>
-                    ) : (
-                      <>
-                        <div className="flex flex-wrap gap-3">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={blocked || dirty}
-                            onClick={() => applyCandidates('HIGH')}
-                          >
-                            {t('lessonAuthoring.selectHigh')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={blocked || dirty}
-                            onClick={() => applyCandidates('ALL')}
-                          >
-                            {t('lessonAuthoring.selectAllPriorities')}
-                          </Button>
-                        </div>
-                        {draft.sentences
-                          .filter((s) => s.usage === 'LEARN')
-                          .map((sentence) => (
-                            <div
-                              key={sentence.id}
-                              className="authoring-content-row flex flex-col gap-2 border-b border-border py-3 last:border-0"
-                            >
-                              <strong>{sentence.text}</strong>
-                              <p>{sentence.translation}</p>
-                              {(['vocabulary', 'grammar'] as const).map(
-                                (kind) =>
-                                  sentence[kind].length ? (
-                                    <div key={kind}>
-                                      <h3>{t(`lessonAuthoring.${kind}`)}</h3>
-                                      <ul>
-                                        {sentence[kind].map(
-                                          (annotation, index) => (
-                                            <li key={index}>
-                                              <strong>
-                                                {annotation.surface}
-                                              </strong>{' '}
-                                              · {annotation.explanation}
-                                              {annotation.headwordId
-                                                ? ` · #${annotation.headwordId}`
-                                                : ''}
-                                            </li>
-                                          ),
-                                        )}
-                                      </ul>
-                                    </div>
-                                  ) : null,
-                              )}
-                              {sentence.hints.length ? (
-                                <p>
-                                  {t('lessonAuthoring.hints')}:{' '}
-                                  {sentence.hints
-                                    .map((note) => note.text)
-                                    .join(' · ')}
-                                </p>
-                              ) : null}
-                              {sentence.notes.length ? (
-                                <p>
-                                  {t('lessonAuthoring.notes')}:{' '}
-                                  {sentence.notes
-                                    .map((note) => note.text)
-                                    .join(' · ')}
-                                </p>
-                              ) : null}
-                              {sentence.thoughtGroups.length ? (
-                                <p>
-                                  {t('lessonAuthoring.thoughtGroups')}:{' '}
-                                  {sentence.thoughtGroups
-                                    .map((group) =>
-                                      sentence.words
-                                        .filter(
-                                          (word) =>
-                                            word.tokenStart >=
-                                              group.tokenStart &&
-                                            word.tokenEnd <= group.tokenEnd,
-                                        )
-                                        .map((word) => word.text)
-                                        .join(' '),
-                                    )
-                                    .join(' / ')}
-                                </p>
-                              ) : null}
-                              <div className="flex flex-wrap gap-4">
-                                {(['dictation', 'shadowing'] as const).map(
-                                  (activity) => {
-                                    const ids =
-                                      activity === 'dictation'
-                                        ? dictationIds
-                                        : shadowingIds;
-                                    const setter =
-                                      activity === 'dictation'
-                                        ? setDictationIds
-                                        : setShadowingIds;
-                                    return (
-                                      <label
-                                        key={activity}
-                                        className="flex items-center gap-2"
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={ids.includes(sentence.id)}
-                                          disabled={
-                                            blocked ||
-                                            dirty ||
-                                            !sentence[`${activity}Eligible`]
-                                          }
-                                          onChange={(event) => {
-                                            setter(
-                                              event.target.checked
-                                                ? [...ids, sentence.id]
-                                                : ids.filter(
-                                                    (id) => id !== sentence.id,
-                                                  ),
-                                            );
-                                            setCandidatesDirty(true);
-                                            candidatesDirtyRef.current = true;
-                                            setContentReviewed(false);
-                                          }}
-                                        />
-                                        {t(`lessonAuthoring.${activity}`)} ·{' '}
-                                        {sentence[`${activity}Priority`] ?? '—'}
-                                        {!sentence[`${activity}Eligible`]
-                                          ? ` · ${t('lessonAuthoring.ineligible')}`
-                                          : ''}
-                                      </label>
-                                    );
-                                  },
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          disabled={blocked || dirty || !candidatesDirty}
-                          onClick={() =>
-                            void perform(async () => {
-                              const next = await authoring.saveCandidates(
-                                draft.id,
-                                candidateRevision,
-                                dictationIds,
-                                shadowingIds,
-                              );
-                              candidatesDirtyRef.current = false;
-                              acceptDraft(next);
-                            })
-                          }
-                        >
-                          {t('lessonAuthoring.saveCandidates')}
-                        </Button>
-                        <label className="flex items-start gap-2">
-                          <input
-                            type="checkbox"
-                            checked={contentReviewed}
-                            disabled={blocked || dirty || candidatesDirty}
-                            onChange={(event) =>
-                              setContentReviewed(event.target.checked)
-                            }
-                          />
-                          {t('lessonAuthoring.contentReviewed')}
-                        </label>
+                        })}
+                      </div>
+                      {dirty ? (
+                        <p role="status" className="text-warning">
+                          {t('lessonAuthoring.unsaved')}
+                        </p>
+                      ) : null}
+                      <div className="authoring-editor-actions flex flex-wrap gap-2">
                         <Button
                           type="button"
                           disabled={
                             blocked ||
-                            dirty ||
-                            candidatesDirty ||
-                            !contentReviewed ||
-                            !karaokeReviewed
+                            !dirty ||
+                            sentences.some((s) => !s.text.trim())
                           }
                           onClick={() =>
                             void perform(async () =>
                               acceptDraft(
-                                await authoring.publishLesson(
+                                await authoring.saveTranscript(
+                                  draft.id,
+                                  editorRevision,
+                                  sentences,
+                                ),
+                              ),
+                            )
+                          }
+                        >
+                          {t('lessonAuthoring.saveTranscript')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={
+                            blocked || dirty || !sentences.length || approved
+                          }
+                          onClick={() =>
+                            void perform(async () =>
+                              acceptDraft(
+                                await authoring.approveTranscript(
                                   draft.id,
                                   draft.revision,
                                 ),
@@ -1200,15 +1080,255 @@ export function LessonBuilderPage() {
                             )
                           }
                         >
-                          {t('lessonAuthoring.publish')}
+                          {approved
+                            ? t('lessonAuthoring.transcriptApproved')
+                            : t('lessonAuthoring.approveTranscript')}
                         </Button>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={blocked || dirty || !approved}
+                          onClick={() =>
+                            void perform(async () => {
+                              await authoring.alignTranscript(
+                                draft.id,
+                                draft.revision,
+                              );
+                              acceptDraft(await authoring.fetchDraft(draft.id));
+                              setKaraokeConfirmed(false);
+                            })
+                          }
+                        >
+                          {timingValid
+                            ? t('lessonAuthoring.realign')
+                            : t('lessonAuthoring.align')}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                <TabsContent value="content">
+                  <Card>
+                    <CardContent className="flex flex-col gap-3">
+                      <Button
+                        type="button"
+                        disabled={
+                          blocked || dirty || !approved || !karaokeReviewed
+                        }
+                        onClick={() =>
+                          void perform(async () => {
+                            await authoring.generateSemantic(
+                              draft.id,
+                              draft.revision,
+                            );
+                            setContentReviewed(false);
+                            acceptDraft(await authoring.fetchDraft(draft.id));
+                          })
+                        }
+                      >
+                        {semanticReady
+                          ? t('lessonAuthoring.regenerate')
+                          : t('lessonAuthoring.generate')}
+                      </Button>
+                      {!semanticReady ? (
+                        <p className="text-muted-foreground">
+                          {t('lessonAuthoring.generationGate')}
+                        </p>
+                      ) : (
+                        <>
+                          <div className="flex flex-wrap gap-3">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={blocked || dirty}
+                              onClick={() => applyCandidates('HIGH')}
+                            >
+                              {t('lessonAuthoring.selectHigh')}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={blocked || dirty}
+                              onClick={() => applyCandidates('ALL')}
+                            >
+                              {t('lessonAuthoring.selectAllPriorities')}
+                            </Button>
+                          </div>
+                          {draft.sentences
+                            .filter((s) => s.usage === 'LEARN')
+                            .map((sentence) => (
+                              <div
+                                key={sentence.id}
+                                className="authoring-content-row flex flex-col gap-2 border-b border-border py-3 last:border-0"
+                              >
+                                <strong>{sentence.text}</strong>
+                                <p>{sentence.translation}</p>
+                                {(['vocabulary', 'grammar'] as const).map(
+                                  (kind) =>
+                                    sentence[kind].length ? (
+                                      <div key={kind}>
+                                        <h3>{t(`lessonAuthoring.${kind}`)}</h3>
+                                        <ul>
+                                          {sentence[kind].map(
+                                            (annotation, index) => (
+                                              <li key={index}>
+                                                <strong>
+                                                  {annotation.surface}
+                                                </strong>{' '}
+                                                · {annotation.explanation}
+                                                {annotation.headwordId
+                                                  ? ` · #${annotation.headwordId}`
+                                                  : ''}
+                                              </li>
+                                            ),
+                                          )}
+                                        </ul>
+                                      </div>
+                                    ) : null,
+                                )}
+                                {sentence.hints.length ? (
+                                  <p>
+                                    {t('lessonAuthoring.hints')}:{' '}
+                                    {sentence.hints
+                                      .map((note) => note.text)
+                                      .join(' · ')}
+                                  </p>
+                                ) : null}
+                                {sentence.notes.length ? (
+                                  <p>
+                                    {t('lessonAuthoring.notes')}:{' '}
+                                    {sentence.notes
+                                      .map((note) => note.text)
+                                      .join(' · ')}
+                                  </p>
+                                ) : null}
+                                {sentence.thoughtGroups.length ? (
+                                  <p>
+                                    {t('lessonAuthoring.thoughtGroups')}:{' '}
+                                    {sentence.thoughtGroups
+                                      .map((group) =>
+                                        sentence.words
+                                          .filter(
+                                            (word) =>
+                                              word.tokenStart >=
+                                                group.tokenStart &&
+                                              word.tokenEnd <= group.tokenEnd,
+                                          )
+                                          .map((word) => word.text)
+                                          .join(' '),
+                                      )
+                                      .join(' / ')}
+                                  </p>
+                                ) : null}
+                                <div className="flex flex-wrap gap-4">
+                                  {(['dictation', 'shadowing'] as const).map(
+                                    (activity) => {
+                                      const ids =
+                                        activity === 'dictation'
+                                          ? dictationIds
+                                          : shadowingIds;
+                                      const setter =
+                                        activity === 'dictation'
+                                          ? setDictationIds
+                                          : setShadowingIds;
+                                      return (
+                                        <label
+                                          key={activity}
+                                          className="flex items-center gap-2"
+                                        >
+                                          <Checkbox
+                                            checked={ids.includes(sentence.id)}
+                                            disabled={
+                                              blocked ||
+                                              dirty ||
+                                              !sentence[`${activity}Eligible`]
+                                            }
+                                            onCheckedChange={(checked) => {
+                                              setter(
+                                                checked === true
+                                                  ? [...ids, sentence.id]
+                                                  : ids.filter(
+                                                      (id) =>
+                                                        id !== sentence.id,
+                                                    ),
+                                              );
+                                              setCandidatesDirty(true);
+                                              candidatesDirtyRef.current = true;
+                                              setContentReviewed(false);
+                                            }}
+                                          />
+                                          {t(`lessonAuthoring.${activity}`)} ·{' '}
+                                          {sentence[`${activity}Priority`] ??
+                                            '—'}
+                                          {!sentence[`${activity}Eligible`]
+                                            ? ` · ${t('lessonAuthoring.ineligible')}`
+                                            : ''}
+                                        </label>
+                                      );
+                                    },
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={blocked || dirty || !candidatesDirty}
+                            onClick={() =>
+                              void perform(async () => {
+                                const next = await authoring.saveCandidates(
+                                  draft.id,
+                                  candidateRevision,
+                                  dictationIds,
+                                  shadowingIds,
+                                );
+                                candidatesDirtyRef.current = false;
+                                acceptDraft(next);
+                              })
+                            }
+                          >
+                            {t('lessonAuthoring.saveCandidates')}
+                          </Button>
+                          <label className="flex items-start gap-2">
+                            <Checkbox
+                              checked={contentReviewed}
+                              disabled={blocked || dirty || candidatesDirty}
+                              onCheckedChange={(checked) =>
+                                setContentReviewed(checked === true)
+                              }
+                            />
+                            {t('lessonAuthoring.contentReviewed')}
+                          </label>
+                          <Button
+                            type="button"
+                            disabled={
+                              blocked ||
+                              dirty ||
+                              candidatesDirty ||
+                              !contentReviewed ||
+                              !karaokeReviewed
+                            }
+                            onClick={() =>
+                              void perform(async () =>
+                                acceptDraft(
+                                  await authoring.publishLesson(
+                                    draft.id,
+                                    draft.revision,
+                                  ),
+                                ),
+                              )
+                            }
+                          >
+                            {t('lessonAuthoring.publish')}
+                          </Button>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </>
       )}
     </section>
