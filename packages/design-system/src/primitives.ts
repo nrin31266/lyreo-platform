@@ -40,7 +40,7 @@ export const primitiveColors = {
   cream200: '#F3D5B4',
   ivory100: '#F7F6F3',
 
-    // Lyreo dark surfaces
+  // Lyreo dark surfaces
   cocoa950: '#211D1B',
   cocoa900: '#292421',
   cocoa800: '#332C28',
@@ -63,6 +63,31 @@ export const primitiveColors = {
   danger950: '#1A1111',
   danger700: '#A64B47',
   danger400: '#E07A74',
+
+  // Neutral console palette; Admin uses these roles independently of learner branding.
+  slate50: '#F4F6F9',
+  slate100: '#EDF1F6',
+  slate200: '#DCE2EA',
+  slate400: '#7E8B9D',
+  slate500: '#73839B',
+  slate600: '#536176',
+  slate800: '#232D3C',
+  slate850: '#1A212D',
+  slate900: '#1B2433',
+  slate950: '#131820',
+  slateText: '#E6EDF7',
+  slateMuted: '#A6B3C6',
+  slateBorder: '#344156',
+  indigo50: '#EDF0FF',
+  indigo200: '#A5B4FC',
+  indigo600: '#4558C8',
+  indigo700: '#3847A4',
+  green700: '#157347',
+  green300: '#69CF9E',
+  amber700: '#8A5A08',
+  amber300: '#ECC46A',
+  red700: '#BC3344',
+  red300: '#FA929D',
 
   // Kept temporarily for backwards compatibility with possible consumers.
   forest950: '#0F1614',

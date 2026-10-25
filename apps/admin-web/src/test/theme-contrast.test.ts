@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { semanticThemes } from '@lyreo/design-system';
+import { adminThemes } from '@lyreo/design-system';
 
 function luminance(hex: string) {
   const rgb = hex
@@ -21,7 +21,7 @@ function contrast(first: string, second: string) {
 }
 
 describe('shared theme readability', () => {
-  for (const [mode, theme] of Object.entries(semanticThemes)) {
+  for (const [mode, theme] of Object.entries(adminThemes)) {
     it(`${mode} keeps text readable and unfocused form controls visible`, () => {
       for (const background of [
         theme.background,

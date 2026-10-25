@@ -4,7 +4,14 @@ import {
   supportedLocales,
   type SupportedLocale,
 } from '@lyreo/i18n';
-import { Menu } from 'lucide-react';
+import {
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Sun,
+  Moon,
+  Monitor,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -21,7 +28,13 @@ import { persistAdminLocale } from '@/i18n';
 import { useAppTheme } from '@/app/providers/AppThemeProvider';
 import { getNavTitleKey } from './admin-navigation';
 
-export function AdminHeader() {
+export function AdminHeader({
+  collapsed,
+  onToggleSidebar,
+}: {
+  collapsed: boolean;
+  onToggleSidebar: () => void;
+}) {
   const location = useLocation();
   const { t, i18n } = useTranslation(['admin', 'common']);
   const { preference, setPreference } = useAppTheme();
@@ -29,11 +42,31 @@ export function AdminHeader() {
 
   return (
     <header className="admin-header">
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="hidden md:inline-flex"
+          aria-label={t(
+            collapsed
+              ? 'admin:shell.expandSidebar'
+              : 'admin:shell.collapseSidebar',
+          )}
+          aria-controls="desktop-navigation"
+          aria-expanded={!collapsed}
+          onClick={onToggleSidebar}
+        >
+          {collapsed ? (
+            <PanelLeftOpen aria-hidden="true" className="size-4" />
+          ) : (
+            <PanelLeftClose aria-hidden="true" className="size-4" />
+          )}
+        </Button>
         <DialogTrigger asChild>
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="icon"
             className="md:hidden"
             aria-label={t('admin:shell.openNavigation')}
@@ -54,9 +87,9 @@ export function AdminHeader() {
         >
           <SelectTrigger
             aria-label={t('admin:appearance.language')}
-            className="w-[8rem] max-w-full"
+            className="h-8 w-[4.5rem] max-w-full border-transparent bg-transparent"
           >
-            <SelectValue />
+            <SelectValue>{locale.toUpperCase()}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
@@ -76,9 +109,22 @@ export function AdminHeader() {
         >
           <SelectTrigger
             aria-label={t('admin:appearance.theme')}
-            className="w-[9.25rem] max-w-full"
+            className="h-8 w-[3.5rem] max-w-full border-transparent bg-transparent"
           >
-            <SelectValue />
+            <SelectValue>
+              <span className="inline-flex items-center">
+                <span className="sr-only">
+                  {t(`common:theme.${preference}`)}
+                </span>
+                {preference === 'dark' ? (
+                  <Moon className="size-4" aria-hidden="true" />
+                ) : preference === 'light' ? (
+                  <Sun className="size-4" aria-hidden="true" />
+                ) : (
+                  <Monitor className="size-4" aria-hidden="true" />
+                )}
+              </span>
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>

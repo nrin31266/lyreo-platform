@@ -19,12 +19,12 @@ brand + primitive palette + non-color foundation tokens
 - `src/primitives.ts` owns brand metadata and the primitive color palette.
 - `src/foundation.json` is the single data source for non-color foundation tokens (`spacing`,
   `radius`, `motion`, `typography`). TypeScript re-exports them through the package API.
-- `src/semantic.ts` owns `ThemeColors`, `semanticThemes.light`, and `semanticThemes.dark`.
+- `src/semantic.ts` owns `ThemeColors`, learner `semanticThemes` and operator `adminThemes`.
 - Feature code should consume semantic roles such as `background`, `foreground`, `surface`,
   `primary`, `muted`, `border`, and `destructive`, never raw palette values.
 
-`semanticThemes.light` and `semanticThemes.dark` are the authoritative runtime color maps and must
-have 100% parity with `ThemeColors`. `ThemePreference` is `system | light | dark`.
+Each light/dark map must have 100% parity with `ThemeColors`. Admin uses `adminThemes`; Mobile
+uses learner `semanticThemes`. `ThemePreference` is `system | light | dark`.
 
 The Mobile Tailwind adapter reads the public `@lyreo/design-system/foundation` export for radius
 values instead of copying them. Admin publishes the same shared radius values into its Tailwind
@@ -36,13 +36,21 @@ share DOM and React Native component implementations.
 
 ## Admin workspace direction
 
-Lyreo keeps its espresso primary and apricot/cream accents. Neutral paper backgrounds and less
-saturated cocoa dark surfaces keep long transcript reviews readable. Form boundaries use `input`
-with at least 3:1 contrast; softer `border` is for separators. Primary, muted and functional text
-are checked at 4.5:1 against the supported surfaces in the Admin theme regression test. Shared
-radii are 6/10/16 px; Web and Mobile both consume these foundation values.
+Admin is a dense content console. Its palette uses slate background `#F4F6F9`, white surface
+`#FFFFFF`, ink `#1B2433`, muted text `#536176`, indigo primary `#4558C8` and pale indigo selection
+`#EDF0FF`. Dark mode uses slate surfaces with a lighter indigo action. Input boundaries meet 3:1;
+primary, muted and functional text meet 4.5:1 on supported surfaces in the Admin regression test.
+Learner themes remain independently defined.
 
-Admin uses a compact header, persistent desktop navigation and a modal mobile navigation drawer.
-Its local system/Noto Sans stack supports Vietnamese without a remote font dependency. Keep page
-headings concise, one primary task visible, focus indicators clear, and animation responsive to
-reduced-motion preferences. Do not show fabricated counts or infrastructure status in the overview.
+The 49 px header and 216 px sidebar reserve space for work. Desktop navigation can collapse to
+56 px icons with named links/tooltips; mobile uses the existing modal drawer. Page gutters are
+16–20 px, panel insets 12–16 px, and ordinary controls 32–36 px. Transcript rows use dividers,
+compact tools and content-sized textareas; the player stays beside the transcript/content tabs.
+Controls retain visible focus, safe keyboard behavior and responsive wrapping.
+
+Admin self-hosts IBM Plex Sans Variable through Fontsource (OFL-1.1), loading only Latin and
+Vietnamese normal-weight subsets. Font assets ship with the app instead of requesting Google Fonts
+at runtime. The Admin stylesheet owns this Web typography adapter; Mobile font loading is separate.
+Sidebar composition references [shadcn sidebar-07](https://ui.shadcn.com/blocks/sidebar), customized
+for the existing React Router/auth/i18n stack. Avoid promotional hero spacing, fake metrics and
+sample analytics in operational screens.

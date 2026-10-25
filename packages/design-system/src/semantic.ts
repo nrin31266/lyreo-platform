@@ -90,6 +90,50 @@ export const semanticThemes: Record<ThemeMode, ThemeColors> = {
   },
 };
 
+/** Dense Admin console; learner-facing themes retain their own brand palette. */
+export const adminThemes: Record<ThemeMode, ThemeColors> = {
+  light: {
+    background: primitiveColors.slate50,
+    foreground: primitiveColors.slate900,
+    surface: primitiveColors.white,
+    surfaceElevated: primitiveColors.white,
+    primary: primitiveColors.indigo600,
+    primaryForeground: primitiveColors.white,
+    secondary: primitiveColors.indigo50,
+    secondaryForeground: primitiveColors.indigo700,
+    muted: primitiveColors.slate100,
+    mutedForeground: primitiveColors.slate600,
+    border: primitiveColors.slate200,
+    input: primitiveColors.slate400,
+    focusRing: primitiveColors.indigo600,
+    success: primitiveColors.green700,
+    warning: primitiveColors.amber700,
+    destructive: primitiveColors.red700,
+    destructiveForeground: primitiveColors.white,
+    overlay: 'rgba(19, 24, 32, 0.45)',
+  },
+  dark: {
+    background: primitiveColors.slate950,
+    foreground: primitiveColors.slateText,
+    surface: primitiveColors.slate850,
+    surfaceElevated: primitiveColors.slate800,
+    primary: primitiveColors.indigo200,
+    primaryForeground: primitiveColors.slate950,
+    secondary: primitiveColors.slate800,
+    secondaryForeground: primitiveColors.indigo200,
+    muted: primitiveColors.slate800,
+    mutedForeground: primitiveColors.slateMuted,
+    border: primitiveColors.slateBorder,
+    input: primitiveColors.slate500,
+    focusRing: primitiveColors.indigo200,
+    success: primitiveColors.green300,
+    warning: primitiveColors.amber300,
+    destructive: primitiveColors.red300,
+    destructiveForeground: primitiveColors.slate950,
+    overlay: 'rgba(6, 10, 16, 0.7)',
+  },
+};
+
 export const semanticColorRoles = Object.freeze(
   Object.keys(semanticThemes.light) as (keyof ThemeColors)[],
 );

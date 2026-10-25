@@ -23,17 +23,23 @@ Admin owns its Web components and accessibility adapters. Use shared semantic li
 
 ## Workspace UI
 
-The shared shell uses a persistent desktop sidebar and a Radix modal navigation drawer below
-768 px, with focus restoration, Escape dismissal and a skip-to-content link. Navigation groups
-content work separately from operations. The overview links to real actions rather than invented
-metrics; the login screen uses the same identity and translations.
+The compact console uses the shared `adminThemes` slate/indigo maps and self-hosted IBM Plex Sans
+Variable (Fontsource, OFL-1.1, Latin/Vietnamese subsets). The 49 px header and collapsible
+216/56 px desktop navigation follow shadcn sidebar/dashboard composition. Mobile navigation remains
+a labelled Radix dialog with focus restoration and Escape dismissal. Named tooltips make collapsed
+links discoverable; the skip link remains first in keyboard order.
 
-Global CSS owns one visible keyboard outline, compact typography, adaptive gutters and reduced
-motion. House controls retain visible unfocused boundaries and invalid/disabled states. Keep colors
-in the [shared theme package](../../packages/design-system/README.md); its neutral paper/cocoa colors
-and 6/10/16 px radii also reach Mobile through the existing shared adapters.
+Use 16–20 px page gutters, 12–16 px panel insets and 32–36 px controls. Transcript editing and
+semantic review occupy separate Radix tabs beside the player. State belongs to the parent so tab
+changes do not discard unsaved edits. Content-sized textareas have a two-row fallback for older
+browsers. Tables scroll within labelled regions rather than expanding the page. The overview links
+to implemented operations and does not invent counts or analytics.
 
-Regression checks cover modal navigation, checkpoint/polling conflicts and shared theme contrast.
-Browser visual checks use local fixture sessions; they do not prove live OIDC, YouTube playback or
-AI teaching quality. Production acquisition and Lesson Prep retirement retain the gates in the
-[authoring contract](../../docs/features/lesson-build.md).
+Global CSS owns the keyboard outline and reduced-motion behavior. Keep palette values in the
+[shared theme package](../../packages/design-system/README.md), not feature pages. Mobile continues
+to use learner `semanticThemes`; Admin palette/font changes do not change that runtime adapter.
+
+Regression checks cover collapse persistence, mobile focus, tabs, checkpoint/polling conflicts
+and theme contrast. Browser visual checks use fixture sessions/drafts and are not evidence for
+live OIDC, YouTube playback or AI quality. Consult the [plan completion audit](../../docs/features/lesson-build.md#plan-completion-audit--2026-10-25)
+for incomplete research, verified anchor recovery defect, replacement and retirement work.

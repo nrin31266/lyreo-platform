@@ -92,3 +92,27 @@ YouTube material and official player review. The research limits in the [ASR evi
 and [semantic evidence](../research/lesson-authoring-semantic.md) remain explicit: conversational/noisy
 and 20–30-minute quality, human timing/pedagogical scoring and account billing state are unverified.
 Keep the old tool and user artifacts until that gate passes; its tests do not prove the new pipeline.
+
+
+## Plan completion audit — 2026-10-25
+
+**The accepted plan is not complete.** Existing deterministic tests prove selected implemented
+contracts; they do not close the research, replacement verification or retirement gates.
+
+| Plan area | Current state | Remaining evidence/work |
+| --- | --- | --- |
+| Inspect/range/cache and 16 kHz mono preparation | Implemented; real FFmpeg with local fixture downloader tested | Actual source acquisition and range-download versus full-cache timing/bytes/accuracy comparison |
+| Persistent draft/editor/checkpoints and semantic validation | Implemented with deterministic coverage | Authorized source → approved transcript → reviewed semantic content → published lesson live run |
+| ASR and alignment research | Partial clean assembled 2/5/10-minute corpus, one runtime 5-minute run | Natural/conversational accents, noise/fast speech/silence, 20–30-minute quality, human timing review; aligner comparison using both ASR transcripts |
+| Semantic research | Partial full-context tests with six targets/chunk | Full-lesson completion/latency and pedagogical review across representative lesson material |
+| Official player seek/Skip/karaoke/end bound | Implemented and helper tests exist | Review against actual authorized video/audio, including player failures and timing drift |
+| Free-only, quota and provider audit | Implemented guards and error tests | Verify the configured accounts' billing/quota state; full workflow quota/resume evidence |
+| Publication/leases/revisions/membership | Implemented with PostgreSQL regression coverage | Include cancellation/late results and published access in full replacement verification |
+| Lesson Prep retirement | Not implemented; deliberately still wired | Remove source/Gradio/ZIP, Make/CI/setup/doctor/validators and current docs after the replacement gate |
+
+A recovery defect was reproduced during this audit: splitting a 120-second sentence while changing
+its lexical text preserves the entire parent coarse interval on both descendants. Alignment still
+rejects each >115-second anchor and asks for a split, so that recovery action cannot succeed.
+The control case, splitting without lexical changes using an observed word boundary, succeeds.
+Fix safe anchor recovery and add permanent regression coverage before calling the editor complete.
+No synthetic word durations or proportional text/audio splitting are acceptable repairs.

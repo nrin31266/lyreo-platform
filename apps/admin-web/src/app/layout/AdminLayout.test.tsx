@@ -21,6 +21,7 @@ let desktop = false;
 let resize: () => void;
 beforeEach(async () => {
   desktop = false;
+  localStorage.clear();
   vi.stubGlobal(
     'matchMedia',
     vi.fn(() => ({
@@ -102,5 +103,28 @@ describe('shared Admin navigation', () => {
       screen.getByRole('combobox', { name: 'Language' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Theme' })).toBeInTheDocument();
+  });
+  it('collapses desktop navigation, keeps links named and restores the saved preference', async () => {
+    const user = userEvent.setup();
+    desktop = true;
+    show();
+    const collapse = screen.getByRole('button', { name: 'Collapse sidebar' });
+    await user.click(collapse);
+    expect(
+      screen.getByRole('button', { name: 'Expand sidebar' }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.getByRole('link', { name: 'Lesson Builder' }),
+    ).toBeInTheDocument();
+    expect(localStorage.getItem('lyreo.admin.sidebar-collapsed')).toBe('true');
+    cleanup();
+    show();
+    expect(
+      screen.getByRole('button', { name: 'Expand sidebar' }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    await user.click(screen.getByRole('button', { name: 'Expand sidebar' }));
+    expect(
+      screen.getByRole('button', { name: 'Collapse sidebar' }),
+    ).toHaveAttribute('aria-expanded', 'true');
   });
 });

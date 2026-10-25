@@ -21,8 +21,8 @@
     "theme": "Giao diện"
   },
   "overview": {
-    "title": "Chuẩn bị bài học tiếp theo.",
-    "lead": "Biến lời nói thực tế thành bài học để người học xem, hiểu và luyện tập. Bắt đầu từ một đoạn YouTube và duyệt từng bước trước khi xuất bản.",
+    "title": "Không gian làm việc",
+    "lead": "Biên soạn bài học, theo dõi tác vụ và quản lý nhà cung cấp AI.",
     "createLesson": "Tạo bài học",
     "workflowTitle": "Từ nguồn đến bài học",
     "steps": {
@@ -41,14 +41,20 @@
     },
     "links": {
       "jobs": {
-        "title": "Theo dõi công việc đang chạy",
-        "description": "Kiểm tra tác vụ chuẩn bị bài, xem lỗi cần xử lý hoặc hủy tác vụ đang chạy."
+        "title": "Tác vụ xử lý",
+        "description": "Kiểm tra tiến độ, xem lỗi hoặc hủy tác vụ."
       },
       "providers": {
-        "title": "Quản lý nhà cung cấp AI",
-        "description": "Xem các nhà cung cấp đã cấu hình và mô hình dùng để chuẩn bị nội dung học."
+        "title": "Nhà cung cấp AI",
+        "description": "Quản lý thông tin xác thực và xem định tuyến mô hình."
+      },
+      "authoring": {
+        "title": "Biên soạn bài học",
+        "description": "Chọn đoạn YouTube, duyệt bản chép lời và xuất bản nội dung đã kiểm tra."
       }
-    }
+    },
+    "areasTitle": "Công cụ làm việc",
+    "open": "Mở"
   },
   "jobs": {
     "eyebrow": "Vận hành",
@@ -223,7 +229,9 @@
       "TIMING_ZERO_DURATION": "Có khoảng timing không có độ dài",
       "GROUPED_TIMING": "Timing theo nhóm từ; kiểm tra karaoke theo âm thanh"
     },
-    "retryAt": "Dự kiến chạy tiếp: {{time}}"
+    "retryAt": "Dự kiến chạy tiếp: {{time}}",
+    "transcriptTab": "Bản chép lời",
+    "contentTab": "Nội dung học"
   },
   "shell": {
     "skipToContent": "Chuyển đến nội dung",
@@ -231,7 +239,9 @@
     "navigation": "Điều hướng chính",
     "openNavigation": "Mở điều hướng",
     "content": "Nội dung",
-    "operations": "Vận hành"
+    "operations": "Vận hành",
+    "collapseSidebar": "Thu gọn điều hướng",
+    "expandSidebar": "Mở rộng điều hướng"
   },
   "login": {
     "title": "Lời nói thực tế.\nHiểu biết bền lâu.",

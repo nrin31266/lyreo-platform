@@ -1,4 +1,10 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInstance } from 'i18next';
 import { I18nextProvider, initReactI18next } from 'react-i18next';
@@ -10,25 +16,83 @@ import type { LessonDraft } from './lesson-builder.types';
 import { LessonBuilderPage } from './LessonBuilderPage';
 
 vi.mock('./lesson-builder.api', () => ({
-  fetchDraft: vi.fn(), inspectSource: vi.fn(), createDraft: vi.fn(), saveTranscript: vi.fn(),
-  approveTranscript: vi.fn(), alignTranscript: vi.fn(), reviewKaraoke: vi.fn(), generateSemantic: vi.fn(),
-  saveCandidates: vi.fn(), publishLesson: vi.fn(), prepareTranscript: vi.fn(),
+  fetchDraft: vi.fn(),
+  inspectSource: vi.fn(),
+  createDraft: vi.fn(),
+  saveTranscript: vi.fn(),
+  approveTranscript: vi.fn(),
+  alignTranscript: vi.fn(),
+  reviewKaraoke: vi.fn(),
+  generateSemantic: vi.fn(),
+  saveCandidates: vi.fn(),
+  publishLesson: vi.fn(),
+  prepareTranscript: vi.fn(),
 }));
 vi.mock('@/pages/jobs/jobs.api', () => ({ cancelJob: vi.fn() }));
-vi.mock('./YouTubePreview', () => ({ YouTubePreview: ({ onAvailabilityChange }: { onAvailabilityChange?: (ready: boolean) => void }) =>
-  <button onClick={() => onAvailabilityChange?.(true)}>Ready player</button> }));
+vi.mock('./YouTubePreview', () => ({
+  YouTubePreview: ({
+    onAvailabilityChange,
+  }: {
+    onAvailabilityChange?: (ready: boolean) => void;
+  }) => (
+    <button onClick={() => onAvailabilityChange?.(true)}>Ready player</button>
+  ),
+}));
 
 const original: LessonDraft = {
-  id: 'lesson-a', title: 'A lesson', videoId: 'abcdefghijk', sourceReference: 'https://youtu.be/abcdefghijk',
-  startMs: 10000, endMs: 130000, revision: 1, transcriptRevision: 1, status: 'TRANSCRIPT_REVIEW',
-  timingStatus: 'DRAFT_VALID', approvedRevision: null, karaokeReviewedRevision: null, semanticRevision: null,
-  jobs: [], sentences: [{
-    id: 's1', text: 'Hello world.', usage: 'LEARN', issues: [], vocabulary: [], grammar: [], hints: [], notes: [], thoughtGroups: [],
-    dictationEligible: true, shadowingEligible: true, dictationSelected: true, shadowingSelected: false,
-    dictationPriority: 'HIGH', shadowingPriority: 'MEDIUM',
-    words: [{ text: 'Hello', startMs: 0, endMs: 500, charStart: 0, charEnd: 5, tokenStart: 0, tokenEnd: 1 },
-      { text: 'world', startMs: 500, endMs: 1000, charStart: 6, charEnd: 11, tokenStart: 1, tokenEnd: 2 }],
-  }],
+  id: 'lesson-a',
+  title: 'A lesson',
+  videoId: 'abcdefghijk',
+  sourceReference: 'https://youtu.be/abcdefghijk',
+  startMs: 10000,
+  endMs: 130000,
+  revision: 1,
+  transcriptRevision: 1,
+  status: 'TRANSCRIPT_REVIEW',
+  timingStatus: 'DRAFT_VALID',
+  approvedRevision: null,
+  karaokeReviewedRevision: null,
+  semanticRevision: null,
+  jobs: [],
+  sentences: [
+    {
+      id: 's1',
+      text: 'Hello world.',
+      usage: 'LEARN',
+      issues: [],
+      vocabulary: [],
+      grammar: [],
+      hints: [],
+      notes: [],
+      thoughtGroups: [],
+      dictationEligible: true,
+      shadowingEligible: true,
+      dictationSelected: true,
+      shadowingSelected: false,
+      dictationPriority: 'HIGH',
+      shadowingPriority: 'MEDIUM',
+      words: [
+        {
+          text: 'Hello',
+          startMs: 0,
+          endMs: 500,
+          charStart: 0,
+          charEnd: 5,
+          tokenStart: 0,
+          tokenEnd: 1,
+        },
+        {
+          text: 'world',
+          startMs: 500,
+          endMs: 1000,
+          charStart: 6,
+          charEnd: 11,
+          tokenStart: 1,
+          tokenEnd: 2,
+        },
+      ],
+    },
+  ],
 };
 let current: LessonDraft;
 const i18n = createInstance();
@@ -36,121 +100,336 @@ beforeEach(async () => {
   vi.useFakeTimers();
   vi.clearAllMocks();
   current = structuredClone(original);
-  vi.mocked(api.fetchDraft).mockImplementation(async () => structuredClone(current));
-  await i18n.use(initReactI18next).init({ resources: adminI18nResources, lng: 'en', fallbackLng: 'en', ns: ['admin', 'common'], interpolation: { escapeValue: false } });
+  vi.mocked(api.fetchDraft).mockImplementation(async () =>
+    structuredClone(current),
+  );
+  await i18n
+    .use(initReactI18next)
+    .init({
+      resources: adminI18nResources,
+      lng: 'en',
+      fallbackLng: 'en',
+      ns: ['admin', 'common'],
+      interpolation: { escapeValue: false },
+    });
 });
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 async function show(path = '/lessons/lesson-a') {
   await act(async () => {
-    render(<I18nextProvider i18n={i18n}><MemoryRouter initialEntries={[path]}><Routes>
-      <Route path="/lessons/:lessonId" element={<LessonBuilderPage />} />
-      <Route path="/lessons/new" element={<LessonBuilderPage />} />
-    </Routes></MemoryRouter></I18nextProvider>);
+    render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/lessons/:lessonId" element={<LessonBuilderPage />} />
+            <Route path="/lessons/new" element={<LessonBuilderPage />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
   });
 }
 
 describe('lesson authoring checkpoints', () => {
   it('preserves unsaved transcript text across polling and saves against the original editor revision', async () => {
     await show();
-    fireEvent.change(screen.getByLabelText('Text for sentence 1'), { target: { value: 'My corrected transcript.' } });
+    fireEvent.change(screen.getByLabelText('Text for sentence 1'), {
+      target: { value: 'My corrected transcript.' },
+    });
     current = { ...current, revision: 2 };
-    await act(async () => { await vi.advanceTimersByTimeAsync(2600); });
-    expect(screen.getByLabelText('Text for sentence 1')).toHaveValue('My corrected transcript.');
-    expect(screen.getByRole('button', { name: 'Approve transcript' })).toBeDisabled();
-    vi.mocked(api.saveTranscript).mockRejectedValue(new ApiError(409, 'Changed'));
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save transcript' })); });
-    expect(api.saveTranscript).toHaveBeenCalledWith('lesson-a', 1, [{ id: 's1', text: 'My corrected transcript.', usage: 'LEARN' }]);
-    expect(screen.getByRole('alert')).toHaveTextContent('The lesson changed or is locked');
-    expect(screen.getByLabelText('Text for sentence 1')).toHaveValue('My corrected transcript.');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2600);
+    });
+    expect(screen.getByLabelText('Text for sentence 1')).toHaveValue(
+      'My corrected transcript.',
+    );
+    expect(
+      screen.getByRole('button', { name: 'Approve transcript' }),
+    ).toBeDisabled();
+    vi.mocked(api.saveTranscript).mockRejectedValue(
+      new ApiError(409, 'Changed'),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save transcript' }));
+    });
+    expect(api.saveTranscript).toHaveBeenCalledWith('lesson-a', 1, [
+      { id: 's1', text: 'My corrected transcript.', usage: 'LEARN' },
+    ]);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'The lesson changed or is locked',
+    );
+    expect(screen.getByLabelText('Text for sentence 1')).toHaveValue(
+      'My corrected transcript.',
+    );
+  });
+
+  it('preserves unsaved transcript text when moving between the editor tabs', async () => {
+    await show();
+    fireEvent.change(screen.getByLabelText('Text for sentence 1'), {
+      target: { value: 'Unsaved correction.' },
+    });
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Learning content' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(
+      screen.queryByLabelText('Text for sentence 1'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Generate learning content' }),
+    ).toBeDisabled();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Transcript' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(screen.getByLabelText('Text for sentence 1')).toHaveValue(
+      'Unsaved correction.',
+    );
+    expect(
+      screen.getByRole('button', { name: 'Save transcript' }),
+    ).toBeEnabled();
   });
 
   it('does not unlock generation from ASR timing or transcript approval alone', async () => {
     current.approvedRevision = 1;
     await show();
-    expect(screen.getByRole('button', { name: 'Generate learning content' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Confirm karaoke review' })).toBeDisabled();
-    expect(screen.getByText('Grouped ASR timing needs manual review and may need dedicated alignment.', { exact: false })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Transcript' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Generate learning content' }),
+    ).not.toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Learning content' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(
+      screen.getByRole('tab', { name: 'Learning content' }),
+    ).toHaveAttribute('aria-selected', 'true');
+    expect(
+      screen.getByRole('button', { name: 'Generate learning content' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Confirm karaoke review' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(
+        'Grouped ASR timing needs manual review and may need dedicated alignment.',
+        { exact: false },
+      ),
+    ).toBeInTheDocument();
     expect(api.generateSemantic).not.toHaveBeenCalled();
   });
 
   it('preserves custom candidate selection across polling and requires saving before publication', async () => {
-    current.approvedRevision = current.karaokeReviewedRevision = current.semanticRevision = 1;
+    current.approvedRevision =
+      current.karaokeReviewedRevision =
+      current.semanticRevision =
+        1;
     current.status = 'CONTENT_REVIEW';
     await show();
-    const shadowing = screen.getByRole('checkbox', { name: /Shadowing · MEDIUM/ });
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Learning content' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    const shadowing = screen.getByRole('checkbox', {
+      name: /Shadowing · MEDIUM/,
+    });
     fireEvent.click(shadowing);
-    await act(async () => { await vi.advanceTimersByTimeAsync(2600); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2600);
+    });
     expect(shadowing).toBeChecked();
-    expect(screen.getByRole('button', { name: 'Save activity selection' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Publish lesson' })).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: /I reviewed the translations/ })).toBeDisabled();
-    vi.mocked(api.saveCandidates).mockResolvedValue({ ...current, revision: 2,
-      sentences: [{ ...current.sentences[0], shadowingSelected: true }] });
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save activity selection' })); });
-    expect(api.saveCandidates).toHaveBeenCalledWith('lesson-a', 1, ['s1'], ['s1']);
+    expect(
+      screen.getByRole('button', { name: 'Save activity selection' }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole('button', { name: 'Publish lesson' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('checkbox', { name: /I reviewed the translations/ }),
+    ).toBeDisabled();
+    vi.mocked(api.saveCandidates).mockResolvedValue({
+      ...current,
+      revision: 2,
+      sentences: [{ ...current.sentences[0], shadowingSelected: true }],
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Save activity selection' }),
+      );
+    });
+    expect(api.saveCandidates).toHaveBeenCalledWith(
+      'lesson-a',
+      1,
+      ['s1'],
+      ['s1'],
+    );
   });
 
   it('saves custom candidates against the revision where editing began despite polling', async () => {
-    current.approvedRevision = current.karaokeReviewedRevision = current.semanticRevision = 1;
+    current.approvedRevision =
+      current.karaokeReviewedRevision =
+      current.semanticRevision =
+        1;
     await show();
-    fireEvent.click(screen.getByRole('checkbox', { name: /Shadowing · MEDIUM/ }));
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Learning content' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /Shadowing · MEDIUM/ }),
+    );
     current = { ...current, revision: 2 };
-    await act(async () => { await vi.advanceTimersByTimeAsync(2600); });
-    vi.mocked(api.saveCandidates).mockRejectedValue(new ApiError(409, 'Changed'));
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save activity selection' })); });
-    expect(api.saveCandidates).toHaveBeenCalledWith('lesson-a', 1, ['s1'], ['s1']);
-    expect(screen.getByRole('checkbox', { name: /Shadowing · MEDIUM/ })).toBeChecked();
-    expect(screen.getByRole('alert')).toHaveTextContent('The lesson changed or is locked');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2600);
+    });
+    vi.mocked(api.saveCandidates).mockRejectedValue(
+      new ApiError(409, 'Changed'),
+    );
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Save activity selection' }),
+      );
+    });
+    expect(api.saveCandidates).toHaveBeenCalledWith(
+      'lesson-a',
+      1,
+      ['s1'],
+      ['s1'],
+    );
+    expect(
+      screen.getByRole('checkbox', { name: /Shadowing · MEDIUM/ }),
+    ).toBeChecked();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'The lesson changed or is locked',
+    );
   });
 
   it('requires a fresh karaoke confirmation after polling receives a changed draft', async () => {
     current.approvedRevision = 1;
     await show();
     fireEvent.click(screen.getByRole('button', { name: 'Ready player' }));
-    const confirmation = screen.getByRole('checkbox', { name: /I played and checked/ });
+    const confirmation = screen.getByRole('checkbox', {
+      name: /I played and checked/,
+    });
     fireEvent.click(confirmation);
     expect(confirmation).toBeChecked();
     current = { ...current, revision: 2 };
-    await act(async () => { await vi.advanceTimersByTimeAsync(2600); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2600);
+    });
     expect(confirmation).not.toBeChecked();
-    expect(screen.getByRole('button', { name: 'Confirm karaoke review' })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Confirm karaoke review' }),
+    ).toBeDisabled();
   });
 
   it('ignores an old poll response delivered after a newer successful save', async () => {
     await show();
     let resolvePoll!: (draft: LessonDraft) => void;
-    vi.mocked(api.fetchDraft).mockImplementationOnce(() => new Promise(resolve => { resolvePoll = resolve; }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(2600); });
-    fireEvent.change(screen.getByLabelText('Text for sentence 1'), { target: { value: 'New saved text.' } });
-    vi.mocked(api.saveTranscript).mockResolvedValue({ ...current, revision: 2,
-      sentences: [{ ...current.sentences[0], text: 'New saved text.' }] });
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save transcript' })); });
-    await act(async () => { resolvePoll(structuredClone(original)); });
-    expect(screen.getByLabelText('Text for sentence 1')).toHaveValue('New saved text.');
+    vi.mocked(api.fetchDraft).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolvePoll = resolve;
+        }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2600);
+    });
+    fireEvent.change(screen.getByLabelText('Text for sentence 1'), {
+      target: { value: 'New saved text.' },
+    });
+    vi.mocked(api.saveTranscript).mockResolvedValue({
+      ...current,
+      revision: 2,
+      sentences: [{ ...current.sentences[0], text: 'New saved text.' }],
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save transcript' }));
+    });
+    await act(async () => {
+      resolvePoll(structuredClone(original));
+    });
+    expect(screen.getByLabelText('Text for sentence 1')).toHaveValue(
+      'New saved text.',
+    );
   });
 
   it('locks every content mutation after publication', async () => {
     current.status = 'PUBLISHED';
-    current.approvedRevision = current.karaokeReviewedRevision = current.semanticRevision = 1;
+    current.approvedRevision =
+      current.karaokeReviewedRevision =
+      current.semanticRevision =
+        1;
     await show();
     expect(screen.getByLabelText('Text for sentence 1')).toBeDisabled();
-    for (const name of ['Save transcript', 'Run dedicated alignment', 'Regenerate learning content', 'Save activity selection', 'Publish lesson']) {
+    for (const name of ['Save transcript', 'Run dedicated alignment']) {
       expect(screen.getByRole('button', { name })).toBeDisabled();
     }
-    expect(screen.getByText('Published. Content and selected activities are locked.')).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Learning content' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    for (const name of [
+      'Regenerate learning content',
+      'Save activity selection',
+      'Publish lesson',
+    ]) {
+      expect(screen.getByRole('button', { name })).toBeDisabled();
+    }
+    expect(
+      screen.getByText(
+        'Published. Content and selected activities are locked.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('inspects YouTube first and requires explicit media rights before preparation', async () => {
-    vi.mocked(api.inspectSource).mockResolvedValue({ videoId: 'abcdefghijk', title: 'Video', durationMs: 300000,
-      embedAllowed: true, usedRanges: [{ lessonId: 'existing', title: 'Existing', startMs: 0, endMs: 200000, status: 'PUBLISHED' }] });
+    vi.mocked(api.inspectSource).mockResolvedValue({
+      videoId: 'abcdefghijk',
+      title: 'Video',
+      durationMs: 300000,
+      embedAllowed: true,
+      usedRanges: [
+        {
+          lessonId: 'existing',
+          title: 'Existing',
+          startMs: 0,
+          endMs: 200000,
+          status: 'PUBLISHED',
+        },
+      ],
+    });
     await show('/lessons/new');
     expect(screen.queryByText('Text source')).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('YouTube URL'), { target: { value: 'https://youtu.be/abcdefghijk' } });
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Inspect video' })); });
-    expect(api.inspectSource).toHaveBeenCalledWith('https://youtu.be/abcdefghijk');
-    expect(screen.getByText('This segment overlaps an existing lesson. You may continue.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Prepare transcript' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('checkbox', { name: /I confirm I have the appropriate rights/ }));
-    expect(screen.getByRole('button', { name: 'Prepare transcript' })).toBeEnabled();
+    fireEvent.change(screen.getByLabelText('YouTube URL'), {
+      target: { value: 'https://youtu.be/abcdefghijk' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Inspect video' }));
+    });
+    expect(api.inspectSource).toHaveBeenCalledWith(
+      'https://youtu.be/abcdefghijk',
+    );
+    expect(
+      screen.getByText(
+        'This segment overlaps an existing lesson. You may continue.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Prepare transcript' }),
+    ).toBeDisabled();
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /I confirm I have the appropriate rights/,
+      }),
+    );
+    expect(
+      screen.getByRole('button', { name: 'Prepare transcript' }),
+    ).toBeEnabled();
   });
 });

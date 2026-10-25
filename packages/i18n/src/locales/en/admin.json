@@ -21,8 +21,8 @@
     "theme": "Theme"
   },
   "overview": {
-    "title": "Prepare your next lesson.",
-    "lead": "Turn real speech into lessons learners can watch, understand and practise. Start with a YouTube segment and review every step before publishing.",
+    "title": "Workspace",
+    "lead": "Prepare lessons, follow processing jobs and manage AI providers.",
     "createLesson": "Create a lesson",
     "workflowTitle": "From source to lesson",
     "steps": {
@@ -41,14 +41,20 @@
     },
     "links": {
       "jobs": {
-        "title": "Follow work in progress",
-        "description": "Check a preparation job, see what needs attention or cancel a running task."
+        "title": "Processing jobs",
+        "description": "Inspect progress, review a failure or cancel work."
       },
       "providers": {
-        "title": "Manage AI providers",
-        "description": "Review configured providers and the models used to prepare learning content."
+        "title": "AI providers",
+        "description": "Manage provider credentials and inspect model routes."
+      },
+      "authoring": {
+        "title": "Lesson authoring",
+        "description": "Select a YouTube range, review its transcript and publish approved content."
       }
-    }
+    },
+    "areasTitle": "Workspace tools",
+    "open": "Open"
   },
   "jobs": {
     "eyebrow": "Operations",
@@ -223,7 +229,9 @@
       "TIMING_ZERO_DURATION": "A timing interval has no duration",
       "GROUPED_TIMING": "Timing covers a group of words; check karaoke against the audio"
     },
-    "retryAt": "Scheduled to resume: {{time}}"
+    "retryAt": "Scheduled to resume: {{time}}",
+    "transcriptTab": "Transcript",
+    "contentTab": "Learning content"
   },
   "shell": {
     "skipToContent": "Skip to content",
@@ -231,7 +239,9 @@
     "navigation": "Main navigation",
     "openNavigation": "Open navigation",
     "content": "Content",
-    "operations": "Operations"
+    "operations": "Operations",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar"
   },
   "login": {
     "title": "Real speech.\nLasting understanding.",

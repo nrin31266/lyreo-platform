@@ -73,7 +73,7 @@ export function AiSettingsPage() {
       <p className="lead">{t('aiSettings.lead')}</p>
 
       {error ? (
-        <Card className="mt-6">
+        <Card className="mt-4">
           <CardHeader>
             <CardTitle>{t('aiSettings.apiError')}</CardTitle>
           </CardHeader>
@@ -83,178 +83,186 @@ export function AiSettingsPage() {
         </Card>
       ) : null}
 
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>{t('aiSettings.providers')}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <p className="muted py-4 text-center">
-              {t('common:status.loading')}
-            </p>
-          ) : (
-            <div
-              className="overflow-x-auto"
-              role="region"
-              aria-label={t('aiSettings.providers')}
-              tabIndex={0}
-            >
-              <table>
-                <thead>
-                  <tr>
-                    <th scope="col">{t('aiSettings.table.provider')}</th>
-                    <th scope="col">{t('aiSettings.table.endpoint')}</th>
-                    <th scope="col">{t('aiSettings.table.credential')}</th>
-                    <th scope="col">{t('aiSettings.table.status')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {providers.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="muted py-4 text-center">
-                        {t('aiSettings.notConfigured')}
-                      </td>
-                    </tr>
-                  ) : (
-                    providers.map((provider) => (
-                      <tr key={provider.id}>
-                        <td>
-                          <strong>{provider.code}</strong>
-                          <br />
-                          <span className="muted">{provider.display_name}</span>
-                        </td>
-                        <td>
-                          {provider.base_url || t('aiSettings.internalRuntime')}
-                        </td>
-                        <td>
-                          {provider.configured
-                            ? `•••• ${provider.key_last4 || ''}`
-                            : t('aiSettings.notConfigured')}
-                        </td>
-                        <td>
-                          {provider.enabled
-                            ? provider.connection_status
-                            : t('aiSettings.disabled')}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>{t('aiSettings.routes')}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <p className="muted py-4 text-center">
-              {t('common:status.loading')}
-            </p>
-          ) : (
-            <>
-              <div
-                className="overflow-x-auto"
-                role="region"
-                aria-label={t('aiSettings.routes')}
-                tabIndex={0}
-              >
-                <table>
-                  <thead>
-                    <tr>
-                      <th scope="col">{t('aiSettings.table.capability')}</th>
-                      <th scope="col">{t('aiSettings.table.provider')}</th>
-                      <th scope="col">{t('aiSettings.table.model')}</th>
-                      <th scope="col">{t('aiSettings.table.priority')}</th>
-                      <th scope="col">{t('aiSettings.table.fallback')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {routes.length === 0 ? (
+      <div className="settings-workspace">
+        <div className="settings-tables">
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle>{t('aiSettings.providers')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p className="muted py-4 text-center">
+                  {t('common:status.loading')}
+                </p>
+              ) : (
+                <div
+                  className="overflow-x-auto"
+                  role="region"
+                  aria-label={t('aiSettings.providers')}
+                  tabIndex={0}
+                >
+                  <table>
+                    <thead>
                       <tr>
-                        <td colSpan={5} className="muted py-4 text-center">
-                          {t('aiSettings.notConfigured')}
-                        </td>
+                        <th scope="col">{t('aiSettings.table.provider')}</th>
+                        <th scope="col">{t('aiSettings.table.endpoint')}</th>
+                        <th scope="col">{t('aiSettings.table.credential')}</th>
+                        <th scope="col">{t('aiSettings.table.status')}</th>
                       </tr>
-                    ) : (
-                      routes.map((route) => (
-                        <tr key={route.id}>
-                          <td>{route.capability}</td>
-                          <td>{route.provider}</td>
-                          <td>{route.model}</td>
-                          <td>{route.priority}</td>
-                          <td>
-                            {route.is_fallback
-                              ? t('common:yes')
-                              : t('common:no')}
+                    </thead>
+                    <tbody>
+                      {providers.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="muted py-4 text-center">
+                            {t('aiSettings.notConfigured')}
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <p className="muted">{t('aiSettings.modelNamesNote')}</p>
-            </>
-          )}
-        </CardContent>
-      </Card>
+                      ) : (
+                        providers.map((provider) => (
+                          <tr key={provider.id}>
+                            <td>
+                              <strong>{provider.code}</strong>
+                              <br />
+                              <span className="muted">
+                                {provider.display_name}
+                              </span>
+                            </td>
+                            <td>
+                              {provider.base_url ||
+                                t('aiSettings.internalRuntime')}
+                            </td>
+                            <td>
+                              {provider.configured
+                                ? `•••• ${provider.key_last4 || ''}`
+                                : t('aiSettings.notConfigured')}
+                            </td>
+                            <td>
+                              {provider.enabled
+                                ? provider.connection_status
+                                : t('aiSettings.disabled')}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>{t('aiSettings.configure')}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="form" onSubmit={handleSaveProvider}>
-            <div className="form-grid">
-              <label>
-                {t('aiSettings.fields.code')}
-                <Input
-                  value={providerCode}
-                  onChange={(event) =>
-                    setProviderCode(event.target.value.toUpperCase())
-                  }
-                />
-              </label>
-              <label>
-                {t('aiSettings.fields.displayName')}
-                <Input
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                />
-              </label>
-              <label className="wide">
-                {t('aiSettings.fields.baseUrl')}
-                <Input
-                  value={baseUrl}
-                  onChange={(event) => setBaseUrl(event.target.value)}
-                />
-              </label>
-              <label className="wide">
-                {t('aiSettings.fields.apiKey')}
-                <Input
-                  type="password"
-                  value={apiKey}
-                  onChange={(event) => setApiKey(event.target.value)}
-                  placeholder={t('aiSettings.fields.apiKeyPlaceholder')}
-                />
-              </label>
-              <label className="wide flex-row items-center justify-between">
-                <span>{t('aiSettings.fields.enabled')}</span>
-                <Switch checked={enabled} onCheckedChange={setEnabled} />
-              </label>
-            </div>
-            <Button className="mt-[22px]" disabled={saving} type="submit">
-              {saving ? t('common:status.saving') : t('aiSettings.save')}
-            </Button>
-            <p className="muted">{t('aiSettings.encryptionNote')}</p>
-          </form>
-        </CardContent>
-      </Card>
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle>{t('aiSettings.routes')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p className="muted py-4 text-center">
+                  {t('common:status.loading')}
+                </p>
+              ) : (
+                <>
+                  <div
+                    className="overflow-x-auto"
+                    role="region"
+                    aria-label={t('aiSettings.routes')}
+                    tabIndex={0}
+                  >
+                    <table>
+                      <thead>
+                        <tr>
+                          <th scope="col">
+                            {t('aiSettings.table.capability')}
+                          </th>
+                          <th scope="col">{t('aiSettings.table.provider')}</th>
+                          <th scope="col">{t('aiSettings.table.model')}</th>
+                          <th scope="col">{t('aiSettings.table.priority')}</th>
+                          <th scope="col">{t('aiSettings.table.fallback')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {routes.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="muted py-4 text-center">
+                              {t('aiSettings.notConfigured')}
+                            </td>
+                          </tr>
+                        ) : (
+                          routes.map((route) => (
+                            <tr key={route.id}>
+                              <td>{route.capability}</td>
+                              <td>{route.provider}</td>
+                              <td>{route.model}</td>
+                              <td>{route.priority}</td>
+                              <td>
+                                {route.is_fallback
+                                  ? t('common:yes')
+                                  : t('common:no')}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="muted">{t('aiSettings.modelNamesNote')}</p>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle>{t('aiSettings.configure')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form className="form" onSubmit={handleSaveProvider}>
+              <div className="form-grid">
+                <label>
+                  {t('aiSettings.fields.code')}
+                  <Input
+                    value={providerCode}
+                    onChange={(event) =>
+                      setProviderCode(event.target.value.toUpperCase())
+                    }
+                  />
+                </label>
+                <label>
+                  {t('aiSettings.fields.displayName')}
+                  <Input
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.target.value)}
+                  />
+                </label>
+                <label className="wide">
+                  {t('aiSettings.fields.baseUrl')}
+                  <Input
+                    value={baseUrl}
+                    onChange={(event) => setBaseUrl(event.target.value)}
+                  />
+                </label>
+                <label className="wide">
+                  {t('aiSettings.fields.apiKey')}
+                  <Input
+                    type="password"
+                    value={apiKey}
+                    onChange={(event) => setApiKey(event.target.value)}
+                    placeholder={t('aiSettings.fields.apiKeyPlaceholder')}
+                  />
+                </label>
+                <label className="wide flex-row items-center justify-between">
+                  <span>{t('aiSettings.fields.enabled')}</span>
+                  <Switch checked={enabled} onCheckedChange={setEnabled} />
+                </label>
+              </div>
+              <Button className="mt-[22px]" disabled={saving} type="submit">
+                {saving ? t('common:status.saving') : t('aiSettings.save')}
+              </Button>
+              <p className="muted">{t('aiSettings.encryptionNote')}</p>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
     </section>
   );
 }
