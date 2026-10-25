@@ -1,23 +1,39 @@
-import { useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { Dialog } from '@/components/ui/dialog';
 import { AdminHeader } from './AdminHeader';
 import { AdminSidebar } from './AdminSidebar';
 
 export function AdminLayout() {
+  const { t } = useTranslation('admin');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 768px)');
+    const closeOnDesktop = () => {
+      if (desktop.matches) setSidebarOpen(false);
+    };
+    desktop.addEventListener('change', closeOnDesktop);
+    return () => desktop.removeEventListener('change', closeOnDesktop);
+  }, []);
+
   return (
-    <div className="shell">
-      <AdminSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="content-container flex flex-col flex-1 min-w-0">
-        <AdminHeader
-          isSidebarOpen={sidebarOpen}
-          onToggleSidebar={() => setSidebarOpen(prev => !prev)}
-        />
-        <main id="main-content" className="flex-1">
-          <Outlet />
-        </main>
+    <Dialog open={sidebarOpen} onOpenChange={setSidebarOpen}>
+      <div className="shell">
+        <a className="skip-link" href="#main-content">
+          {t('shell.skipToContent')}
+        </a>
+        <AdminSidebar onClose={() => setSidebarOpen(false)} />
+        <div className="content-container flex min-w-0 flex-col">
+          <AdminHeader />
+          <main id="main-content" tabIndex={-1} className="flex-1">
+            <Suspense fallback={<p role="status">{t('loading')}</p>}>
+              <Outlet />
+            </Suspense>
+          </main>
+        </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

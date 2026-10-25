@@ -1,6 +1,6 @@
 {
   "workspace": "Không gian quản trị",
-  "signIn": "Đăng nhập bằng Keycloak",
+  "signIn": "Đăng nhập không gian làm việc",
   "signInFailed": "Đăng nhập thất bại",
   "completingSignIn": "Đang hoàn tất đăng nhập…",
   "loading": "Đang tải Lyreo…",
@@ -21,41 +21,39 @@
     "theme": "Giao diện"
   },
   "overview": {
-    "eyebrow": "Không gian sản phẩm",
-    "title": "Chào buổi tối, đội ngũ Lyreo.",
-    "lead": "Xây dựng nội dung học tiếng Anh mà không che giấu hạ tầng bằng cơ chế khó hiểu. Mọi workflow dài đều có thể kiểm tra, thử lại và hủy.",
-    "architecturePulse": "Tình trạng kiến trúc",
-    "stats": {
-      "lessons": {
-        "label": "Bài học",
-        "note": "Nội dung do Admin tạo"
+    "title": "Chuẩn bị bài học tiếp theo.",
+    "lead": "Biến lời nói thực tế thành bài học để người học xem, hiểu và luyện tập. Bắt đầu từ một đoạn YouTube và duyệt từng bước trước khi xuất bản.",
+    "createLesson": "Tạo bài học",
+    "workflowTitle": "Từ nguồn đến bài học",
+    "steps": {
+      "source": {
+        "title": "Chọn đoạn phù hợp",
+        "description": "Chọn một đoạn YouTube, kiểm tra các khoảng đã dùng và chuẩn bị bản chép lời."
       },
-      "jobs": {
-        "label": "Tác vụ",
-        "note": "Hàng đợi bền vững PostgreSQL"
+      "review": {
+        "title": "Nghe, sửa và kiểm tra",
+        "description": "Chỉnh bản chép lời, xem thử karaoke rồi duyệt ghi chú và hoạt động luyện tập."
       },
-      "lexicon": {
-        "label": "Từ điển",
-        "note": "Dựa trên Wiktionary"
-      },
-      "toeic": {
-        "label": "TOEIC",
-        "note": "Khoảng dữ liệu đã import"
+      "publish": {
+        "title": "Sẵn sàng cho người học",
+        "description": "Xuất bản bài học đã duyệt. Nội dung và các hoạt động đã chọn sẽ được khóa."
       }
     },
-    "architecture": {
-      "springModulith": "Spring Modulith",
-      "fastApiRuntime": "Runtime AI FastAPI",
-      "r2Artifacts": "Artifact trên R2",
-      "postgresJobs": "Tác vụ PostgreSQL",
-      "noKafka": "Không dùng Kafka",
-      "noRedis": "Không dùng Redis ở MVP"
+    "links": {
+      "jobs": {
+        "title": "Theo dõi công việc đang chạy",
+        "description": "Kiểm tra tác vụ chuẩn bị bài, xem lỗi cần xử lý hoặc hủy tác vụ đang chạy."
+      },
+      "providers": {
+        "title": "Quản lý nhà cung cấp AI",
+        "description": "Xem các nhà cung cấp đã cấu hình và mô hình dùng để chuẩn bị nội dung học."
+      }
     }
   },
   "jobs": {
     "eyebrow": "Vận hành",
     "title": "Tác vụ nền",
-    "lead": "PostgreSQL là nguồn sự thật bền vững. JSON trên R2 chỉ là artifact, không phải trạng thái workflow.",
+    "lead": "Theo dõi tiến độ, kiểm tra lỗi và hủy công việc không còn cần thiết.",
     "enterUuid": "Nhập UUID của tác vụ.",
     "jobUuid": "UUID tác vụ",
     "inspect": "Kiểm tra",
@@ -71,7 +69,7 @@
   "aiSettings": {
     "eyebrow": "Cài đặt / AI",
     "title": "Định tuyến nhà cung cấp",
-    "lead": "Provider/model là dữ liệu runtime. Product prompt nằm trong các module nghiệp vụ Java; API key dạng plaintext không bao giờ được trả lại trình duyệt.",
+    "lead": "Quản lý nhà cung cấp và mô hình dùng để chuẩn bị bài học. Thông tin xác thực được giữ riêng; chỉ thay khóa khi cần.",
     "apiError": "Lỗi API",
     "providers": "Nhà cung cấp",
     "routes": "Định tuyến capability",
@@ -88,7 +86,7 @@
       "priority": "Ưu tiên",
       "fallback": "Dự phòng"
     },
-    "modelNamesNote": "Tên model được giữ dạng chuỗi có chủ đích vì danh mục model của provider thay đổi thường xuyên.",
+    "modelNamesNote": "Các định tuyến xác định mô hình xử lý từng bước chuẩn bị bài.",
     "configure": "Cấu hình / thay thế credential của provider",
     "fields": {
       "code": "Mã",
@@ -99,7 +97,7 @@
       "enabled": "Bật"
     },
     "save": "Lưu provider",
-    "encryptionNote": "Master encryption key nằm ngoài database. Secret của provider được mã hóa AES-GCM khi lưu."
+    "encryptionNote": "Khóa nhà cung cấp được giữ ở máy chủ và không trả về trình duyệt."
   },
   "placeholders": {
     "eyebrow": "Không gian Lyreo",
@@ -226,5 +224,23 @@
       "GROUPED_TIMING": "Timing theo nhóm từ; kiểm tra karaoke theo âm thanh"
     },
     "retryAt": "Dự kiến chạy tiếp: {{time}}"
+  },
+  "shell": {
+    "skipToContent": "Chuyển đến nội dung",
+    "administrator": "Quản trị viên",
+    "navigation": "Điều hướng chính",
+    "openNavigation": "Mở điều hướng",
+    "content": "Nội dung",
+    "operations": "Vận hành"
+  },
+  "login": {
+    "title": "Lời nói thực tế.\nHiểu biết bền lâu.",
+    "description": "Không gian biến những điều nghe được thành bài học giúp người học ghi nhớ.",
+    "source": "Chọn nguồn",
+    "review": "Biên soạn bài",
+    "publish": "Chia sẻ kiến thức",
+    "welcome": "Chào mừng đến Lyreo",
+    "access": "Đăng nhập để chuẩn bị và duyệt nội dung học.",
+    "note": "Không gian dành cho người biên soạn nội dung và quản trị viên Lyreo."
   }
 }

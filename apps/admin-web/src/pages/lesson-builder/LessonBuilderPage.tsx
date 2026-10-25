@@ -265,7 +265,7 @@ export function LessonBuilderPage() {
         <Button type="button" disabled={blocked} onClick={() => void perform(async () => { await authoring.prepareTranscript(draft.id, draft.revision); acceptDraft(await authoring.fetchDraft(draft.id)); })}>{t('lessonAuthoring.retryPreparation')}</Button>
       </CardContent></Card> : null}
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <Card className="xl:sticky xl:top-4"><CardHeader><CardTitle>{t('lessonAuthoring.karaokeTitle')}</CardTitle></CardHeader><CardContent className="flex flex-col gap-4">
+        <Card className="xl:sticky xl:top-24"><CardHeader><CardTitle>{t('lessonAuthoring.karaokeTitle')}</CardTitle></CardHeader><CardContent className="flex flex-col gap-4">
           <YouTubePreview videoId={draft.videoId} startMs={draft.startMs} endMs={draft.endMs}
             sentences={dirty ? [] : draft.sentences} seek={seek} onTimeChange={setCurrentMs} onAvailabilityChange={setPlayerAvailable} />
           <p>{formatTime(currentMs)} / {formatTime(draft.endMs - draft.startMs)}</p>

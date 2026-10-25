@@ -1,6 +1,6 @@
 {
   "workspace": "Admin workspace",
-  "signIn": "Sign in with Keycloak",
+  "signIn": "Sign in to workspace",
   "signInFailed": "Sign-in failed",
   "completingSignIn": "Completing sign-in…",
   "loading": "Loading Lyreo…",
@@ -21,41 +21,39 @@
     "theme": "Theme"
   },
   "overview": {
-    "eyebrow": "Product workspace",
-    "title": "Good evening, Lyreo team.",
-    "lead": "Build English learning content without hiding infrastructure behind magic. Every long workflow is inspectable, retryable and cancellable.",
-    "architecturePulse": "Architecture pulse",
-    "stats": {
-      "lessons": {
-        "label": "Lessons",
-        "note": "Admin-created content"
+    "title": "Prepare your next lesson.",
+    "lead": "Turn real speech into lessons learners can watch, understand and practise. Start with a YouTube segment and review every step before publishing.",
+    "createLesson": "Create a lesson",
+    "workflowTitle": "From source to lesson",
+    "steps": {
+      "source": {
+        "title": "Choose the right moment",
+        "description": "Select one segment from YouTube. Check existing ranges and prepare its transcript."
       },
-      "jobs": {
-        "label": "Jobs",
-        "note": "PostgreSQL durable queue"
+      "review": {
+        "title": "Listen, edit and check",
+        "description": "Refine the transcript, preview karaoke timing and review learning notes and activities."
       },
-      "lexicon": {
-        "label": "Lexicon",
-        "note": "Wiktionary-backed"
-      },
-      "toeic": {
-        "label": "TOEIC",
-        "note": "Imported dataset range"
+      "publish": {
+        "title": "Ready for learners",
+        "description": "Publish the approved lesson. Its content and selected activities are then locked."
       }
     },
-    "architecture": {
-      "springModulith": "Spring Modulith",
-      "fastApiRuntime": "FastAPI AI runtime",
-      "r2Artifacts": "R2 artifacts",
-      "postgresJobs": "PostgreSQL jobs",
-      "noKafka": "No Kafka",
-      "noRedis": "No Redis at MVP"
+    "links": {
+      "jobs": {
+        "title": "Follow work in progress",
+        "description": "Check a preparation job, see what needs attention or cancel a running task."
+      },
+      "providers": {
+        "title": "Manage AI providers",
+        "description": "Review configured providers and the models used to prepare learning content."
+      }
     }
   },
   "jobs": {
     "eyebrow": "Operations",
     "title": "Background Jobs",
-    "lead": "PostgreSQL is the durable source of truth. R2 JSON is an artifact, never workflow state.",
+    "lead": "Check progress, review failures and cancel work that is no longer needed.",
     "enterUuid": "Enter a Job UUID.",
     "jobUuid": "Job UUID",
     "inspect": "Inspect",
@@ -71,7 +69,7 @@
   "aiSettings": {
     "eyebrow": "Settings / AI",
     "title": "Provider routing",
-    "lead": "Provider/model is runtime data. Product prompts stay in Java business modules; plaintext provider API keys are never returned to the browser.",
+    "lead": "Manage the providers and models used to prepare lessons. Existing credentials stay private; replace a key only when needed.",
     "apiError": "API error",
     "providers": "Providers",
     "routes": "Capability routes",
@@ -88,7 +86,7 @@
       "priority": "Priority",
       "fallback": "Fallback"
     },
-    "modelNamesNote": "Model names remain strings by design because provider model catalogs change frequently.",
+    "modelNamesNote": "Routes determine which model handles each preparation step.",
     "configure": "Configure / replace provider credential",
     "fields": {
       "code": "Code",
@@ -99,7 +97,7 @@
       "enabled": "Enabled"
     },
     "save": "Save provider",
-    "encryptionNote": "The master encryption key stays outside the database. Provider secrets are AES-GCM encrypted at rest."
+    "encryptionNote": "Provider keys stay on the server and are never returned to the browser."
   },
   "placeholders": {
     "eyebrow": "Lyreo workspace",
@@ -226,5 +224,23 @@
       "GROUPED_TIMING": "Timing covers a group of words; check karaoke against the audio"
     },
     "retryAt": "Scheduled to resume: {{time}}"
+  },
+  "shell": {
+    "skipToContent": "Skip to content",
+    "administrator": "Administrator",
+    "navigation": "Main navigation",
+    "openNavigation": "Open navigation",
+    "content": "Content",
+    "operations": "Operations"
+  },
+  "login": {
+    "title": "Real speech.\nLasting understanding.",
+    "description": "A workspace for turning the moments you hear into learning that stays with you.",
+    "source": "Choose a source",
+    "review": "Shape the lesson",
+    "publish": "Share the learning",
+    "welcome": "Welcome to Lyreo",
+    "access": "Sign in to prepare and review learning content.",
+    "note": "This workspace is for Lyreo content managers and administrators."
   }
 }

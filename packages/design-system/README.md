@@ -32,3 +32,17 @@ CSS-variable adapter. This keeps platform configuration separate while preventin
 
 Web and Mobile may implement their own components and styling engines; this package does not try to
 share DOM and React Native component implementations.
+
+
+## Admin workspace direction
+
+Lyreo keeps its espresso primary and apricot/cream accents. Neutral paper backgrounds and less
+saturated cocoa dark surfaces keep long transcript reviews readable. Form boundaries use `input`
+with at least 3:1 contrast; softer `border` is for separators. Primary, muted and functional text
+are checked at 4.5:1 against the supported surfaces in the Admin theme regression test. Shared
+radii are 6/10/16 px; Web and Mobile both consume these foundation values.
+
+Admin uses a compact header, persistent desktop navigation and a modal mobile navigation drawer.
+Its local system/Noto Sans stack supports Vietnamese without a remote font dependency. Keep page
+headings concise, one primary task visible, focus indicators clear, and animation responsive to
+reduced-motion preferences. Do not show fabricated counts or infrastructure status in the overview.

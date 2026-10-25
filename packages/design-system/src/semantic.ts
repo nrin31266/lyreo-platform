@@ -43,7 +43,7 @@ export const semanticThemes: Record<ThemeMode, ThemeColors> = {
     mutedForeground: primitiveColors.ink700,
 
     border: primitiveColors.paper200,
-    input: primitiveColors.paper200,
+    input: primitiveColors.ink500,
 
     // Darker tone for accessible focus indication
     focusRing: primitiveColors.chestnut500,

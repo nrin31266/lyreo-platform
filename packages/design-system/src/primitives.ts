@@ -15,14 +15,14 @@ export const primitiveColors = {
   // Neutral ink
   ink950: '#1B0E0B',
   ink900: '#2B1813',
-  ink700: '#72594D',
+  ink700: '#6C625C',
   ink500: '#9B8275',
   ink300: '#C8A997',
 
   // Neutral paper
-  paper50: '#FEF8F0',
-  paper100: '#F8EDE3',
-  paper200: '#E8D5C6',
+  paper50: '#FBFAF8',
+  paper100: '#EFEBE6',
+  paper200: '#DED8D2',
   white: '#FFFFFF',
 
   // Lyreo brand — inspired by the mascot
@@ -38,14 +38,14 @@ export const primitiveColors = {
   apricot400: '#EDB07C',
   peach300: '#F2C69E',
   cream200: '#F3D5B4',
-  ivory100: '#FEF6E6',
+  ivory100: '#F7F6F3',
 
     // Lyreo dark surfaces
-  cocoa950: '#2A1812',
-  cocoa900: '#362119',
-  cocoa800: '#493025',
-  cocoa700: '#56392D',
-  cocoa500: '#765346',
+  cocoa950: '#211D1B',
+  cocoa900: '#292421',
+  cocoa800: '#332C28',
+  cocoa700: '#44372F',
+  cocoa500: '#8B7769',
 
   // Lyreo dark text & accents
   warmWhite50: '#FFF8EF',
@@ -57,7 +57,7 @@ export const primitiveColors = {
   success700: '#2E7D5B',
   success400: '#6FD0A0',
 
-  warning700: '#A66A18',
+  warning700: '#8A5918',
   warning400: '#E8B04A',
 
   danger950: '#1A1111',
