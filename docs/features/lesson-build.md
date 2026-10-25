@@ -8,11 +8,17 @@ holds prepared audio and raw evidence. Mobile playback is a later phase.
 
 ## Authoring checkpoints
 
-Inspect a YouTube URL, see existing ranges, choose one contiguous segment and confirm media rights.
-Acquisition is operator-enabled only after the applicable rights/path have been checked. The
+Inspect a YouTube URL, see existing ranges, choose one contiguous segment and acknowledge operator responsibility for source use.
+Local acquisition is operator-enabled for public videos supported by the configured downloader; no channel allowlist or licence-document upload is required. The
 conservative acquisition baseline caches full source audio once, then normalizes the selected
 segment as 16 kHz mono PCM WAV. Exact normalized range assets can be reused across lessons.
 Range downloading has not been benchmarked; no network savings claim follows from selected-range inference.
+
+Nguồn do người vận hành lựa chọn để phát triển và kiểm thử nội bộ. Người vận hành chịu trách nhiệm xin phép và bảo đảm quyền sử dụng trước khi khai thác hoặc phát hành.
+
+Metadata inspection does not acquire audio and is independent of the acquisition switch. Both paths
+need the configured downloader on the Core host; audio preparation also needs FFmpeg. Expected
+source-tool failures return safe `503` Problem Details with stable `YOUTUBE_*` codes.
 
 PREPARE stops at transcript review. Edit/split/merge stable sentences; choose Learn, Watch only or
 Skip in bulk. Draft word evidence supports player seeking. Learn receives semantic output; Watch
@@ -87,32 +93,78 @@ Source adapter tests exercise real FFmpeg with local generated audio and a fake 
 process, including source/range cache reuse and normalized selected-range WAV output. These do not
 acquire YouTube media or establish production acquisition rights.
 
-Lesson Prep retirement remains pending the replacement's live end-to-end check with authorized
-YouTube material and official player review. The research limits in the [ASR evidence](../research/lesson-authoring-asr.md)
-and [semantic evidence](../research/lesson-authoring-semantic.md) remain explicit: conversational/noisy
-and 20–30-minute quality, human timing/pedagogical scoring and account billing state are unverified.
-Keep the old tool and user artifacts until that gate passes; its tests do not prove the new pipeline.
+The technical replacement gate passed on 2026-10-26: actual OIDC, YouTube acquisition,
+prepare/edit/approve/alignment, official player seek/Skip/end pause, karaoke confirmation,
+semantic generation, candidate selection and local publication/read-only verification. Lesson Prep
+source and hooks are retired; local artifacts and user data remain intact. This does not close human
+transcript, word-boundary or pedagogical approval, broad natural-accent scoring, or independent
+account billing verification. See the research evidence and the live checkpoint below.
 
+<a id="plan-completion-audit--2026-10-25"></a>
+## Plan completion audit — 2026-10-26
 
-## Plan completion audit — 2026-10-25
+**The complete research/release plan is not closed.** Code verification and the measured research
+are distinct from human content/timing approval and account billing verification.
 
-**The accepted plan is not complete.** Existing deterministic tests prove selected implemented
-contracts; they do not close the research, replacement verification or retirement gates.
-
-| Plan area | Current state | Remaining evidence/work |
+| Plan area | Verified implementation/evidence | Remaining work |
 | --- | --- | --- |
-| Inspect/range/cache and 16 kHz mono preparation | Implemented; real FFmpeg with local fixture downloader tested | Actual source acquisition and range-download versus full-cache timing/bytes/accuracy comparison |
-| Persistent draft/editor/checkpoints and semantic validation | Implemented with deterministic coverage | Authorized source → approved transcript → reviewed semantic content → published lesson live run |
-| ASR and alignment research | Partial clean assembled 2/5/10-minute corpus, one runtime 5-minute run | Natural/conversational accents, noise/fast speech/silence, 20–30-minute quality, human timing review; aligner comparison using both ASR transcripts |
-| Semantic research | Partial full-context tests with six targets/chunk | Full-lesson completion/latency and pedagogical review across representative lesson material |
-| Official player seek/Skip/karaoke/end bound | Implemented and helper tests exist | Review against actual authorized video/audio, including player failures and timing drift |
-| Free-only, quota and provider audit | Implemented guards and error tests | Verify the configured accounts' billing/quota state; full workflow quota/resume evidence |
-| Publication/leases/revisions/membership | Implemented with PostgreSQL regression coverage | Include cancellation/late results and published access in full replacement verification |
-| Lesson Prep retirement | Not implemented; deliberately still wired | Remove source/Gradio/ZIP, Make/CI/setup/doctor/validators and current docs after the replacement gate |
+| Inspect/range/cache/normalization | Actual Listening Time inspection and repeated-source ranges; real acquisition; safe source error mapping; source/range cache reuse | Media-payload bytes measured separately from output bytes; full socket/TLS overhead remains unmeasured |
+| Persistent editor and recovery | Actual split/merge, stable identity, refresh persistence, Learn/Watch only/Skip and revision conflict; 120s edit/save/reload/split regression | Older stale drafts without retained word evidence require a new draft |
+| ASR/alignment research | Actual 2/5/10/20min paired runs, animation and UK material, synthetic noise/speed/silence; both ASR transcripts aligned on the existing 4GB GPU | Independent human reference/boundary and broad natural-accent scoring |
+| Semantic research | Full Gemini 2/5/10min outputs; GPT-OSS 2min and explicit 5min429/10min413 limits; failed spans retained; one bounded correction implemented | Human pedagogical scoring; corrected prompt's live validation is reported below, not substituted into the original benchmark |
+| Official player | Actual iframe seek, Skip, observed-group highlighting and selected-range end pause passed on the measured clip | Human listening review across representative sources |
+| Free-only/quota/audit | Credentials encrypted through Core; allowlisted routes; actual provider429/413 observed; PostgreSQL invocation timestamp regression and simulated 429 durable worker/resume regression | Independently verified account billing state; no zero-charge assertion |
+| Publication/recovery | PostgreSQL cancellation/late-result/lease/revision/atomic publication/membership regressions | Live local publication200, refresh locked and mutation409; human release approval remains open |
+| Lesson Prep | Technical replacement gate passed; source/Gradio/ZIP and Make/CI/setup/doctor/validator hooks retired together | Local .env/.work/exports and existing lessons/attempts/progress preserved |
 
-A recovery defect was reproduced during this audit: splitting a 120-second sentence while changing
-its lexical text preserves the entire parent coarse interval on both descendants. Alignment still
-rejects each >115-second anchor and asks for a split, so that recovery action cannot succeed.
-The control case, splitting without lexical changes using an observed word boundary, succeeds.
-Fix safe anchor recovery and add permanent regression coverage before calling the editor complete.
-No synthetic word durations or proportional text/audio splitting are acceptable repairs.
+The original 2026-10-25 audit reproduced a long-anchor recovery defect; the implementation update
+below records its fix. Deterministic tests do not certify human teaching quality.
+
+## Implementation updates — 2026-10-26
+
+The anchor recovery defect above is fixed for drafts retaining observed word evidence. Regression
+coverage includes lexical edit plus split in one save and edit/save/reload/split on PostgreSQL.
+Long descendants use distinct, uniquely observed boundaries; repeated, inserted or internal
+multi-token group boundaries fail without synthetic timings. Older already-edited drafts whose
+evidence was erased need a new shorter-range draft or splitting before lexical edits.
+
+Metadata inspection is independent of the audio acquisition switch. Source failures now preserve
+safe `YOUTUBE_*` codes as HTTP 503 Problem Details with correlation IDs, rather than a generic 500.
+Core media setup/doctor checks own the downloader independently of Lesson Prep.
+
+
+## Live local checkpoint — 2026-10-26
+
+A real OIDC session used Listening Time 0–120s, unrestricted local source acknowledgement,
+Whisper Turbo (2190ms), dedicated Qwen alignment (15202ms), and Gemini semantic generation.
+Split/merge retained identity, edits survived refresh, a stale revision returned 409, and Learn,
+Watch-only and Skip persisted. The official YouTube iframe played real media; sentence seek,
+Skip, end pause and observed-group karaoke highlighting passed. A second real 60–90s draft verified nonzero source offset: expected seek 60.44s, observed 60.994s;
+playback paused at 90.006s.
+
+The first semantic job correctly rejected an ambiguous annotation in a 130+word ASR sentence,
+including its single correction attempt. Four manual test splits at existing observed timing
+boundaries preserved valid timing; a fresh approval and karaoke checkpoint preceded regeneration.
+All 20 Learn targets then passed Core validation across 6 successful Gemini calls (29267ms summed
+provider latency). The original benchmark results are unchanged. This is one corrected-prompt
+E2E success after transcript curation, not proof that correction alone fixes every transcript.
+
+Candidate selection saved 200; browser publish returned 200; refresh showed PUBLISHED with a
+disabled editor; an attempted API transcript write returned 409. This publication is an internal
+local fixture. The preview and raw snapshot are retained under ignored
+`data/cache/lesson-authoring-research/2026-10-26/e2e/`, referenced by the credential-free
+[manifest](../../tools/research/lesson-authoring-2026-10-26.json).
+
+Agent content inspection still found an inaccurate explanation of “video where I speak” as a
+place, an overly broad grammar span, and fragmentary sentences after mechanical timing-boundary
+splits. These are visible in `e2e/preview.html`; technical publication is not teaching-quality
+acceptance. Human review remains required before actual release. Groq 5/10min comparisons remain
+incomplete due to observed free-route 429/413 limits; no billing or paid fallback was enabled.
+
+Final verification: `make check` passed with 236 Java unit tests, 30 PostgreSQL integration tests,
+42 AI tests, 83 importer tests, 24 Admin tests and 1 Mobile test, plus typecheck/build.
+After the final quoted-env Doctor fix, `make validate test-tooling` passed 37 tooling tests.
+Real browser checks covered 40 route/theme/viewport cases plus 6 published-draft cases, 320–1440px,
+and 10 additional cases using Chromium's actual 200% page zoom (verified DPR 2 and 720px layout in
+a 1440px window). No horizontal overflow or page JavaScript exceptions were observed; mobile
+Sheet Escape restored focus. Screenshots are retained locally, not committed.

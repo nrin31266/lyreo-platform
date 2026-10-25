@@ -35,8 +35,6 @@ jobs:
         run: make test-ai
       - name: Data importer tests
         run: make test-data-import
-      - name: Lesson Prep tests
-        run: make test-lesson-prep
 
   frontend:
     runs-on: ubuntu-latest

@@ -39,14 +39,12 @@ class ValidateRepoTest(unittest.TestCase):
             "pnpm-lock.yaml": "lockfileVersion: '9.0'\nimporters:\n  apps/admin-web:\n  apps/mobile:\n  packages/design-system:\n  packages/i18n:\n",
             "apps/ai-service/pyproject.toml": "[project]\nname = \"ai-service\"\n",
             "tools/data-import/pyproject.toml": "[project]\nname = \"data-import\"\n",
-            "tools/lesson-prep/pyproject.toml": "[project]\nname = \"lesson-prep\"\n",
         })
         errors: list[str] = []
         check_lockfiles(root, errors)
 
         self.assertTrue(any("missing required lockfile: apps/ai-service/uv.lock" in err for err in errors))
         self.assertTrue(any("missing required lockfile: tools/data-import/uv.lock" in err for err in errors))
-        self.assertTrue(any("missing required lockfile: tools/lesson-prep/uv.lock" in err for err in errors))
 
     def test_legacy_jackson2_production_import_fails(self) -> None:
         """Production Java code importing Jackson 2 databind must be rejected."""
@@ -100,7 +98,6 @@ class ValidateRepoTest(unittest.TestCase):
             ),
             "apps/ai-service/uv.lock": "version = 1\n",
             "tools/data-import/uv.lock": "version = 1\n",
-            "tools/lesson-prep/uv.lock": "version = 1\n",
             "modules/lesson/src/main/java/com/lyreo/lesson/package-info.java": "package com.lyreo.lesson;\n",
             "modules/lesson/src/main/java/com/lyreo/lesson/application/LessonService.java": (
                 "package com.lyreo.lesson.application;\n"

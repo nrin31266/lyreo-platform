@@ -139,7 +139,7 @@ attempts/progress. Draft revision prevents concurrent overwrites; stale AI/job o
 
 ### BR-LSN-007 — Free-only and retirement gates
 
-Only confirmed free external paths or local inference may execute. Quota exhaustion waits durably
+For local development, operators may select any supported public YouTube source and acknowledge responsibility for permissions; channel allowlists and licence-document checks are not required. Only confirmed free external paths or local inference may execute. Quota exhaustion waits durably
 or uses a tested configured free alternative, never paid fallback. Source rights/acquisition must
 be verified before production. Retire the old authoring tool only after regression coverage and
 replacement verification; preserve user artifacts and business data.

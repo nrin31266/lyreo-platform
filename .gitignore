@@ -41,3 +41,7 @@ CLAUDE.local.md
 
 # Local browser verification output
 .playwright-mcp/
+
+# Retained local artifacts from the retired Lesson Prep workstation
+tools/lesson-prep/.work/
+tools/lesson-prep/exports/

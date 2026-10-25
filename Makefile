@@ -1,7 +1,7 @@
-.PHONY: help init-env doctor setup deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset keycloak-seed down core ai admin mobile \
+.PHONY: help init-env doctor setup setup-media deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset keycloak-seed down core ai admin mobile \
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
-        ai-local lesson-prep test-lesson-prep clean-prep clean-cache clean \
+        ai-local clean-cache clean \
         test-java verify-java test-ai test-data-import test-tooling test-frontend typecheck build-web validate-docs validate-repo validate check prod-config verify-prod-env down-v \
         import-clean-lexicon import-clean-grammar-toeic
 
@@ -13,6 +13,7 @@ help:
 	  '  make setup                       First-clone setup: env + deps + PostgreSQL/Keycloak bootstrap' \
 	  '  make init-env                    Copy/synchronize local .env files' \
 	  '  make doctor                      Inspect local toolchain/env/data readiness' \
+	  '  make setup-media                 Install the Core YouTube metadata/audio downloader' \
 	  '  make deps                        Sync Python dependencies and install pnpm workspace dependencies' \
 	  '  make deps-java                   Compile and install internal Java artifacts required by Core into local Maven cache' \
 	  '' \
@@ -20,7 +21,6 @@ help:
 	  '  make core                        Run Spring Boot locally' \
 	  '  make ai                          Run FastAPI locally' \
 	  '  make ai-local                    Run FastAPI locally with local Qwen/Kokoro weights' \
-	  '  make lesson-prep                 Run local Lesson Prep Gradio workstation' \
 	  '  make admin                       Run Admin Vite dev server' \
 	  '  make mobile                      Run Expo Metro bundler (requires Dev Build installed on device/emulator)' \
 	  '' \
@@ -55,15 +55,13 @@ help:
 	  '  make test-java                   Run fast Java unit tests (Surefire)' \
 	  '  make verify-java                 Run full Java verification: unit + integration tests (Failsafe)' \
 	  '  make test-data-import            Run data importer test suite' \
-	  '  make test-lesson-prep            Run lesson-prep test suite' \
 	  '  make typecheck                   Typecheck TypeScript workspaces' \
 	  '  make test-frontend              Run Admin Web and Mobile tests' \
 	  '  make build-web                  Build Admin Web' \
 	  '' \
 	  'Cleanup' \
-	  '  make clean-prep                  Clean temporary lesson-prep session workspaces' \
 	  '  make clean-cache                 Clean Python bytecode and test caches' \
-	  '  make clean                       Aggregate cleanup: clean-cache + clean-prep' \
+	  '  make clean                       Clean Python bytecode and test caches' \
 	  '' \
 	  'Deployment/config' \
 	  '  make dev-config                  Validate compose.dev.yml syntax/resolution' \
@@ -99,12 +97,16 @@ import-clean-grammar-toeic:
 	./tools/data-import/scripts/import-clean-grammar-toeic.sh $(ARGS)
 
 deps-java:
-	./mvnw -B -pl apps/core-service -am -DskipTests install
+	./mvnw -B -pl apps/core-service -am -DskipTests -DskipITs install
+
+setup-media:
+	uv tool install yt-dlp==2026.10.21
+	@command -v yt-dlp >/dev/null || { echo 'Add the uv tool bin directory to PATH before starting Core.'; exit 1; }
+	@command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null || { echo 'Install FFmpeg (including ffprobe) on the Core host.'; exit 1; }
 
 deps: deps-java
 	cd apps/ai-service && uv sync --locked --extra dev
 	cd tools/data-import && uv sync --locked --extra dev
-	cd tools/lesson-prep && uv sync --locked --extra dev
 	pnpm install --frozen-lockfile
 
 setup:
@@ -147,16 +149,9 @@ core: deps-java
 ai:
 	cd apps/ai-service && set -a && . ./.env && set +a && uv run --locked uvicorn app.main:app --reload --port 8000
 
-# Local Qwen runtime: requires GPU/model availability. qwen + kokoro extras both live here
-# because the Lesson Prep Tool may call STT/alignment AND Kokoro TTS in one session.
+# Local Qwen/Kokoro capability runtimes require GPU/model availability.
 ai-local:
 	cd apps/ai-service && set -a && . ./.env && set +a && AI_RUNTIME_MODE=local uv run --locked --extra qwen --extra kokoro uvicorn app.main:app --reload --port 8000
-
-# Lesson Prep Tool. Requires: make ai (AI service), and ffmpeg/ffprobe on PATH.
-# Does NOT require Core, Keycloak, or PostgreSQL.
-lesson-prep:
-	@[ -f tools/lesson-prep/.env ] || { echo 'tools/lesson-prep/.env missing — run make init-env first'; exit 1; }
-	cd tools/lesson-prep && set -a && . ./.env && set +a && uv run --locked python -m lesson_prep.ui_app
 
 admin:
 	pnpm --filter @lyreo/admin-web dev
@@ -209,20 +204,13 @@ test-ai:
 test-data-import:
 	cd tools/data-import && uv run --locked --extra dev python -m pytest
 
-test-lesson-prep:
-	cd tools/lesson-prep && uv run --locked --extra dev python -m pytest
-
-clean-prep:
-	rm -rf tools/lesson-prep/.work/* tools/lesson-prep/.pytest_cache
-	@echo "Cleaned lesson-prep temporary files."
-
 clean-cache:
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 	@echo "Cleaned Python bytecode and test caches."
 
-clean: clean-cache clean-prep
-	@echo "All caches and temporary workspaces cleaned."
+clean: clean-cache
+	@echo "Python bytecode and test caches cleaned."
 
 typecheck:
 	pnpm typecheck
@@ -248,8 +236,6 @@ validate:
 	  PYTHONPYCACHEPREFIX="$$tmp" python3 -m compileall -q \
 	    apps/ai-service/app \
 	    apps/ai-service/tests \
-	    tools/lesson-prep/lesson_prep \
-	    tools/lesson-prep/tests \
 	    tools/data-import/import_grammar.py \
 	    tools/data-import/import_toeic.py \
 	    tools/data-import/import_lexicon.py \
@@ -268,7 +254,7 @@ validate:
 	bash -n scripts/*.sh apps/mobile/scripts/*.sh tools/data-import/scripts/*.sh infra/keycloak/scripts/*.sh infra/postgres/init/*.sh
 	$(MAKE) validate-repo
 
-check: validate test-tooling verify-java test-ai test-data-import test-lesson-prep typecheck test-frontend build-web
+check: validate test-tooling verify-java test-ai test-data-import typecheck test-frontend build-web
 
 verify-prod-env:
 	./scripts/verify-prod-env.sh

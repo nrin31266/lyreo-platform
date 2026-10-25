@@ -1,0 +1,326 @@
+{
+  "measured_date": "2026-10-26",
+  "purpose": "Internal development benchmark; no proof of source licence or account billing state",
+  "operator_notice": "Nguồn do người vận hành lựa chọn để phát triển và kiểm thử nội bộ. Người vận hành chịu trách nhiệm xin phép và bảo đảm quyền sử dụng trước khi khai thác hoặc phát hành.",
+  "sources": [
+    {
+      "id": "listening",
+      "url": "https://www.youtube.com/watch?v=RlA-Nhr8XVU",
+      "title": "Why You Didn't Learn English in School",
+      "ranges_seconds": [
+        [
+          0,
+          120
+        ],
+        [
+          0,
+          300
+        ],
+        [
+          0,
+          600
+        ],
+        [
+          0,
+          1200
+        ]
+      ],
+      "reference": "YouTube automatic English captions; not human gold"
+    },
+    {
+      "id": "story",
+      "url": "https://www.youtube.com/watch?v=Jsfli3pyk5s",
+      "title": "PRINCESS FOR A DAY",
+      "ranges_seconds": [
+        [
+          0,
+          120
+        ],
+        [
+          0,
+          300
+        ],
+        [
+          0,
+          600
+        ],
+        [
+          0,
+          900
+        ]
+      ],
+      "additional_qwen_actual_seconds": 926.26725,
+      "reference": "YouTube automatic English captions; not human gold"
+    },
+    {
+      "id": "bbc",
+      "url": "https://www.youtube.com/watch?v=pjFlVc-EDzc",
+      "title": "What should you eat for a better night’s sleep?",
+      "ranges_seconds": [
+        [
+          0,
+          120
+        ]
+      ],
+      "reference": "Creator English (United Kingdom) caption track available; no independent human timing/scoring"
+    }
+  ],
+  "versions": {
+    "yt_dlp": "2026.10.21",
+    "qwen_asr": "0.0.6",
+    "models": [
+      "whisper-large-v3-turbo",
+      "Qwen/Qwen3-ASR-0.6B",
+      "Qwen/Qwen3-ForcedAligner-0.6B",
+      "gemini-3.5-flash-lite",
+      "openai/gpt-oss-120b"
+    ]
+  },
+  "local_artifact_directory": "data/cache/lesson-authoring-research/2026-10-26",
+  "evidence_files": [
+    "local-results.json",
+    "whisper-results.json",
+    "alignment-results.json",
+    "grouped-alignment-results.json",
+    "caption-comparison.json",
+    "whisper-caption-comparison.json",
+    "stress-comparison.json",
+    "bbc-results.json",
+    "acquisition-comparison.json",
+    "offset-comparison.json",
+    "seam-audit.json",
+    "semantic-gemini-results.json",
+    "semantic-groq-results.json",
+    "semantic-validation.json",
+    "original-semantic-prompt.txt",
+    "byte-measurement/results.json",
+    "byte-measurement/full.log",
+    "byte-measurement/range.log",
+    "e2e/state.json",
+    "e2e/published-draft.json",
+    "e2e/preview.html",
+    "e2e/ui-routes.json",
+    "e2e/ui-published.json",
+    "e2e/player-offset.json",
+    "e2e/ui-zoom200.json"
+  ],
+  "asr_uploads": [
+    {
+      "source": "listening",
+      "seconds": 120,
+      "bytes": 2530073,
+      "sha256": "905dc2c47f3b5edc9b0ecc0dfb1b66f4732b914b05a6e4d75a0c992ea572696b"
+    },
+    {
+      "source": "listening",
+      "seconds": 300,
+      "bytes": 6323998,
+      "sha256": "8920bd4befca08a9585354ad1efe6697561b89176f65021b2e30ea56fe78b2c4"
+    },
+    {
+      "source": "listening",
+      "seconds": 600,
+      "bytes": 12239863,
+      "sha256": "63f98a77490107a15e16293724f2c4189f585bed05fb28522fb7427f58b4ed67"
+    },
+    {
+      "source": "listening",
+      "seconds": 1200,
+      "bytes": 24032940,
+      "sha256": "07c7f47f8addfc787e9870312a646e49e40f1eacfe14b5faa432720b68378fe7"
+    },
+    {
+      "source": "story",
+      "seconds": 120,
+      "bytes": 2654388,
+      "sha256": "361f347bbf6d1316df3c00e4c8b7aea457b25f41fc2e4a9e994573ff7e1ba3f8"
+    },
+    {
+      "source": "story",
+      "seconds": 300,
+      "bytes": 6344633,
+      "sha256": "7d4aa4aabf9fde7a15f642a97131a6086aa7372b21e4edb425705ac8d1e5660c"
+    },
+    {
+      "source": "story",
+      "seconds": 600,
+      "bytes": 12447802,
+      "sha256": "48ea83bc721892cd311b572e4414a48f6f3e4bcb78a33af68740da3ac9a02aea"
+    },
+    {
+      "source": "story",
+      "seconds": 900,
+      "bytes": 18936140,
+      "sha256": "60657070df5a927a64fd8142707c6a0a52b49653f6dadbfae0dea665415d667c"
+    }
+  ],
+  "original_semantic_contract": {
+    "git_revision": "8e599e1dc5eae087b0e14e19110327e2f6955720",
+    "java_source": "modules/lesson/src/main/java/com/lyreo/lesson/application/authoring/AuthoringSemantic.java",
+    "prompt_sha256": "ad4ec997db4f719765e3a346adc3892a3501e41ce1a975940334623c279d998f",
+    "saved_prompt_file": "original-semantic-prompt.txt",
+    "max_output_tokens": 3500,
+    "temperature": 0.2,
+    "chunk_size": 6,
+    "correction_attempts": 0
+  },
+  "acquisition_socket_bytes": {
+    "status": "blocked_tool_unavailable",
+    "probe_command": "command -v strace",
+    "probe_exit_code": 1,
+    "received_socket_bytes": null,
+    "additional_acquisition_runs": 0,
+    "limitation": "Saved output bytes are not transferred/download bytes. No OS tools were installed to obtain this measurement."
+  },
+  "acquisition_media_payload_bytes": {
+    "status": "measured",
+    "source_url": "https://www.youtube.com/watch?v=RlA-Nhr8XVU",
+    "range_seconds": [
+      0,
+      120
+    ],
+    "metric": "Downloader/demuxer received media-payload bytes; not complete socket/L2 traffic",
+    "excludes": [
+      "YouTube metadata-page/API requests",
+      "HTTP/TLS headers and encryption overhead",
+      "unread network/OS buffers"
+    ],
+    "full": {
+      "wall_seconds": 8.268,
+      "received_media_payload_bytes": 17100266,
+      "saved_file_bytes": 17100266,
+      "counter": "Final yt-dlp progress.downloaded_bytes"
+    },
+    "remote_range": {
+      "wall_seconds": 64.73,
+      "received_media_payload_bytes": 1753088,
+      "saved_file_bytes": 1323750,
+      "counter": "Single remote HTTPS input AVIOContext Statistics bytes read",
+      "input_contexts": 1,
+      "input_seeks": 0,
+      "output_bytes_written_excluded": 1324207
+    },
+    "commands": [
+      {
+        "name": "full",
+        "argv": [
+          "yt-dlp",
+          "--no-playlist",
+          "--js-runtimes",
+          "node",
+          "-f",
+          "bestaudio",
+          "--newline",
+          "--progress-template",
+          "download:LYREO_RECEIVED:%(progress.downloaded_bytes)s",
+          "-o",
+          "$ARTIFACT_DIR/native-full.%(ext)s",
+          "https://www.youtube.com/watch?v=RlA-Nhr8XVU"
+        ]
+      },
+      {
+        "name": "range",
+        "argv": [
+          "yt-dlp",
+          "--no-playlist",
+          "--js-runtimes",
+          "node",
+          "-f",
+          "bestaudio",
+          "--download-sections",
+          "*0-120",
+          "--force-keyframes-at-cuts",
+          "--downloader-args",
+          "ffmpeg:-loglevel verbose",
+          "-o",
+          "$ARTIFACT_DIR/remote-range.%(ext)s",
+          "https://www.youtube.com/watch?v=RlA-Nhr8XVU"
+        ]
+      }
+    ]
+  },
+  "replay": {
+    "working_directory": "repository root",
+    "runtime": "apps/ai-service/.venv/bin/python",
+    "artifact_directory": "data/cache/lesson-authoring-research/2026-10-26",
+    "offline_scripts": [
+      "validate_semantic.py",
+      "final_metrics.py",
+      "prepare_reference.py",
+      "score_reference.py",
+      "score_additional.py"
+    ],
+    "live_scripts": [
+      "run_local.py",
+      "run_whisper.py",
+      "run_semantic.py",
+      "run_alignment.py",
+      "run_stress.py",
+      "run_bbc.py"
+    ],
+    "original_executed_scripts": "*.executed.py",
+    "original_prompt_file": "original-semantic-prompt.txt",
+    "notes": "Active scripts resolve artifact inputs relative to __file__. Run live scripts sequentially only when intentionally repeating provider/GPU work; run_semantic loads the retained original prompt, not current Java. Live replay overwrites matching result artifacts, so copy the artifact directory first. The historical document-writer is archived only, not a replay command."
+  },
+  "core_live_e2e": {
+    "source_url": "https://www.youtube.com/watch?v=RlA-Nhr8XVU",
+    "range_seconds": [
+      0,
+      120
+    ],
+    "local_fixture_only": true,
+    "oidc": true,
+    "asr": {
+      "provider": "GROQ",
+      "model": "whisper-large-v3-turbo",
+      "latency_ms": 2190
+    },
+    "alignment": {
+      "provider": "LOCAL_QWEN",
+      "latency_ms": 15202
+    },
+    "sentences": 22,
+    "learn": 20,
+    "watch_only": 1,
+    "skip": 1,
+    "semantic": {
+      "provider": "GEMINI",
+      "model": "gemini-3.5-flash-lite",
+      "completed_chunks": 6,
+      "latency_ms": 29267,
+      "initial_long_sentence_attempt_failed": true,
+      "observed_boundary_curated_splits": 4,
+      "original_benchmark_unchanged": true
+    },
+    "published_status": "PUBLISHED",
+    "published_mutation_http": 409,
+    "player_checks": [
+      "actual video loaded",
+      "sentence seek",
+      "skip excluded range",
+      "pause at selected range end",
+      "observed group karaoke highlight"
+    ],
+    "limits": [
+      "Technical local publication is not human teaching-quality acceptance",
+      "Billing/account state not independently verified"
+    ],
+    "nonzero_offset_player": {
+      "range_seconds": [
+        60,
+        90
+      ],
+      "expected_source_seek_seconds": 60.44,
+      "observed_source_seek_seconds": 60.993557,
+      "observed_end_pause_seconds": 90.006215
+    },
+    "ui_verification": {
+      "route_theme_viewport_cases": 40,
+      "published_theme_viewport_cases": 6,
+      "native_zoom_200_percent_cases": 10,
+      "horizontal_overflow": 0,
+      "javascript_page_errors": 0,
+      "mobile_escape_focus_restoration": true
+    }
+  }
+}

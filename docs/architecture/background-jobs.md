@@ -36,3 +36,7 @@ Admin. Realtime feed không thay database state.
 ## Verification
 
 Changes to leasing and fencing require concurrent transaction tests and affected business side-effect tests.
+
+Unexpected worker failures are logged with the job ID on the server. Persisted client-facing
+messages use a safe generic detail; explicit permanent and quota failures retain their application
+messages. Database statements and arbitrary exception details are not returned in job progress.

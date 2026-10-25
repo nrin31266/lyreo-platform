@@ -11,6 +11,8 @@
 ---
 
 This preserves historical coursework evidence and does not establish current implementation status.
+Lesson Prep paths and commands below are historical: its source and hooks were retired on 2026-10-26
+after integrated functional verification; see [D-024](../DECISIONS.md#d-024--integrated-youtube-lesson-authoring-and-free-only-research-2026-10-25).
 
 Baseline và verification evidence status: cập nhật sau repo cleanup pass (2026-09-14).
 Automated local suites đã chạy exit 0 cho toàn bộ:

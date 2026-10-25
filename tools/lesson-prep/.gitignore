@@ -1,6 +1,0 @@
-.env
-.work/
-__pycache__/
-.pytest_cache/
-exports/
-.venv/
