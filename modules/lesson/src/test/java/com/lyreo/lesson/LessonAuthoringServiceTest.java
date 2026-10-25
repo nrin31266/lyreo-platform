@@ -62,6 +62,80 @@ class LessonAuthoringServiceTest {
         assertThat(LessonAuthoringService.alignmentSegments(lesson)).containsExactly(
             java.util.Map.of("text","We teach. Practice helps.","start_ms",0L,"end_ms",900L));
     }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans={true,false})
+    void longSentenceLexicalEditThenSplitRecoversObservedDescendantWindows(boolean saveEditFirst) {
+        lesson.endMs=120_000;
+        var original=new AuthoringSentence(UUID.randomUUID(),"We learn every day and practice together.","LEARN");
+        AuthoringText.mapTiming(List.of(original),List.of(
+            new AuthoringText.ObservedWord("We",0,10_000),
+            new AuthoringText.ObservedWord("learn",10_000,20_000),
+            new AuthoringText.ObservedWord("every",20_000,30_000),
+            new AuthoringText.ObservedWord("day",30_000,60_000),
+            new AuthoringText.ObservedWord("and",60_000,70_000),
+            new AuthoringText.ObservedWord("practice",70_000,90_000),
+            new AuthoringText.ObservedWord("together",90_000,120_000)),120_000);
+        lesson.sentences=List.of(original);
+        if(saveEditFirst) service.transcript(lesson.id,5,List.of(new LessonAuthoringService.SentenceInput(original.id,
+            "We teach every day and practice together.","LEARN")));
+        service.transcript(lesson.id,5,List.of(new LessonAuthoringService.SentenceInput(original.id,
+            "We teach every day.","LEARN"),new LessonAuthoringService.SentenceInput(null,"And practice together.","LEARN")));
+        assertThat(lesson.timingStatus).isEqualTo("STALE");
+        assertThat(lesson.sentences).allSatisfy(sentence->assertThat(sentence.words).isEmpty());
+        assertThat(LessonAuthoringService.alignmentSegments(lesson)).containsExactly(
+            java.util.Map.of("text","We teach every day.","start_ms",0L,"end_ms",60_000L),
+            java.util.Map.of("text","And practice together.","start_ms",60_000L,"end_ms",120_000L));
+    }
+    @Test void splitWithAmbiguousObservedBoundaryRequiresRecoveryInsteadOfDuplicatingParentRange() {
+        lesson.endMs=120_000;
+        var original=new AuthoringSentence(UUID.randomUUID(),"We learn and we learn and we learn.","LEARN");
+        AuthoringText.mapTiming(List.of(original),List.of(
+            new AuthoringText.ObservedWord("We learn",0,20_000),new AuthoringText.ObservedWord("and",20_000,40_000),
+            new AuthoringText.ObservedWord("we learn",40_000,60_000),new AuthoringText.ObservedWord("and",60_000,80_000),
+            new AuthoringText.ObservedWord("we learn",80_000,120_000)),120_000);
+        lesson.sentences=List.of(original);
+        service.transcript(lesson.id,5,List.of(new LessonAuthoringService.SentenceInput(original.id,"We teach and we learn.","LEARN"),
+            new LessonAuthoringService.SentenceInput(null,"And we learn.","LEARN")));
+        assertThatThrownBy(()->LessonAuthoringService.alignmentSegments(lesson)).hasMessageContaining("No safe ASR");
+        assertThat(lesson.sentences).allSatisfy(sentence->assertThat(sentence.coarseStartMs).isNull());
+    }
+    @Test void insertionAtLongSplitBoundaryDoesNotInventATimestamp() {
+        lesson.endMs=120_000;
+        var original=new AuthoringSentence(UUID.randomUUID(),"We learn and practice.","LEARN");
+        AuthoringText.mapTiming(List.of(original),List.of(new AuthoringText.ObservedWord("We",0,20_000),
+            new AuthoringText.ObservedWord("learn",20_000,60_000),new AuthoringText.ObservedWord("and",60_000,80_000),
+            new AuthoringText.ObservedWord("practice",80_000,120_000)),120_000);
+        lesson.sentences=List.of(original);
+        service.transcript(lesson.id,5,List.of(new LessonAuthoringService.SentenceInput(original.id,"We learn today.","LEARN"),
+            new LessonAuthoringService.SentenceInput(null,"And practice.","LEARN")));
+        assertThatThrownBy(()->LessonAuthoringService.alignmentSegments(lesson)).hasMessageContaining("create a new draft").hasMessageNotContaining("re-prepare");
+        assertThat(lesson.sentences).allSatisfy(sentence->{
+            assertThat(sentence.words).isEmpty();assertThat(sentence.coarseStartMs).isNull();
+        });
+    }
+    @Test void repeatedBoundaryInsideGroupedObservedWordRemainsAmbiguous() {
+        lesson.endMs=120_000;
+        var original=new AuthoringSentence(UUID.randomUUID(),"We learn and practice and practice.","LEARN");
+        AuthoringText.mapTiming(List.of(original),List.of(new AuthoringText.ObservedWord("We",0,10_000),
+            new AuthoringText.ObservedWord("learn",10_000,20_000),new AuthoringText.ObservedWord("and practice",20_000,60_000),
+            new AuthoringText.ObservedWord("and",60_000,80_000),new AuthoringText.ObservedWord("practice",80_000,120_000)),120_000);
+        lesson.sentences=List.of(original);
+        service.transcript(lesson.id,5,List.of(new LessonAuthoringService.SentenceInput(original.id,"We teach and practice and.","LEARN"),
+            new LessonAuthoringService.SentenceInput(null,"Practice.","LEARN")));
+        assertThatThrownBy(()->LessonAuthoringService.alignmentSegments(lesson)).hasMessageContaining("No safe ASR");
+    }
+    @Test void legacyJsonDefaultsToEmptyObservedSourceEvidence() {
+        var old=new tools.jackson.databind.ObjectMapper().readValue("{\"text\":\"We learn.\"}",AuthoringSentence.class);
+        assertThat(old.sourceWords).isEmpty();
+    }
+    @Test void olderDraftWithoutObservedEvidenceDoesNotAcquireInventedAnchors() {
+        lesson.endMs=120_000;
+        var original=lesson.sentences.getFirst();
+        original.words=List.of();original.coarseStartMs=0L;original.coarseEndMs=120_000L;
+        service.transcript(lesson.id,5,List.of(new LessonAuthoringService.SentenceInput(original.id,"We!","LEARN"),
+            new LessonAuthoringService.SentenceInput(null,"Teach!","LEARN")));
+        assertThatThrownBy(()->LessonAuthoringService.alignmentSegments(lesson)).hasMessageContaining("No safe ASR");
+    }
     @Test void semanticRequiresExplicitKaraokeAndCurrentApproval() {
         lesson.karaokeReviewedRevision=null;
         assertThatThrownBy(()->service.generate(lesson.id,5)).hasMessageContaining("karaoke");

@@ -9,6 +9,8 @@ public final class AuthoringSentence {
     public String text;
     public String usage = "LEARN";
     public List<Word> words = List.of();
+    // Retain observed source evidence only while editable words are stale.
+    public List<AuthoringText.ObservedWord> sourceWords = List.of();
     public List<String> issues = List.of();
     public Long coarseStartMs;
     public Long coarseEndMs;

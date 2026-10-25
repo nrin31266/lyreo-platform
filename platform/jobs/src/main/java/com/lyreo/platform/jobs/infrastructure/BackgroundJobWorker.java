@@ -22,6 +22,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Durable PostgreSQL job worker.
@@ -32,6 +34,9 @@ import java.util.stream.Collectors;
  * external call.</p>
  */
 public final class BackgroundJobWorker implements AutoCloseable {
+    private static final Logger log = LoggerFactory.getLogger(BackgroundJobWorker.class);
+    private static final String UNEXPECTED_FAILURE =
+        "An unexpected processing error occurred. Retry or contact an administrator with the job ID.";
 
     private final BackgroundJobRepository repository;
     private final Map<String, JobHandler> handlers;
@@ -110,6 +115,7 @@ public final class BackgroundJobWorker implements AutoCloseable {
                 context.currentStep(), context.currentPercent()
             );
         } catch (Exception failure) {
+            log.error("Unexpected job failure [jobId={}]", job.id(), failure);
             BackgroundJob fresh = repository.findById(job.id()).orElse(job);
             if (fresh.cancellationRequested()) {
                 transitions.cancelled(
@@ -119,12 +125,12 @@ public final class BackgroundJobWorker implements AutoCloseable {
                 long delaySeconds = Math.min(300L, 5L * (1L << Math.min(6, Math.max(0, fresh.attemptCount() - 1))));
                 transitions.retryWaiting(
                     job, workerId, Instant.now().plusSeconds(delaySeconds),
-                    "JOB_EXECUTION_FAILED", safeMessage(failure),
+                    "JOB_EXECUTION_FAILED", UNEXPECTED_FAILURE,
                     fresh.currentStep(), fresh.progressPercent()
                 );
             } else {
                 transitions.failed(
-                    job, workerId, "JOB_EXECUTION_FAILED", safeMessage(failure),
+                    job, workerId, "JOB_EXECUTION_FAILED", UNEXPECTED_FAILURE,
                     fresh.currentStep(), fresh.progressPercent()
                 );
             }

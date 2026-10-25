@@ -100,6 +100,7 @@ public final class AuthoringText {
                     first.start, last.end, firstToken, tokenIndex));
             }
             sentence.words = List.copyOf(mapped);
+            sentence.sourceWords = List.of();
             sentence.coarseStartMs = mapped.getFirst().startMs();
             sentence.coarseEndMs = mapped.getLast().endMs();
             sentence.issues = issues(sentence);

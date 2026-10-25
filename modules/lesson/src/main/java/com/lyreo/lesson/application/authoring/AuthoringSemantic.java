@@ -28,6 +28,9 @@ public final class AuthoringSemantic {
             explanation (concise contextual Vietnamese meaning), importance (HIGH|MEDIUM), canonicalForm.
             Grammar fields: surface (EXACT unique substring), label, explanation (concise contextual Vietnamese), importance (HIGH|MEDIUM).
             Hints and notes fields: surface (EXACT unique substring), text (useful concise Vietnamese).
+            Every surface must be a contiguous exact-case substring occurring exactly once in this target sentence.
+            Never borrow a surface from another context sentence, change its case, add ellipses, or join nonadjacent words.
+            For repeated words, use a longer unique exact phrase or omit the annotation. When uncertain, omit it.
             ThoughtGroups: exact source substrings in order whose joined text preserves the entire sentence;
             use only when useful for technically eligible Shadowing. No token indices: Core resolves source spans.
             Keep vocabulary/grammar/notes sparse; omit generic tips and IPA. Never return dictionary definitions, timestamps, or DB IDs.

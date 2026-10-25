@@ -72,7 +72,6 @@ public final class AuthoringYoutubeSource implements AuthoringSourcePort {
     @Override
     public SourceInfo inspect(String sourceReference) {
         String id = videoId(sourceReference);
-        requireEnabled();
         var cached = jdbc.query("""
             SELECT video_id, title, duration_ms, embed_allowed FROM lesson_youtube_source
              WHERE video_id=:id AND updated_at > now() - interval '1 day'
@@ -179,7 +178,7 @@ public final class AuthoringYoutubeSource implements AuthoringSourcePort {
 
     private void requireEnabled() {
         if (!enabled) throw new SourceMaterializationException("YOUTUBE_MEDIA_TOOL_DISABLED",
-            "YouTube acquisition is disabled; an operator must verify media rights and enable it", false);
+            "YouTube acquisition is disabled; enable it in the operator environment", false);
     }
     private static String url(String id) { return "https://www.youtube.com/watch?v=" + id; }
     private static String seconds(long millis) { return java.math.BigDecimal.valueOf(millis, 3).toPlainString(); }

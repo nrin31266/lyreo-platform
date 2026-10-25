@@ -36,6 +36,14 @@ class AuthoringSemanticTest {
         assertThatThrownBy(()->AuthoringSemantic.span("calling","call")).hasMessageContaining("cuts");
         assertThatThrownBy(()->AuthoringSemantic.span("called","call off")).hasMessageContaining("missing");
     }
+    @Test void rejectsLiveFailurePatternsWithoutWeakeningSpanValidation() {
+        assertThatThrownBy(()->AuthoringSemantic.span("You took four years of English classes.","took... classes"))
+            .hasMessageContaining("missing");
+        assertThatThrownBy(()->AuthoringSemantic.span("these are useful.","These are")).hasMessageContaining("missing");
+        assertThatThrownBy(()->AuthoringSemantic.span("We like rain and like snow.","like")).hasMessageContaining("ambiguous");
+        assertThatThrownBy(()->AuthoringSemantic.span("English learners, welcome.","ambient sounds")).hasMessageContaining("missing");
+        assertThat(semantic.prompt(List.of(),List.of())).contains("this target sentence", "case", "contiguous", "omit");
+    }
     @Test void rejectsMalformedMissingDuplicateAndWrongLocale() {
         var sentence=new AuthoringSentence(UUID.randomUUID(),"A useful sentence.","LEARN");
         assertThatThrownBy(()->semantic.apply(Map.of("content","{broken"),List.of(sentence))).hasMessageContaining("JSON");

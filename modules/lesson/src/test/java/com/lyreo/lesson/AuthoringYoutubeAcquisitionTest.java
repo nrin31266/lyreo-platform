@@ -135,6 +135,30 @@ class AuthoringYoutubeAcquisitionTest {
             });
     }
 
+    @Test void metadataInspectionWorksWhenAcquisitionIsDisabled() throws Exception {
+        Path calls = temp.resolve("calls.log");
+        var source = new AuthoringYoutubeSource(jdbc, storage, new ObjectMapper(), false,
+            fakeDownloader(temp, temp.resolve("unused.m4a"), calls).toString(), Duration.ofSeconds(10));
+        assertThat(source.inspect(URL).title()).isEqualTo("Fixture video");
+        assertThat(source.inspect(URL).durationMs()).isEqualTo(5_000);
+        assertThat(Files.readAllLines(calls)).containsExactly("metadata");
+        assertThatThrownBy(() -> source.prepare(URL, VIDEO_ID, 0, 1_000))
+            .isInstanceOfSatisfying(SourceMaterializationException.class,
+                error -> assertThat(error.errorCode()).isEqualTo("YOUTUBE_MEDIA_TOOL_DISABLED"));
+        verifyNoInteractions(storage);
+    }
+
+    @Test void timesOutWithoutLeakingCommandOutput() throws Exception {
+        Path downloader = temp.resolve("slow-yt-dlp");
+        Files.writeString(downloader, "#!/bin/sh\nexec sleep 10\n");
+        makeExecutable(downloader);
+        var source = new AuthoringYoutubeSource(jdbc, storage, new ObjectMapper(), true,
+            downloader.toString(), Duration.ofMillis(20));
+        assertThatThrownBy(() -> source.inspect(URL))
+            .isInstanceOfSatisfying(SourceMaterializationException.class,
+                error -> assertThat(error.errorCode()).isEqualTo("YOUTUBE_MEDIA_TIMEOUT"));
+    }
+
     private AuthoringYoutubeSource source(String command) {
         return new AuthoringYoutubeSource(jdbc, storage, new ObjectMapper(), true, command, Duration.ofSeconds(10));
     }

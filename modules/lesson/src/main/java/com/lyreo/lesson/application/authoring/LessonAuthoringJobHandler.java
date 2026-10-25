@@ -117,10 +117,22 @@ public final class LessonAuthoringJobHandler implements JobHandler {
                 }
                 continue;
             }
-            var result=invoke(job,AiCapability.GENERAL_LLM,semantic.prompt(lesson.sentences,chunk),semantic.input(lesson.sentences,chunk),
-                Map.of("response_schema","lesson_authoring_v1","json_schema",AuthoringSemantic.schema(),"temperature",0.2,"max_output_tokens",3500,
-                    "thinking_level","minimal","provider_options",Map.of("reasoning_effort","low")));
-            context.throwIfCancellationRequested();semantic.apply(result.output(),chunk);
+            String prompt=semantic.prompt(lesson.sentences,chunk);
+            var input=semantic.input(lesson.sentences,chunk);
+            var options=Map.<String,Object>of("response_schema","lesson_authoring_v1","json_schema",AuthoringSemantic.schema(),
+                "temperature",0.2,"max_output_tokens",3500,"thinking_level","minimal","provider_options",Map.of("reasoning_effort","low"));
+            for(int attempt=0;attempt<2;attempt++) {
+                context.throwIfCancellationRequested();context.heartbeat();
+                var result=invoke(job,AiCapability.GENERAL_LLM,prompt,input,options);
+                context.throwIfCancellationRequested();
+                try {semantic.apply(result.output(),chunk);break;}
+                catch(RequestValidationException invalid) {
+                    if(attempt==1) throw invalid;
+                    // Core validation messages contain no provider output or source text.
+                    prompt+="\nCore validation rejected the previous response: "+invalid.getMessage()
+                        +". Regenerate every requested item with the same schema; omit uncertain annotations.";
+                }
+            }
             committer.stage(job,index,chunk);
         }
     }

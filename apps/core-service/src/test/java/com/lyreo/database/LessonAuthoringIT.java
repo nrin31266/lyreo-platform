@@ -63,6 +63,7 @@ class LessonAuthoringIT {
     @Autowired AiInvocationService ai;
     @Autowired BackgroundJobService jobs;
     @Autowired BackgroundJobRepository jobRepository;
+    @Autowired JobStateTransitionService transitions;
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactions;
 
@@ -225,6 +226,146 @@ class LessonAuthoringIT {
         List<Map<String,Object>> windows=(List<Map<String,Object>>)capture.getValue().get("segments");
         assertThat(windows.getFirst()).containsEntry("start_ms",0L).containsEntry("end_ms",1200L);
     }
+    @Test void simulated429WaitsDurablyUntilDueThenResumesPreparationExactlyOnce() {
+        var accepted=service.create("Simulated quota resume","https://www.youtube.com/watch?v=abcdefghijk",0,5000,true);
+        var before=service.get(accepted.lessonId());
+        // Other methods leave queued fixtures; this worker scenario owns only the new job.
+        jdbc.update("UPDATE background_job SET status='CANCELLED',cancel_requested_at=now() WHERE id<>? AND "
+            +"(status='QUEUED' OR (status='RETRY_WAIT' AND next_retry_at<=now()))",accepted.jobId());
+        jdbc.update("UPDATE background_job SET priority=10000 WHERE id=?",accepted.jobId());
+        var attempts=new java.util.concurrent.atomic.AtomicInteger();
+        var transcript=result(Map.of("text","We learn. Practice helps.","timestamps",List.of(
+            Map.of("text","We","start_ms",0,"end_ms",200),Map.of("text","learn","start_ms",200,"end_ms",500),
+            Map.of("text","Practice","start_ms",600,"end_ms",900),Map.of("text","helps","start_ms",900,"end_ms",1200))));
+        doAnswer(call->{
+            if(attempts.incrementAndGet()==1) throw new com.lyreo.ai.application.execution.AiExecutionException(
+                "Simulated HTTP 429; no live provider billing",false,"PROVIDER_RATE_LIMITED").retryAfter(60);
+            return transcript;
+        }).when(ai).execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap());
+        try(var worker=new com.lyreo.platform.jobs.infrastructure.BackgroundJobWorker(jobRepository,List.of(handler),
+            transitions,"quota-worker",Duration.ofMinutes(1),1)) {
+            assertThat(worker.runOnce()).isEqualTo(1);
+            var waiting=jobs.findById(accepted.jobId()).orElseThrow();
+            assertThat(waiting.status().name()).isEqualTo("RETRY_WAIT");
+            assertThat(waiting.nextRetryAt()).isAfter(java.time.Instant.now());
+            assertThat(jdbc.queryForObject("SELECT error_code FROM background_job WHERE id=?",String.class,accepted.jobId()))
+                .isEqualTo("PROVIDER_QUOTA_WAIT");
+            assertThat(waiting.attemptCount()).isEqualTo(1);
+            var unchanged=service.get(accepted.lessonId());
+            assertThat(unchanged.revision).isEqualTo(before.revision);
+            assertThat(unchanged.transcriptRevision).isEqualTo(before.transcriptRevision);
+            assertThat(unchanged.sentences).isEmpty();
+            assertThat(unchanged.audioObjectKey).isNull();
+            assertThat(repository.jobInput(accepted.jobId()).completed()).isFalse();
+            assertThat(worker.runOnce()).isZero();
+            assertThat(attempts.get()).isEqualTo(1);
+            jdbc.update("UPDATE background_job SET next_retry_at=now()-interval '1 second' WHERE id=?",accepted.jobId());
+            assertThat(worker.runOnce()).isEqualTo(1);
+            var finished=jobs.findById(accepted.jobId()).orElseThrow();
+            assertThat(finished.status().name()).isEqualTo("SUCCEEDED");
+            assertThat(finished.attemptCount()).isEqualTo(2);
+            var prepared=service.get(accepted.lessonId());
+            assertThat(prepared.sentences).hasSize(2);
+            assertThat(prepared.timingStatus).isEqualTo("DRAFT_VALID");
+            assertThat(prepared.revision).isEqualTo(before.revision+1);
+            assertThat(prepared.transcriptRevision).isEqualTo(before.transcriptRevision+1);
+            assertThat(repository.jobInput(accepted.jobId()).completed()).isTrue();
+            assertThat(worker.runOnce()).isZero();
+            assertThat(service.get(accepted.lessonId()).revision).isEqualTo(prepared.revision);
+            verify(ai,times(2)).execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap());
+        }
+    }
+
+    @Test void invalidSemanticCorrectionDoesNotOverwritePreviouslyValidatedDraft() throws Exception {
+        var draft=prepared();draft=service.approve(draft.id,draft.revision);draft=service.karaoke(draft.id,draft.revision);
+        run(service.generate(draft.id,draft.revision));draft=service.get(draft.id);
+        String previous=draft.sentences.getFirst().translation;
+        var accepted=service.generate(draft.id,draft.revision);claim(accepted.jobId());
+        var before=service.get(draft.id);
+        clearInvocations(ai);
+        doReturn(result(Map.of("content","{broken"))).when(ai).execute(eq(AiCapability.GENERAL_LLM),anyString(),anyMap(),anyMap());
+        assertThatThrownBy(()->handler.execute(jobs.findById(accepted.jobId()).orElseThrow(),mock(JobExecutionContext.class)))
+            .isInstanceOfSatisfying(PermanentJobException.class,failure->assertThat(failure.errorCode()).isEqualTo("AUTHORING_VALIDATION_FAILED"));
+        verify(ai,times(2)).execute(eq(AiCapability.GENERAL_LLM),anyString(),anyMap(),anyMap());
+        var after=service.get(draft.id);
+        assertThat(after.revision).isEqualTo(before.revision);
+        assertThat(after.semanticRevision).isEqualTo(before.semanticRevision);
+        assertThat(after.sentences.getFirst().translation).isEqualTo(previous);
+        assertThat(repository.chunk(accepted.jobId(),0)).isEmpty();
+        assertThat(repository.jobInput(accepted.jobId()).completed()).isFalse();
+    }
+    @Test void cancellationWhileProviderRunsDiscardsOutputAndKeepsDraftCheckpoint() throws Exception {
+        var accepted=service.create("Cancel provider","https://www.youtube.com/watch?v=abcdefghijk",0,5000,true);
+        claim(accepted.jobId());
+        var before=service.get(accepted.lessonId());
+        var entered=new java.util.concurrent.CountDownLatch(1);
+        var release=new java.util.concurrent.CountDownLatch(1);
+        when(ai.execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap())).thenAnswer(call->{
+            entered.countDown();
+            assertThat(release.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            return result(Map.of("text","Late provider output."));
+        });
+        var context=mock(JobExecutionContext.class,CALLS_REAL_METHODS);
+        when(context.isCancellationRequested()).thenAnswer(call->jobRepository.isCancellationRequested(accepted.jobId()));
+        try(var executor=java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            var execution=executor.submit(()->{
+                try {handler.execute(jobs.findById(accepted.jobId()).orElseThrow(),context);return null;}
+                catch(Exception failure) {return failure;}
+            });
+            try {
+                assertThat(entered.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+                assertThat(jobs.cancel(accepted.jobId())).isEqualTo(CancellationResult.ACCEPTED);
+            } finally {release.countDown();}
+            assertThat(execution.get(5,java.util.concurrent.TimeUnit.SECONDS)).isInstanceOf(JobCancelledException.class);
+        }
+        var after=service.get(before.id);
+        assertThat(after.revision).isEqualTo(before.revision);
+        assertThat(after.sentences).isEmpty();
+        assertThat(after.audioObjectKey).isNull();
+        assertThat(repository.jobInput(accepted.jobId()).completed()).isFalse();
+    }
+    @Test void cancellationAfterProviderBeforeCommitIsFencedEvenWithoutWorkerCancellationCheck() throws Exception {
+        var accepted=service.create("Cancel commit","https://www.youtube.com/watch?v=abcdefghijk",0,5000,true);
+        claim(accepted.jobId());
+        var before=service.get(accepted.lessonId());
+        var context=mock(JobExecutionContext.class);
+        doAnswer(call->{jobs.cancel(accepted.jobId());return null;}).when(context).heartbeat();
+        assertThatThrownBy(()->handler.execute(jobs.findById(accepted.jobId()).orElseThrow(),context))
+            .isInstanceOf(JobLeaseLostException.class);
+        var after=service.get(before.id);
+        assertThat(after.revision).isEqualTo(before.revision);
+        assertThat(after.sentences).isEmpty();
+        assertThat(after.audioObjectKey).isNull();
+        assertThat(repository.jobInput(accepted.jobId()).completed()).isFalse();
+        assertThatThrownBy(()->committer.stage(jobs.findById(accepted.jobId()).orElseThrow(),0,after.sentences))
+            .isInstanceOf(JobLeaseLostException.class);
+        assertThat(repository.chunk(accepted.jobId(),0)).isEmpty();
+    }
+    @Test void lexicalEditEvidenceSurvivesReloadAndLetsLongSentenceSplitForAlignment() throws Exception {
+        when(source.inspect(anyString())).thenReturn(new AuthoringSourcePort.SourceInfo("abcdefghijk","Long",120_000,true));
+        when(ai.execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap())).thenReturn(result(Map.of(
+            "text","We learn every day and practice together.","words",List.of(
+                Map.of("text","We","start_ms",0,"end_ms",10_000),Map.of("text","learn","start_ms",10_000,"end_ms",20_000),
+                Map.of("text","every","start_ms",20_000,"end_ms",30_000),Map.of("text","day","start_ms",30_000,"end_ms",60_000),
+                Map.of("text","and","start_ms",60_000,"end_ms",70_000),Map.of("text","practice","start_ms",70_000,"end_ms",90_000),
+                Map.of("text","together","start_ms",90_000,"end_ms",120_000)))));
+        var accepted=service.create("Long edit","https://www.youtube.com/watch?v=abcdefghijk",0,120_000,true);
+        run(accepted);var draft=service.get(accepted.lessonId());
+        UUID first=draft.sentences.getFirst().id;
+        service.transcript(draft.id,draft.revision,List.of(new LessonAuthoringService.SentenceInput(first,
+            "We teach every day and practice together.","LEARN")));
+        draft=service.get(draft.id);
+        assertThat(draft.sentences.getFirst().words).isEmpty();
+        service.transcript(draft.id,draft.revision,List.of(new LessonAuthoringService.SentenceInput(first,"We teach every day.","LEARN"),
+            new LessonAuthoringService.SentenceInput(null,"And practice together.","LEARN")));
+        draft=service.get(draft.id);
+        assertThat(LessonAuthoringService.alignmentSegments(draft)).containsExactly(
+            Map.of("text","We teach every day.","start_ms",0L,"end_ms",60_000L),
+            Map.of("text","And practice together.","start_ms",60_000L,"end_ms",120_000L));
+        draft=service.approve(draft.id,draft.revision);
+        service.align(draft.id,draft.revision);
+    }
+
     private AuthoringLesson prepared() throws Exception {
         var accepted=service.create("Authoring","https://www.youtube.com/watch?v=abcdefghijk",0,5000,true);
         run(accepted);return service.get(accepted.lessonId());

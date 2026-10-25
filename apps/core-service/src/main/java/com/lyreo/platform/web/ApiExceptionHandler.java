@@ -3,6 +3,7 @@ package com.lyreo.platform.web;
 import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.errors.StateConflictException;
+import com.lyreo.contracts.errors.ServiceUnavailableException;
 import com.lyreo.platform.observability.CorrelationIdAccessor;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
@@ -320,6 +321,16 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(status)
             .contentType(ApiProblemWriter.APPLICATION_PROBLEM_JSON)
             .body(problem);
+    }
+
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleServiceUnavailable(ServiceUnavailableException ex, HttpServletRequest request) {
+        ProblemDetail problem = ApiProblemFactory.create(
+            HttpStatus.SERVICE_UNAVAILABLE, "service-unavailable", "Service unavailable",
+            ex.getMessage(), ex.errorCode(), request, null
+        );
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+            .contentType(ApiProblemWriter.APPLICATION_PROBLEM_JSON).body(problem);
     }
 
     @ExceptionHandler(Exception.class)

@@ -61,10 +61,29 @@ file_status apps/admin-web/.env
 echo 'OPTIONAL AI'
 file_status apps/ai-service/.env
 
-echo 'OPTIONAL LESSON PREP / MEDIA'
-optional ffmpeg ffmpeg
-optional ffprobe ffprobe
-file_status tools/lesson-prep/.env
+echo 'CORE YOUTUBE MEDIA'
+media_enabled=false
+media_command=yt-dlp
+if [[ -f apps/core-service/.env ]]; then
+  media_enabled=$(sed -n 's/^YOUTUBE_MEDIA_TOOL_ENABLED=//p' apps/core-service/.env | tail -n1)
+  configured_command=$(sed -n 's/^YOUTUBE_MEDIA_TOOL_COMMAND=//p' apps/core-service/.env | tail -n1)
+  for media_setting in media_enabled configured_command; do
+    media_value=${!media_setting}
+    if [[ "$media_value" == \"*\" || "$media_value" == \'*\' ]]; then
+      printf -v "$media_setting" '%s' "${media_value:1:${#media_value}-2}"
+    fi
+  done
+  media_command=${configured_command:-yt-dlp}
+fi
+if [[ "$media_enabled" == true ]]; then
+  required "$media_command" yt-dlp
+  required ffmpeg ffmpeg
+  required ffprobe ffprobe
+else
+  optional "$media_command" yt-dlp
+  optional ffmpeg ffmpeg
+  optional ffprobe ffprobe
+fi
 
 echo 'OPTIONAL DATA IMPORT'
 file_status tools/data-import/.env

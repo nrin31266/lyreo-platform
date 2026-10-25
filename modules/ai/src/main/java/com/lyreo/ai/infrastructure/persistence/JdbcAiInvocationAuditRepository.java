@@ -2,6 +2,7 @@ package com.lyreo.ai.infrastructure.persistence;
 
 import com.lyreo.ai.application.port.AiInvocationAuditRepository;
 import com.lyreo.ai.domain.AiCapability;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -18,7 +19,7 @@ public final class JdbcAiInvocationAuditRepository implements AiInvocationAuditR
             INSERT INTO ai_invocation(id, capability, provider_code, model, status, started_at, request_hash)
             VALUES (:id, :capability, :provider, :model, 'RUNNING', :startedAt, :requestHash)
             """, new MapSqlParameterSource().addValue("id", id).addValue("capability", capability.name())
-            .addValue("provider", provider).addValue("model", model).addValue("startedAt", at).addValue("requestHash", requestHash));
+            .addValue("provider", provider).addValue("model", model).addValue("startedAt", Timestamp.from(at)).addValue("requestHash", requestHash));
     }
 
     @Override
@@ -26,7 +27,7 @@ public final class JdbcAiInvocationAuditRepository implements AiInvocationAuditR
         jdbc.update("""
             UPDATE ai_invocation SET status='SUCCEEDED', finished_at=:at, latency_ms=:latency,
               input_tokens=:inputTokens, output_tokens=:outputTokens WHERE id=:id
-            """, new MapSqlParameterSource().addValue("id", id).addValue("at", at).addValue("latency", latencyMs)
+            """, new MapSqlParameterSource().addValue("id", id).addValue("at", Timestamp.from(at)).addValue("latency", latencyMs)
             .addValue("inputTokens", inputTokens).addValue("outputTokens", outputTokens));
     }
 
@@ -34,6 +35,6 @@ public final class JdbcAiInvocationAuditRepository implements AiInvocationAuditR
     public void failed(UUID id, Instant at, long latencyMs, String errorCode) {
         jdbc.update("""
             UPDATE ai_invocation SET status='FAILED', finished_at=:at, latency_ms=:latency, error_code=:error WHERE id=:id
-            """, Map.of("id", id, "at", at, "latency", latencyMs, "error", errorCode));
+            """, Map.of("id", id, "at", Timestamp.from(at), "latency", latencyMs, "error", errorCode));
     }
 }

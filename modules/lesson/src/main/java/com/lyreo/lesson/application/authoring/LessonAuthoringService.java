@@ -34,7 +34,7 @@ public class LessonAuthoringService {
     }
     @Transactional public Accepted create(String title,String reference,long start,long end,boolean rights) {
         require(title!=null && !title.isBlank() && title.length()<=500,"Title is required (maximum 500 characters)");
-        require(rights,"Confirm media rights before preparing a source");
+        require(rights,"Confirm operator responsibility for source use before preparing a source");
         var info=source.inspect(reference);
         require(info.embedAllowed(),"This source cannot be embedded");
         require(start>=0 && end>start && end<=info.durationMs(),"Select a range within the source duration");
@@ -113,15 +113,61 @@ public class LessonAuthoringService {
             int oldEnd=end<next.size() ? positions.get(next.get(end).id) : old.size();
             if(oldEnd>oldBegin) {
                 var evidence=old.subList(oldBegin,oldEnd);
-                if(evidence.stream().allMatch(s->s.coarseStartMs!=null && s.coarseEndMs!=null)) {
-                    long start=evidence.stream().mapToLong(s->s.coarseStartMs).min().orElseThrow();
-                    long finish=evidence.stream().mapToLong(s->s.coarseEndMs).max().orElseThrow();
-                    // Split descendants share observed bounds; alignment resolves words inside them.
-                    for(int i=begin;i<end;i++) {next.get(i).coarseStartMs=start;next.get(i).coarseEndMs=finish;}
+                var words=evidence.stream().flatMap(sentence->sentence.words.isEmpty() ? sentence.sourceWords.stream()
+                    : sentence.words.stream().map(word->new AuthoringText.ObservedWord(word.text(),word.startMs(),word.endMs())))
+                    .distinct().toList();
+                next.get(begin).sourceWords=words;
+                if(evidence.stream().allMatch(sentence->sentence.coarseStartMs!=null && sentence.coarseEndMs!=null)) {
+                    long start=evidence.stream().mapToLong(sentence->sentence.coarseStartMs).min().orElseThrow();
+                    long finish=evidence.stream().mapToLong(sentence->sentence.coarseEndMs).max().orElseThrow();
+                    var descendants=next.subList(begin,end);
+                    if(descendants.size()==1 || finish-start<=115_000) {
+                        // A shared short observed window can safely align edits at the split boundary.
+                        for(var sentence:descendants) {sentence.coarseStartMs=start;sentence.coarseEndMs=finish;}
+                    } else if(!splitObservedBounds(descendants,words,start,finish)) {
+                        for(var sentence:descendants) {sentence.coarseStartMs=null;sentence.coarseEndMs=null;}
+                    }
                 }
             }
             begin=end;
         }
+    }
+    private static boolean splitObservedBounds(List<AuthoringSentence> descendants,List<AuthoringText.ObservedWord> words,
+        long start,long finish) {
+        var observedBoundaries=new HashMap<String,Integer>();
+        String previousToken=null;
+        long previousEnd=start;
+        for(int i=0;i<words.size();i++) {
+            var word=words.get(i);
+            var tokens=AuthoringText.tokens(word.text());
+            if(tokens.isEmpty() || word.startMs()<previousEnd || word.endMs()<=word.startMs() || word.endMs()>finish) return false;
+            for(int token=0;token<tokens.size();token++) {
+                String currentToken=AuthoringText.lexical(tokens.get(token).text());
+                if(previousToken!=null) observedBoundaries.merge(previousToken+" "+currentToken,token==0 ? i : -1,(a,b)->-1);
+                previousToken=currentToken;
+            }
+            previousEnd=word.endMs();
+        }
+        var boundaries=new ArrayList<Integer>();
+        int previous=0;
+        for(int i=1;i<descendants.size();i++) {
+            var left=AuthoringText.tokens(descendants.get(i-1).text);
+            var right=AuthoringText.tokens(descendants.get(i).text);
+            String boundary=AuthoringText.lexical(left.getLast().text())+" "+AuthoringText.lexical(right.getFirst().text());
+            int match=observedBoundaries.getOrDefault(boundary,-1);
+            if(match<=previous) return false;
+            boundaries.add(match);previous=match;
+        }
+        int from=0;
+        for(int i=0;i<descendants.size();i++) {
+            int to=i<boundaries.size() ? boundaries.get(i) : words.size();
+            var sentence=descendants.get(i);
+            sentence.coarseStartMs=i==0 ? start : words.get(from).startMs();
+            sentence.coarseEndMs=i==descendants.size()-1 ? finish : words.get(to-1).endMs();
+            sentence.sourceWords=List.copyOf(words.subList(from,to));
+            from=to;
+        }
+        return true;
     }
     @Transactional public AuthoringLesson approve(UUID id,long revision) {
         var lesson=editable(id,revision);
@@ -223,7 +269,7 @@ public class LessonAuthoringService {
         var windows=new ArrayList<Map<String,Object>>();
         var text=new StringBuilder();long begin=-1,end=-1,previousStart=-1,previousEnd=-1;
         for(var sentence:lesson.sentences) {
-            require(sentence.coarseStartMs!=null && sentence.coarseEndMs!=null,"No safe ASR boundaries for alignment; re-prepare the draft");
+            require(sentence.coarseStartMs!=null && sentence.coarseEndMs!=null,"No safe ASR word boundary for alignment; create a new draft with a shorter source range or split before lexical edits");
             require(sentence.coarseStartMs>=previousStart && sentence.coarseEndMs>=previousEnd
                 && sentence.coarseStartMs>=0 && sentence.coarseEndMs<=lesson.endMs-lesson.startMs,"Unsafe or reordered ASR boundaries for alignment");
             previousStart=sentence.coarseStartMs;previousEnd=sentence.coarseEndMs;

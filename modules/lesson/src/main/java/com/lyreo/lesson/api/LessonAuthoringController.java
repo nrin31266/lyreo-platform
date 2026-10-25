@@ -1,6 +1,8 @@
 package com.lyreo.lesson.api;
 
 import com.lyreo.lesson.application.authoring.LessonAuthoringService;
+import com.lyreo.lesson.application.build.SourceMaterializationException;
+import com.lyreo.contracts.errors.ServiceUnavailableException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -18,7 +20,11 @@ public class LessonAuthoringController {
     private final LessonAuthoringService service;
     public LessonAuthoringController(LessonAuthoringService service) {this.service=service;}
     @PostMapping("/inspect") public LessonAuthoringService.Inspect inspect(@Valid @RequestBody InspectRequest request) {
-        return service.inspect(request.sourceReference());
+        try { return service.inspect(request.sourceReference()); }
+        catch (SourceMaterializationException failure) {
+            throw new ServiceUnavailableException(failure.errorCode(),
+                "YouTube source is unavailable. Check the source and media tools, then retry.", failure);
+        }
     }
     @PostMapping("/drafts") public ResponseEntity<LessonAuthoringService.Accepted> create(@Valid @RequestBody CreateRequest request) {
         return accepted(service.create(request.title(),request.sourceReference(),request.startMs(),request.endMs(),request.rightsConfirmed()));
