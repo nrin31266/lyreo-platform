@@ -163,6 +163,22 @@ describe('lesson authoring checkpoints', () => {
     );
   });
 
+  it('shows thought groups from transcript tokens when observed timing crosses their boundary', async () => {
+    current.approvedRevision = current.karaokeReviewedRevision = current.semanticRevision = current.transcriptRevision;
+    current.sentences[0] = {
+      ...current.sentences[0],
+      text: '“New York” rocks.',
+      words: [
+        { text: 'New York', startMs: 0, endMs: 500, charStart: 1, charEnd: 9, tokenStart: 0, tokenEnd: 2 },
+        { text: 'rocks', startMs: 500, endMs: 1000, charStart: 11, charEnd: 16, tokenStart: 2, tokenEnd: 3 },
+      ],
+      thoughtGroups: [{ tokenStart: 0, tokenEnd: 1 }, { tokenStart: 1, tokenEnd: 3 }],
+    };
+    await show();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Learning content' }), { button: 0, ctrlKey: false });
+    expect(screen.getByText(/“New \/ York” rocks\./)).toBeVisible();
+  });
+
   it('preserves unsaved transcript text when moving between the editor tabs', async () => {
     await show();
     fireEvent.change(screen.getByLabelText('Text for sentence 1'), {

@@ -23,10 +23,16 @@ Admin owns its Web components and accessibility adapters. Use shared semantic li
 
 ## Workspace UI
 
-The compact console uses neutral/blue `adminThemes` and self-hosted IBM Plex Sans Variable
-(Fontsource, OFL-1.1, Latin/Vietnamese subsets). The 48 px header and 216/48 px navigation
-use the actual official `sidebar-07` block customized for React Router/auth/i18n. Mobile navigation
-uses shadcn Sidebar's labelled Sheet, Escape dismissal, close control and focus restoration.
+The compact console uses white/black/gray surfaces and text with restrained blue accents for
+primary actions, focus and selected navigation in light/dark mode. Be Vietnam Pro
+(Fontsource, OFL-1.1) is self-hosted in Latin/Vietnamese subsets, weights 400/500/600/700.
+The 48 px header and 216 px navigation use the official `sidebar-07` block with its standard
+sidebar variant customized for React Router/auth/i18n. Content sits beside the sidebar with one
+vertical divider, without an inset frame. Language and theme controls have labelled icons;
+sign out is inside the avatar dropdown, matching the block's account-menu pattern.
+Dialog, Select and menu primitives use the same Radix focus-scope version so nested mobile menus
+share focus management; the navigation regression checks Escape and focus restoration.
+Mobile navigation uses shadcn Sidebar's labelled Sheet, Escape dismissal, close control and focus restoration.
 The login screen customizes official `login-03` with the existing OIDC entrypoint.
 
 The full 54-file Radix/new-york component set was installed with `pnpm dlx shadcn@latest add --all`.
@@ -44,7 +50,9 @@ Tables scroll within labelled regions rather than expanding the page. The overvi
 implemented operations and does not invent counts or analytics.
 
 `AppThemeProvider` remains the single theme owner. CSS aliases map its semantic tokens into
-shadcn card/popover/accent/sidebar/chart roles. Sonner also reads this existing provider.
+shadcn card/popover/accent/chart roles; `adminSidebarThemes` owns the neutral navigation
+surfaces and text. Base-layer border color defaults prevent Tailwind 4 width-only borders from
+falling back to the text color. Sonner also reads this existing provider.
 The installed Resizable adapter uses the installed react-resizable-panels v4 API (`Group`,
 `Panel`, `Separator`) rather than the older API returned by the legacy new-york registry.
 Unused components are available in source without a barrel import into the application.

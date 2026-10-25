@@ -90,7 +90,7 @@ export const semanticThemes: Record<ThemeMode, ThemeColors> = {
   },
 };
 
-/** Dense Admin console; learner-facing themes retain their own brand palette. */
+/** Neutral operator palette with blue accents, independent of learner themes. */
 export const adminThemes: Record<ThemeMode, ThemeColors> = {
   light: {
     background: '#FAFAFA',
@@ -99,18 +99,18 @@ export const adminThemes: Record<ThemeMode, ThemeColors> = {
     surfaceElevated: '#FFFFFF',
     primary: '#2563EB',
     primaryForeground: '#FFFFFF',
-    secondary: '#EFF6FF',
-    secondaryForeground: '#1D4ED8',
+    secondary: '#F4F4F5',
+    secondaryForeground: '#27272A',
     muted: '#F4F4F5',
     mutedForeground: '#52525B',
     border: '#E4E4E7',
-    input: '#8A8A93',
+    input: '#71717A',
     focusRing: '#2563EB',
     success: primitiveColors.green700,
     warning: primitiveColors.amber700,
     destructive: primitiveColors.red700,
     destructiveForeground: '#FFFFFF',
-    overlay: 'rgba(24, 24, 27, 0.45)',
+    overlay: 'rgba(0, 0, 0, 0.5)',
   },
   dark: {
     background: '#09090B',
@@ -119,8 +119,8 @@ export const adminThemes: Record<ThemeMode, ThemeColors> = {
     surfaceElevated: '#27272A',
     primary: '#93C5FD',
     primaryForeground: '#172554',
-    secondary: '#1E293B',
-    secondaryForeground: '#BFDBFE',
+    secondary: '#27272A',
+    secondaryForeground: '#FAFAFA',
     muted: '#27272A',
     mutedForeground: '#A1A1AA',
     border: '#3F3F46',
@@ -131,6 +131,31 @@ export const adminThemes: Record<ThemeMode, ThemeColors> = {
     destructive: primitiveColors.red300,
     destructiveForeground: '#09090B',
     overlay: 'rgba(0, 0, 0, 0.7)',
+  },
+};
+
+export const adminSidebarThemes = {
+  light: {
+    sidebar: '#FAFAFA',
+    sidebarForeground: '#18181B',
+    sidebarMutedForeground: '#52525B',
+    sidebarPrimary: '#EFF6FF',
+    sidebarPrimaryForeground: '#1D4ED8',
+    sidebarAccent: '#F4F4F5',
+    sidebarAccentForeground: '#18181B',
+    sidebarBorder: '#E4E4E7',
+    sidebarRing: '#2563EB',
+  },
+  dark: {
+    sidebar: '#18181B',
+    sidebarForeground: '#FAFAFA',
+    sidebarMutedForeground: '#A1A1AA',
+    sidebarPrimary: '#1E293B',
+    sidebarPrimaryForeground: '#BFDBFE',
+    sidebarAccent: '#27272A',
+    sidebarAccentForeground: '#FAFAFA',
+    sidebarBorder: '#3F3F46',
+    sidebarRing: '#93C5FD',
   },
 };
 

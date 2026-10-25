@@ -30,3 +30,12 @@ export function playbackAction(sourceMs: number, startMs: number, endMs: number,
   }
   return {};
 }
+
+export function thoughtGroupPreview(sentence: Pick<AuthoringSentence, 'text' | 'thoughtGroups'>): string {
+  // Match Core AuthoringText tokens; observed timing groups can cross semantic boundaries.
+  const tokens = [...sentence.text.matchAll(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu)];
+  return sentence.thoughtGroups.map(({ tokenStart, tokenEnd }) =>
+    sentence.text.slice(tokenStart === 0 ? 0 : tokens[tokenStart].index,
+      tokenEnd === tokens.length ? sentence.text.length : tokens[tokenEnd].index).trim(),
+  ).join(' / ');
+}

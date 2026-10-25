@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adminThemes } from '@lyreo/design-system';
+import { adminThemes, adminSidebarThemes } from '@lyreo/design-system';
 
 function luminance(hex: string) {
   const rgb = hex
@@ -21,12 +21,24 @@ function contrast(first: string, second: string) {
 }
 
 describe('shared theme readability', () => {
+  for (const [mode, sidebar] of Object.entries(adminSidebarThemes)) {
+    it(`${mode} keeps navigation text and active states readable`, () => {
+      for (const foreground of [sidebar.sidebarForeground, sidebar.sidebarMutedForeground]) {
+        expect(contrast(foreground, sidebar.sidebar)).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(contrast(sidebar.sidebarMutedForeground, sidebar.sidebarAccent)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(sidebar.sidebarAccentForeground, sidebar.sidebarAccent)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(sidebar.sidebarPrimaryForeground, sidebar.sidebarPrimary)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(sidebar.sidebarRing, sidebar.sidebar)).toBeGreaterThanOrEqual(3);
+    });
+  }
   for (const [mode, theme] of Object.entries(adminThemes)) {
     it(`${mode} keeps text readable and unfocused form controls visible`, () => {
       for (const background of [
         theme.background,
         theme.surface,
         theme.surfaceElevated,
+        theme.muted,
       ]) {
         for (const text of [
           theme.foreground,

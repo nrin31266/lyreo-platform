@@ -2,6 +2,7 @@ import {
   radius,
   semanticColorRoles,
   adminThemes,
+  adminSidebarThemes,
   type ThemeMode,
   type ThemePreference,
 } from '@lyreo/design-system';
@@ -63,6 +64,12 @@ export function AppThemeProvider({ children }: PropsWithChildren) {
       root.style.setProperty(
         `--${role.replace(/[A-Z]/g, (value) => `-${value.toLowerCase()}`)}`,
         theme[role],
+      );
+    }
+    for (const [role, value] of Object.entries(adminSidebarThemes[mode])) {
+      root.style.setProperty(
+        `--${role.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`,
+        value,
       );
     }
   }, [mode]);

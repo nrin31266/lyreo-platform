@@ -32,7 +32,11 @@ import {
 } from '@/components/ui/resizable';
 import { ApiError } from '@/lib/api';
 import { cancelJob } from '@/pages/jobs/jobs.api';
-import { mergeSentence, splitSentence } from './authoring-editor';
+import {
+  mergeSentence,
+  splitSentence,
+  thoughtGroupPreview,
+} from './authoring-editor';
 import * as authoring from './lesson-builder.api';
 import type {
   AuthoringJob,
@@ -1205,19 +1209,7 @@ export function LessonBuilderPage() {
                                 {sentence.thoughtGroups.length ? (
                                   <p>
                                     {t('lessonAuthoring.thoughtGroups')}:{' '}
-                                    {sentence.thoughtGroups
-                                      .map((group) =>
-                                        sentence.words
-                                          .filter(
-                                            (word) =>
-                                              word.tokenStart >=
-                                                group.tokenStart &&
-                                              word.tokenEnd <= group.tokenEnd,
-                                          )
-                                          .map((word) => word.text)
-                                          .join(' '),
-                                      )
-                                      .join(' / ')}
+                                    {thoughtGroupPreview(sentence)}
                                   </p>
                                 ) : null}
                                 <div className="flex flex-wrap gap-4">

@@ -36,21 +36,20 @@ share DOM and React Native component implementations.
 
 ## Admin workspace direction
 
-Admin is a dense content console. Its palette uses neutral background `#FAFAFA`, white surface
-`#FFFFFF`, text `#18181B`, muted text `#52525B`, blue primary `#2563EB` and pale blue selection
-`#EFF6FF`. Dark mode uses neutral surfaces with a lighter blue action. Input boundaries meet 3:1;
-primary, muted and functional text meet 4.5:1 on supported surfaces in the Admin regression test.
+Admin uses neutral white/black/gray surfaces and text in `adminThemes`. Blue is reserved for
+primary actions and focus: `#2563EB` in light mode, `#93C5FD` in dark mode.
+`adminSidebarThemes` keeps navigation neutral with a pale blue selected state.
+Functional text meets 4.5:1 and input/focus boundaries meet 3:1 in the Admin contrast regressions.
 Learner themes remain independently defined.
 
-The 48 px header and 216 px sidebar reserve space for work. Desktop navigation can collapse to
-48 px icons with named links/tooltips; mobile uses the official shadcn Sheet. Page gutters are
-16 px, panel insets 12 px, and ordinary controls 32–36 px. Transcript rows use dividers,
-compact tools and content-sized textareas; the player stays beside the transcript/content tabs.
-Controls retain visible focus, safe keyboard behavior and responsive wrapping.
+The official `sidebar-07` standard sidebar composition has a 48px header and 216px navigation,
+icon collapse, labelled tooltips and a mobile Sheet. A single vertical divider separates navigation
+from the content; there is no inset frame. The avatar opens the account/sign-out menu.
+Page gutters are 16px, panel insets 12px and ordinary controls 32–36px. Transcript rows use
+dividers, compact tools and content-sized textareas.
 
-Admin self-hosts IBM Plex Sans Variable through Fontsource (OFL-1.1), loading only Latin and
-Vietnamese normal-weight subsets. Font assets ship with the app instead of requesting Google Fonts
-at runtime. The Admin stylesheet owns this Web typography adapter; Mobile font loading is separate.
-Sidebar composition uses the installed official [shadcn sidebar-07](https://ui.shadcn.com/blocks/sidebar), customized
-for the existing React Router/auth/i18n stack. Avoid promotional hero spacing, fake metrics and
-sample analytics in operational screens.
+Admin self-hosts Be Vietnam Pro through Fontsource (OFL-1.1), Latin and Vietnamese normal-weight
+subsets at 400/500/600/700. The same family applies to navigation, controls and content; Tailwind's
+`font-sans` maps to it too. Base-layer border tokens allow explicit border-color utilities to win
+while avoiding `currentColor` borders in uncoloured shadcn primitives. Mobile font loading remains
+independent. Avoid sample analytics or invented operational counts.

@@ -5,6 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --font-sans: 'Be Vietnam Pro', ui-sans-serif, system-ui, sans-serif;
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -77,24 +78,35 @@
   --popover-foreground: var(--foreground);
   --accent: var(--muted);
   --accent-foreground: var(--foreground);
-  --sidebar: var(--surface);
-  --sidebar-foreground: var(--foreground);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--secondary);
-  --sidebar-accent-foreground: var(--secondary-foreground);
-  --sidebar-border: var(--border);
-  --sidebar-ring: var(--focus-ring);
   --chart-1: var(--primary);
   --chart-2: var(--success);
   --chart-3: var(--warning);
   --chart-4: var(--muted-foreground);
   --chart-5: var(--destructive);
 
-  font-family: 'IBM Plex Sans Variable', 'Segoe UI', sans-serif;
+  font-family: var(--font-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
+}
+
+[data-sidebar='sidebar'] {
+  --foreground: var(--sidebar-foreground);
+  --muted-foreground: var(--sidebar-muted-foreground);
+  --muted: var(--sidebar-accent);
+  --focus-ring: var(--sidebar-ring);
+}
+[data-sidebar='menu-button'][data-active='true'] {
+  background: var(--sidebar-primary);
+  color: var(--sidebar-primary-foreground);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -103,7 +115,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.6;
 }
 button,
 input,
@@ -234,7 +246,7 @@ h3 {
 .console-row strong {
   display: block;
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 600;
 }
 .console-row p {
   margin-top: 2px;
@@ -258,7 +270,7 @@ h3 {
 }
 .authoring-path h3 {
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 600;
   margin-bottom: 3px;
 }
 .authoring-path p {

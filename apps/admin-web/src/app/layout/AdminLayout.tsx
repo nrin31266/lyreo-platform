@@ -28,7 +28,7 @@ export function AdminLayout() {
         {t('shell.skipToContent')}
       </a>
       <AdminSidebar />
-      <SidebarInset className="min-w-0">
+      <SidebarInset className="min-w-0 overflow-clip">
         <AdminHeader />
         <div
           id="main-content"

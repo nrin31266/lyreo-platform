@@ -7,10 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { adminI18nResources } from '@lyreo/i18n';
 import { AdminLayout } from './AdminLayout';
 
+const { logout } = vi.hoisted(() => ({ logout: vi.fn() }));
+
 vi.mock('@/app/auth', () => ({
   useAuth: () => ({
     user: { profile: { preferred_username: 'Editor' } },
-    logout: vi.fn(),
+    logout,
   }),
 }));
 vi.mock('@/app/providers/AppThemeProvider', () => ({
@@ -22,6 +24,7 @@ let resize: () => void;
 beforeEach(async () => {
   desktop = false;
   localStorage.clear();
+  logout.mockClear();
   vi.stubGlobal(
     'matchMedia',
     vi.fn(() => ({
@@ -62,6 +65,24 @@ function show() {
 }
 
 describe('shared Admin navigation', () => {
+  it.each([true, false])('opens logout from the avatar menu (desktop=%s)', async (isDesktop) => {
+    desktop = isDesktop;
+    const user = userEvent.setup();
+    show();
+    if (!isDesktop) await user.click(screen.getByRole('button', { name: 'Open navigation' }));
+    expect(screen.queryByRole('menuitem', { name: 'Sign out' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
+    const account = screen.getByRole('button', { name: 'Editor' });
+    await user.click(account);
+    expect(account).toHaveAttribute('aria-expanded', 'true');
+    await user.keyboard('{Escape}');
+    expect(account).toHaveFocus();
+    if (!isDesktop) expect(screen.getByRole('dialog')).toBeVisible();
+    await user.click(account);
+    await user.click(screen.getByRole('menuitem', { name: 'Sign out' }));
+    expect(logout).toHaveBeenCalledOnce();
+  });
+
   it('opens a labelled modal, closes with Escape and restores keyboard focus', async () => {
     const user = userEvent.setup();
     show();

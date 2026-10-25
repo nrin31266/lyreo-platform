@@ -4,7 +4,7 @@ import {
   supportedLocales,
   type SupportedLocale,
 } from '@lyreo/i18n';
-import { Sun, Moon, Monitor } from 'lucide-react';
+import { Sun, Moon, Monitor, Languages } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
@@ -57,8 +57,9 @@ export function AdminHeader() {
         >
           <SelectTrigger
             aria-label={t('admin:appearance.language')}
-            className="h-8 w-[4.5rem] max-w-full border-transparent bg-transparent"
+            className="h-8 w-[6rem] max-w-full border-transparent bg-transparent"
           >
+            <Languages aria-hidden="true" />
             <SelectValue>{locale.toUpperCase()}</SelectValue>
           </SelectTrigger>
           <SelectContent>
