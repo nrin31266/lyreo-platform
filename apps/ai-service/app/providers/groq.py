@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import math
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -70,15 +71,19 @@ class GroqProvider:
             words.append({
                 'index': i,
                 'word': item.get('word', ''),
-                'start_ms': round(float(item.get('start', 0)) * 1000),
-                'end_ms': round(float(item.get('end', 0)) * 1000),
+                'start_ms': _timestamp_ms(item.get('start')),
+                'end_ms': _timestamp_ms(item.get('end')),
             })
         return ExecuteResponse(
             output={
                 'text': data.get('text', ''),
                 'timestamps': words,
-                'segments': data.get('segments') or [],
+                'segments': [{'text': item.get('text', ''),
+                              'start_ms': _timestamp_ms(item.get('start')),
+                              'end_ms': _timestamp_ms(item.get('end'))}
+                             for item in data.get('segments') or []],
             },
+            usage={'audio_seconds': data['duration']} if isinstance(data.get('duration'), (int, float)) else {},
             metadata={'provider': 'GROQ', 'model': model},
         )
 
@@ -133,7 +138,13 @@ async def _multipart_transcription(
             'language': language,
             'response_format': 'verbose_json' if want_timestamps else 'json',
             'temperature': '0',
-            **({'timestamp_granularities[]': 'word'} if want_timestamps else {}),
+            **({'timestamp_granularities[]': ['word', 'segment']} if want_timestamps else {}),
         },
         files={'file': (filename, raw, 'application/octet-stream')},
     )
+
+
+def _timestamp_ms(value) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise ValueError('Groq returned a missing or non-finite timestamp')
+    return round(value * 1000)

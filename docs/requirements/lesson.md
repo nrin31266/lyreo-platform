@@ -4,8 +4,9 @@ Cross-boundary workflow: [Lesson Build](../features/lesson-build.md).
 
 ### FR-LSN-001 — Lesson source
 
-Admin có thể tạo Lesson từ Text, Audio hoặc YouTube; source material được chuẩn
-hóa thành content/media phù hợp. Release timing của YouTube còn mở tại [OQ-001](open-questions.md#oq-001--youtube-in-the-first-lesson-release).
+Product supports Text, Audio and YouTube conceptually. The current phase implements YouTube-first
+Admin authoring; Text/Audio UI and mobile playback/practice are deferred. Source identity is shared
+across lessons; each V1 lesson selects one contiguous range before inference. Overlap warns, not blocks.
 
 ### FR-LSN-002 — Independent build dimensions
 
@@ -113,3 +114,32 @@ attempt, actual ASR/alignment audit và server scores; context notes tuân displ
 
 Given assessment bị cancel hoặc user không được quyền, when output trở về/access được yêu cầu, then
 stale output không commit và private recording không lộ.
+
+
+## Admin authoring checkpoints
+
+### FR-LSN-007 — Transcript and karaoke review
+
+Admin edits/splits/merges transcript, bulk-selects Learn/Watch only/Skip, and explicitly approves
+transcript plus karaoke preview before semantic generation. Only stale dependencies recompute.
+Timing requires real lexical coverage and observed intervals, not fabricated duration.
+
+### FR-LSN-008 — Contextual generation and candidate review
+
+Learn receives Vietnamese translation and sparse contextual vocabulary/grammar/notes. Watch-only
+is context; Skip is excluded. Dictation/Shadowing priorities are independent and cannot override
+Core technical eligibility. Admin defaults to HIGH and may select HIGH+MEDIUM or Custom. Exact
+Lexicon links may remain unresolved; Grammar notes do not require Grammar Bank mapping.
+
+### BR-LSN-006 — Atomic immutable publication
+
+Only current, approved, valid content can publish. Publication and selected candidate membership
+commit atomically and are immutable in V1. Old APIs/writers must not destroy existing learner
+attempts/progress. Draft revision prevents concurrent overwrites; stale AI/job output cannot commit.
+
+### BR-LSN-007 — Free-only and retirement gates
+
+Only confirmed free external paths or local inference may execute. Quota exhaustion waits durably
+or uses a tested configured free alternative, never paid fallback. Source rights/acquisition must
+be verified before production. Retire the old authoring tool only after regression coverage and
+replacement verification; preserve user artifacts and business data.

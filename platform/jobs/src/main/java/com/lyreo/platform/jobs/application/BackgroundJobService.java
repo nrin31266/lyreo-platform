@@ -5,7 +5,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /** Public command facade for enqueue/cancel operations. */
-public final class BackgroundJobService {
+public class BackgroundJobService {
     private final BackgroundJobRepository repository;
     private final JobStateTransitionService transitions;
 
@@ -33,6 +33,15 @@ public final class BackgroundJobService {
     /** Reads a job by ID. Returns empty if the job does not exist. */
     public Optional<BackgroundJob> findById(UUID jobId) {
         return repository.findById(jobId);
+    }
+
+    /** Hold the generic job fence until the caller's business transaction commits. */
+    @org.springframework.transaction.annotation.Transactional(
+        propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public void fenceForCommit(UUID jobId, String workerId) {
+        if (!repository.lockForCommit(jobId, workerId)) {
+            throw new JobLeaseLostException("Job ownership changed before business commit");
+        }
     }
 
     /**

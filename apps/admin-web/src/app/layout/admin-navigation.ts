@@ -6,7 +6,7 @@ export type AdminNavItem = {
 
 export const adminNavItems: readonly AdminNavItem[] = [
   { path: '/', labelKey: 'admin:nav.overview', end: true },
-  { path: '/lessons/new', labelKey: 'admin:nav.lessonBuilder' },
+  { path: '/lessons', labelKey: 'admin:nav.lessonBuilder' },
   { path: '/jobs', labelKey: 'admin:nav.jobs' },
   { path: '/settings/ai', labelKey: 'admin:nav.aiProviders' },
   { path: '/curriculum', labelKey: 'admin:nav.curriculum' },

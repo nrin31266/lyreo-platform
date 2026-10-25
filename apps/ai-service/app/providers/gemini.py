@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import math
 import mimetypes
 import wave
 from typing import Any
@@ -72,15 +73,16 @@ class GeminiProvider:
                 'voice': voice,
                 'accent': accent,
                 'interaction_id': data.get('id'),
+                'status': data.get('status'),
+                'finish_reason': 'stop' if data.get('status') == 'completed' else data.get('status'),
             },
         )
 
     async def complete(self, request: ExecuteRequest, credential: str) -> ExecuteResponse:
         """Execute a generic LLM capability through Gemini Interactions.
 
-        The exact product prompt and symbolic response-schema name stay in Java. If Java later
-        supplies a concrete JSON schema, this adapter can pass it through without changing the
-        business module.
+        Core owns product prompts and the concrete JSON schema. This adapter maps execution
+        hints and preserves completion status so Core can reject incomplete generations.
         """
         if not credential:
             raise ValueError('GEMINI credential is required')
@@ -100,10 +102,11 @@ class GeminiProvider:
 
         body = {
             'model': request.model,
+            'store': False,
             'input': prompt,
             'response_format': response_format,
             'generation_config': {
-                'temperature': request.options.get('temperature', 0.2),
+                **_generation_config(request.options),
             },
         }
         data = await self._interaction(body, credential, timeout=180)
@@ -119,6 +122,8 @@ class GeminiProvider:
                 'provider': 'GEMINI',
                 'model': request.model,
                 'interaction_id': data.get('id'),
+                'status': data.get('status'),
+                'finish_reason': 'stop' if data.get('status') == 'completed' else data.get('status'),
             },
         )
 
@@ -147,7 +152,7 @@ class GeminiProvider:
             ],
             'response_format': response_format,
             'generation_config': {
-                'temperature': request.options.get('temperature', 0.2),
+                **_generation_config(request.options),
             },
         }
         data = await self._interaction(body, credential, timeout=240)
@@ -163,6 +168,8 @@ class GeminiProvider:
                 'provider': 'GEMINI',
                 'model': request.model,
                 'interaction_id': data.get('id'),
+                'status': data.get('status'),
+                'finish_reason': 'stop' if data.get('status') == 'completed' else data.get('status'),
             },
         )
 
@@ -270,14 +277,26 @@ def _interaction_usage(data: dict[str, Any]) -> dict[str, int]:
     if not isinstance(usage, dict):
         return {}
 
-    def number(*keys: str) -> int:
+    def number(*keys: str) -> int | None:
         for key in keys:
             value = usage.get(key)
-            if isinstance(value, (int, float)):
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0:
                 return int(value)
-        return 0
+        return None
 
-    return {
-        'input_tokens': number('input_tokens', 'prompt_token_count', 'promptTokenCount'),
-        'output_tokens': number('output_tokens', 'output_token_count', 'candidatesTokenCount'),
+    values = {
+        'input_tokens': number('total_input_tokens', 'input_tokens', 'prompt_token_count', 'promptTokenCount'),
+        'output_tokens': number('total_output_tokens', 'output_tokens', 'output_token_count', 'candidatesTokenCount'),
     }
+    return {key: value for key, value in values.items() if value is not None}
+
+
+def _generation_config(options: dict[str, Any]) -> dict[str, Any]:
+    config = {'temperature': options.get('temperature', 0.2)}
+    for key in ('thinking_level', 'max_output_tokens'):
+        if key in options:
+            config[key] = options[key]
+    budget = config.get('max_output_tokens')
+    if budget is not None and (not isinstance(budget, int) or isinstance(budget, bool) or budget <= 0):
+        raise ValueError('max_output_tokens must be a positive integer')
+    return config

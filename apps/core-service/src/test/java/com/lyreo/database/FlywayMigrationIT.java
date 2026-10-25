@@ -52,7 +52,7 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Proves the database and testing foundation on fresh PostgreSQL:
  * 1. Testcontainers provisions real PostgreSQL 18 (alpine).
- * 2. Spring Boot Flyway applies the consolidated baseline and production cutover (V001..V006).
+ * 2. Spring Boot Flyway applies the consolidated baseline and production cutover (V001..V009).
  * 3. Asserts migration status, essential schema objects, indexes, constraints, and reference data.
  */
 @SpringBootTest(classes = FlywayMigrationIT.TestConfig.class)
@@ -88,8 +88,8 @@ class FlywayMigrationIT {
         MigrationInfo[] applied = flyway.info().applied();
 
         assertThat(applied)
-            .as("Six migrations must be applied")
-            .hasSize(6);
+            .as("Nine migrations must be applied")
+            .hasSize(9);
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
@@ -109,9 +109,15 @@ class FlywayMigrationIT {
         assertThat(applied[4].getState()).isEqualTo(MigrationState.SUCCESS);
         assertThat(applied[5].getVersion().getVersion()).isEqualTo("006");
         assertThat(applied[5].getState()).isEqualTo(MigrationState.SUCCESS);
+        assertThat(applied[6].getVersion().getVersion()).isEqualTo("007");
+        assertThat(applied[6].getState()).isEqualTo(MigrationState.SUCCESS);
+        assertThat(applied[7].getVersion().getVersion()).isEqualTo("008");
+        assertThat(applied[7].getState()).isEqualTo(MigrationState.SUCCESS);
+        assertThat(applied[8].getVersion().getVersion()).isEqualTo("009");
+        assertThat(applied[8].getState()).isEqualTo(MigrationState.SUCCESS);
         assertThat(flyway.info().current().getVersion().getVersion())
-            .as("Current Flyway version must be 006")
-            .isEqualTo("006");
+            .as("Current Flyway version must be 009")
+            .isEqualTo("009");
     }
 
     @Test

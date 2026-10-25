@@ -21,7 +21,9 @@ export function AppRouter() {
         }
       >
         <Route index element={<OverviewPage />} />
+        <Route path="lessons" element={<Navigate to="/lessons/new" replace />} />
         <Route path="lessons/new" element={<LessonBuilderPage />} />
+        <Route path="lessons/:lessonId" element={<LessonBuilderPage />} />
         <Route path="jobs" element={<JobsPage />} />
         <Route path="settings/ai" element={<AiSettingsPage />} />
         <Route path="curriculum" element={<CurriculumPage />} />

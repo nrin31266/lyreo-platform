@@ -124,7 +124,7 @@ Rationale: [`http-api-contract.md`](architecture/http-api-contract.md).
 
 ## D-022 — Standalone Lesson Prep Tool and Portable Package Format (2026-09-13)
 
-Status: Accepted.
+Status: Superseded by D-024. The description below records the former operator workflow.
 Decision: Lesson source acquisition, speech synthesis, transcription, and alignment are executed
 locally inside a dedicated operator workstation (`tools/lesson-prep`) that exports one self-contained,
 portable `*.lesson-source.zip` package (`lesson-source.json` manifest + media bytes). The tool does
@@ -145,3 +145,29 @@ Decision: Route tasks through `docs/README.md`; keep one owner per normative fac
 Consequences: Document merges and valid implementation refactors are possible without updating a fixed leaf-doc taxonomy. Link/ID checks remain structural; behavior and module boundaries are verified by tests and targeted validators.
 
 Confirmation: `make validate-docs`, `make validate-repo`, `make test-tooling`, and relevant application checks.
+
+
+## D-024 — Integrated YouTube Lesson authoring and free-only research (2026-10-25)
+
+Status: Accepted. Supersedes D-022 for the current authoring phase.
+
+Admin authors one contiguous YouTube range per Lesson, reviews transcript and karaoke before
+semantic generation, reviews contextual annotations/candidates, and publishes explicitly. Core owns
+business prompts, lifecycle, validation and PostgreSQL checkpoints; FastAPI only executes technical
+capabilities. Text/Audio authoring and mobile playback are deferred, not new work for this phase.
+
+Draft revision and transcript revision are separate: candidate selection cannot invalidate approved
+content. Publication atomically projects immutable content and selected candidate membership. Old
+writers must not mutate published content or cascade-delete learner attempts/progress. Additive Flyway
+migrations preserve existing records; scaffold APIs and implementation are not product contracts.
+
+Free-only execution permits only benchmarked allowlisted models and requires operator confirmation
+of the external projects' free billing path. No billing changes or paid fallback are automatic.
+Quota waits are durable, resumable jobs. Existing encrypted Core credentials remain authoritative.
+See the bounded [ASR evidence](research/lesson-authoring-asr.md) and
+[semantic evidence](research/lesson-authoring-semantic.md); these are measured research, not release guarantees.
+
+Lesson Prep retirement requires regression coverage, replacement workflow verification and no runtime
+dependency. Local secrets, media and exported artifacts must not be deleted with source retirement.
+The old package ingestion proposal is not part of this phase. Feature owner:
+[Lesson Build](features/lesson-build.md).

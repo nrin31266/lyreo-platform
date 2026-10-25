@@ -1,17 +1,67 @@
-export type SourceType = 'TEXT' | 'AUDIO' | 'YOUTUBE';
-
-export type BuildAccepted = {
-  lessonId: string;
-  jobId: string;
-};
-
-export type BuildLessonPayload = {
+export type SentenceUsage = 'LEARN' | 'WATCH_ONLY' | 'SKIP';
+export type Priority = 'HIGH' | 'MEDIUM';
+export type SourceInspection = {
+  videoId: string;
   title: string;
-  sourceType: SourceType;
-  sourceText: string | null;
-  sourceReference: string | null;
-  activities: string[];
-  annotations: string[];
-  accent: string;
-  pronunciationStrategy: string;
+  durationMs: number;
+  embedAllowed: boolean;
+  usedRanges: { lessonId: string; title: string; startMs: number; endMs: number; status: string }[];
 };
+export type AuthoringWord = {
+  text: string;
+  startMs: number;
+  endMs: number;
+  charStart: number;
+  charEnd: number;
+  tokenStart: number;
+  tokenEnd: number;
+};
+export type AuthoringAnnotation = { tokenStart: number; tokenEnd: number; surface: string; label: string; explanation: string; importance: string; canonicalForm?: string | null; headwordId?: string | null };
+export type AuthoringNote = { tokenStart: number; tokenEnd: number; text: string };
+export type AuthoringSentence = {
+  id: string;
+  text: string;
+  usage: SentenceUsage;
+  words: AuthoringWord[];
+  issues: string[];
+  translation?: string | null;
+  vocabulary: AuthoringAnnotation[];
+  grammar: AuthoringAnnotation[];
+  dictationPriority?: Priority | null;
+  shadowingPriority?: Priority | null;
+  dictationEligible: boolean;
+  shadowingEligible: boolean;
+  dictationSelected: boolean;
+  shadowingSelected: boolean;
+  hints: AuthoringNote[];
+  notes: AuthoringNote[];
+  thoughtGroups: { tokenStart: number; tokenEnd: number }[];
+};
+export type AuthoringJob = {
+  jobId: string;
+  operation: string;
+  status: string;
+  currentStep?: string | null;
+  errorMessage?: string | null;
+  nextRetryAt?: string | null;
+  usage: { provider: string; model: string; inputTokens?: number | null; outputTokens?: number | null; latencyMs: number }[];
+};
+export type LessonDraft = {
+  id: string;
+  title: string;
+  videoId: string;
+  sourceReference: string;
+  startMs: number;
+  endMs: number;
+  revision: number;
+  transcriptRevision: number;
+  status: string;
+  timingStatus: string;
+  approvedRevision: number | null;
+  karaokeReviewedRevision: number | null;
+  semanticRevision: number | null;
+  sentences: AuthoringSentence[];
+  jobs: AuthoringJob[];
+};
+export type TranscriptSentence = { id?: string; text: string; usage: SentenceUsage };
+export type BuildAccepted = { lessonId: string; jobId: string };

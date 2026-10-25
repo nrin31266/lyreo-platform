@@ -14,6 +14,7 @@ import org.springframework.modulith.NamedInterface;
 public final class AiExecutionException extends RuntimeException {
     private final boolean fallbackAllowed;
     private final String errorCode;
+    private long retryAfterSeconds;
 
     public AiExecutionException(
         String message,
@@ -36,5 +37,12 @@ public final class AiExecutionException extends RuntimeException {
 
     public String errorCode() {
         return errorCode;
+    }
+
+    public long retryAfterSeconds() { return retryAfterSeconds; }
+
+    public AiExecutionException retryAfter(long seconds) {
+        this.retryAfterSeconds = Math.max(0, seconds);
+        return this;
     }
 }

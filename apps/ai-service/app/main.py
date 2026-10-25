@@ -61,7 +61,10 @@ async def value_error_handler(_: Request, error: ValueError):
 async def provider_http_error_handler(_: Request, error: httpx.HTTPStatusError):
     # Do not proxy full provider bodies/headers: they can contain sensitive operational detail.
     return JSONResponse(
-        status_code=502,
+        status_code=error.response.status_code
+        if error.response.status_code in {400, 401, 403, 404, 413, 422, 429} else 502,
+        headers={'Retry-After': error.response.headers['Retry-After']}
+        if error.response.status_code == 429 and 'Retry-After' in error.response.headers else None,
         content={
             'detail': 'upstream AI provider request failed',
             'provider_status': error.response.status_code,
@@ -143,8 +146,8 @@ async def tts(
 async def tts_voices():
     """Voice discovery for the local TTS runtime.
 
-    Static metadata only — no model load. The Lesson Prep Tool uses this list so it
-    never hard-codes Kokoro voices.
+    Static metadata only — no model load. Preview callers can discover available
+    voices without hard-coding Kokoro metadata.
     """
     return {'voices': kokoro.voices()}
 

@@ -4,6 +4,7 @@ import com.lyreo.ai.application.execution.AiExecutionCommand;
 import com.lyreo.ai.application.execution.AiExecutionException;
 import com.lyreo.ai.application.execution.AiExecutionResult;
 import com.lyreo.ai.application.port.AiExecutionGateway;
+import com.lyreo.ai.domain.AiCapability;
 import java.time.Duration;
 import java.util.Map;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -74,6 +75,18 @@ public final class FastApiAiExecutionGateway implements AiExecutionGateway {
                 ? (Map<String, Object>) rawUsage
                 : Map.of();
 
+            Map<?, ?> metadata = response.get("metadata") instanceof Map<?, ?> values ? values : Map.of();
+            Object finish = metadata.get("finish_reason");
+            Object status = metadata.get("status");
+            boolean llm = command.capability() == AiCapability.GENERAL_LLM
+                || command.capability() == AiCapability.REASONING_LLM;
+            boolean completed = command.provider().equalsIgnoreCase("GEMINI")
+                ? "completed".equals(status) : "stop".equals(finish);
+            if ((llm && !completed) || (finish != null && !"stop".equals(finish))
+                || (status != null && !"completed".equals(status))) {
+                throw new AiExecutionException("AI output did not complete", false, "AI_OUTPUT_INCOMPLETE");
+            }
+
             return new AiExecutionResult(
                 command.invocationId(),
                 command.provider(),
@@ -85,10 +98,7 @@ public final class FastApiAiExecutionGateway implements AiExecutionGateway {
             );
         } catch (WebClientResponseException responseFailure) {
             int status = responseFailure.getStatusCode().value();
-            boolean fallbackAllowed = status == 401
-                || status == 403
-                || status == 404
-                || status == 408
+            boolean fallbackAllowed = status == 408
                 || status == 409
                 || status == 425
                 || status == 429
@@ -98,7 +108,7 @@ public final class FastApiAiExecutionGateway implements AiExecutionGateway {
                 fallbackAllowed,
                 "AI_HTTP_" + status,
                 responseFailure
-            );
+            ).retryAfter(status == 429 ? retryAfterSeconds(responseFailure) : 0);
         } catch (WebClientRequestException networkFailure) {
             throw new AiExecutionException(
                 "AI service network request failed", true, "AI_NETWORK", networkFailure
@@ -119,6 +129,20 @@ public final class FastApiAiExecutionGateway implements AiExecutionGateway {
 
     private static long elapsedMs(long startNanos) {
         return Duration.ofNanos(System.nanoTime() - startNanos).toMillis();
+    }
+
+    private static long retryAfterSeconds(WebClientResponseException failure) {
+        String raw = failure.getHeaders().getFirst("Retry-After");
+        if (raw != null) {
+            try { return Math.max(1, Long.parseLong(raw)); }
+            catch (NumberFormatException ignored) {
+                try {
+                    return Math.max(1, java.time.Duration.between(java.time.Instant.now(),
+                        java.time.ZonedDateTime.parse(raw, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant()).toSeconds());
+                } catch (java.time.format.DateTimeParseException invalid) { /* Safe bounded fallback below. */ }
+            }
+        }
+        return 60;
     }
 
     private static Integer asInteger(Object value) {

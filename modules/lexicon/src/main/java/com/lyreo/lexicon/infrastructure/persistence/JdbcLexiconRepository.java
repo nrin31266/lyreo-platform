@@ -125,6 +125,20 @@ public final class JdbcLexiconRepository implements LexiconRepository {
     }
 
     @Override
+    public List<UUID> exactHeadwordIds(String normalizedForm) {
+        return jdbc.query("""
+            SELECT DISTINCT e.headword_id
+              FROM dataset_active_release ar
+              JOIN lexicon_entry e ON e.release_id=ar.release_id
+             WHERE ar.domain='lexicon'
+               AND (e.lookup_form=:form OR EXISTS (
+                 SELECT 1 FROM lexicon_form f WHERE f.release_id=e.release_id
+                   AND f.entry_id=e.id AND f.normalized_form=:form))
+             LIMIT 2
+            """, Map.of("form", normalizedForm), (rs, row) -> rs.getObject(1, UUID.class));
+    }
+
+    @Override
     public Optional<LexiconEntry> findByNormalizedForm(String normalizedForm) {
         List<LexiconHeader> headers = jdbc.query(BASE + """
             AND e.lookup_form = :form

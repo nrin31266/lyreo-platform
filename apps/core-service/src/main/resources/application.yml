@@ -88,6 +88,7 @@ lyreo:
     base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
     internal-token: ${AI_SERVICE_INTERNAL_TOKEN}
     timeout-seconds: ${AI_SERVICE_TIMEOUT_SECONDS:300}
+    confirmed-free-providers: ${AI_CONFIRMED_FREE_PROVIDERS:}
 
   lesson:
     youtube:

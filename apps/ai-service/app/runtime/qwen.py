@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from typing import Any
 from urllib.parse import unquote, urlparse
 
@@ -92,110 +93,142 @@ class QwenRuntime:
 
     async def stt(self, request: ExecuteRequest) -> ExecuteResponse:
         async with self._inference_lock:
-            audio = _normalize_audio_source(
-                request.input.get('audio') or request.input.get('audio_url')
-            )
-            if not audio:
+            source = _normalize_audio_source(request.input.get('audio') or request.input.get('audio_url'))
+            if not source:
                 raise ValueError('STT requires input.audio or input.audio_url')
-
+            audio = await asyncio.to_thread(_read_audio, source)
             language = request.options.get('language', 'English')
             model = await self._load_asr()
-            _empty_cuda_cache()
-            try:
-                results = await asyncio.to_thread(
-                    model.transcribe,
-                    audio=audio,
-                    language=language,
-                    context=request.options.get('context'),
-                    return_time_stamps=False,
-                )
-            finally:
+            segments = []
+            # Measured on the 4 GB worker: an unchunked 300 s input exhausts VRAM.
+            for start, window in _audio_windows(audio):
                 _empty_cuda_cache()
-            if not results:
-                raise ValueError('Qwen ASR returned no transcription result')
-
-            result = results[0]
-            text = str(getattr(result, 'text', '') or '')
-            resolved_language = getattr(result, 'language', language)
-            timestamps: list[dict[str, Any]] = []
-
-            if bool(request.options.get('timestamps', False)) and text.strip():
-                timestamps = await self._align_words(audio, text, resolved_language)
-
+                try:
+                    results = await asyncio.to_thread(
+                        model.transcribe, audio=(window, 16_000), language=language,
+                        context=request.options.get('context'), return_time_stamps=False,
+                    )
+                finally:
+                    _empty_cuda_cache()
+                if not results:
+                    raise ValueError('Qwen ASR returned no transcription result')
+                text = str(getattr(results[0], 'text', '') or '').strip()
+                if text:
+                    segments.append({'text': text, 'start_ms': round(start / 16),
+                                     'end_ms': round((start + len(window)) / 16)})
+            del model
+            text = ' '.join(segment['text'] for segment in segments)
+            timestamps = []
+            if request.options.get('timestamps', False) and text:
+                # Unload ASR once before alignment, rather than swapping models per window.
+                timestamps = await self._align_words((audio, 16_000), text, language, segments)
             return ExecuteResponse(
-                output={
-                    'text': text,
-                    'language': resolved_language,
-                    'timestamps': timestamps,
-                },
-                metadata={
-                    'runtime': 'qwen',
-                    'model': self.cfg.qwen_asr_model,
-                },
+                output={'text': text, 'language': language, 'timestamps': timestamps, 'segments': segments},
+                metadata={'runtime': 'qwen', 'model': self.cfg.qwen_asr_model},
             )
 
     async def align(self, request: ExecuteRequest) -> ExecuteResponse:
         async with self._inference_lock:
-            audio = _normalize_audio_source(
-                request.input.get('audio') or request.input.get('audio_url')
-            )
+            audio = _normalize_audio_source(request.input.get('audio') or request.input.get('audio_url'))
             text = request.input.get('text')
-            if not audio or not text:
+            if not audio or not isinstance(text, str) or not text.strip():
                 raise ValueError('Alignment requires audio/audio_url and text')
-
             words = await self._align_words(
-                audio,
-                str(text),
-                request.options.get('language', 'English'),
+                audio, text, request.options.get('language', 'English'), request.input.get('segments'),
             )
-            return ExecuteResponse(
-                output={'words': words},
-                metadata={
-                    'runtime': 'qwen',
-                    'model': self.cfg.qwen_aligner_model,
-                },
-            )
+            return ExecuteResponse(output={'words': words}, metadata={
+                'runtime': 'qwen', 'model': self.cfg.qwen_aligner_model,
+            })
 
-    async def _align_words(self, audio: Any, text: str, language: Any) -> list[dict[str, Any]]:
+    async def _align_words(self, audio: Any, text: str, language: Any, segments=None) -> list[dict[str, Any]]:
+        waveform = await asyncio.to_thread(_read_audio, audio)
+        windows = _alignment_windows(waveform, text, segments)
         model = await self._load_aligner()
-        _empty_cuda_cache()
-        try:
-            results = await asyncio.to_thread(
-                model.align,
-                audio=audio,
-                text=text,
-                language=language,
-            )
-        finally:
+        words = []
+        for start, window, window_text in windows:
             _empty_cuda_cache()
-
-        # Official API returns a list per input sample. Lyreo sends one sample/request.
-        # qwen-asr wraps the ForcedAligner output in ForcedAlignResult(items=[...]),
-        # while ASR returns flat WordResult objects — flatten both shapes into one
-        # provider-independent word timestamp contract.
-        items = _flatten_alignment_results(results)
-
-        words: list[dict[str, Any]] = []
-        for index, item in enumerate(items):
-            mapped = _to_mapping(item)
-            if isinstance(mapped, dict):
-                text_value = str(mapped.get('text') or mapped.get('word') or '')
-                start = mapped.get('start_time', mapped.get('start_ms', 0))
-                end = mapped.get('end_time', mapped.get('end_ms', 0))
-            else:
-                text_value = str(item)
-                start = 0
-                end = 0
-
-            words.append(
-                {
-                    'index': index,
-                    'word': text_value,
-                    'start_ms': round(float(start) * 1000),
-                    'end_ms': round(float(end) * 1000),
-                }
-            )
+            try:
+                results = await asyncio.to_thread(
+                    model.align, audio=(window, 16_000), text=window_text, language=language,
+                )
+            finally:
+                _empty_cuda_cache()
+            items = _flatten_alignment_results(results)
+            if not items:
+                raise ValueError('Qwen aligner returned no words')
+            for item in items:
+                word = _alignment_word(item)
+                word['index'] = len(words)
+                word['start_ms'] += round(start / 16)
+                word['end_ms'] += round(start / 16)
+                words.append(word)
         return words
+
+
+def _read_audio(source: Any):
+    from qwen_asr.inference.utils import normalize_audio_input
+    waveform = normalize_audio_input(source)
+    if not len(waveform):
+        raise ValueError('Audio contains no samples')
+    return waveform
+
+
+def _audio_windows(waveform):
+    # shortcut: fixed ASR windows can cut a word; transcript review is required at seams.
+    limit = 120 * 16_000
+    return [(start, waveform[start:start + limit]) for start in range(0, len(waveform), limit)]
+
+
+def _alignment_windows(waveform, text: str, segments):
+    duration_ms = len(waveform) / 16
+    if segments is None or segments == []:
+        if len(waveform) > 120 * 16_000:
+            raise ValueError('Alignment over 120 seconds requires anchored transcript segments')
+        return [(0, waveform, text)]
+    if not isinstance(segments, list) or not all(isinstance(s, dict) for s in segments):
+        raise ValueError('Alignment segments must be a list of text/start_ms/end_ms objects')
+    previous_end = 0
+    for segment in segments:
+        start = segment.get('start_ms')
+        end = segment.get('end_ms')
+        if (not isinstance(start, int) or isinstance(start, bool)
+                or not isinstance(end, int) or isinstance(end, bool)
+                or start < previous_end or end <= start or end > math.ceil(duration_ms)
+                or not isinstance(segment.get('text'), str) or not segment['text'].strip()):
+            raise ValueError('Alignment segments require ordered non-overlapping in-bounds millisecond anchors')
+        previous_end = end
+    if ' '.join(' '.join(s['text'].split()) for s in segments) != ' '.join(text.split()):
+        raise ValueError('Alignment segment text must cover the complete approved transcript in order')
+    windows = []
+    for index, segment in enumerate(segments):
+        previous_end = segments[index - 1]['end_ms'] if index else 0
+        next_start = segments[index + 1]['start_ms'] if index + 1 < len(segments) else duration_ms
+        segment_ms = segment['end_ms'] - segment['start_ms']
+        padding_ms = min(500, max(0, (120_000 - segment_ms) / 2))
+        start = round(max(previous_end, segment['start_ms'] - padding_ms) * 16)
+        end = min(len(waveform), round(min(next_start, segment['end_ms'] + padding_ms) * 16))
+        if end - start > 120 * 16_000:
+            raise ValueError('Each padded alignment segment must be at most 120 seconds; split at a known audio anchor')
+        windows.append((start, waveform[start:end], segment['text']))
+    return windows
+
+
+def _alignment_word(item: Any) -> dict[str, Any]:
+    mapped = _to_mapping(item)
+    if not isinstance(mapped, dict):
+        raise ValueError('Qwen aligner returned an invalid word')
+    text = mapped.get('text') or mapped.get('word')
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError('Qwen aligner returned an empty word')
+    if 'start_time' in mapped and 'end_time' in mapped:
+        start, end, factor = mapped['start_time'], mapped['end_time'], 1000
+    elif 'start_ms' in mapped and 'end_ms' in mapped:
+        start, end, factor = mapped['start_ms'], mapped['end_ms'], 1
+    else:
+        raise ValueError('Qwen aligner returned a word without timing')
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in (start, end)):
+        raise ValueError('Qwen aligner returned non-finite word timing')
+    return {'word': text, 'start_ms': round(start * factor), 'end_ms': round(end * factor)}
 
 
 def _flatten_alignment_results(results: Any) -> list[Any]:

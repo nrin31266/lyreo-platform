@@ -16,6 +16,7 @@ public interface BackgroundJobRepository {
 
     /** Lease-aware writes are fencing operations: stale workers must not mutate recovered jobs. */
     boolean heartbeat(UUID id, String workerId, Duration lease);
+    boolean lockForCommit(UUID id, String workerId);
     boolean updateProgress(UUID id, String workerId, String step, int percent);
     boolean markSucceeded(UUID id, String workerId);
     boolean markCancelled(UUID id, String workerId);

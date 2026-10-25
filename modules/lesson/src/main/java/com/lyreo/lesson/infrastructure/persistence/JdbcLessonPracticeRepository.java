@@ -33,6 +33,10 @@ public final class JdbcLessonPracticeRepository implements LessonPracticeReposit
                AND a.activity_type = 'DICTATION'
                AND a.enabled = TRUE
                AND s.id = :sentenceId
+               AND (NOT EXISTS(SELECT 1 FROM lesson_authoring x WHERE x.lesson_id=a.lesson_id)
+                    OR EXISTS(SELECT 1 FROM lesson_authoring x JOIN lesson_activity_sentence m
+                        ON m.activity_id=a.id AND m.sentence_id=s.id
+                        WHERE x.lesson_id=a.lesson_id AND x.published_at IS NOT NULL))
             """, Map.of(
                 "lessonId", lessonId,
                 "activityId", activityId,
@@ -132,6 +136,10 @@ public final class JdbcLessonPracticeRepository implements LessonPracticeReposit
                    AND a.activity_id = :activityId
                    AND a.learner_id = :learnerId
                  WHERE s.lesson_id = :lessonId
+                   AND (NOT EXISTS(SELECT 1 FROM lesson_authoring x WHERE x.lesson_id=s.lesson_id)
+                        OR EXISTS(SELECT 1 FROM lesson_authoring x JOIN lesson_activity_sentence m
+                            ON m.activity_id=:activityId AND m.sentence_id=s.id
+                            WHERE x.lesson_id=s.lesson_id AND x.published_at IS NOT NULL))
                  GROUP BY s.id
             ), stats AS (
                 SELECT COUNT(*)::int AS total_items,

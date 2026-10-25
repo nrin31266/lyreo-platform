@@ -122,6 +122,15 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
     }
 
     @Override
+    public boolean lockForCommit(UUID id, String workerId) {
+        return !jdbc.queryForList("""
+            SELECT id FROM background_job WHERE id=:id AND lease_owner=:worker
+              AND status='RUNNING' AND lease_until>now() AND cancel_requested_at IS NULL
+            FOR UPDATE
+            """, Map.of("id", id, "worker", workerId), UUID.class).isEmpty();
+    }
+
+    @Override
     public boolean heartbeat(UUID id, String workerId, Duration lease) {
         return jdbc.update("""
             UPDATE background_job
@@ -130,6 +139,7 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
              WHERE id = :id
                AND lease_owner = :workerId
                AND status IN ('RUNNING','CANCEL_REQUESTED')
+               AND lease_until > now()
             """, Map.of("id", id, "workerId", workerId, "leaseSeconds", lease.toSeconds())) == 1;
     }
 
@@ -142,6 +152,7 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
              WHERE id = :id
                AND lease_owner = :workerId
                AND status IN ('RUNNING','CANCEL_REQUESTED')
+               AND lease_until > now()
             """, Map.of(
                 "id", id,
                 "workerId", workerId,
@@ -178,6 +189,7 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
              WHERE id = :id
                AND lease_owner = :workerId
                AND status IN ('RUNNING','CANCEL_REQUESTED')
+               AND lease_until > now()
             """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("workerId", workerId)
@@ -199,6 +211,7 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
              WHERE id = :id
                AND lease_owner = :workerId
                AND status = 'RUNNING'
+               AND lease_until > now()
             """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("workerId", workerId)

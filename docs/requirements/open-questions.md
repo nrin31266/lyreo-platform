@@ -5,10 +5,9 @@ Only unresolved product or architecture decisions belong here. Implementation ta
 <a id="gap-001--youtube-p0-hay-sau-lesson-mvp"></a>
 ## OQ-001 — YouTube in the first Lesson release
 
-- **Status**: open
-- **Type**: conflict
-
-The [PRD scope](../product/prd.md#6-scope-va-uu-tien) includes YouTube in Core Lesson, while its earlier release direction listed Text/Audio first. Product ownership must decide the release boundary before the first Lesson release is scoped. The technical adapter alone does not decide priority or policy approval.
+- **Status**: resolved, 2026-10-25
+- **Decision**: YouTube-first Admin authoring; Text/Audio UI and mobile playback/practice deferred.
+  See [D-024](../DECISIONS.md#d-024--integrated-youtube-lesson-authoring-and-free-only-research-2026-10-25).
 
 <a id="gap-002--nguong-hoan-thanh-dictation-70"></a>
 ## OQ-002 — Dictation completion threshold
@@ -37,10 +36,10 @@ The [PRD](../product/prd.md) and [non-functional requirements](non-functional.md
 <a id="gap-011--ingestion-portable-lesson-source"></a>
 ## OQ-005 — Portable Lesson source ingestion policy
 
-- **Status**: open
-- **Type**: decision-needed
-
-The [Lesson Prep package](../DATA_PIPELINES.md#0-lesson-prep-tool-acquisition-tool-local-not-a-core-pipeline) needs a Core ingestion contract. Before implementing import, decide validation, media checksum verification, and storage handling. Endpoint and UI implementation are separate tasks.
+- **Status**: closed, 2026-10-25
+- **Decision**: integrated Admin authoring replaces the standalone ZIP workflow; portable package
+  ingestion is outside this phase. Lesson Prep retirement is gated by regression coverage and
+  replacement verification, not merely this scope decision. See [Lesson Build](../features/lesson-build.md).
 
 ## OQ-006 — Production versus deploy terminology
 

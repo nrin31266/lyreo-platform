@@ -38,7 +38,7 @@ public class AiConfiguration {
         @Value("${lyreo.ai-service.timeout-seconds:300}") long timeoutSeconds
     ) {
         return new FastApiAiExecutionGateway(
-            builder.baseUrl(baseUrl).build(),
+            builder.baseUrl(baseUrl).codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(8 * 1024 * 1024)).build(),
             Duration.ofSeconds(timeoutSeconds),
             internalToken
         );
@@ -78,8 +78,12 @@ public class AiConfiguration {
         AiRouter router,
         JdbcAiRouteRepository repository,
         FastApiAiExecutionGateway gateway,
-        JdbcAiInvocationAuditRepository audit
+        JdbcAiInvocationAuditRepository audit,
+        @Value("${lyreo.ai-service.confirmed-free-providers:}") String confirmedFreeProviders
     ) {
-        return new AiInvocationService(router, repository, gateway, audit);
+        var confirmed = java.util.Arrays.stream(confirmedFreeProviders.split(","))
+            .map(String::strip).map(value -> value.toUpperCase(java.util.Locale.ROOT))
+            .filter(value -> !value.isBlank()).collect(java.util.stream.Collectors.toSet());
+        return new AiInvocationService(router, repository, gateway, audit, confirmed);
     }
 }

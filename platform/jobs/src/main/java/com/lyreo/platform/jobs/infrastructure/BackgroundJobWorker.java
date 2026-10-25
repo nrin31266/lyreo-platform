@@ -1,6 +1,7 @@
 package com.lyreo.platform.jobs.infrastructure;
 
 import com.lyreo.platform.jobs.application.BackgroundJobRepository;
+import com.lyreo.platform.jobs.application.DeferredJobException;
 import com.lyreo.platform.jobs.application.JobCancelledException;
 import com.lyreo.platform.jobs.application.JobExecutionContext;
 import com.lyreo.platform.jobs.application.JobLeaseLostException;
@@ -100,6 +101,9 @@ public final class BackgroundJobWorker implements AutoCloseable {
         } catch (JobLeaseLostException leaseLost) {
             // A recovered job now belongs to another worker. Fencing prevents this stale
             // worker from overwriting the new owner's state. Do not mark it failed.
+        } catch (DeferredJobException deferred) {
+            transitions.retryWaiting(job, workerId, deferred.retryAt(), "PROVIDER_QUOTA_WAIT",
+                safeMessage(deferred), context.currentStep(), context.currentPercent());
         } catch (PermanentJobException permanent) {
             transitions.failed(
                 job, workerId, permanent.errorCode(), safeMessage(permanent),
