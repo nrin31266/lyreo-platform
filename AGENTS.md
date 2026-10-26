@@ -18,6 +18,8 @@ The server enforces authorization and owns scores, XP, and rewards. Keep provide
 
 ## Change and verification
 
+Work in one agent unless the user requests delegation. Search narrowly with `rg` and read only relevant file sections. Keep tool output bounded; save verbose logs outside the repository and report summaries plus relevant errors. Reuse findings already in the chat and rerun checks only after relevant changes or failures.
+
 Keep each fact with its owner. Internal refactors with unchanged contracts need no ceremonial docs edit. Check consumers when changing an API, event, schema, or configuration. Use the applicable tests and validators; `make validate` is the offline minimum and `make check` is the full verification interface. Report any required check that could not run with its exact blocker. Never call a scaffold feature complete based only on starter tests.
 
 ## Decisions

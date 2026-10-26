@@ -8,11 +8,11 @@ holds prepared audio and raw evidence. Mobile playback is a later phase.
 
 ## Authoring checkpoints
 
-Inspect a YouTube URL, see existing ranges, choose one contiguous segment and acknowledge operator responsibility for source use.
+Inspect a YouTube URL, see existing ranges, choose one contiguous segment and enter the editor directly after metadata inspection.
 Local acquisition is operator-enabled for public videos supported by the configured downloader; no channel allowlist or licence-document upload is required. The
-conservative acquisition baseline caches full source audio once, then normalizes the selected
-segment as 16 kHz mono PCM WAV. Exact normalized range assets can be reused across lessons.
-Range downloading has not been benchmarked; no network savings claim follows from selected-range inference.
+current acquisition path downloads the explicitly confirmed source range, then normalizes it as
+16 kHz mono PCM WAV. Existing cached full sources can still supply selected ranges. Exact normalized range assets can be reused across lessons.
+Output file size alone does not measure network savings; byte measurements must distinguish media payload and transport overhead.
 
 Nguồn do người vận hành lựa chọn để phát triển và kiểm thử nội bộ. Người vận hành chịu trách nhiệm xin phép và bảo đảm quyền sử dụng trước khi khai thác hoặc phát hành.
 
@@ -26,19 +26,46 @@ only contributes context; Skip is excluded from semantic context and skipped in 
 Review issues are derived from actual coverage/timing evidence, never invented ASR confidence.
 
 Structurally valid provisional Whisper timing needs explicit karaoke preview confirmation. Dedicated
-alignment is available when timing is absent/stale or preview is inadequate. Coalescing may only
+alignment is required when timing is absent/stale or preview is inadequate. Until human-referenced
+quality acceptance, deployment policy also requires local alignment for structurally valid draft timing. Coalescing may only
 combine adjacent touching/overlapping observed intervals into multi-token timing groups; it may not
-invent positive per-word duration, stretch silence or hide unresolved lexical coverage. Invalid timing
+invent positive per-word duration, stretch silence or hide unresolved lexical coverage. Qwen alignment
+window bounds may reach the next timestamp frame at the audio end; the adapter uses the loaded
+model's frame precision and slices only existing samples, preserving raw word timing. Invalid timing
 blocks confirmation/publication. Approved lexical edits require bounded anchored realignment; absent
 anchors or unsafe long windows fail clearly instead of proportional text/audio splitting.
 
 Transcript approval and karaoke confirmation precede SEMANTIC. The semantic operation sends compact
 full context, target Learn IDs and Core-owned schema; output chunks preserve that global context.
+Each new semantic chunk contains at most three Learn targets while retaining the full lesson context.
+A validation correction preserves translations and practice priorities but requests empty optional
+annotation arrays instead of guessing source spans; existing larger validated checkpoints remain reusable.
 Provider exact phrases map to unique source spans in Core; thought groups must partition original
 text in order. Core rejects missing/duplicate targets, altered/ambiguous surfaces, invalid locale,
 enums, bounds and truncation before replacing valid annotations. Candidate eligibility is technical
 Core policy; independent model priorities cannot override it. Admin reviews content/candidates and
 publishes explicitly. Publication and selected membership are one immutable transaction.
+
+
+## Admin management and workspace
+
+Admin uses a viewport-based editing workspace with independently scrollable player and editor panes.
+On smaller screens, Player/Editor switches preserve state; content lists scroll inside the workspace
+and the single workflow action bar stays visible.
+Source, transcript, timing and content navigation exposes the authoring checkpoints. Active jobs
+have compact progress with expandable details; loading uses skeletons. Poll only while jobs are active,
+keep unsaved local edits and candidate revision intact, and confirm navigation away from dirty edits.
+Published lessons have a separate read view with metadata and availability controls.
+
+Presentation metadata lives outside the immutable content snapshot. It includes display title,
+description, image URL and classification. A missing custom image falls back to source metadata.
+Soft-delete is limited to inactive drafts; unlisting published lessons blocks new practice while
+preserving learner history. Metadata changes do not invoke inference or invalidate approval.
+
+YouTube channel metadata sync uses `YOUTUBE_DATA_API_KEY` in Core. Selected channel IDs become one
+durable job; partial/missing responses retain good values and report per-channel errors. Quota waits
+durably, recovery skips completed channel checkpoints, and cancellation/lease fencing protects writes.
+The capability stores external image URLs, not downloaded image objects.
 
 ## Dependency and invalidation matrix
 
@@ -168,3 +195,65 @@ Real browser checks covered 40 route/theme/viewport cases plus 6 published-draft
 and 10 additional cases using Chromium's actual 200% page zoom (verified DPR 2 and 720px layout in
 a 1440px window). No horizontal overflow or page JavaScript exceptions were observed; mobile
 Sheet Escape restored focus. Screenshots are retained locally, not committed.
+
+## Catalog, waveform and timing policy update
+
+The Admin catalog exposes lessons, flat many-to-many categories and metadata-derived source channels.
+Classification lives outside published content guards; title edits remain draft-only. API additions are
+`GET /api/v1/admin/lessons`, `PUT /api/v1/admin/lessons/{id}/metadata`, category CRUD, channel listing,
+and asynchronous `/api/v1/admin/lesson-source-previews` creation/read/audio endpoints. Pagination is
+zero-based with a default size of 20 and maximum 100. Missing categories or channels do not prevent
+reading legacy lessons.
+
+Source metadata inspection does not acquire audio. Default selection is full duration at ≤10 minutes,
+otherwise the first five minutes; the whole timeline remains available. Explicit confirmation creates
+a durable preview job for that exact range. Range preparation and peaks are cached; unprepared areas
+stay empty. Preview publication is job-lease/cancellation fenced. YouTube is the sole playback clock;
+WaveSurfer renders real prepared peaks and sends seek/region commands without starting another audio
+player. Source selection never enables publication rights.
+
+Core retains raw STT timing evidence and reports coverage/interval issues separately from missing
+output. `LESSON_TIMING_REUSE_DRAFT` defaults to false pending human quality acceptance. Enabling it
+permits validated, lexically unchanged timing reuse; invalid/stale timing still requires alignment.
+Both routes require karaoke confirmation. Existing immutable atomic publication and candidate
+membership guards remain in force.
+
+The reproducible scorer is `tools/research/benchmark_lesson_timing.py`; the credential-free
+[quality report](../../tools/research/lesson-timing-quality-2026-10-26.json) compares retained Groq and
+Qwen runs using the same transcript at 2/5/10 minutes. Human word references and listening approval
+are absent, so the report explicitly cannot certify karaoke quality. Historical evidence above is
+preserved and is not verification of this subsequent implementation.
+
+The [range measurement](../../tools/research/lesson-source-range-2026-10-26.json) downloaded 11:00–11:30
+from a 20-minute source in 2.444 seconds: FFmpeg reported 589,824 bytes read versus 316,837 output
+bytes. Full socket/TLS/metadata overhead is unmeasured. A separate 60–180-second sample returned
+Groq timestamps in 2.461 seconds and Qwen alignment through the existing local service in 1.217
+seconds; model loading state was not independently measured. The quality report includes this
+offset sample, but no human boundary reference or listening approval is claimed.
+
+### Admin refactor verification checkpoint
+
+Browser checks exercised 54 route/theme/viewport cases at 375/1024/1440px plus six draft/published
+editor layouts, actual region drag/resize, bidirectional timecodes, zoom, seek to source time
+663.243 seconds, loop and play/pause. No page overflow or JavaScript errors were observed in those
+cases. A long-source default and an edited range caused zero preview calls before explicit
+confirmation, and one call after confirmation. These are bounded technical checks, not all-device
+or accessibility certification.
+
+A new local fixture at source 60–90 seconds preserved transcript edits across reload, approved the
+transcript, ran local alignment and confirmed the karaoke checkpoint. Semantic validation rejected
+ambiguous annotation output and left the draft unpublished. Curation at observed clause boundaries
+reduced the Learn selection to one short unique clause, with other material Watch-only; generation
+then succeeded. Browser publication returned 200, reload showed PUBLISHED/read-only, and transcript
+mutation returned 409. Fixture ID: `74abbdc8-b0cd-4285-b7e6-b29d51531da1`. This is an automated
+internal workflow fixture, not human listening/pedagogical approval or authorization for release.
+
+Source URL paste inspects metadata and opens the source workspace directly. It does not download
+media or start inference automatically. Loading the selected-range waveform remains an explicit
+operator action, with no rights checkbox or attestation flag in the API. Workflow submissions for
+Transcript, Timing and Content are grouped in the one persistent action bar.
+
+The desktop workflow was rechecked with local Qwen transcription/alignment and Groq semantic
+generation on a 20-second source range. Fixture `084bca30-47e7-4242-b125-5bffc808226b` was
+created and published through Admin; reload returned PUBLISHED with six sentences and three
+selected sentences per activity. This is an automated internal fixture, not human language-quality approval.

@@ -10,13 +10,13 @@ public record LessonAuthoringResponse(
     UUID id, String title, String videoId, String sourceReference, long startMs, long endMs,
     long revision, long transcriptRevision, Long approvedRevision, Long karaokeReviewedRevision,
     Long semanticRevision, String status, String timingStatus, List<Sentence> sentences,
-    List<AuthoringLesson.Job> jobs
+    List<AuthoringLesson.Job> jobs, boolean alignmentRequired
 ) {
     static LessonAuthoringResponse from(AuthoringLesson lesson) {
         return new LessonAuthoringResponse(lesson.id, lesson.title, lesson.videoId, lesson.sourceReference,
             lesson.startMs, lesson.endMs, lesson.revision, lesson.transcriptRevision, lesson.approvedRevision,
             lesson.karaokeReviewedRevision, lesson.semanticRevision, lesson.status, lesson.timingStatus,
-            lesson.sentences.stream().map(Sentence::from).toList(), lesson.jobs);
+            lesson.sentences.stream().map(Sentence::from).toList(), lesson.jobs, lesson.alignmentRequired);
     }
 
     public record Sentence(

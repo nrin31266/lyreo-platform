@@ -42,7 +42,7 @@ class JobControllerTest {
             id, "LESSON_BUILD", "lesson", UUID.randomUUID(),
             BackgroundJobStatus.RUNNING, 10, "GENERATE_TEXT", 40,
             1, 3, null, "worker-1", Instant.now().plusSeconds(60), null, null
-        )));
+        , null, java.time.Instant.EPOCH)));
 
         mockMvc.perform(get("/api/v1/jobs/" + id))
             .andExpect(status().isOk())

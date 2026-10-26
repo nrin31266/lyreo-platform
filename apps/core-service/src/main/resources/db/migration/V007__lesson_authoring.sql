@@ -46,6 +46,8 @@ BEGIN
     ELSE
         target := CASE WHEN TG_OP = 'INSERT' THEN NEW.lesson_id ELSE OLD.lesson_id END;
     END IF;
+    -- Publication holds this row too; recheck after any concurrent publisher commits.
+    PERFORM id FROM lesson WHERE id=target FOR UPDATE;
     IF EXISTS(SELECT 1 FROM lesson_authoring WHERE lesson_id=target AND published_at IS NOT NULL) THEN
         RAISE EXCEPTION 'Published lesson content is immutable' USING ERRCODE='23514';
     END IF;
@@ -60,6 +62,7 @@ BEGIN
     END IF;
     RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
 END $$;
+
 CREATE TRIGGER lesson_published_guard BEFORE UPDATE OR DELETE ON lesson
     FOR EACH ROW EXECUTE FUNCTION guard_published_lesson_content();
 CREATE TRIGGER lesson_authoring_published_guard BEFORE UPDATE OR DELETE ON lesson_authoring
@@ -98,3 +101,76 @@ BEGIN
 END $$;
 CREATE TRIGGER lesson_annotation_same_lesson BEFORE INSERT OR UPDATE ON lesson_annotation
     FOR EACH ROW EXECUTE FUNCTION guard_lesson_annotation_scope();
+
+CREATE TABLE lesson_youtube_source (
+    video_id VARCHAR(11) PRIMARY KEY,
+    title TEXT NOT NULL,
+    duration_ms BIGINT NOT NULL CHECK (duration_ms > 0),
+    embed_allowed BOOLEAN NOT NULL,
+    audio_object_key TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE lesson_youtube_segment (
+    video_id VARCHAR(11) NOT NULL REFERENCES lesson_youtube_source(video_id),
+    start_ms BIGINT NOT NULL CHECK (start_ms >= 0),
+    end_ms BIGINT NOT NULL CHECK (end_ms > start_ms),
+    normalization_version VARCHAR(32) NOT NULL,
+    audio_object_key TEXT NOT NULL,
+    PRIMARY KEY (video_id, start_ms, end_ms, normalization_version)
+);
+
+ALTER TABLE lesson_youtube_source ADD COLUMN channel_id VARCHAR(128), ADD COLUMN channel_title VARCHAR(500);
+CREATE TABLE lesson_category (
+    id UUID PRIMARY KEY, name VARCHAR(100) NOT NULL CHECK(length(trim(name)) > 0)
+);
+CREATE UNIQUE INDEX lesson_category_name_idx ON lesson_category(lower(name));
+CREATE TABLE lesson_category_membership (
+    lesson_id UUID NOT NULL REFERENCES lesson(id) ON DELETE RESTRICT,
+    category_id UUID NOT NULL REFERENCES lesson_category(id) ON DELETE RESTRICT,
+    PRIMARY KEY(lesson_id,category_id)
+);
+CREATE INDEX lesson_category_membership_category_idx ON lesson_category_membership(category_id,lesson_id);
+CREATE TABLE lesson_source_preview (
+    id UUID PRIMARY KEY, video_id VARCHAR(32) NOT NULL REFERENCES lesson_youtube_source(video_id),
+    start_ms BIGINT NOT NULL CHECK(start_ms >= 0), end_ms BIGINT NOT NULL,
+    job_id UUID NOT NULL REFERENCES background_job(id), audio_object_key TEXT,
+    peaks JSONB, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK(end_ms > start_ms AND end_ms - start_ms <= 600000)
+);
+CREATE INDEX lesson_source_preview_range_idx ON lesson_source_preview(video_id,start_ms,end_ms);
+ALTER TABLE lesson_authoring ADD COLUMN timing_evidence JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+
+-- Presentation and availability are independent of immutable learning content.
+CREATE TABLE lesson_metadata (
+    lesson_id UUID PRIMARY KEY REFERENCES lesson(id) ON DELETE RESTRICT,
+    title VARCHAR(500) NOT NULL CHECK(length(trim(title)) > 0),
+    description VARCHAR(5000) NOT NULL DEFAULT '',
+    image_url TEXT,
+    visible BOOLEAN NOT NULL DEFAULT TRUE,
+    deleted_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO lesson_metadata(lesson_id,title) SELECT id,title FROM lesson;
+CREATE FUNCTION initialize_lesson_metadata() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO lesson_metadata(lesson_id,title) VALUES(NEW.id,NEW.title);
+    RETURN NEW;
+END $$;
+CREATE TRIGGER lesson_metadata_created AFTER INSERT ON lesson
+    FOR EACH ROW EXECUTE FUNCTION initialize_lesson_metadata();
+ALTER TABLE lesson_youtube_source ADD COLUMN thumbnail_url TEXT;
+CREATE TABLE lesson_youtube_channel (
+    channel_id VARCHAR(128) PRIMARY KEY,
+    title VARCHAR(500) NOT NULL,
+    avatar_url TEXT,
+    synced_at TIMESTAMPTZ,
+    sync_error VARCHAR(500),
+    sync_job_id UUID REFERENCES background_job(id),
+    sync_completed BOOLEAN NOT NULL DEFAULT FALSE
+);
+INSERT INTO lesson_youtube_channel(channel_id,title)
+    SELECT channel_id,max(channel_title) FROM lesson_youtube_source
+    WHERE channel_id IS NOT NULL AND channel_id<>'' GROUP BY channel_id;
+CREATE INDEX lesson_metadata_available_idx ON lesson_metadata(lesson_id) WHERE deleted_at IS NULL AND visible;

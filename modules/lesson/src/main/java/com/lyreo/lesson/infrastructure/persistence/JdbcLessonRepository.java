@@ -40,9 +40,9 @@ public final class JdbcLessonRepository implements LessonRepository {
     @Override
     public Optional<Lesson> findById(UUID lessonId) {
         return jdbc.query("""
-            SELECT id, title, source_type, source_text, source_reference,
+            SELECT l.id, m.title, source_type, source_text, source_reference,
                    canonical_audio_object_key, status, created_at
-              FROM lesson WHERE id = :id
+              FROM lesson l JOIN lesson_metadata m ON m.lesson_id=l.id WHERE l.id = :id AND m.deleted_at IS NULL
             """, Map.of("id", lessonId), this::mapLesson).stream().findFirst();
     }
 

@@ -258,7 +258,9 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
             rs.getString("lease_owner"),
             instant(rs, "lease_until"),
             instant(rs, "cancel_requested_at"),
-            rs.getString("error_message")
+            rs.getString("error_message"),
+            rs.getString("error_code"),
+            instant(rs, "created_at")
         );
     }
 

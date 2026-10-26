@@ -15,6 +15,8 @@ infer model quality or production behavior from mock responses.
 
 Core startup applies Flyway migrations and validates Hibernate mappings. Append a new versioned migration for every schema change; do not edit established migrations or let Hibernate mutate schema. Test PostgreSQL-specific behavior with Testcontainers. `make db-shell` inspects the local database; `make db-reset` deliberately resets only the local Lyreo application database while preserving Keycloak. Review the reset prompt and target before using it.
 
+The disposable-development V007–V010 consolidation is recorded in [D-026](DECISIONS.md#d-026--admin-management-lifecycle-and-development-migration-consolidation-2026-10-26). V001–V007 form the consolidated foundation; subsequent schema changes append migrations. Databases with the former development history require the explicitly authorized application DB reset, not Flyway repair.
+
 Large content datasets are imported through the [data-import tool](../tools/data-import/README.md), not Flyway seed blobs. Store raw datasets outside Git.
 
 ## Verification loop

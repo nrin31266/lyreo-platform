@@ -15,6 +15,31 @@ class FreeOnlyAiInvocationTest {
     private final AiExecutionGateway gateway = mock(AiExecutionGateway.class);
     private final AiInvocationAuditRepository audit = mock(AiInvocationAuditRepository.class);
 
+    @Test void shortLessonSemanticRequestFitsFreeGroqWithoutDroppingContext() {
+        var semantic = new com.lyreo.lesson.application.authoring.AuthoringSemantic(
+            new tools.jackson.databind.ObjectMapper(), mock(com.lyreo.lexicon.api.LexiconLinkService.class));
+        var sentences = List.of(
+            "You can use this video to train your listening and comprehension.",
+            "As I speak, you ready?", "So today I'm going to talk about language learning.",
+            "If you're watching this video, you're probably learning English.",
+            "So I hope this is an interesting topic for you.", "Language learning is hard, and if you.")
+            .stream().map(text -> new com.lyreo.lesson.domain.authoring.AuthoringSentence(UUID.randomUUID(), text, "LEARN")).toList();
+        sentences.forEach(s -> { s.dictationEligible = true; s.shadowingEligible = true; });
+        when(routes.findEnabledRoutes(AiCapability.GENERAL_LLM)).thenReturn(List.of(
+            new AiRoute(UUID.randomUUID(), "GROQ", "openai/gpt-oss-120b", AiCapability.GENERAL_LLM, 10, false)));
+        var expected = new AiExecutionResult(UUID.randomUUID(), "GROQ", "openai/gpt-oss-120b", Map.of(), null, null, 1);
+        when(gateway.execute(any())).thenReturn(expected);
+        var service = new AiInvocationService(new AiRouter(routes), routes, gateway, audit, Set.of("GROQ"));
+        assertThat(service.execute(AiCapability.GENERAL_LLM, semantic.prompt(sentences, sentences.subList(0, 3)),
+            semantic.input(sentences, sentences.subList(0, 3)), com.lyreo.lesson.application.authoring.AuthoringSemantic.options())).isSameAs(expected);
+        assertThat(service.execute(AiCapability.GENERAL_LLM,
+            semantic.correctionPrompt("grammar for sentence "+sentences.getFirst().id+": Annotation surface is missing or ambiguous"),
+            semantic.input(sentences, sentences.subList(0, 3)), com.lyreo.lesson.application.authoring.AuthoringSemantic.options())).isSameAs(expected);
+        var command = org.mockito.ArgumentCaptor.forClass(AiExecutionCommand.class);
+        verify(gateway, times(2)).execute(command.capture());
+        assertThat((List<?>) command.getValue().input().get("context")).hasSize(6);
+    }
+
     @Test void preservesExistingLocalTtsAndNlpRoutesWithoutExternalConfirmation() {
         var localRoutes = new ArrayList<AiRoute>();
         for (String provider : List.of("LOCAL_KOKORO", "KOKORO")) {

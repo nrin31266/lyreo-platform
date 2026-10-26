@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -201,6 +202,13 @@ class HttpWireContractTest {
     }
 
     @Test
+    void removingProviderReturnsNoContentAndNormalizesCode() throws Exception {
+        aiMvc.perform(delete("/api/v1/admin/ai/providers/groq"))
+            .andExpect(status().isNoContent());
+        org.mockito.Mockito.verify(aiAdminService).removeProvider("GROQ");
+    }
+
+    @Test
     void lessonBuildReturns202WithLocationAndOmitsInternalPlan() throws Exception {
         UUID lessonId = UUID.randomUUID();
         UUID jobId = UUID.randomUUID();
@@ -263,7 +271,7 @@ class HttpWireContractTest {
             jobId, "LESSON_BUILD", "lesson", lessonId,
             BackgroundJobStatus.SUCCEEDED, 10, "DONE", 100,
             1, 3, null, null, null, null, null
-        )));
+        , null, java.time.Instant.EPOCH)));
 
         lessonMvc.perform(get("/api/v1/admin/lessons/" + lessonId))
             .andExpect(status().isOk())
@@ -299,7 +307,7 @@ class HttpWireContractTest {
             jobId, "LESSON_BUILD", "lesson", lessonId,
             BackgroundJobStatus.FAILED, 10, "GENERATE_TEXT", 30,
             3, 3, null, null, null, null, "AI provider rate limit exceeded: 429 Too Many Requests"
-        )));
+        , null, java.time.Instant.EPOCH)));
 
         lessonMvc.perform(get("/api/v1/admin/lessons/" + lessonId))
             .andExpect(status().isOk())
@@ -825,7 +833,7 @@ class HttpWireContractTest {
             jobId, "LESSON_BUILD", "lesson", UUID.randomUUID(),
             BackgroundJobStatus.RUNNING, 10, "GENERATE_TEXT", 45,
             1, 3, null, "worker-1", Instant.now().plusSeconds(60), null, null
-        )));
+        , null, java.time.Instant.EPOCH)));
 
         jobMvc.perform(get("/api/v1/jobs/" + jobId))
             .andExpect(status().isOk())

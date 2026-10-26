@@ -109,8 +109,9 @@ class AuthoringYoutubeAcquisitionTest {
         assertThat(details.channels()).isEqualTo(1);
         assertThat(details.sampleRate()).isEqualTo(16_000);
         assertThat(details.durationSeconds()).isCloseTo(1.0, within(0.12));
-        assertThat(Files.readAllLines(calls)).containsExactly("metadata", "audio");
-        verify(storage, times(1)).put(eq("sources/youtube/" + VIDEO_ID + "/original.m4a"), eq("audio/mp4"), any());
+        assertThat(Files.readAllLines(calls)).containsExactly("metadata", "audio", "audio");
+        assertThat(Files.readAllLines(work.resolve("ranges.log"))).containsExactly("*0.500-1.500", "*2.000-3.500");
+        verify(storage, never()).put(eq("sources/youtube/" + VIDEO_ID + "/original.m4a"), eq("audio/mp4"), any());
         verify(storage, times(2)).put(startsWith("sources/youtube/" + VIDEO_ID + "/segments/"), eq("audio/wav"), any());
     }
 
@@ -183,6 +184,7 @@ class AuthoringYoutubeAcquisitionTest {
             + "done\n"
             + "echo audio >> " + quote(calls) + "\n"
             + "while [ $# -gt 0 ]; do\n"
+            + "  if [ \"$1\" = \"--download-sections\" ]; then shift; echo \"$1\" >> " + quote(work.resolve("ranges.log")) + "; fi\n"
             + "  if [ \"$1\" = \"--output\" ]; then shift; cp " + quote(fixture) + " \"$1\"; exit $?; fi\n"
             + "  shift\n"
             + "done\nexit 2\n";

@@ -22,6 +22,7 @@ class LessonAuthoringServiceTest {
     private final LessonAuthoringService service=new LessonAuthoringService(repository,mock(AuthoringSourcePort.class),jobs);
     private AuthoringLesson lesson;
     @BeforeEach void setup() {
+        service.setReuseDraftTiming(true);
         lesson=new AuthoringLesson();lesson.id=UUID.randomUUID();lesson.revision=5;lesson.transcriptRevision=2;
         lesson.endMs=1000;lesson.timingStatus="DRAFT_VALID";lesson.status="CONTENT_REVIEW";
         var sentence=new AuthoringSentence(UUID.randomUUID(),"We learn.","LEARN");
@@ -29,6 +30,20 @@ class LessonAuthoringServiceTest {
         sentence.dictationEligible=true;sentence.shadowingEligible=true;
         lesson.sentences=List.of(sentence);lesson.approvedRevision=2L;lesson.karaokeReviewedRevision=2L;lesson.semanticRevision=2L;
         when(repository.find(lesson.id,true)).thenReturn(Optional.of(lesson));
+    }
+    @Test void draftTimingRequiresLocalUntilQualityPolicyAllowsReuse() {
+        service.setReuseDraftTiming(false);
+        assertThatThrownBy(()->service.karaoke(lesson.id,5)).hasMessageContaining("Local alignment");
+        service.setReuseDraftTiming(true);
+        assertThat(service.karaoke(lesson.id,5).karaokeReviewedRevision).isEqualTo(2L);
+    }
+    @Test void rejectsLessonLongerThanTenMinutes() {
+        var source=mock(AuthoringSourcePort.class);
+        when(source.inspect("source")).thenReturn(new AuthoringSourcePort.SourceInfo("Abc_123-xYz","Video",3_600_000,true));
+        var bounded=new LessonAuthoringService(repository,source,jobs);
+        assertThatThrownBy(()->bounded.create("Lesson","source",0,600_001))
+            .isInstanceOf(com.lyreo.contracts.errors.RequestValidationException.class);
+        verify(repository,never()).create(any());verifyNoInteractions(jobs);
     }
     @Test void punctuationAndSplitReuseTimingWithoutAiJobs() {
         var first=lesson.sentences.getFirst();

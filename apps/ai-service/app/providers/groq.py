@@ -77,6 +77,7 @@ class GroqProvider:
         return ExecuteResponse(
             output={
                 'text': data.get('text', ''),
+                'audio_seconds': data.get('duration'),
                 'timestamps': words,
                 'segments': [{'text': item.get('text', ''),
                               'start_ms': _timestamp_ms(item.get('start')),

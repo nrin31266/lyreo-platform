@@ -46,6 +46,14 @@ class LessonAuthoringJobHandlerTest {
         when(repository.jobInput(job.id())).thenReturn(new AuthoringRepository.JobInput(lesson.id,"SEMANTIC",1,false));
         when(repository.chunk(job.id(),0)).thenReturn(Optional.empty());
     }
+    @Test void unsupportedProviderEndsWithActionableConfigurationErrorWithoutRetrying() {
+        when(ai.execute(eq(AiCapability.GENERAL_LLM),anyString(),anyMap(),anyMap()))
+            .thenThrow(new com.lyreo.ai.application.execution.AiExecutionException("private runtime detail",true,"AI_HTTP_501"));
+        assertThatThrownBy(()->handler.execute(job,context)).isInstanceOfSatisfying(PermanentJobException.class,
+            failure->{assertThat(failure.errorCode()).isEqualTo("AI_CONFIGURATION_REQUIRED");
+                assertThat(failure.getMessage()).contains("AI Settings").doesNotContain("private runtime detail");});
+        verifyNoInteractions(committer);
+    }
     @Test void correctsInvalidChunkOnceWithSameContextSchemaBudgetAndSafeFeedback() throws Exception {
         when(ai.execute(eq(AiCapability.GENERAL_LLM),anyString(),anyMap(),anyMap()))
             .thenReturn(response("not present credential=secret"),response(null));
@@ -54,7 +62,7 @@ class LessonAuthoringJobHandlerTest {
         var inputs=ArgumentCaptor.forClass(Map.class);
         var options=ArgumentCaptor.forClass(Map.class);
         verify(ai,times(2)).execute(eq(AiCapability.GENERAL_LLM),prompts.capture(),inputs.capture(),options.capture());
-        assertThat(prompts.getAllValues().get(1)).contains("Annotation surface is missing or ambiguous")
+        assertThat(prompts.getAllValues().get(1)).contains("Annotation surface is missing or ambiguous", "vocabulary [], grammar [], hints [], notes [], thoughtGroups []")
             .doesNotContain("credential=secret");
         assertThat(inputs.getAllValues().get(1)).isEqualTo(inputs.getAllValues().get(0));
         assertThat((List<?>)inputs.getValue().get("context")).hasSize(2);

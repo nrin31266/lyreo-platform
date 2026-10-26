@@ -30,6 +30,7 @@ public final class DevAiBootstrap implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        if (!admin.providers().isEmpty()) return;
         admin.saveProvider(
             "DEV_MOCK",
             "Lyreo development mock",

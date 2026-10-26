@@ -1,5 +1,5 @@
 import { api } from '@/lib/api';
-import type { Provider, Route, SaveProviderPayload } from './ai-settings.types';
+import type { Provider, Route, SaveProviderPayload, SaveRoutePayload } from './ai-settings.types';
 
 export async function fetchAiProviders(): Promise<Provider[]> {
   return api<Provider[]>('/api/v1/admin/ai/providers');
@@ -14,4 +14,12 @@ export async function saveAiProvider(code: string, payload: SaveProviderPayload)
     method: 'PUT',
     body: JSON.stringify(payload),
   });
+}
+
+export async function removeAiProvider(code: string): Promise<void> {
+  return api<void>(`/api/v1/admin/ai/providers/${encodeURIComponent(code)}`, { method: 'DELETE' });
+}
+
+export async function saveAiRoute(payload: SaveRoutePayload): Promise<void> {
+  return api<void>('/api/v1/admin/ai/routes', { method: 'POST', body: JSON.stringify(payload) });
 }

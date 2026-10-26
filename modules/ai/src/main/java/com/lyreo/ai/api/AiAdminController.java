@@ -8,6 +8,9 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -74,6 +77,12 @@ public class AiAdminController {
             normalizedCode,
             request.apiKey() != null && !request.apiKey().isBlank()
         );
+    }
+
+    @DeleteMapping("/providers/{code}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeProvider(@PathVariable String code) {
+        service.removeProvider(code.toUpperCase(java.util.Locale.ROOT));
     }
 
     @PostMapping("/routes")

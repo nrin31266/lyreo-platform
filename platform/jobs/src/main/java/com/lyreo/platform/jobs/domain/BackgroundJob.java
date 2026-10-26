@@ -18,7 +18,9 @@ public record BackgroundJob(
     String leaseOwner,
     Instant leaseUntil,
     Instant cancelRequestedAt,
-    String errorMessage
+    String errorMessage,
+    String errorCode,
+    Instant createdAt
 ) {
     public boolean cancellationRequested() {
         return status == BackgroundJobStatus.CANCEL_REQUESTED || cancelRequestedAt != null;

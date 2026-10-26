@@ -22,3 +22,10 @@ Metadata inspection needs the downloader but does not require acquisition to be 
 `make doctor` checks the configured executable and treats missing media tools as errors when
 acquisition is enabled. An absolute executable path can be configured when the service PATH differs.
 See the [authoring source policy](../../docs/features/lesson-build.md#authoring-checkpoints).
+
+### YouTube channel metadata
+
+Set optional `YOUTUBE_DATA_API_KEY` only in Core's environment to enable explicit channel name/avatar
+synchronization. Admin requests one channel or a batch of at most 50. Core uses durable jobs and
+stores channel metadata/URLs, preserving prior good values on errors. This key is never a `VITE_*`
+value. Without it, metadata sync returns an actionable conflict; authoring remains available.

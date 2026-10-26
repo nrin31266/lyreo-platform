@@ -17,7 +17,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class LessonAuthoringControllerTest {
     @Test void inspectTranslatesExpectedSourceFailuresToSafeServiceUnavailableProblems() throws Exception {
         var service = mock(LessonAuthoringService.class);
-        var mvc = MockMvcBuilders.standaloneSetup(new LessonAuthoringController(service))
+        var mvc = MockMvcBuilders.standaloneSetup(new LessonAuthoringController(service,mock(com.lyreo.lesson.application.port.LessonCatalogPort.class)))
             .setControllerAdvice(new ApiExceptionHandler())
             .addFilters(new com.lyreo.platform.observability.CorrelationIdFilter()).build();
         for (String code : List.of("YOUTUBE_MEDIA_TOOL_DISABLED", "YOUTUBE_MEDIA_TOOL_UNAVAILABLE",
@@ -54,7 +54,7 @@ class LessonAuthoringControllerTest {
         draft.sentences = List.of(sentence);
         when(service.get(draft.id)).thenReturn(draft);
         when(service.approve(draft.id, 2)).thenReturn(draft);
-        var mvc = MockMvcBuilders.standaloneSetup(new LessonAuthoringController(service)).build();
+        var mvc = MockMvcBuilders.standaloneSetup(new LessonAuthoringController(service,mock(com.lyreo.lesson.application.port.LessonCatalogPort.class))).build();
         for (var request : List.of(get("/api/v1/admin/lesson-authoring/" + draft.id),
             post("/api/v1/admin/lesson-authoring/" + draft.id + "/approve")
                 .contentType(MediaType.APPLICATION_JSON).content("{\"revision\":2}"))) {

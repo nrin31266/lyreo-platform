@@ -1,0 +1,12 @@
+{
+  "source": "https://www.youtube.com/watch?v=RlA-Nhr8XVU",
+  "source_duration_seconds": 1206.821,
+  "selected_start_seconds": 660,
+  "selected_end_seconds": 690,
+  "process_exit": 0,
+  "elapsed_seconds": 2.444,
+  "ffmpeg_io_bytes_read": 589824,
+  "demuxed_audio_packet_bytes": 550115,
+  "output_bytes": 316837,
+  "measurement_limits": "FFmpeg read counters measure media IO, not full socket/TLS/metadata overhead. This is one range run, not a general bandwidth guarantee. Acquisition is not evidence of publication rights."
+}

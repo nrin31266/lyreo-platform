@@ -32,6 +32,7 @@ public final class JdbcLessonPracticeRepository implements LessonPracticeReposit
                AND a.id = :activityId
                AND a.activity_type = 'DICTATION'
                AND a.enabled = TRUE
+               AND EXISTS(SELECT 1 FROM lesson_metadata m WHERE m.lesson_id=a.lesson_id AND m.visible AND m.deleted_at IS NULL)
                AND s.id = :sentenceId
                AND (NOT EXISTS(SELECT 1 FROM lesson_authoring x WHERE x.lesson_id=a.lesson_id)
                     OR EXISTS(SELECT 1 FROM lesson_authoring x JOIN lesson_activity_sentence m

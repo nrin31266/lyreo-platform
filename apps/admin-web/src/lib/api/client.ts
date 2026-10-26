@@ -1,79 +1,56 @@
-import { env } from '@/config/env';
-import { accessToken } from '@/lib/oidc/client';
+import axios from "axios";
+import { env } from "@/config/env";
+import { accessToken } from "@/lib/oidc/client";
 
 export class ApiError extends Error {
-  readonly status: number;
-  readonly code?: string;
-  readonly detail?: string;
-  readonly correlationId?: string;
-
   constructor(
-    status: number,
+    readonly status: number,
     message: string,
-    code?: string,
-    detail?: string,
-    correlationId?: string,
+    readonly code?: string,
+    readonly detail?: string,
+    readonly correlationId?: string,
+    readonly errors?: { field: string; code?: string; message: string }[],
   ) {
     super(message);
-    this.name = 'ApiError';
-    this.status = status;
-    this.code = code;
-    this.detail = detail;
-    this.correlationId = correlationId;
+    this.name = "ApiError";
   }
 }
-
-export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+export const http = axios.create({ baseURL: env.apiBaseUrl, timeout: 30_000 });
+http.interceptors.request.use(async (config) => {
   const token = await accessToken();
-  const response = await fetch(`${env.apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
+  if (token) config.headers.set("Authorization", `Bearer ${token}`);
+  return config;
+});
+http.interceptors.response.use(
+  (response) => response,
+  (cause: unknown) => {
+    if (axios.isCancel(cause)) return Promise.reject(cause);
+    if (!axios.isAxiosError(cause)) return Promise.reject(cause);
+    const data = cause.response?.data;
+    const problem = data && typeof data === "object" ? data : {};
+    return Promise.reject(
+      new ApiError(
+        cause.response?.status ?? 0,
+        typeof problem.detail === "string"
+          ? problem.detail
+          : "Unable to complete the request",
+        problem.code,
+        problem.detail,
+        problem.correlationId,
+        problem.errors,
+      ),
+    );
+  },
+);
+
+// Keep the existing call contract while all features share Axios transport.
+export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await http.request<T>({
+    url: path,
+    method: init.method ?? "GET",
+    data: typeof init.body === "string" ? JSON.parse(init.body) : init.body,
+    headers: Object.fromEntries(new Headers(init.headers).entries()),
+    signal: init.signal ?? undefined,
   });
-
-  if (!response.ok) {
-    const rawText = await response.text().catch(() => '');
-    let message = `API request failed with status ${response.status}`;
-    let code: string | undefined;
-    let detail: string | undefined;
-    let correlationId: string | undefined;
-
-    if (rawText) {
-      try {
-        const data = JSON.parse(rawText) as {
-          correlationId?: unknown;
-          detail?: unknown;
-          title?: unknown;
-          code?: unknown;
-          message?: unknown;
-        };
-        if (typeof data === 'object' && data !== null) {
-          if (typeof data.correlationId === 'string')
-            correlationId = data.correlationId;
-          if (typeof data.code === 'string') {
-            code = data.code;
-          }
-          if (typeof data.detail === 'string') {
-            detail = data.detail;
-            message = data.detail;
-          } else if (typeof data.title === 'string') {
-            message = data.title;
-          } else if (typeof data.message === 'string') {
-            message = data.message;
-          }
-        }
-      } catch {
-        message = rawText;
-      }
-    }
-
-    throw new ApiError(response.status, message, code, detail, correlationId);
-  }
-
-  const text = await response.text();
-  if (!text) return undefined as T;
-  return JSON.parse(text) as T;
+  return response.data;
 }

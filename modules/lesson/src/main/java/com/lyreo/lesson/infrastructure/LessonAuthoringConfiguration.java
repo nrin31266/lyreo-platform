@@ -18,8 +18,9 @@ public class LessonAuthoringConfiguration {
     @Bean AuthoringRepository authoringRepository(NamedParameterJdbcTemplate jdbc,ObjectMapper mapper,BackgroundJobService jobs) {
         return new JdbcAuthoringRepository(jdbc,mapper,jobs);
     }
-    @Bean LessonAuthoringService lessonAuthoringService(AuthoringRepository repository,AuthoringSourcePort source,BackgroundJobService jobs) {
-        return new LessonAuthoringService(repository,source,jobs);
+    @Bean LessonAuthoringService lessonAuthoringService(AuthoringRepository repository,AuthoringSourcePort source,BackgroundJobService jobs,
+        @org.springframework.beans.factory.annotation.Value("${lyreo.lesson.timing.reuse-draft:false}") boolean reuseDraft) {
+        var service=new LessonAuthoringService(repository,source,jobs);service.setReuseDraftTiming(reuseDraft);return service;
     }
     @Bean AuthoringSemantic authoringSemantic(ObjectMapper mapper,LexiconLinkService lexicon) {return new AuthoringSemantic(mapper,lexicon);}
     @Bean AuthoringJobCommitter authoringJobCommitter(AuthoringRepository repository) {return new AuthoringJobCommitter(repository);}

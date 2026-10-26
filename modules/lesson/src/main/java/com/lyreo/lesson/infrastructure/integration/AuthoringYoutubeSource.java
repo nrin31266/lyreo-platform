@@ -73,10 +73,10 @@ public final class AuthoringYoutubeSource implements AuthoringSourcePort {
     public SourceInfo inspect(String sourceReference) {
         String id = videoId(sourceReference);
         var cached = jdbc.query("""
-            SELECT video_id, title, duration_ms, embed_allowed FROM lesson_youtube_source
-             WHERE video_id=:id AND updated_at > now() - interval '1 day'
+            SELECT video_id, title, duration_ms, embed_allowed,thumbnail_url FROM lesson_youtube_source
+             WHERE video_id=:id AND channel_id IS NOT NULL AND updated_at > now() - interval '1 day'
             """, Map.of("id", id), (rs, row) -> new SourceInfo(rs.getString(1), rs.getString(2),
-                rs.getLong(3), rs.getBoolean(4)));
+                rs.getLong(3), rs.getBoolean(4),rs.getString(5)));
         if (!cached.isEmpty()) return cached.getFirst();
         if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
             throw new RequestValidationException("Inspect the source before creating a draft; metadata is missing or expired");
@@ -93,14 +93,21 @@ public final class AuthoringYoutubeSource implements AuthoringSourcePort {
                 throw new RequestValidationException("Choose a completed video up to two hours long");
             }
             SourceInfo info = new SourceInfo(id, node.path("title").asText(id),
-                Math.round(seconds * 1000), node.path("playable_in_embed").asBoolean(true));
+                Math.round(seconds * 1000), node.path("playable_in_embed").asBoolean(true),node.path("thumbnail").asText(null));
             jdbc.update("""
-                INSERT INTO lesson_youtube_source(video_id,title,duration_ms,embed_allowed)
-                VALUES (:id,:title,:duration,:embed)
+                INSERT INTO lesson_youtube_source(video_id,title,duration_ms,embed_allowed,channel_id,channel_title,thumbnail_url)
+                VALUES (:id,:title,:duration,:embed,:channel,:channelTitle,:thumbnail)
                 ON CONFLICT(video_id) DO UPDATE SET title=excluded.title,
-                  duration_ms=excluded.duration_ms,embed_allowed=excluded.embed_allowed,updated_at=now()
+                  duration_ms=excluded.duration_ms,embed_allowed=excluded.embed_allowed,
+                  channel_id=excluded.channel_id,channel_title=excluded.channel_title,thumbnail_url=excluded.thumbnail_url,updated_at=now()
                 """, Map.of("id", id, "title", info.title(), "duration", info.durationMs(),
-                    "embed", info.embedAllowed()));
+                    "embed", info.embedAllowed(), "channel", node.path("channel_id").asText(""),
+                    "channelTitle", node.path("channel").asText(""),"thumbnail",node.path("thumbnail").asText("")));
+            String channel=node.path("channel_id").asText("");
+            if(!channel.isBlank()) jdbc.update("""
+                INSERT INTO lesson_youtube_channel(channel_id,title) VALUES(:id,:title)
+                ON CONFLICT(channel_id) DO UPDATE SET title=CASE WHEN lesson_youtube_channel.synced_at IS NULL THEN excluded.title ELSE lesson_youtube_channel.title END
+                """,Map.of("id",channel,"title",node.path("channel").asText(channel)));
             return info;
         } catch (IOException failure) {
             throw unavailable(failure);
@@ -114,8 +121,8 @@ public final class AuthoringYoutubeSource implements AuthoringSourcePort {
             throw new RequestValidationException("Source identity does not match the video");
         }
         SourceInfo info = inspect(sourceReference);
-        if (startMs < 0 || endMs <= startMs || endMs > info.durationMs() || endMs - startMs > 1_800_000) {
-            throw new RequestValidationException("Choose a valid segment of at most 30 minutes");
+        if (startMs < 0 || endMs <= startMs || endMs > info.durationMs() || endMs - startMs > 600_000) {
+            throw new RequestValidationException("Choose a valid segment of at most 10 minutes");
         }
         Map<String, Object> args = Map.of("id", videoId, "start", startMs, "end", endMs);
         var cached = jdbc.queryForList("""
@@ -125,26 +132,23 @@ public final class AuthoringYoutubeSource implements AuthoringSourcePort {
         if (!cached.isEmpty()) return cached.getFirst();
         Path work = temp();
         try {
-            Path source = work.resolve("source.m4a");
+            Path source = work.resolve("source.mka");
             var sourceKeys = jdbc.queryForList("SELECT audio_object_key FROM lesson_youtube_source "
                 + "WHERE video_id=:id", Map.of("id", videoId), String.class);
             String sourceKey = sourceKeys.isEmpty() ? null : sourceKeys.getFirst();
-            if (sourceKey == null) {
+            boolean ranged = sourceKey == null;
+            if (ranged) {
                 run(List.of(command, "--no-playlist", "--no-progress", "--max-filesize", "256M",
-                    "--extract-audio", "--audio-format", "m4a", "--output", source.toString(),
+                    "-f", "bestaudio", "--download-sections", "*" + seconds(startMs) + "-" + seconds(endMs),
+                    "--force-keyframes-at-cuts", "--output", source.toString(),
                     "--", url(videoId)), work.resolve("acquisition.log"));
-                if (!Files.isRegularFile(source) || Files.size(source) > MAX_SOURCE_BYTES) {
+                if (!Files.isRegularFile(source) || Files.size(source) > MAX_SOURCE_BYTES)
                     throw new RequestValidationException("Source audio exceeds the supported size");
-                }
-                sourceKey = "sources/youtube/" + videoId + "/original.m4a";
-                storage.put(sourceKey, "audio/mp4", Files.readAllBytes(source));
-                jdbc.update("UPDATE lesson_youtube_source SET audio_object_key=:key WHERE video_id=:id",
-                    Map.of("key", sourceKey, "id", videoId));
             } else {
                 try (var input = storage.get(sourceKey)) { Files.copy(input, source); }
             }
             Path segment = work.resolve("segment.wav");
-            run(List.of("ffmpeg", "-v", "error", "-nostdin", "-y", "-ss", seconds(startMs),
+            run(List.of("ffmpeg", "-v", "error", "-nostdin", "-y", "-ss", ranged ? "0" : seconds(startMs),
                 "-i", source.toString(), "-t", seconds(endMs - startMs), "-vn", "-ar", "16000",
                 "-ac", "1", "-c:a", "pcm_s16le", segment.toString()), work.resolve("ffmpeg.log"));
             String key = "sources/youtube/" + videoId + "/segments/" + startMs + "-" + endMs + "-pcm16-v1.wav";

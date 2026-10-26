@@ -6,7 +6,11 @@ Cross-boundary workflow: [Lesson Build](../features/lesson-build.md).
 
 Product supports Text, Audio and YouTube conceptually. The current phase implements YouTube-first
 Admin authoring; Text/Audio UI and mobile playback/practice are deferred. Source identity is shared
-across lessons; each V1 lesson selects one contiguous range before inference. Overlap warns, not blocks.
+across lessons; each V1 lesson selects one contiguous range of at most 10 minutes before inference; 2–5 minutes is recommended.
+Videos up to 10 minutes default to their full duration, longer videos default to 0–5 minutes without
+starting acquisition, preview preparation or inference. Metadata exposes the full source timeline;
+Admin may move the range anywhere. Only explicit range confirmation starts media preparation.
+Overlap warns, not blocks.
 
 ### FR-LSN-002 — Independent build dimensions
 
@@ -123,6 +127,9 @@ stale output không commit và private recording không lộ.
 Admin edits/splits/merges transcript, bulk-selects Learn/Watch only/Skip, and explicitly approves
 transcript plus karaoke preview before semantic generation. Only stale dependencies recompute.
 Timing requires real lexical coverage and observed intervals, not fabricated duration.
+A waveform editor provides an overview, zoom, draggable/resizable region, synchronized millisecond
+timecodes, seek and loop with one playback clock. Unknown waveform areas stay visibly unprepared.
+Long-source preview cannot require downloading the complete source first.
 
 ### FR-LSN-008 — Contextual generation and candidate review
 
@@ -139,7 +146,40 @@ attempts/progress. Draft revision prevents concurrent overwrites; stale AI/job o
 
 ### BR-LSN-007 — Free-only and retirement gates
 
-For local development, operators may select any supported public YouTube source and acknowledge responsibility for permissions; channel allowlists and licence-document checks are not required. Only confirmed free external paths or local inference may execute. Quota exhaustion waits durably
+For local development, operators may select any supported public YouTube source without a mandatory rights-attestation checkbox; channel allowlists and licence-document checks are not required. Only confirmed free external paths or local inference may execute. Quota exhaustion waits durably
 or uses a tested configured free alternative, never paid fallback. Source rights/acquisition must
 be verified before production. Retire the old authoring tool only after regression coverage and
 replacement verification; preserve user artifacts and business data.
+
+### FR-LSN-009 — Admin catalog and classification
+
+Admin lists/searches/filters/pages lessons, resumes drafts after refresh/failure, and views published
+content. Categories are flat and many-to-many. Source channels use YouTube channel IDs/metadata;
+Audio/Text and legacy lessons may have no channel. Classification metadata is editable independently
+of immutable published content and does not invalidate transcript approvals. Used categories cannot
+be silently deleted. Presentation metadata (display title, description, HTTP(S) image URL and categories) is editable for
+both drafts and published lessons without invalidating learning-content approvals. Display metadata
+is separate from the immutable publication snapshot. A source thumbnail is the default image;
+missing or broken images have a fallback.
+
+Admin may soft-delete drafts only after active jobs have stopped. Deleted drafts disappear from
+catalog, authoring lookup and source-range listings; shared media and sources remain intact.
+Published lessons cannot be deleted through this operation. Admin may unlist/relist published
+lessons using availability independent of content/build status. Unlisted lessons cannot accept new
+practice and must be excluded from future learner discovery; existing attempts/progress remain.
+Published transcript, timing, annotations and selected activity membership remain immutable.
+
+Admin manages YouTube source channels independently by channel ID. Channel names/avatar URLs can
+be synchronized explicitly for one channel or a selected batch of at most 50 via durable jobs.
+Missing metadata or provider errors must preserve previously valid metadata. Credentials stay in
+Core configuration; unconfigured synchronization reports a safe actionable conflict. This does not
+import videos or create lessons automatically.
+
+### FR-LSN-010 — Evidence-based timing reuse
+
+Groq supplies transcript and draft word/segment evidence. After transcript approval, reuse is allowed
+only when lexical tokens still match, validation passes and the centrally configured quality policy
+permits it. Missing/stale/invalid timing requires local forced alignment. Benchmark actual 2/5/10-minute
+lessons against the same transcript and human-checked word references, including listening/karaoke
+review and nonzero source offsets. Without adequate evidence, require local alignment temporarily;
+local output also requires validation and explicit karaoke approval before semantic generation.

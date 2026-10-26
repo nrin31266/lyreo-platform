@@ -5,6 +5,7 @@ export type SourceInspection = {
   title: string;
   durationMs: number;
   embedAllowed: boolean;
+  thumbnailUrl?:string|null;
   usedRanges: { lessonId: string; title: string; startMs: number; endMs: number; status: string }[];
 };
 export type AuthoringWord = {
@@ -43,8 +44,9 @@ export type AuthoringJob = {
   status: string;
   currentStep?: string | null;
   errorMessage?: string | null;
+  errorCode?: string | null;
   nextRetryAt?: string | null;
-  usage: { provider: string; model: string; inputTokens?: number | null; outputTokens?: number | null; latencyMs: number }[];
+  usage: { provider: string; model: string; inputTokens?: number | null; outputTokens?: number | null; latencyMs: number; audioSeconds?: number | null }[];
 };
 export type LessonDraft = {
   id: string;
@@ -57,6 +59,7 @@ export type LessonDraft = {
   transcriptRevision: number;
   status: string;
   timingStatus: string;
+  alignmentRequired?: boolean;
   approvedRevision: number | null;
   karaokeReviewedRevision: number | null;
   semanticRevision: number | null;

@@ -31,7 +31,7 @@ infrastructure       -> application ports / domain
 
 Domain and application code do not depend on HTTP, persistence adapters, object storage SDKs, model runtimes, or client frameworks. Cross-module collaboration uses named/public Spring Modulith interfaces, shared contracts, or events. Modules do not import each other's repositories, entities, or internal adapters. Platform code does not depend on business modules.
 
-Mobile and Admin Web implement their own components and platform adapters. [`design-system`](../packages/design-system/README.md) owns semantic tokens; [`i18n`](../packages/i18n/README.md) owns shared EN/VI resources. Shared contracts do not require shared Web/Native components.
+Mobile and Admin Web own independent visual foundations and components. [`design-system`](../packages/design-system/README.md) owns learner tokens; Admin owns its shadcn preset, theme CSS, typography, radius and density. [`i18n`](../packages/i18n/README.md) owns shared EN/VI resources. Domain/API contracts remain shared where needed; presentation parity is not required.
 
 ## Important runtime scenarios
 

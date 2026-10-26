@@ -16,55 +16,40 @@ Tests use Vitest, React Testing Library, and jsdom. Tests cover editor polling/c
 
 ## Local conventions
 
-Authentication uses Authorization Code + PKCE with the public Keycloak client. Browser env values are baked into a production Vite build; the Dockerfile supplies relative API/auth defaults for the repository compose topology.
+Admin uses React/Vite, React Router, local shadcn Radix components and the full `b1aIuOuyO` preset
+initialized with `--pointer`. `src/styles/globals.css` owns the default preset palette; feature styles
+live with their owners. Shared EN/VI strings live in `packages/i18n`.
 
-Admin owns its Web components and accessibility adapters. Use shared semantic light/dark tokens from [`design-system`](../../packages/design-system/README.md), shared translations from [`i18n`](../../packages/i18n/README.md), and local shadcn/Radix-style primitives. Keep feature pages organized by domain and avoid importing another page's private implementation. Use semantic classes rather than raw brand/theme color literals.
+Axios owns authenticated transport, timeout, cancellation and Problem Details. TanStack Query owns
+server data, invalidation and polling while jobs are active; mutations do not retry automatically.
+React Hook Form and Zod validate forms. Core remains the final validation and lifecycle authority.
+Editor text, selection and playback state stay local and cannot be overwritten by background refresh.
 
+The sidebar uses one navigation configuration, nested menus and explicit Coming soon entries for
+unimplemented areas. These entries do not imply feature completeness. AI configuration uses one sidebar entry and top tabs for providers and routing. Task pages prefer
+a viewport-height workspace with independent scrolling for long lists and forms; desktop authoring uses resizable player/editor panes, while smaller screens switch
+between Player and Editor without expanding the whole page. Source URL paste opens the source
+workspace after metadata inspection; no rights-attestation checkbox is required. A single footer
+groups the current step’s submissions. Loading states use skeletons.
 
-## Workspace UI
+## Content workflow
 
-The compact console uses white/black/gray surfaces and text with restrained blue accents for
-primary actions, focus and selected navigation in light/dark mode. Be Vietnam Pro
-(Fontsource, OFL-1.1) is self-hosted in Latin/Vietnamese subsets, weights 400/500/600/700.
-The 48 px header and 216 px navigation use the official `sidebar-07` block with its standard
-sidebar variant customized for React Router/auth/i18n. Content sits beside the sidebar with one
-vertical divider, without an inset frame. Language and theme controls have labelled icons;
-sign out is inside the avatar dropdown, matching the block's account-menu pattern.
-Dialog, Select and menu primitives use the same Radix focus-scope version so nested mobile menus
-share focus management; the navigation regression checks Escape and focus restoration.
-Mobile navigation uses shadcn Sidebar's labelled Sheet, Escape dismissal, close control and focus restoration.
-The login screen customizes official `login-03` with the existing OIDC entrypoint.
+`/lessons` lists/filters/pages lessons; `/lessons/new` inspects sources and creates drafts;
+`/lessons/:lessonId` resumes drafts or opens the separate published view. Categories and source
+channels have dedicated screens and queries. Filters remain in the URL.
 
-The full 54-file Radix/new-york component set was installed with `pnpm dlx shadcn@latest add --all`.
-Existing components were previewed with `--dry-run`, `--diff` and `--view`, then merged preserving
-the compact control styles, invalid states and translated `DialogContent.closeLabel` contract.
-Blocks were installed with `pnpm dlx shadcn@latest add @shadcn/sidebar-07 @shadcn/login-03`;
-unused team/project demonstration components and sample data were removed.
+Metadata (display title, description, image URL and categories) can change independently of published
+learning content. Draft deletion is soft and requires stopped jobs. Published lessons can be unlisted
+and relisted; learning history is preserved. Source thumbnails and channel avatars have fallbacks.
+Explicit channel metadata sync supports up to 50 selected IDs through Core jobs; configure the
+server-only `YOUTUBE_DATA_API_KEY` to enable it. No automatic video import is performed.
 
-Use 16 px page gutters, 12 px panel insets and 32–36 px desktop controls; mobile touch targets
-are at least 44 px. At 1200 px and above, official Resizable panels start at a 1/3 player and 2/3
-editor split. Narrower screens stack the same mounted panels, so changing width does not discard
-edits or recreate the player. Transcript and semantic review occupy separate Radix tabs.
-State belongs to the parent so tab changes do not discard unsaved edits.
-Tables scroll within labelled regions rather than expanding the page. The overview links to
-implemented operations and does not invent counts or analytics.
+Source selection, timecodes, waveform preparation, transcript editing, alignment, karaoke review,
+semantic review, candidates and publication follow [Lesson Build](../../docs/features/lesson-build.md).
+Source inspection does not acquire audio; range confirmation is explicit. YouTube owns the playback
+clock. `LESSON_TIMING_REUSE_DRAFT` stays a Core quality policy, default false pending human evidence.
 
-`AppThemeProvider` remains the single theme owner. CSS aliases map its semantic tokens into
-shadcn card/popover/accent/chart roles; `adminSidebarThemes` owns the neutral navigation
-surfaces and text. Base-layer border color defaults prevent Tailwind 4 width-only borders from
-falling back to the text color. Sonner also reads this existing provider.
-The installed Resizable adapter uses the installed react-resizable-panels v4 API (`Group`,
-`Panel`, `Separator`) rather than the older API returned by the legacy new-york registry.
-Unused components are available in source without a barrel import into the application.
-
-Source inspection shows translated errors beside the URL and preserves the request correlation ID.
-Source confirmation records operator responsibility and does not assert verified permission:
-“Nguồn do người vận hành lựa chọn để phát triển và kiểm thử nội bộ. Người vận hành chịu trách nhiệm
-xin phép và bảo đảm quyền sử dụng trước khi khai thác hoặc phát hành.”
-
-Global CSS owns keyboard focus and reduced-motion behavior. Mobile continues to use learner
-`semanticThemes`; Admin palette/font changes do not change that runtime adapter.
-
-Browser fixture sessions are not evidence for live OIDC, YouTube playback or AI quality.
-Consult the [plan completion audit](../../docs/features/lesson-build.md#plan-completion-audit--2026-10-25)
-for verified live OIDC/player/publication checks, source retirement and remaining human quality/billing gates.
+Tests cover observable behavior and stay with their owner; shared setup stays in `src/test`.
+Run browser checks across desktop/tablet/mobile, light/dark, keyboard navigation, dirty navigation,
+source-region interactions and the complete authoring workflow. Unit tests do not prove visual layout
+or pedagogical quality. Credentials are never persisted in public Vite configuration.

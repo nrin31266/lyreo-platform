@@ -33,8 +33,8 @@ export function NavUser() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton size="lg" tooltip={name} aria-label={name}>
-              <Avatar className="size-8 rounded-lg">
-                <AvatarFallback className="rounded-lg">
+              <Avatar>
+                <AvatarFallback>
                   {name.slice(0, 1).toUpperCase()}
                 </AvatarFallback>
               </Avatar>

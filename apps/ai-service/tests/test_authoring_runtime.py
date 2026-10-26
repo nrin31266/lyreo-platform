@@ -37,6 +37,21 @@ def test_asr_windows_preserve_every_sample_and_bound_gpu_input():
     assert all(len(window) <= 120 * 16_000 for _, window in windows)
 
 
+def test_alignment_accepts_only_terminal_frame_rounding_and_never_pads_audio():
+    audio = Waveform(19_979 * 16)
+    segments = [{'text': 'hello', 'start_ms': 160, 'end_ms': 20_000}]
+    start, window, text = _alignment_windows(audio, 'hello', segments, timestamp_precision_ms=80)[0]
+    assert start + len(window) == len(audio)
+    assert text == 'hello'
+    assert segments[0]['end_ms'] == 20_000
+    for invalid in (
+        [{'text': 'hello', 'start_ms': 160, 'end_ms': 20_080}],
+        [{'text': 'hello', 'start_ms': 19_980, 'end_ms': 20_000}],
+    ):
+        with pytest.raises(ValueError, match='in-bounds'):
+            _alignment_windows(audio, 'hello', invalid, timestamp_precision_ms=80)
+
+
 def test_alignment_requires_real_anchors_for_long_input():
     with pytest.raises(ValueError, match='requires anchored'):
         _alignment_windows(Waveform(121 * 16_000), 'hello', None)

@@ -85,13 +85,17 @@ lyreo:
     max-client-keys: ${API_RATE_LIMIT_MAX_CLIENT_KEYS:100000}
 
   ai-service:
+    dev-mock-routes-enabled: ${AI_DEV_MOCK_ROUTES_ENABLED:false}
     base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
     internal-token: ${AI_SERVICE_INTERNAL_TOKEN}
     timeout-seconds: ${AI_SERVICE_TIMEOUT_SECONDS:300}
     confirmed-free-providers: ${AI_CONFIRMED_FREE_PROVIDERS:}
 
   lesson:
+    timing:
+      reuse-draft: ${LESSON_TIMING_REUSE_DRAFT:false}
     youtube:
+      data-api-key: ${YOUTUBE_DATA_API_KEY:}
       # External media materialization is opt-in per environment. It runs in Core, not FastAPI.
       enabled: ${YOUTUBE_MEDIA_TOOL_ENABLED:false}
       command: ${YOUTUBE_MEDIA_TOOL_COMMAND:yt-dlp}

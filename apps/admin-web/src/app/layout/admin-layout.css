@@ -1,0 +1,149 @@
+.admin-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 16px;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+}
+.header-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+}
+.appearance-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 8px;
+  background: var(--background);
+  transform: translateY(-200%);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+.page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+h1 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+h2,
+h3 {
+  font-weight: 600;
+}
+.lead {
+  color: var(--muted-foreground);
+  font-size: 14px;
+  margin-top: 4px;
+  max-width: 80ch;
+}
+.muted {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.eyebrow {
+  display: none;
+}
+.center,
+.login-page {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  gap: 16px;
+  padding: 24px;
+}
+@media (max-width: 767px) {
+  .page-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .admin-header {
+    padding-inline: 12px;
+  }
+}
+.console-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 16px;
+  align-items: start;
+}
+.console-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground);
+  text-decoration: none;
+}
+.console-row:last-child {
+  border: 0;
+}
+.console-row:hover {
+  background: var(--muted);
+}
+.console-row > svg {
+  width: 17px;
+  height: 17px;
+  color: var(--muted-foreground);
+}
+.console-row strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+.console-row p {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.console-row-action {
+  font-size: 12px;
+  color: var(--sidebar-primary);
+}
+.authoring-path {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 14px 14px 14px 34px;
+}
+.authoring-path li::marker {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+.authoring-path h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.authoring-path p {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+@media (max-width: 1199px) {
+  .console-overview {
+    grid-template-columns: 1fr;
+  }
+}

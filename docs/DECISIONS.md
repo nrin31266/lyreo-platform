@@ -86,8 +86,9 @@ Keep module boundary so future English-only tutor can reuse AI routing, but do n
 ## D-017 — Semantic theming and shared localization (2026-09-07)
 
 Status: Accepted.
-Use shared primitive/semantic design tokens with light/dark themes and `@lyreo/i18n` for intentional
-shared translations. Platform adapters own locale/theme persistence.
+Use semantic design tokens with light/dark themes and `@lyreo/i18n` for intentional
+shared translations. Platform adapters own locale/theme persistence. The shared visual-foundation
+requirement is superseded by D-025; localization remains shared.
 
 ## D-018 — Platform-specific UI component ownership (2026-09-07)
 
@@ -175,3 +176,45 @@ source and setup/CI hooks are retired; local secrets, media and exported artifac
 This does not approve human timing/pedagogical quality or independently verify provider billing.
 The old package ingestion proposal is not part of this phase. Feature owner:
 [Lesson Build](features/lesson-build.md).
+
+## D-025 — Independent Admin foundation and conditional timing policy (2026-10-26)
+
+Status: Accepted.
+Admin adopts the full shadcn `b1aIuOuyO` preset (Radix Luma, Stone/Blue, Inter, small radius)
+and owns its colors, typography, spacing and component states independently of Mobile. Remove
+unused prototype components/adapters after consumer and regression checks; preserve real domain/API
+contracts. This supersedes D-017 only for cross-platform visual-token sharing.
+
+Lesson timing reuse is a Core quality-policy decision, independent of STT/alignment providers.
+Keep raw draft evidence; require local alignment temporarily until human-referenced benchmarks and
+karaoke listening review support reuse. This temporary default is configuration, not an architectural
+requirement to align every lesson forever. Source preview prepares only an explicitly confirmed
+range; a long-source full download is not a prerequisite.
+
+## D-026 — Admin management lifecycle and development migration consolidation (2026-10-26)
+
+Status: Accepted.
+
+Admin keeps the unmodified shadcn `b1aIuOuyO` palette initialized with the pointer option. Application
+styles do not override preset colors. Axios owns HTTP transport, TanStack Query owns server state and
+active-job polling, and React Hook Form/Zod own forms and client validation. Local editor state stays
+with the editor. Future sidebar entries are explicitly unavailable, not implemented feature claims.
+
+Display metadata and availability are separate from immutable published learning content. Drafts may
+be soft-deleted after jobs stop; published lessons may be unlisted/relisted while learner history is
+preserved. This extends D-024/D-025 without authorizing in-place published-content editing.
+
+The owner confirmed V007–V010 exist only in disposable development databases and authorized their
+consolidation into V007 plus a local application DB reset. V001–V006 remain unchanged. This is a
+one-time development exception; future schema changes append migrations and deployed histories must
+not be rewritten or repaired to hide changed checksums.
+
+## D-027 — Direct source editing without rights attestation (2026-10-26)
+
+Status: Accepted.
+
+Source URL input opens the editor after metadata inspection; no rights-attestation checkbox or
+boolean is required. Source selection is a selection timestamp, not proof of permission. Explicit
+waveform preparation and AI processing remain separate actions. This supersedes D-024's mandatory
+operator acknowledgment step without establishing source publication rights. Workflow actions share
+one persistent bar; only workspace contents scroll at narrow widths as well as desktop.

@@ -28,7 +28,7 @@ public class AuthoringJobCommitter {
             throw new PermanentJobException("AUTHORING_STALE","Authoring output discarded because the draft changed");
         if("PREPARE".equals(input.operation())) {
             current.audioObjectKey=output.audioObjectKey;current.sentences=output.sentences;
-            current.transcriptRevision++;current.timingStatus=output.timingStatus;current.status="TRANSCRIPT_REVIEW";
+            current.timingEvidence=output.timingEvidence;current.transcriptRevision++;current.timingStatus=output.timingStatus;current.status="TRANSCRIPT_REVIEW";
         } else if("ALIGN".equals(input.operation())) {
             current.sentences=output.sentences;current.timingStatus="VALID";current.karaokeReviewedRevision=null;
             current.status="TIMING_REVIEW";

@@ -71,6 +71,8 @@ public class AiConfiguration {
 
     @Bean
     @org.springframework.context.annotation.Profile("dev")
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+        name = "lyreo.ai-service.dev-mock-routes-enabled", havingValue = "true")
     DevAiBootstrap devAiBootstrap(AiAdminService admin) { return new DevAiBootstrap(admin); }
 
     @Bean

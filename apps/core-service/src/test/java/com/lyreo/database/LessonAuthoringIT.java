@@ -44,7 +44,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 class LessonAuthoringIT {
     @ServiceConnection static PostgreSQLContainer postgres=new PostgreSQLContainer("postgres:18.6-alpine");
     static {postgres.start();}
-    @Configuration(proxyBeanMethods=false) @EnableAutoConfiguration @Import(LessonAuthoringConfiguration.class)
+    @Configuration(proxyBeanMethods=false) @EnableAutoConfiguration @Import({LessonAuthoringConfiguration.class,com.lyreo.lesson.infrastructure.persistence.JdbcLessonCatalog.class,com.lyreo.lesson.infrastructure.persistence.JdbcSourcePreview.class})
     static class Config {
         @Bean AuthoringSourcePort source() {return mock(AuthoringSourcePort.class);}
         @Bean ObjectStoragePort storage() {return mock(ObjectStoragePort.class);}
@@ -55,6 +55,8 @@ class LessonAuthoringIT {
         @Bean BackgroundJobService jobs(BackgroundJobRepository repository,JobStateTransitionService transitions) {return new BackgroundJobService(repository,transitions);}
     }
     @Autowired LessonAuthoringService service;
+    @Autowired com.lyreo.lesson.application.port.LessonCatalogPort catalog;
+    @Autowired com.lyreo.lesson.infrastructure.persistence.JdbcSourcePreview previews;
     @Autowired LessonAuthoringJobHandler handler;
     @Autowired AuthoringJobCommitter committer;
     @Autowired AuthoringRepository repository;
@@ -68,6 +70,7 @@ class LessonAuthoringIT {
     @Autowired PlatformTransactionManager transactions;
 
     @BeforeEach void setup() {
+        service.setReuseDraftTiming(true);
         reset(ai,source,storage);
         when(source.inspect(anyString())).thenReturn(new AuthoringSourcePort.SourceInfo("abcdefghijk","Reference",10_000,true));
         when(source.prepare(anyString(),anyString(),anyLong(),anyLong())).thenReturn("sources/test/segment.wav");
@@ -86,6 +89,56 @@ class LessonAuthoringIT {
             return result(Map.of("structured",Map.of("targetLocale","vi-VN","items",items)));
         });
     }
+    @Test void deletionRejectsActiveJobsAndPreservesSharedSources() throws Exception {
+        var accepted=service.create("Delete draft","https://www.youtube.com/watch?v=abcdefghijk",0,2000);
+        assertThatThrownBy(()->catalog.deleteDraft(accepted.lessonId())).hasMessageContaining("Cancel active jobs");
+        jobs.cancel(accepted.jobId());
+        var category=catalog.saveCategory(UUID.randomUUID(),"Deleted draft "+UUID.randomUUID());
+        catalog.update(accepted.lessonId(),null,List.of(category.id()));
+        catalog.deleteDraft(accepted.lessonId());
+        catalog.deleteCategory(category.id());
+        assertThatThrownBy(()->service.get(accepted.lessonId())).hasMessageContaining("not found");
+        assertThatThrownBy(()->catalog.get(accepted.lessonId())).hasMessageContaining("not found");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson WHERE id=?",Long.class,accepted.lessonId())).isEqualTo(1);
+    }
+    @Test void catalogFiltersAndCategoryChangesPreserveDraftRevision() throws Exception {
+        var draft=prepared();String marker="Catalog "+UUID.randomUUID();
+        var one=catalog.saveCategory(UUID.randomUUID(),"Topic "+UUID.randomUUID());
+        var two=catalog.saveCategory(UUID.randomUUID(),"Other "+UUID.randomUUID());
+        catalog.update(draft.id,marker,List.of(one.id(),two.id()));
+        var page=catalog.list(marker,"",one.id(),"",0,1);
+        assertThat(page.total()).isEqualTo(1);assertThat(page.items().getFirst().categories()).hasSize(2);
+        assertThat(service.get(draft.id).revision).isEqualTo(draft.revision);
+        assertThatThrownBy(()->catalog.deleteCategory(one.id())).hasMessageContaining("assignments");
+        assertThatThrownBy(()->catalog.update(draft.id,null,List.of(UUID.randomUUID()))).hasMessageContaining("Unknown category");
+        assertThat(catalog.list(marker,"",one.id(),"",0,20).items().getFirst().categories()).hasSize(2);
+        catalog.update(draft.id,null,List.of());catalog.deleteCategory(one.id());catalog.deleteCategory(two.id());
+        assertThat(catalog.list(marker,"",one.id(),"",0,20).total()).isZero();
+        assertThatThrownBy(()->catalog.list("","",null,"",-1,20)).hasMessageContaining("Invalid");
+    }
+    @Test void previewRequiresExplicitConfirmationAndFencesCancelledOutput() throws Exception {
+        verify(source,never()).prepare(anyString(),anyString(),anyLong(),anyLong());
+        jdbc.update("INSERT INTO lesson_youtube_source(video_id,title,duration_ms,embed_allowed) VALUES('abcdefghijk','Fixture',10000,true) ON CONFLICT DO NOTHING");
+        var preview=previews.create("source",6000,7000);
+        assertThat(preview.peaks()).isEmpty();assertThat(preview.startMs()).isEqualTo(6000);
+        assertThat(previews.create("source",6000,7000).id()).isEqualTo(preview.id());
+        verify(source,never()).prepare(anyString(),anyString(),anyLong(),anyLong());
+        assertThatThrownBy(()->previews.audio(preview.id())).hasMessageContaining("not ready");
+        claim(preview.jobId());
+        byte[] pcm=new byte[32000];for(int i=0;i<pcm.length;i+=2) {pcm[i]=0;pcm[i+1]=64;}
+        var format=new javax.sound.sampled.AudioFormat(16000,16,1,true,false);
+        var bytes=new java.io.ByteArrayOutputStream();
+        javax.sound.sampled.AudioSystem.write(new javax.sound.sampled.AudioInputStream(new java.io.ByteArrayInputStream(pcm),format,16000),javax.sound.sampled.AudioFileFormat.Type.WAVE,bytes);
+        when(storage.get(anyString())).thenAnswer(call->new java.io.ByteArrayInputStream(bytes.toByteArray()));
+        previews.execute(jobs.findById(preview.jobId()).orElseThrow(),mock(JobExecutionContext.class));
+        assertThat(previews.get(preview.id()).peaks()).isNotEmpty().allSatisfy(value->assertThat(value).isEqualTo(0.5));
+        assertThat(previews.audio(preview.id())).isEqualTo(bytes.toByteArray());
+        assertThat(previews.get(preview.id()).audioDurationMs()).isEqualTo(1000.0);
+        var cancelled=previews.create("source",7000,8000);claim(cancelled.jobId());
+        jdbc.update("UPDATE background_job SET status='CANCEL_REQUESTED',cancel_requested_at=now() WHERE id=?",cancelled.jobId());
+        assertThatThrownBy(()->previews.execute(jobs.findById(cancelled.jobId()).orElseThrow(),mock(JobExecutionContext.class))).isInstanceOf(JobLeaseLostException.class);
+        assertThat(previews.get(cancelled.id()).peaks()).isEmpty();
+    }
     @Test void runsCheckpointsPublishesAtomicallyAndProtectsPracticeMembership() throws Exception {
         var draft=prepared();
         assertThat(draft.timingStatus).isEqualTo("DRAFT_VALID");
@@ -98,6 +151,16 @@ class LessonAuthoringIT {
         draft=service.publish(draft.id,draft.revision);
         assertThat(draft.status).isEqualTo("PUBLISHED");
         UUID id=draft.id;
+        long revision=draft.revision;var category=catalog.saveCategory(UUID.randomUUID(),"Published "+UUID.randomUUID());
+        catalog.update(id,null,List.of(category.id()));
+        assertThat(service.get(id).revision).isEqualTo(revision);
+        catalog.updateMetadata(id,"Changed","Description","https://example.com/image.jpg",List.of(category.id()));
+        assertThat(catalog.get(id).title()).isEqualTo("Changed");
+        assertThat(service.get(id).revision).isEqualTo(revision);
+        catalog.visibility(id,false);
+        assertThat(catalog.get(id).visible()).isFalse();
+        assertThatThrownBy(()->catalog.deleteDraft(id)).hasMessageContaining("Unlist");
+        catalog.visibility(id,true);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_activity_sentence m JOIN lesson_activity a ON a.id=m.activity_id WHERE a.lesson_id=? AND a.activity_type='DICTATION'",Integer.class,id)).isEqualTo(1);
         assertThatThrownBy(()->jdbc.update("UPDATE lesson_sentence SET text='changed' WHERE id=?",selected)).hasMessageContaining("immutable");
         assertThatThrownBy(()->jdbc.update("DELETE FROM lesson_activity WHERE lesson_id=?",id)).hasMessageContaining("immutable");
@@ -115,6 +178,11 @@ class LessonAuthoringIT {
         practice.appendDictationAttempt(learner,target,"We learn.",100,"{}");
         assertThat(practice.refreshActivityProgress(learner,id,activity,70).totalItems()).isEqualTo(1);
         assertThat(practice.tryMarkActivityCompleted(learner,activity)).isTrue();
+        catalog.visibility(id,false);
+        assertThat(practice.findDictationTarget(id,activity,selected)).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_practice_attempt WHERE lesson_id=?",Long.class,id)).isEqualTo(1);
+        catalog.visibility(id,true);
+        assertThat(practice.findDictationTarget(id,activity,selected)).isPresent();
     }
     @Test void failedPublicationRollsBackProjectionAndKeepsEditableDraft() throws Exception {
         var draft=prepared();draft=service.approve(draft.id,draft.revision);draft=service.karaoke(draft.id,draft.revision);
@@ -158,7 +226,7 @@ class LessonAuthoringIT {
         verify(ai,never()).execute(eq(AiCapability.ALIGNMENT),anyString(),anyMap(),anyMap());
     }
     @Test void expiredLeaseCannotBeRenewedOrCommitAuthoringOutput() throws Exception {
-        var accepted=service.create("Expired","https://www.youtube.com/watch?v=abcdefghijk",0,5000,true);
+        var accepted=service.create("Expired","https://www.youtube.com/watch?v=abcdefghijk",0,5000);
         claim(accepted.jobId());
         var job=jobs.findById(accepted.jobId()).orElseThrow();
         jdbc.update("UPDATE background_job SET lease_until=now()-interval '1 second' WHERE id=?",job.id());
@@ -227,7 +295,7 @@ class LessonAuthoringIT {
         assertThat(windows.getFirst()).containsEntry("start_ms",0L).containsEntry("end_ms",1200L);
     }
     @Test void simulated429WaitsDurablyUntilDueThenResumesPreparationExactlyOnce() {
-        var accepted=service.create("Simulated quota resume","https://www.youtube.com/watch?v=abcdefghijk",0,5000,true);
+        var accepted=service.create("Simulated quota resume","https://www.youtube.com/watch?v=abcdefghijk",0,5000);
         var before=service.get(accepted.lessonId());
         // Other methods leave queued fixtures; this worker scenario owns only the new job.
         jdbc.update("UPDATE background_job SET status='CANCELLED',cancel_requested_at=now() WHERE id<>? AND "
@@ -295,7 +363,7 @@ class LessonAuthoringIT {
         assertThat(repository.jobInput(accepted.jobId()).completed()).isFalse();
     }
     @Test void cancellationWhileProviderRunsDiscardsOutputAndKeepsDraftCheckpoint() throws Exception {
-        var accepted=service.create("Cancel provider","https://www.youtube.com/watch?v=abcdefghijk",0,5000,true);
+        var accepted=service.create("Cancel provider","https://www.youtube.com/watch?v=abcdefghijk",0,5000);
         claim(accepted.jobId());
         var before=service.get(accepted.lessonId());
         var entered=new java.util.concurrent.CountDownLatch(1);
@@ -325,7 +393,7 @@ class LessonAuthoringIT {
         assertThat(repository.jobInput(accepted.jobId()).completed()).isFalse();
     }
     @Test void cancellationAfterProviderBeforeCommitIsFencedEvenWithoutWorkerCancellationCheck() throws Exception {
-        var accepted=service.create("Cancel commit","https://www.youtube.com/watch?v=abcdefghijk",0,5000,true);
+        var accepted=service.create("Cancel commit","https://www.youtube.com/watch?v=abcdefghijk",0,5000);
         claim(accepted.jobId());
         var before=service.get(accepted.lessonId());
         var context=mock(JobExecutionContext.class);
@@ -349,7 +417,7 @@ class LessonAuthoringIT {
                 Map.of("text","every","start_ms",20_000,"end_ms",30_000),Map.of("text","day","start_ms",30_000,"end_ms",60_000),
                 Map.of("text","and","start_ms",60_000,"end_ms",70_000),Map.of("text","practice","start_ms",70_000,"end_ms",90_000),
                 Map.of("text","together","start_ms",90_000,"end_ms",120_000)))));
-        var accepted=service.create("Long edit","https://www.youtube.com/watch?v=abcdefghijk",0,120_000,true);
+        var accepted=service.create("Long edit","https://www.youtube.com/watch?v=abcdefghijk",0,120_000);
         run(accepted);var draft=service.get(accepted.lessonId());
         UUID first=draft.sentences.getFirst().id;
         service.transcript(draft.id,draft.revision,List.of(new LessonAuthoringService.SentenceInput(first,
@@ -367,7 +435,7 @@ class LessonAuthoringIT {
     }
 
     private AuthoringLesson prepared() throws Exception {
-        var accepted=service.create("Authoring","https://www.youtube.com/watch?v=abcdefghijk",0,5000,true);
+        var accepted=service.create("Authoring","https://www.youtube.com/watch?v=abcdefghijk",0,5000);
         run(accepted);return service.get(accepted.lessonId());
     }
     private void claim(UUID job) {jdbc.update("UPDATE background_job SET status='RUNNING',lease_owner='test-worker',lease_until=now()+interval '5 minutes' WHERE id=?",job);}

@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public final class LessonAuthoringJobHandler implements JobHandler {
     private final AuthoringRepository repository;
@@ -54,6 +55,9 @@ public final class LessonAuthoringJobHandler implements JobHandler {
             committer.commit(job,input,lesson);
             context.progress("CHECKPOINT_SAVED",100);
         } catch(AiExecutionException failure) {
+            if(Set.of("AI_HTTP_401","AI_HTTP_403","AI_HTTP_404","AI_HTTP_501","AI_ROUTE_NOT_CONFIGURED","AI_FREE_ONLY_ROUTE_BLOCKED").contains(failure.errorCode()))
+                throw new PermanentJobException("AI_CONFIGURATION_REQUIRED",
+                    "Configure an enabled provider, supported model and credential in AI Settings, then retry this step. Local runtime cannot execute DEV_MOCK routes.",failure);
             if(failure.retryAfterSeconds()>0)
                 throw new DeferredJobException("Free provider quota reached; waiting to resume",Instant.now().plusSeconds(failure.retryAfterSeconds()));
             if(!failure.fallbackAllowed()) throw new PermanentJobException(failure.errorCode(),failure.getMessage(),failure);
@@ -73,6 +77,7 @@ public final class LessonAuthoringJobHandler implements JobHandler {
         context.throwIfCancellationRequested();
         Object text=result.output().get("text");
         LessonAuthoringService.require(text instanceof String && !((String)text).isBlank(),"ASR response has no transcript");
+        lesson.timingEvidence=java.util.Collections.unmodifiableMap(new java.util.HashMap<>(result.output()));
         lesson.sentences=AuthoringText.split((String)text);
         lesson.timingStatus="MISSING";
         try {
@@ -86,7 +91,9 @@ public final class LessonAuthoringJobHandler implements JobHandler {
                 lesson.timingStatus="WHISPER_DRAFT";
             }
         } catch(RequestValidationException invalid) {
-            lesson.sentences.forEach(s->{s.words=List.of();s.issues=List.of("TIMING_MISSING");});
+            String issue=result.output().get("timestamps") instanceof List<?> timestamps && !timestamps.isEmpty()
+                ? (invalid.getMessage().contains("coverage") ? "TIMING_COVERAGE_MISMATCH" : "TIMING_INVALID") : "TIMING_MISSING";
+            lesson.sentences.forEach(s->{s.words=List.of();s.issues=List.of(issue);});
         }
         AuthoringText.seedCoarse(lesson.sentences,result.output());
         boolean usable="DRAFT_VALID".equals(lesson.timingStatus);
@@ -106,21 +113,22 @@ public final class LessonAuthoringJobHandler implements JobHandler {
         LessonAuthoringService.readyForSemantic(lesson);context.progress("GENERATING_CONTENT",0);
         List<AuthoringSentence> targets=lesson.sentences.stream().filter(s->"LEARN".equals(s.usage)).toList();
         // Full lesson context is repeated; only the requested output is bounded to prevent truncation.
-        for(int index=0;index<targets.size();index+=6) {
+        for(int index=0;index<targets.size();) {
             context.throwIfCancellationRequested();
-            var chunk=targets.subList(index,Math.min(index+6,targets.size()));
             var saved=repository.chunk(job.id(),index);
+            int size=saved.map(List::size).orElse(3);
+            LessonAuthoringService.require(saved.isEmpty() || (size>0 && index+size<=targets.size()),"Invalid semantic checkpoint size");
+            var chunk=targets.subList(index,Math.min(index+size,targets.size()));
             if(saved.isPresent()) {
                 for(var cached:saved.get()) {
                     var target=chunk.stream().filter(s->s.id.equals(cached.id)).findFirst().orElseThrow();
                     copySemantic(cached,target);
                 }
-                continue;
+                index+=chunk.size();continue;
             }
             String prompt=semantic.prompt(lesson.sentences,chunk);
             var input=semantic.input(lesson.sentences,chunk);
-            var options=Map.<String,Object>of("response_schema","lesson_authoring_v1","json_schema",AuthoringSemantic.schema(),
-                "temperature",0.2,"max_output_tokens",3500,"thinking_level","minimal","provider_options",Map.of("reasoning_effort","low"));
+            var options=AuthoringSemantic.options();
             for(int attempt=0;attempt<2;attempt++) {
                 context.throwIfCancellationRequested();context.heartbeat();
                 var result=invoke(job,AiCapability.GENERAL_LLM,prompt,input,options);
@@ -129,11 +137,10 @@ public final class LessonAuthoringJobHandler implements JobHandler {
                 catch(RequestValidationException invalid) {
                     if(attempt==1) throw invalid;
                     // Core validation messages contain no provider output or source text.
-                    prompt+="\nCore validation rejected the previous response: "+invalid.getMessage()
-                        +". Regenerate every requested item with the same schema; omit uncertain annotations.";
+                    prompt=semantic.correctionPrompt(invalid.getMessage());
                 }
             }
-            committer.stage(job,index,chunk);
+            committer.stage(job,index,chunk);index+=chunk.size();
         }
     }
     private static void copySemantic(AuthoringSentence from,AuthoringSentence to) {
@@ -144,7 +151,8 @@ public final class LessonAuthoringJobHandler implements JobHandler {
     }
     private AiExecutionResult invoke(BackgroundJob job,AiCapability capability,String prompt,Map<String,Object> input,Map<String,Object> options) {
         var result=ai.execute(capability,prompt,input,options);
-        repository.usage(job.id(),new AuthoringLesson.Invocation(result.provider(),result.model(),result.inputTokens(),result.outputTokens(),result.latencyMs()));
+        repository.usage(job.id(),new AuthoringLesson.Invocation(result.provider(),result.model(),result.inputTokens(),result.outputTokens(),result.latencyMs(),
+            result.output().get("audio_seconds") instanceof Number seconds ? seconds.doubleValue() : null));
         return result;
     }
     private String audioUrl(AuthoringLesson lesson) {

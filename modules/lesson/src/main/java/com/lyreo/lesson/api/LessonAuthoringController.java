@@ -18,7 +18,8 @@ import org.springframework.web.bind.annotation.*;
 @PreAuthorize("hasRole('ADMIN')")
 public class LessonAuthoringController {
     private final LessonAuthoringService service;
-    public LessonAuthoringController(LessonAuthoringService service) {this.service=service;}
+    private final com.lyreo.lesson.application.port.LessonCatalogPort catalog;
+    public LessonAuthoringController(LessonAuthoringService service,com.lyreo.lesson.application.port.LessonCatalogPort catalog) {this.service=service;this.catalog=catalog;}
     @PostMapping("/inspect") public LessonAuthoringService.Inspect inspect(@Valid @RequestBody InspectRequest request) {
         try { return service.inspect(request.sourceReference()); }
         catch (SourceMaterializationException failure) {
@@ -26,8 +27,11 @@ public class LessonAuthoringController {
                 "YouTube source is unavailable. Check the source and media tools, then retry.", failure);
         }
     }
+    @org.springframework.transaction.annotation.Transactional
     @PostMapping("/drafts") public ResponseEntity<LessonAuthoringService.Accepted> create(@Valid @RequestBody CreateRequest request) {
-        return accepted(service.create(request.title(),request.sourceReference(),request.startMs(),request.endMs(),request.rightsConfirmed()));
+        var result=service.create(request.title(),request.sourceReference(),request.startMs(),request.endMs());
+        catalog.updateMetadata(result.lessonId(),request.title(),request.description()==null ? "" : request.description(),request.imageUrl(),request.categoryIds()==null ? List.of() : request.categoryIds());
+        return accepted(result);
     }
     @GetMapping("/{id}") public LessonAuthoringResponse get(@PathVariable UUID id) {return LessonAuthoringResponse.from(service.get(id));}
     @PutMapping("/{id}/transcript") public LessonAuthoringResponse transcript(@PathVariable UUID id,@Valid @RequestBody TranscriptRequest request) {
@@ -58,7 +62,7 @@ public class LessonAuthoringController {
         return ResponseEntity.accepted().location(URI.create("/api/v1/jobs/"+result.jobId())).body(result);
     }
     public record InspectRequest(@NotBlank String sourceReference) {}
-    public record CreateRequest(@NotBlank String title,@NotBlank String sourceReference,long startMs,long endMs,boolean rightsConfirmed) {}
+    public record CreateRequest(@NotBlank String title,@NotBlank String sourceReference,long startMs,long endMs,String description,String imageUrl,List<UUID> categoryIds) {}
     public record RevisionRequest(long revision) {}
     public record TranscriptRequest(long revision,@NotNull List<LessonAuthoringService.SentenceInput> sentences) {}
     public record CandidatesRequest(long revision,List<UUID> dictationSentenceIds,List<UUID> shadowingSentenceIds) {}

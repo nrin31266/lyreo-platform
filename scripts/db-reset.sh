@@ -50,4 +50,4 @@ docker compose --env-file infra/docker/.env -f compose.dev.yml exec -T postgres 
   "CREATE DATABASE \"$TARGET_DB\" OWNER \"$TARGET_USER\";" >/dev/null
 
 echo "Database '$TARGET_DB' reset successfully."
-echo "Run 'make core' to apply Flyway migrations (V001..V003)."
+echo "Run 'make core' to apply Flyway migrations (V001..V008)."

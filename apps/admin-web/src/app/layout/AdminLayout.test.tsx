@@ -83,6 +83,15 @@ describe('shared Admin navigation', () => {
     expect(logout).toHaveBeenCalledOnce();
   });
 
+  it('uses one sidebar entry for AI configuration', () => {
+    desktop = true;
+    show();
+    const link = screen.getByRole('link', { name: 'AI settings' });
+    expect(link).toHaveAttribute('href', '/settings/ai');
+    expect(screen.queryByRole('link', { name: 'AI routing' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'AI providers' })).not.toBeInTheDocument();
+  });
+
   it('opens a labelled modal, closes with Escape and restores keyboard focus', async () => {
     const user = userEvent.setup();
     show();
@@ -105,7 +114,7 @@ describe('shared Admin navigation', () => {
     await user.click(menu);
     await user.click(
       within(screen.getByRole('dialog')).getByRole('link', {
-        name: 'Background Jobs',
+        name: 'Processing jobs',
       }),
     );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -124,7 +133,7 @@ describe('shared Admin navigation', () => {
     expect(
       screen.getByRole('combobox', { name: 'Language' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Theme' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Theme' })).toBeInTheDocument();
     const desktopTrigger = screen.getByRole('button', {
       name: 'Collapse sidebar',
     });
@@ -162,7 +171,7 @@ describe('shared Admin navigation', () => {
       screen.getByRole('button', { name: 'Expand sidebar' }),
     ).toHaveAttribute('aria-expanded', 'false');
     expect(
-      screen.getByRole('link', { name: 'Lesson Builder' }),
+      screen.getByRole('button', { name: 'Lessons' }),
     ).toBeInTheDocument();
     expect(localStorage.getItem('lyreo.admin.sidebar-collapsed')).toBe('true');
     cleanup();

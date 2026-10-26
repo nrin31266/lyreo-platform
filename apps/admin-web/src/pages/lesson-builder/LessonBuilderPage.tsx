@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import "./lesson-builder.css";
+import { RefreshCw } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { CreateLessonPage } from "./CreateLessonPage";
+import { UnsavedChangesGuard } from "./UnsavedChangesGuard";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Link, useParams } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -13,172 +16,57 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from '@/components/ui/accordion';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
-import { Skeleton } from '@/components/ui/skeleton';
+} from "@/components/ui/accordion";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { CatalogError } from "@/pages/lessons/CatalogFeedback";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
-} from '@/components/ui/resizable';
-import { ApiError } from '@/lib/api';
-import { cancelJob } from '@/pages/jobs/jobs.api';
+} from "@/components/ui/resizable";
+import { ApiError } from "@/lib/api";
+import { cancelJob } from "@/pages/jobs/jobs.api";
 import {
   mergeSentence,
   splitSentence,
   thoughtGroupPreview,
-} from './authoring-editor';
-import * as authoring from './lesson-builder.api';
+} from "./authoring-editor";
+import * as authoring from "./lesson-builder.api";
 import type {
   AuthoringJob,
   LessonDraft,
   SentenceUsage,
-  SourceInspection,
   TranscriptSentence,
-} from './lesson-builder.types';
-import { YouTubePreview } from './YouTubePreview';
+} from "./lesson-builder.types";
+import { timecode } from "./timecode";
+import { YouTubePreview } from "./YouTubePreview";
 
-const labelCodes = [
-  'TRANSCRIPT_REVIEW',
-  'TIMING_REVIEW',
-  'CONTENT_REVIEW',
-  'PUBLISHED',
-  'QUEUED',
-  'RUNNING',
-  'RETRY_WAIT',
-  'CANCEL_REQUESTED',
-  'CANCELLED',
-  'SUCCEEDED',
-  'FAILED',
-  'DRAFT_VALID',
-  'VALID',
-  'MISSING',
-  'STALE',
-  'WHISPER_DRAFT',
-  'PREPARE',
-  'ALIGN',
-  'SEMANTIC',
-  'SOURCE_PREPARE',
-  'TRANSCRIBING',
-  'ALIGNING',
-  'GENERATING_CONTENT',
-  'CHECKPOINT_SAVED',
-  'LONG_SENTENCE',
-  'SHORT_SENTENCE',
-  'TIMING_MISSING',
-  'TIMING_OVERLAP',
-  'TIMING_ZERO_DURATION',
-  'GROUPED_TIMING',
-] as const;
-function useCodeLabel() {
-  const { t } = useTranslation('admin');
-  return (code: string) => {
-    const known = labelCodes.find((value) => value === code);
-    return known ? t(`lessonAuthoring.labels.${known}`) : code;
-  };
-}
-
-const usages: SentenceUsage[] = ['LEARN', 'WATCH_ONLY', 'SKIP'];
-const activeJob = (job: AuthoringJob) =>
-  ['QUEUED', 'RUNNING', 'RETRY_WAIT', 'CANCEL_REQUESTED'].includes(job.status);
-const formatTime = (ms: number) =>
-  `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
-
-function JobProgress({
-  job,
-  onCancel,
-}: {
-  job: AuthoringJob;
-  onCancel: () => void;
-}) {
-  const { t, i18n } = useTranslation('admin');
-  const describe = useCodeLabel();
-  const [observedSeconds, setObservedSeconds] = useState(0);
-  useEffect(() => {
-    setObservedSeconds(0);
-    if (!activeJob(job)) return;
-    const start = Date.now();
-    const timer = setInterval(
-      () => setObservedSeconds(Math.floor((Date.now() - start) / 1000)),
-      1000,
-    );
-    return () => clearInterval(timer);
-  }, [job.jobId, job.currentStep, job.status]);
-  return (
-    <div
-      className="flex flex-col gap-2 rounded-lg border border-border p-3 text-sm"
-      role="status"
-    >
-      <div className="flex flex-wrap items-center gap-3">
-        <strong>{describe(job.operation)}</strong>
-        <Badge variant="secondary">{describe(job.status)}</Badge>
-        <span>{job.currentStep ? describe(job.currentStep) : null}</span>
-        {activeJob(job) ? (
-          <>
-            <span>
-              {t('lessonAuthoring.observedTime', { seconds: observedSeconds })}
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={onCancel}
-            >
-              {t('lessonAuthoring.cancel')}
-            </Button>
-          </>
-        ) : null}
-        <Link to={`/jobs?job=${job.jobId}`}>
-          {t('lessonAuthoring.inspectJob')}
-        </Link>
-      </div>
-      {job.nextRetryAt && job.status === 'RETRY_WAIT' ? (
-        <p>
-          {t('lessonAuthoring.retryAt', {
-            time: new Date(job.nextRetryAt).toLocaleString(i18n.language),
-          })}
-        </p>
-      ) : null}
-      {job.errorMessage ? (
-        <p className="text-destructive">{job.errorMessage}</p>
-      ) : null}
-      {(job.usage ?? []).map((call, index) => (
-        <p key={index} className="text-sm text-muted-foreground">
-          {call.provider} / {call.model} ·{' '}
-          {t('lessonAuthoring.usage', {
-            input: call.inputTokens ?? '—',
-            output: call.outputTokens ?? '—',
-            seconds:
-              call.latencyMs === undefined
-                ? '—'
-                : (call.latencyMs / 1000).toFixed(1),
-          })}
-        </p>
-      ))}
-    </div>
-  );
-}
+import {
+  JobProgress,
+  useCodeLabel,
+  activeJob,
+  formatTime,
+} from "./AuthoringJobProgress";
+const usages: SentenceUsage[] = ["LEARN", "WATCH_ONLY", "SKIP"];
 
 export function LessonBuilderPage() {
-  const { t } = useTranslation(['admin', 'common']);
+  const { lessonId } = useParams();
+  return lessonId ? <LessonEditorPage key={lessonId} /> : <CreateLessonPage />;
+}
+function LessonEditorPage() {
+  const { t } = useTranslation(["admin", "common"]);
   const describe = useCodeLabel();
-  const navigate = useNavigate();
   const { lessonId } = useParams<{ lessonId: string }>();
-  const [sourceReference, setSourceReference] = useState('');
-  const [inspection, setInspection] = useState<SourceInspection | null>(null);
-  const [title, setTitle] = useState('');
-  const [startSeconds, setStartSeconds] = useState('0');
-  const [endSeconds, setEndSeconds] = useState('120');
-  const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [draft, setDraft] = useState<LessonDraft | null>(null);
   const latestDraftRef = useRef<LessonDraft | null>(null);
   const [sentences, setSentences] = useState<TranscriptSentence[]>([]);
@@ -199,8 +87,8 @@ export function LessonBuilderPage() {
   const [playerAvailable, setPlayerAvailable] = useState(false);
   const [contentReviewed, setContentReviewed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [inspectError, setInspectError] = useState('');
+  const [error, setError] = useState("");
+  const [inspectError, setInspectError] = useState("");
   const [currentMs, setCurrentMs] = useState(0);
   const [seek, setSeek] = useState<{ atMs: number; sequence: number } | null>(
     null,
@@ -240,47 +128,39 @@ export function LessonBuilderPage() {
     }
   }
 
+  const client = useQueryClient();
+  const query = useQuery({
+    queryKey: ["authoring", lessonId],
+    queryFn: ({ signal }) => authoring.fetchDraft(lessonId!, signal),
+    staleTime: 0,
+    refetchInterval: (q) => (q.state.data?.jobs.some(activeJob) ? 2500 : false),
+  });
   useEffect(() => {
-    setDraft(null);
-    latestDraftRef.current = null;
-    editorRevisionRef.current = null;
-    setDirty(false);
-    dirtyRef.current = false;
-    setCandidatesDirty(false);
-    candidatesDirtyRef.current = false;
-    setKaraokeConfirmed(false);
-    setContentReviewed(false);
-    setError('');
-    if (!lessonId) return;
-    let disposed = false;
-    let timer: ReturnType<typeof setTimeout>;
-    async function refresh() {
-      try {
-        const next = await authoring.fetchDraft(lessonId!);
-        if (disposed) return;
-        acceptDraft(next, !dirtyRef.current);
-      } catch (cause) {
-        if (!disposed)
-          setError(cause instanceof Error ? cause.message : String(cause));
-      }
-      if (!disposed) timer = setTimeout(refresh, 2500);
-    }
-    void refresh();
-    return () => {
-      disposed = true;
-      clearTimeout(timer);
-    };
-  }, [lessonId]);
+    if (query.data) acceptDraft(query.data, !dirtyRef.current);
+  }, [query.data, query.dataUpdatedAt]);
+  useEffect(() => {
+    if (query.error) setError(query.error.message);
+  }, [query.error]);
+  const [mobilePane, setMobilePane] = useState("content");
+  const [editorTab, setEditorTab] = useState("transcript");
+  const actionMutation = useMutation({
+    mutationFn: (action: () => Promise<void>) => action(),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["catalog"] });
+      if (latestDraftRef.current)
+        client.setQueryData(["authoring", lessonId], latestDraftRef.current);
+    },
+  });
 
   async function perform(action: () => Promise<void>) {
     setBusy(true);
-    setError('');
+    setError("");
     try {
-      await action();
+      await actionMutation.mutateAsync(action);
     } catch (cause) {
       setError(
         cause instanceof ApiError && cause.status === 409
-          ? t('lessonAuthoring.conflict')
+          ? t("lessonAuthoring.conflict")
           : cause instanceof Error
             ? cause.message
             : String(cause),
@@ -300,77 +180,15 @@ export function LessonBuilderPage() {
     candidatesDirtyRef.current = false;
   }
 
-  async function inspect(event: FormEvent) {
-    event.preventDefault();
-    setError('');
-    setBusy(true);
-    setInspectError('');
-    setInspection(null);
-    try {
-      const next = await authoring.inspectSource(sourceReference.trim());
-      setInspection(next);
-      if (!title.trim()) setTitle(next.title);
-      setEndSeconds(String(Math.min(next.durationMs / 1000, 120)));
-    } catch (cause) {
-      const code = cause instanceof ApiError ? cause.code : undefined;
-      const known =
-        code &&
-        [
-          'YOUTUBE_MEDIA_TOOL_DISABLED',
-          'YOUTUBE_MEDIA_TOOL_UNAVAILABLE',
-          'YOUTUBE_MEDIA_TIMEOUT',
-          'YOUTUBE_MEDIA_FAILED',
-          'YOUTUBE_MEDIA_INTERRUPTED',
-        ].includes(code);
-      const message = known
-        ? t(`lessonAuthoring.sourceErrors.${code}`)
-        : t('lessonAuthoring.sourceErrors.generic');
-      setInspectError(
-        cause instanceof ApiError && cause.correlationId
-          ? `${message} · ${t('lessonAuthoring.requestId', { id: cause.correlationId })}`
-          : message,
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function create(event: FormEvent) {
-    event.preventDefault();
-    await perform(async () => {
-      const startMs = Math.round(Number(startSeconds) * 1000);
-      const endMs = Math.round(Number(endSeconds) * 1000);
-      if (
-        !title.trim() ||
-        !inspection ||
-        !rightsConfirmed ||
-        !Number.isFinite(startMs) ||
-        !Number.isFinite(endMs) ||
-        startMs < 0 ||
-        endMs <= startMs ||
-        endMs > inspection.durationMs
-      ) {
-        throw new Error(t('lessonAuthoring.invalidRange'));
-      }
-      const result = await authoring.createDraft({
-        title: title.trim(),
-        sourceReference: sourceReference.trim(),
-        startMs,
-        endMs,
-        rightsConfirmed,
-      });
-      navigate(`/lessons/${result.lessonId}`);
-    });
-  }
-
-  const published = draft?.status === 'PUBLISHED';
+  const published = draft?.status === "PUBLISHED";
   const pending = draft?.jobs.some(activeJob) ?? false;
   const blocked = busy || pending || published;
   const approved = draft
     ? draft.approvedRevision === draft.transcriptRevision
     : false;
   const timingValid = draft
-    ? ['VALID', 'DRAFT_VALID'].includes(draft.timingStatus)
+    ? ["VALID", "DRAFT_VALID"].includes(draft.timingStatus) &&
+      !draft.alignmentRequired
     : false;
   const karaokeReviewed = draft
     ? draft.karaokeReviewedRevision === draft.transcriptRevision
@@ -378,33 +196,47 @@ export function LessonBuilderPage() {
   const semanticReady = draft
     ? draft.semanticRevision === draft.transcriptRevision
     : false;
-  const startMs = Math.round(Number(startSeconds) * 1000);
-  const endMs = Math.round(Number(endSeconds) * 1000);
-  const overlap = inspection?.usedRanges.some(
-    (range) => startMs < range.endMs && endMs > range.startMs,
-  );
 
-  function applyCandidates(mode: 'HIGH' | 'ALL') {
+  const nextStep = published
+    ? "lessonAuthoring.published"
+    : pending
+      ? "catalog.waitForJob"
+      : dirty || candidatesDirty
+        ? "catalog.saveBeforeContinue"
+        : !draft?.sentences.length
+          ? "catalog.prepareNext"
+          : !approved
+            ? "catalog.reviewTranscriptNext"
+            : !timingValid
+              ? "catalog.reviewTimingNext"
+              : !karaokeReviewed
+                ? "catalog.confirmKaraokeNext"
+                : !semanticReady
+                  ? "catalog.generateNext"
+                  : "catalog.reviewCandidatesNext";
+
+  function applyCandidates(mode: "HIGH" | "ALL") {
     if (!draft) return;
-    const selected = (activity: 'dictation' | 'shadowing') =>
+    const selected = (activity: "dictation" | "shadowing") =>
       draft.sentences
         .filter(
           (s) =>
-            s.usage === 'LEARN' &&
+            s.usage === "LEARN" &&
             s[`${activity}Eligible`] &&
-            (mode === 'ALL' || s[`${activity}Priority`] === 'HIGH'),
+            (mode === "ALL" || s[`${activity}Priority`] === "HIGH"),
         )
         .map((s) => s.id);
-    setDictationIds(selected('dictation'));
-    setShadowingIds(selected('shadowing'));
+    setDictationIds(selected("dictation"));
+    setShadowingIds(selected("shadowing"));
     setCandidatesDirty(true);
     candidatesDirtyRef.current = true;
     setContentReviewed(false);
   }
 
   const isHistoricalJob = (job: AuthoringJob) =>
-    job.status === 'SUCCEEDED' ||
-    (published && ['FAILED', 'CANCELLED'].includes(job.status));
+    job.status === "SUCCEEDED" ||
+    (["FAILED", "CANCELLED"].includes(job.status) &&
+      (published || job !== draft?.jobs.at(-1)));
   const historyJobs = draft?.jobs.filter(isHistoricalJob) ?? [];
   function renderJob(job: AuthoringJob) {
     if (!draft) return null;
@@ -426,12 +258,13 @@ export function LessonBuilderPage() {
   }
 
   return (
-    <section className="lesson-authoring flex flex-col gap-3">
+    <section className="authoring-page" data-editing={Boolean(lessonId)}>
+      <UnsavedChangesGuard dirty={dirty || candidatesDirty} />
       <div className="authoring-heading">
-        <h1>{draft?.title ?? t('lessonAuthoring.title')}</h1>
+        <h1>{draft?.title ?? t("lessonAuthoring.title")}</h1>
         {!lessonId ? (
           <p className="text-sm text-muted-foreground">
-            {t('lessonAuthoring.lead')}
+            {t("lessonAuthoring.lead")}
           </p>
         ) : null}
       </div>
@@ -440,212 +273,29 @@ export function LessonBuilderPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
-      {!lessonId ? (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('lessonAuthoring.sourceTitle')}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form
-                onSubmit={inspect}
-                className="authoring-source-toolbar flex flex-col items-end gap-3 sm:flex-row"
-              >
-                <FieldGroup className="flex-1">
-                  <Field data-invalid={Boolean(inspectError)}>
-                    <FieldLabel htmlFor="youtube-source">
-                      {t('lessonAuthoring.youtubeUrl')}
-                    </FieldLabel>
-                    <Input
-                      id="youtube-source"
-                      disabled={busy}
-                      aria-invalid={Boolean(inspectError)}
-                      aria-describedby={
-                        inspectError ? 'source-inspect-error' : undefined
-                      }
-                      type="url"
-                      required
-                      value={sourceReference}
-                      onChange={(event) => {
-                        setSourceReference(event.target.value);
-                        setInspectError('');
-                        setInspection(null);
-                        setRightsConfirmed(false);
-                      }}
-                      placeholder="https://www.youtube.com/watch?v=…"
-                    />
-                  </Field>
-                </FieldGroup>
-                <Button
-                  type="submit"
-                  className="w-full sm:w-auto"
-                  disabled={busy || !sourceReference.trim()}
-                >
-                  {busy
-                    ? t('common:status.loading')
-                    : inspectError
-                      ? t('lessonAuthoring.retryInspect')
-                      : t('lessonAuthoring.inspect')}
-                </Button>
-              </form>
-              {inspectError ? (
-                <Alert
-                  id="source-inspect-error"
-                  variant="destructive"
-                  className="mt-3"
-                >
-                  <AlertDescription>{inspectError}</AlertDescription>
-                </Alert>
-              ) : null}
-            </CardContent>
-          </Card>
-          {inspection ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>{inspection.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={create} className="flex flex-col gap-3">
-                  {!inspection.embedAllowed ? (
-                    <Alert variant="destructive">
-                      <AlertDescription>
-                        {t('lessonAuthoring.embedBlocked')}
-                      </AlertDescription>
-                    </Alert>
-                  ) : null}
-                  <p>
-                    {t('lessonAuthoring.duration', {
-                      time: formatTime(inspection.durationMs),
-                    })}
-                  </p>
-                  <div className="authoring-source-grid grid items-start gap-4 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-                    {inspection.embedAllowed ? (
-                      <YouTubePreview
-                        videoId={inspection.videoId}
-                        startMs={
-                          Number.isFinite(startMs) ? Math.max(0, startMs) : 0
-                        }
-                        endMs={
-                          Number.isFinite(endMs) && endMs > startMs
-                            ? Math.min(endMs, inspection.durationMs)
-                            : inspection.durationMs
-                        }
-                        sentences={[]}
-                        seek={null}
-                        onTimeChange={setCurrentMs}
-                      />
-                    ) : (
-                      <div />
-                    )}
-                    <div className="flex flex-col gap-3">
-                      <Field>
-                        <FieldLabel htmlFor="source-lessonTitle">
-                          {t('lessonAuthoring.lessonTitle')}
-                        </FieldLabel>
-                        <Input
-                          id="source-lessonTitle"
-                          required
-                          value={title}
-                          onChange={(event) => setTitle(event.target.value)}
-                        />
-                      </Field>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field>
-                          <FieldLabel htmlFor="source-startSeconds">
-                            {t('lessonAuthoring.startSeconds')}
-                          </FieldLabel>
-                          <Input
-                            id="source-startSeconds"
-                            type="number"
-                            min="0"
-                            step="0.001"
-                            required
-                            value={startSeconds}
-                            onChange={(event) =>
-                              setStartSeconds(event.target.value)
-                            }
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor="source-endSeconds">
-                            {t('lessonAuthoring.endSeconds')}
-                          </FieldLabel>
-                          <Input
-                            id="source-endSeconds"
-                            type="number"
-                            min="0"
-                            max={inspection.durationMs / 1000}
-                            step="0.001"
-                            required
-                            value={endSeconds}
-                            onChange={(event) =>
-                              setEndSeconds(event.target.value)
-                            }
-                          />
-                        </Field>
-                      </div>
-                      {overlap ? (
-                        <p role="status" className="text-warning">
-                          {t('lessonAuthoring.overlap')}
-                        </p>
-                      ) : null}
-                      {inspection.usedRanges.length ? (
-                        <div>
-                          <h3>{t('lessonAuthoring.usedRanges')}</h3>
-                          <ul>
-                            {inspection.usedRanges.map((range) => (
-                              <li key={range.lessonId}>
-                                <Link to={`/lessons/${range.lessonId}`}>
-                                  {range.title}
-                                </Link>{' '}
-                                · {formatTime(range.startMs)}–
-                                {formatTime(range.endMs)} · {range.status}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                      <label className="flex items-start gap-2">
-                        <Checkbox
-                          checked={rightsConfirmed}
-                          onCheckedChange={(checked) =>
-                            setRightsConfirmed(checked === true)
-                          }
-                        />
-                        {t('lessonAuthoring.rights')}
-                      </label>
-                      <Button
-                        type="submit"
-                        disabled={
-                          busy || !rightsConfirmed || !inspection.embedAllowed
-                        }
-                      >
-                        {t('lessonAuthoring.prepare')}
-                      </Button>
-                    </div>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          ) : null}
-        </>
-      ) : !draft ? (
-        <div role="status" aria-label={t('lessonAuthoring.loading')}>
-          <Skeleton className="h-40 w-full" />
+      {!draft ? (
+        query.isError ? <CatalogError error={query.error} retry={() => void query.refetch()} /> :
+        <div role="status" aria-label={t("lessonAuthoring.loading")} className="grid gap-4">
+          <Skeleton className="h-8 w-2/3" />
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-10 w-full" />
         </div>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <Badge variant="secondary">
-              {t('lessonAuthoring.status', { status: describe(draft.status) })}
+              {t("lessonAuthoring.status", { status: describe(draft.status) })}
             </Badge>
             <span>
-              {t('lessonAuthoring.revision', { revision: draft.revision })}
+              {t("lessonAuthoring.revision", { revision: draft.revision })}
             </span>
-            <Link to="/lessons/new">{t('lessonAuthoring.newLesson')}</Link>
+            <Link to="/lessons/new">{t("lessonAuthoring.newLesson")}</Link>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
+              size={dirty || candidatesDirty ? "default" : "icon"}
+              aria-label={t(dirty || candidatesDirty ? "lessonAuthoring.discardReload" : "lessonAuthoring.refresh")}
+              title={t(dirty || candidatesDirty ? "lessonAuthoring.discardReload" : "lessonAuthoring.refresh")}
               disabled={busy}
               onClick={() =>
                 void perform(async () => {
@@ -655,24 +305,23 @@ export function LessonBuilderPage() {
                 })
               }
             >
-              {dirty || candidatesDirty
-                ? t('lessonAuthoring.discardReload')
-                : t('lessonAuthoring.refresh')}
+              <RefreshCw />
+              {(dirty || candidatesDirty) && t("lessonAuthoring.discardReload")}
             </Button>
           </div>
           {published ? (
             <p role="status" className="text-success">
-              {t('lessonAuthoring.published')}
+              {t("lessonAuthoring.published")}
             </p>
           ) : null}
-          <div className="grid gap-2">
+          <div className="authoring-jobs grid gap-2">
             {draft.jobs.filter((job) => !isHistoricalJob(job)).map(renderJob)}
             {historyJobs.length ? (
               <Accordion type="single" collapsible>
                 <AccordionItem value="job-history">
                   <AccordionTrigger className="py-2">
                     <span className="flex items-center gap-2">
-                      {t('lessonAuthoring.jobHistory')}
+                      {t("lessonAuthoring.jobHistory")}
                       <Badge variant="secondary">{historyJobs.length}</Badge>
                     </span>
                   </AccordionTrigger>
@@ -686,9 +335,9 @@ export function LessonBuilderPage() {
             ) : null}
           </div>
           {!draft.sentences.length ? (
-            <Card>
-              <CardContent className="pt-6">
-                <p>{t('lessonAuthoring.preparing')}</p>
+            <Alert>
+              <AlertDescription className="flex flex-wrap items-center gap-2">
+                <p>{t("lessonAuthoring.preparing")}</p>
                 <Button
                   type="button"
                   disabled={blocked}
@@ -702,25 +351,43 @@ export function LessonBuilderPage() {
                     })
                   }
                 >
-                  {t('lessonAuthoring.retryPreparation')}
+                  {t("lessonAuthoring.retryPreparation")}
                 </Button>
-              </CardContent>
-            </Card>
+              </AlertDescription>
+            </Alert>
           ) : null}
+
+          <div className="workspace-pane-switch">
+            <Button
+              variant={mobilePane === "player" ? "secondary" : "outline"}
+              onClick={() => setMobilePane("player")}
+            >
+              {t("catalog.player")}
+            </Button>
+            <Button
+              variant={mobilePane === "content" ? "secondary" : "outline"}
+              onClick={() => setMobilePane("content")}
+            >
+              {t("catalog.editor")}
+            </Button>
+          </div>
           <ResizablePanelGroup
             orientation="horizontal"
             className="authoring-workspace"
+            data-mobile-pane={mobilePane}
           >
             <ResizablePanel
               defaultSize="33%"
               minSize="25%"
               className="authoring-player-pane"
+              id="authoring-player"
+              tabIndex={-1}
             >
-              <Card className="authoring-player">
-                <CardHeader>
-                  <CardTitle>{t('lessonAuthoring.karaokeTitle')}</CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-3">
+              <div className="authoring-player">
+                <header className="authoring-pane-heading">
+                  <h2>{t("lessonAuthoring.karaokeTitle")}</h2>
+                </header>
+                <div className="flex flex-col gap-3">
                   <YouTubePreview
                     videoId={draft.videoId}
                     startMs={draft.startMs}
@@ -731,84 +398,50 @@ export function LessonBuilderPage() {
                     onAvailabilityChange={setPlayerAvailable}
                   />
                   <p>
-                    {formatTime(currentMs)} /{' '}
+                    {formatTime(currentMs)} /{" "}
                     {formatTime(draft.endMs - draft.startMs)}
                   </p>
                   <p>
-                    {t('lessonAuthoring.timing', {
+                    {t("lessonAuthoring.timing", {
                       status: describe(draft.timingStatus),
                     })}
                   </p>
-                  <p className="text-sm text-muted-foreground">
-                    {t('lessonAuthoring.reviewTiming')}
-                  </p>
-                  <label className="flex items-start gap-2">
-                    <Checkbox
-                      checked={karaokeConfirmed}
-                      disabled={
-                        blocked ||
-                        dirty ||
-                        !approved ||
-                        !timingValid ||
-                        !playerAvailable
-                      }
-                      onCheckedChange={(checked) =>
-                        setKaraokeConfirmed(checked === true)
-                      }
-                    />
-                    {t('lessonAuthoring.karaokeConfirmed')}
-                  </label>
-                  <Button
-                    type="button"
-                    disabled={
-                      blocked ||
-                      dirty ||
-                      !approved ||
-                      !timingValid ||
-                      !playerAvailable ||
-                      !karaokeConfirmed ||
-                      karaokeReviewed
-                    }
-                    onClick={() =>
-                      void perform(async () =>
-                        acceptDraft(
-                          await authoring.reviewKaraoke(
-                            draft.id,
-                            draft.revision,
-                          ),
-                        ),
-                      )
-                    }
-                  >
-                    {karaokeReviewed
-                      ? t('lessonAuthoring.karaokeApproved')
-                      : t('lessonAuthoring.approveKaraoke')}
-                  </Button>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </ResizablePanel>
             <ResizableHandle
               withHandle
-              aria-label={t('lessonAuthoring.resizePanels')}
+              aria-label={t("lessonAuthoring.resizePanels")}
             />
-            <ResizablePanel defaultSize="67%" minSize="40%">
+            <ResizablePanel
+              defaultSize="67%"
+              minSize="40%"
+              className="authoring-editor-pane"
+            >
               <Tabs
-                defaultValue="transcript"
+                value={editorTab}
+                onValueChange={setEditorTab}
                 className="authoring-tabs min-w-0"
               >
-                <TabsList aria-label={t('lessonAuthoring.title')}>
+                <TabsList aria-label={t("lessonAuthoring.title")}>
                   <TabsTrigger value="transcript">
-                    {t('lessonAuthoring.transcriptTab')}
+                    {t("lessonAuthoring.transcriptTab")}
+                  </TabsTrigger>
+                  <TabsTrigger value="timing">
+                    {t("catalog.step_timing")}
                   </TabsTrigger>
                   <TabsTrigger value="content">
-                    {t('lessonAuthoring.contentTab')}
+                    {t("lessonAuthoring.contentTab")}
                   </TabsTrigger>
                 </TabsList>
-                <TabsContent value="transcript">
-                  <Card>
-                    <CardContent className="flex flex-col gap-3">
+                <TabsContent
+                  value="transcript"
+                  className="authoring-transcript-tab"
+                >
+                  <div className="authoring-transcript-card">
+                    <div className="authoring-transcript-body flex flex-col gap-3">
                       <p className="text-sm text-muted-foreground">
-                        {t('lessonAuthoring.transcriptNote')}
+                        {t("lessonAuthoring.transcriptNote")}
                       </p>
                       <div className="authoring-editor-toolbar flex flex-wrap items-center gap-2">
                         <label className="flex items-center gap-2">
@@ -818,7 +451,7 @@ export function LessonBuilderPage() {
                               setIssuesOnly(checked === true)
                             }
                           />
-                          {t('lessonAuthoring.issuesOnly')}
+                          {t("lessonAuthoring.issuesOnly")}
                         </label>
                         <label className="flex items-center gap-2">
                           <Checkbox
@@ -835,7 +468,7 @@ export function LessonBuilderPage() {
                               )
                             }
                           />
-                          {t('lessonAuthoring.selectAll')}
+                          {t("lessonAuthoring.selectAll")}
                         </label>
                         {usages.map((usage) => (
                           <Button
@@ -884,7 +517,7 @@ export function LessonBuilderPage() {
                                       )
                                     }
                                   />
-                                  {t('lessonAuthoring.sentence', {
+                                  {t("lessonAuthoring.sentence", {
                                     number: index + 1,
                                   })}
                                 </label>
@@ -907,7 +540,7 @@ export function LessonBuilderPage() {
                                   <SelectTrigger
                                     className="authoring-sentence-usage w-auto min-w-32"
                                     aria-label={t(
-                                      'lessonAuthoring.sentenceUsage',
+                                      "lessonAuthoring.sentenceUsage",
                                       { number: index + 1 },
                                     )}
                                   >
@@ -935,7 +568,7 @@ export function LessonBuilderPage() {
                                     })
                                   }
                                 >
-                                  {t('lessonAuthoring.seek')}
+                                  {t("lessonAuthoring.seek")}
                                 </Button>
                                 <div className="authoring-sentence-actions flex flex-wrap gap-2">
                                   <Button
@@ -952,7 +585,7 @@ export function LessonBuilderPage() {
                                       );
                                       if (next === sentences)
                                         setError(
-                                          t('lessonAuthoring.splitCaret'),
+                                          t("lessonAuthoring.splitCaret"),
                                         );
                                       else {
                                         updateSentences(next);
@@ -960,7 +593,7 @@ export function LessonBuilderPage() {
                                       }
                                     }}
                                   >
-                                    {t('lessonAuthoring.split')}
+                                    {t("lessonAuthoring.split")}
                                   </Button>
                                   <Button
                                     type="button"
@@ -979,14 +612,14 @@ export function LessonBuilderPage() {
                                       setSelectedRows([]);
                                     }}
                                   >
-                                    {t('lessonAuthoring.merge')}
+                                    {t("lessonAuthoring.merge")}
                                   </Button>
                                 </div>
                               </div>
                               <Textarea
                                 className="authoring-sentence-text min-h-0"
                                 rows={2}
-                                aria-label={t('lessonAuthoring.sentenceText', {
+                                aria-label={t("lessonAuthoring.sentenceText", {
                                   number: index + 1,
                                 })}
                                 disabled={blocked}
@@ -1011,21 +644,29 @@ export function LessonBuilderPage() {
                               />
                               {!dirty && saved?.words.length ? (
                                 <p
-                                  aria-label={t('lessonAuthoring.wordTiming')}
+                                  aria-label={t("lessonAuthoring.wordTiming")}
                                   className="flex flex-wrap gap-x-1"
                                 >
                                   {saved.words.map((word, wi) => (
-                                    <span
+                                    <button
+                                      type="button"
                                       key={wi}
+                                      title={`${timecode(word.startMs)} – ${timecode(word.endMs)}`}
+                                      onClick={() =>
+                                        setSeek({
+                                          atMs: word.startMs,
+                                          sequence: Date.now(),
+                                        })
+                                      }
                                       className={
                                         currentMs >= word.startMs &&
                                         currentMs < word.endMs
-                                          ? 'rounded bg-secondary text-secondary-foreground'
-                                          : ''
+                                          ? "rounded bg-secondary text-secondary-foreground"
+                                          : ""
                                       }
                                     >
                                       {word.text}
-                                    </span>
+                                    </button>
                                   ))}
                                 </p>
                               ) : null}
@@ -1042,101 +683,65 @@ export function LessonBuilderPage() {
                       </div>
                       {dirty ? (
                         <p role="status" className="text-warning">
-                          {t('lessonAuthoring.unsaved')}
+                          {t("lessonAuthoring.unsaved")}
                         </p>
                       ) : null}
-                      <div className="authoring-editor-actions flex flex-wrap gap-2">
-                        <Button
+                    </div>
+                  </div>
+                </TabsContent>
+                <TabsContent value="timing" className="authoring-timing-tab">
+                  <div className="timing-review-body">
+                    <p className="text-sm text-muted-foreground">
+                      {draft.alignmentRequired
+                        ? t("waveform.alignmentRequired")
+                        : t("lessonAuthoring.reviewTiming")}
+                    </p>
+                    <label className="flex items-start gap-2">
+                      <Checkbox
+                        checked={karaokeConfirmed}
+                        disabled={
+                          blocked ||
+                          dirty ||
+                          !approved ||
+                          !timingValid ||
+                          !playerAvailable
+                        }
+                        onCheckedChange={(checked) =>
+                          setKaraokeConfirmed(checked === true)
+                        }
+                      />
+                      {t("lessonAuthoring.karaokeConfirmed")}
+                    </label>
+                    <div className="authoring-sentence-list">
+                      {draft.sentences.map((sentence) => (
+                        <button
                           type="button"
-                          disabled={
-                            blocked ||
-                            !dirty ||
-                            sentences.some((s) => !s.text.trim())
-                          }
+                          key={sentence.id}
+                          className="timing-sentence"
                           onClick={() =>
-                            void perform(async () =>
-                              acceptDraft(
-                                await authoring.saveTranscript(
-                                  draft.id,
-                                  editorRevision,
-                                  sentences,
-                                ),
-                              ),
-                            )
-                          }
-                        >
-                          {t('lessonAuthoring.saveTranscript')}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          disabled={
-                            blocked || dirty || !sentences.length || approved
-                          }
-                          onClick={() =>
-                            void perform(async () =>
-                              acceptDraft(
-                                await authoring.approveTranscript(
-                                  draft.id,
-                                  draft.revision,
-                                ),
-                              ),
-                            )
-                          }
-                        >
-                          {approved
-                            ? t('lessonAuthoring.transcriptApproved')
-                            : t('lessonAuthoring.approveTranscript')}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          disabled={blocked || dirty || !approved}
-                          onClick={() =>
-                            void perform(async () => {
-                              await authoring.alignTranscript(
-                                draft.id,
-                                draft.revision,
-                              );
-                              acceptDraft(await authoring.fetchDraft(draft.id));
-                              setKaraokeConfirmed(false);
+                            setSeek({
+                              atMs: sentence.words[0]?.startMs ?? 0,
+                              sequence: Date.now(),
                             })
                           }
                         >
-                          {timingValid
-                            ? t('lessonAuthoring.realign')
-                            : t('lessonAuthoring.align')}
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                          <span>{sentence.text}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {sentence.words.length
+                              ? timecode(sentence.words[0].startMs)
+                              : t("lessonAuthoring.labels.TIMING_MISSING")}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </TabsContent>
-                <TabsContent value="content">
-                  <Card>
-                    <CardContent className="flex flex-col gap-3">
-                      <Button
-                        type="button"
-                        disabled={
-                          blocked || dirty || !approved || !karaokeReviewed
-                        }
-                        onClick={() =>
-                          void perform(async () => {
-                            await authoring.generateSemantic(
-                              draft.id,
-                              draft.revision,
-                            );
-                            setContentReviewed(false);
-                            acceptDraft(await authoring.fetchDraft(draft.id));
-                          })
-                        }
-                      >
-                        {semanticReady
-                          ? t('lessonAuthoring.regenerate')
-                          : t('lessonAuthoring.generate')}
-                      </Button>
+                <TabsContent value="content" className="authoring-content-tab">
+                  <div className="authoring-content-card">
+                    <div className="authoring-content-body flex flex-col gap-3">
                       {!semanticReady ? (
                         <p className="text-muted-foreground">
-                          {t('lessonAuthoring.generationGate')}
+                          {t("lessonAuthoring.generationGate")}
                         </p>
                       ) : (
                         <>
@@ -1145,182 +750,314 @@ export function LessonBuilderPage() {
                               type="button"
                               variant="outline"
                               disabled={blocked || dirty}
-                              onClick={() => applyCandidates('HIGH')}
+                              onClick={() => applyCandidates("HIGH")}
                             >
-                              {t('lessonAuthoring.selectHigh')}
+                              {t("lessonAuthoring.selectHigh")}
                             </Button>
                             <Button
                               type="button"
                               variant="outline"
                               disabled={blocked || dirty}
-                              onClick={() => applyCandidates('ALL')}
+                              onClick={() => applyCandidates("ALL")}
                             >
-                              {t('lessonAuthoring.selectAllPriorities')}
+                              {t("lessonAuthoring.selectAllPriorities")}
                             </Button>
                           </div>
-                          {draft.sentences
-                            .filter((s) => s.usage === 'LEARN')
-                            .map((sentence) => (
-                              <div
-                                key={sentence.id}
-                                className="authoring-content-row flex flex-col gap-2 border-b border-border py-3 last:border-0"
-                              >
-                                <strong>{sentence.text}</strong>
-                                <p>{sentence.translation}</p>
-                                {(['vocabulary', 'grammar'] as const).map(
-                                  (kind) =>
-                                    sentence[kind].length ? (
-                                      <div key={kind}>
-                                        <h3>{t(`lessonAuthoring.${kind}`)}</h3>
-                                        <ul>
-                                          {sentence[kind].map(
-                                            (annotation, index) => (
-                                              <li key={index}>
-                                                <strong>
-                                                  {annotation.surface}
-                                                </strong>{' '}
-                                                · {annotation.explanation}
-                                                {annotation.headwordId
-                                                  ? ` · #${annotation.headwordId}`
-                                                  : ''}
-                                              </li>
-                                            ),
-                                          )}
-                                        </ul>
-                                      </div>
-                                    ) : null,
-                                )}
-                                {sentence.hints.length ? (
-                                  <p>
-                                    {t('lessonAuthoring.hints')}:{' '}
-                                    {sentence.hints
-                                      .map((note) => note.text)
-                                      .join(' · ')}
-                                  </p>
-                                ) : null}
-                                {sentence.notes.length ? (
-                                  <p>
-                                    {t('lessonAuthoring.notes')}:{' '}
-                                    {sentence.notes
-                                      .map((note) => note.text)
-                                      .join(' · ')}
-                                  </p>
-                                ) : null}
-                                {sentence.thoughtGroups.length ? (
-                                  <p>
-                                    {t('lessonAuthoring.thoughtGroups')}:{' '}
-                                    {thoughtGroupPreview(sentence)}
-                                  </p>
-                                ) : null}
-                                <div className="flex flex-wrap gap-4">
-                                  {(['dictation', 'shadowing'] as const).map(
-                                    (activity) => {
-                                      const ids =
-                                        activity === 'dictation'
-                                          ? dictationIds
-                                          : shadowingIds;
-                                      const setter =
-                                        activity === 'dictation'
-                                          ? setDictationIds
-                                          : setShadowingIds;
-                                      return (
-                                        <label
-                                          key={activity}
-                                          className="flex items-center gap-2"
-                                        >
-                                          <Checkbox
-                                            checked={ids.includes(sentence.id)}
-                                            disabled={
-                                              blocked ||
-                                              dirty ||
-                                              !sentence[`${activity}Eligible`]
-                                            }
-                                            onCheckedChange={(checked) => {
-                                              setter(
-                                                checked === true
-                                                  ? [...ids, sentence.id]
-                                                  : ids.filter(
-                                                      (id) =>
-                                                        id !== sentence.id,
-                                                    ),
-                                              );
-                                              setCandidatesDirty(true);
-                                              candidatesDirtyRef.current = true;
-                                              setContentReviewed(false);
-                                            }}
-                                          />
-                                          {t(`lessonAuthoring.${activity}`)} ·{' '}
-                                          {sentence[`${activity}Priority`] ??
-                                            '—'}
-                                          {!sentence[`${activity}Eligible`]
-                                            ? ` · ${t('lessonAuthoring.ineligible')}`
-                                            : ''}
-                                        </label>
-                                      );
-                                    },
+                          <div className="authoring-content-list">
+                            {draft.sentences
+                              .filter((s) => s.usage === "LEARN")
+                              .map((sentence) => (
+                                <div
+                                  key={sentence.id}
+                                  className="authoring-content-row flex flex-col gap-2 border-b border-border py-3 last:border-0"
+                                >
+                                  <strong>{sentence.text}</strong>
+                                  <p>{sentence.translation}</p>
+                                  {(["vocabulary", "grammar"] as const).map(
+                                    (kind) =>
+                                      sentence[kind].length ? (
+                                        <div key={kind}>
+                                          <h3>
+                                            {t(`lessonAuthoring.${kind}`)}
+                                          </h3>
+                                          <ul>
+                                            {sentence[kind].map(
+                                              (annotation, index) => (
+                                                <li key={index}>
+                                                  <strong>
+                                                    {annotation.surface}
+                                                  </strong>{" "}
+                                                  · {annotation.explanation}
+                                                  {annotation.headwordId
+                                                    ? ` · #${annotation.headwordId}`
+                                                    : ""}
+                                                </li>
+                                              ),
+                                            )}
+                                          </ul>
+                                        </div>
+                                      ) : null,
                                   )}
+                                  {sentence.hints.length ? (
+                                    <p>
+                                      {t("lessonAuthoring.hints")}:{" "}
+                                      {sentence.hints
+                                        .map((note) => note.text)
+                                        .join(" · ")}
+                                    </p>
+                                  ) : null}
+                                  {sentence.notes.length ? (
+                                    <p>
+                                      {t("lessonAuthoring.notes")}:{" "}
+                                      {sentence.notes
+                                        .map((note) => note.text)
+                                        .join(" · ")}
+                                    </p>
+                                  ) : null}
+                                  {sentence.thoughtGroups.length ? (
+                                    <p>
+                                      {t("lessonAuthoring.thoughtGroups")}:{" "}
+                                      {thoughtGroupPreview(sentence)}
+                                    </p>
+                                  ) : null}
+                                  <div className="flex flex-wrap gap-4">
+                                    {(["dictation", "shadowing"] as const).map(
+                                      (activity) => {
+                                        const ids =
+                                          activity === "dictation"
+                                            ? dictationIds
+                                            : shadowingIds;
+                                        const setter =
+                                          activity === "dictation"
+                                            ? setDictationIds
+                                            : setShadowingIds;
+                                        return (
+                                          <label
+                                            key={activity}
+                                            className="flex items-center gap-2"
+                                          >
+                                            <Checkbox
+                                              checked={ids.includes(
+                                                sentence.id,
+                                              )}
+                                              disabled={
+                                                blocked ||
+                                                dirty ||
+                                                !sentence[`${activity}Eligible`]
+                                              }
+                                              onCheckedChange={(checked) => {
+                                                setter(
+                                                  checked === true
+                                                    ? [...ids, sentence.id]
+                                                    : ids.filter(
+                                                        (id) =>
+                                                          id !== sentence.id,
+                                                      ),
+                                                );
+                                                setCandidatesDirty(true);
+                                                candidatesDirtyRef.current = true;
+                                                setContentReviewed(false);
+                                              }}
+                                            />
+                                            {t(`lessonAuthoring.${activity}`)} ·{" "}
+                                            {sentence[`${activity}Priority`] ??
+                                              "—"}
+                                            {!sentence[`${activity}Eligible`]
+                                              ? ` · ${t("lessonAuthoring.ineligible")}`
+                                              : ""}
+                                          </label>
+                                        );
+                                      },
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={blocked || dirty || !candidatesDirty}
-                            onClick={() =>
-                              void perform(async () => {
-                                const next = await authoring.saveCandidates(
-                                  draft.id,
-                                  candidateRevision,
-                                  dictationIds,
-                                  shadowingIds,
-                                );
-                                candidatesDirtyRef.current = false;
-                                acceptDraft(next);
-                              })
-                            }
-                          >
-                            {t('lessonAuthoring.saveCandidates')}
-                          </Button>
-                          <label className="flex items-start gap-2">
-                            <Checkbox
-                              checked={contentReviewed}
-                              disabled={blocked || dirty || candidatesDirty}
-                              onCheckedChange={(checked) =>
-                                setContentReviewed(checked === true)
-                              }
-                            />
-                            {t('lessonAuthoring.contentReviewed')}
-                          </label>
-                          <Button
-                            type="button"
-                            disabled={
-                              blocked ||
-                              dirty ||
-                              candidatesDirty ||
-                              !contentReviewed ||
-                              !karaokeReviewed
-                            }
-                            onClick={() =>
-                              void perform(async () =>
-                                acceptDraft(
-                                  await authoring.publishLesson(
-                                    draft.id,
-                                    draft.revision,
-                                  ),
-                                ),
-                              )
-                            }
-                          >
-                            {t('lessonAuthoring.publish')}
-                          </Button>
+                              ))}
+                          </div>
                         </>
                       )}
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </div>
                 </TabsContent>
               </Tabs>
             </ResizablePanel>
           </ResizablePanelGroup>
+          <footer className="authoring-actionbar">
+            <p className="text-xs text-muted-foreground">
+              {!published && t(nextStep)}
+            </p>
+            <div className="authoring-action-buttons">
+              {editorTab === "transcript" && (
+                <div className="authoring-editor-actions flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    disabled={
+                      blocked || !dirty || sentences.some((s) => !s.text.trim())
+                    }
+                    onClick={() =>
+                      void perform(async () =>
+                        acceptDraft(
+                          await authoring.saveTranscript(
+                            draft.id,
+                            editorRevision,
+                            sentences,
+                          ),
+                        ),
+                      )
+                    }
+                  >
+                    {t("lessonAuthoring.saveTranscript")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={blocked || dirty || !sentences.length || approved}
+                    onClick={() =>
+                      void perform(async () =>
+                        acceptDraft(
+                          await authoring.approveTranscript(
+                            draft.id,
+                            draft.revision,
+                          ),
+                        ),
+                      )
+                    }
+                  >
+                    {approved
+                      ? t("lessonAuthoring.transcriptApproved")
+                      : t("lessonAuthoring.approveTranscript")}
+                  </Button>
+                </div>
+              )}
+              {editorTab === "timing" && (
+                <div className="authoring-editor-actions">
+                  {" "}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={blocked || dirty || !approved}
+                    onClick={() =>
+                      void perform(async () => {
+                        await authoring.alignTranscript(
+                          draft.id,
+                          draft.revision,
+                        );
+                        acceptDraft(await authoring.fetchDraft(draft.id));
+                        setKaraokeConfirmed(false);
+                      })
+                    }
+                  >
+                    {timingValid
+                      ? t("lessonAuthoring.realign")
+                      : t("lessonAuthoring.align")}
+                  </Button>{" "}
+                  <Button
+                    type="button"
+                    disabled={
+                      blocked ||
+                      dirty ||
+                      !approved ||
+                      !timingValid ||
+                      !playerAvailable ||
+                      !karaokeConfirmed ||
+                      karaokeReviewed
+                    }
+                    onClick={() =>
+                      void perform(async () =>
+                        acceptDraft(
+                          await authoring.reviewKaraoke(
+                            draft.id,
+                            draft.revision,
+                          ),
+                        ),
+                      )
+                    }
+                  >
+                    {karaokeReviewed
+                      ? t("lessonAuthoring.karaokeApproved")
+                      : t("lessonAuthoring.approveKaraoke")}
+                  </Button>
+                </div>
+              )}
+              {editorTab === "content" && (
+                <div className="authoring-content-actions">
+                  {" "}
+                  <Button
+                    type="button"
+                    disabled={blocked || dirty || !approved || !karaokeReviewed}
+                    onClick={() =>
+                      void perform(async () => {
+                        await authoring.generateSemantic(
+                          draft.id,
+                          draft.revision,
+                        );
+                        setContentReviewed(false);
+                        acceptDraft(await authoring.fetchDraft(draft.id));
+                      })
+                    }
+                  >
+                    {semanticReady
+                      ? t("lessonAuthoring.regenerate")
+                      : t("lessonAuthoring.generate")}
+                  </Button>
+                  {semanticReady && (
+                    <div className="authoring-content-actions">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={blocked || dirty || !candidatesDirty}
+                        onClick={() =>
+                          void perform(async () => {
+                            const next = await authoring.saveCandidates(
+                              draft.id,
+                              candidateRevision,
+                              dictationIds,
+                              shadowingIds,
+                            );
+                            candidatesDirtyRef.current = false;
+                            acceptDraft(next);
+                          })
+                        }
+                      >
+                        {t("lessonAuthoring.saveCandidates")}
+                      </Button>
+                      <label className="flex items-start gap-2">
+                        <Checkbox
+                          checked={contentReviewed}
+                          disabled={blocked || dirty || candidatesDirty}
+                          onCheckedChange={(checked) =>
+                            setContentReviewed(checked === true)
+                          }
+                        />
+                        {t("lessonAuthoring.contentReviewed")}
+                      </label>
+                      <Button
+                        type="button"
+                        disabled={
+                          blocked ||
+                          dirty ||
+                          candidatesDirty ||
+                          !contentReviewed ||
+                          !karaokeReviewed
+                        }
+                        onClick={() =>
+                          void perform(async () =>
+                            acceptDraft(
+                              await authoring.publishLesson(
+                                draft.id,
+                                draft.revision,
+                              ),
+                            ),
+                          )
+                        }
+                      >
+                        {t("lessonAuthoring.publish")}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </footer>
         </>
       )}
     </section>

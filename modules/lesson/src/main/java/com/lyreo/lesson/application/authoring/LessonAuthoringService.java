@@ -22,6 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 public class LessonAuthoringService {
     public static final String JOB_TYPE="LESSON_AUTHORING";
+    private boolean reuseDraftTiming;
+    public void setReuseDraftTiming(boolean enabled) {this.reuseDraftTiming=enabled;}
     private final AuthoringRepository repository;
     private final AuthoringSourcePort source;
     private final BackgroundJobService jobs;
@@ -30,15 +32,14 @@ public class LessonAuthoringService {
     }
     public Inspect inspect(String reference) {
         var info=source.inspect(reference);
-        return new Inspect(info.videoId(),info.title(),info.durationMs(),info.embedAllowed(),repository.usedRanges(info.videoId()));
+        return new Inspect(info.videoId(),info.title(),info.durationMs(),info.embedAllowed(),repository.usedRanges(info.videoId()),info.thumbnailUrl());
     }
-    @Transactional public Accepted create(String title,String reference,long start,long end,boolean rights) {
+    @Transactional public Accepted create(String title,String reference,long start,long end) {
         require(title!=null && !title.isBlank() && title.length()<=500,"Title is required (maximum 500 characters)");
-        require(rights,"Confirm operator responsibility for source use before preparing a source");
         var info=source.inspect(reference);
         require(info.embedAllowed(),"This source cannot be embedded");
         require(start>=0 && end>start && end<=info.durationMs(),"Select a range within the source duration");
-        require(end-start<=30*60_000,"V1 supports a maximum selected range of 30 minutes");
+        require(end-start<=10*60_000,"A lesson supports a maximum selected range of 10 minutes");
         var lesson=new AuthoringLesson();
         lesson.id=UUID.randomUUID(); lesson.title=title.strip(); lesson.videoId=info.videoId();
         lesson.sourceReference="https://www.youtube.com/watch?v="+info.videoId();
@@ -48,7 +49,9 @@ public class LessonAuthoringService {
     }
     public AuthoringLesson get(UUID id) {return find(id,false);}
     private AuthoringLesson find(UUID id,boolean lock) {
-        return repository.find(id,lock).orElseThrow(()->new ResourceNotFoundException("Authoring lesson not found"));
+        var lesson=repository.find(id,lock).orElseThrow(()->new ResourceNotFoundException("Authoring lesson not found"));
+        lesson.alignmentRequired=!("VALID".equals(lesson.timingStatus) || reuseDraftTiming && "DRAFT_VALID".equals(lesson.timingStatus));
+        return lesson;
     }
     private AuthoringLesson editable(UUID id,long revision) {
         var lesson=find(id,true);
@@ -183,17 +186,21 @@ public class LessonAuthoringService {
         alignmentSegments(lesson);
         return enqueue(lesson,"ALIGN");
     }
+    private void requireAcceptedTiming(AuthoringLesson lesson) {
+        require(reuseDraftTiming || "VALID".equals(lesson.timingStatus),"Local alignment is required until draft timing quality has been verified");
+    }
     @Transactional public AuthoringLesson karaoke(UUID id,long revision) {
         var lesson=editable(id,revision);
         require(Objects.equals(lesson.approvedRevision,lesson.transcriptRevision),"Approve the current transcript first");
         require(Set.of("VALID","DRAFT_VALID").contains(lesson.timingStatus),"Resolve timing issues before confirming karaoke review");
+        requireAcceptedTiming(lesson);
         validateTiming(lesson);
         lesson.karaokeReviewedRevision=lesson.transcriptRevision;
         repository.save(lesson);return lesson;
     }
     @Transactional public Accepted generate(UUID id,long revision) {
         var lesson=editable(id,revision);
-        readyForSemantic(lesson);return enqueue(lesson,"SEMANTIC");
+        readyForSemantic(lesson);requireAcceptedTiming(lesson);return enqueue(lesson,"SEMANTIC");
     }
     @Transactional public Accepted prepare(UUID id,long revision) {
         var lesson=editable(id,revision);
@@ -229,7 +236,7 @@ public class LessonAuthoringService {
         repository.save(lesson);return lesson;
     }
     @Transactional public AuthoringLesson publish(UUID id,long revision) {
-        var lesson=editable(id,revision);readyForSemantic(lesson);
+        var lesson=editable(id,revision);readyForSemantic(lesson);requireAcceptedTiming(lesson);
         require(Objects.equals(lesson.semanticRevision,lesson.transcriptRevision),"Semantic output is stale or missing");
         requireNoActiveJob(lesson);
         validateTiming(lesson);
@@ -287,6 +294,6 @@ public class LessonAuthoringService {
     }
     public static void require(boolean valid,String message) {if(!valid)throw new RequestValidationException(message);}
     public record SentenceInput(UUID id,String text,String usage) {}
-    public record Inspect(String videoId,String title,long durationMs,boolean embedAllowed,List<AuthoringRepository.UsedRange> usedRanges) {}
+    public record Inspect(String videoId,String title,long durationMs,boolean embedAllowed,List<AuthoringRepository.UsedRange> usedRanges,String thumbnailUrl) {}
     public record Accepted(UUID lessonId,UUID jobId) {}
 }

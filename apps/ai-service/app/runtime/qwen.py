@@ -142,8 +142,11 @@ class QwenRuntime:
 
     async def _align_words(self, audio: Any, text: str, language: Any, segments=None) -> list[dict[str, Any]]:
         waveform = await asyncio.to_thread(_read_audio, audio)
-        windows = _alignment_windows(waveform, text, segments)
         model = await self._load_aligner()
+        windows = _alignment_windows(
+            waveform, text, segments,
+            timestamp_precision_ms=getattr(model, 'timestamp_segment_time', 0),
+        )
         words = []
         for start, window, window_text in windows:
             _empty_cuda_cache()
@@ -179,8 +182,11 @@ def _audio_windows(waveform):
     return [(start, waveform[start:start + limit]) for start in range(0, len(waveform), limit)]
 
 
-def _alignment_windows(waveform, text: str, segments):
+def _alignment_windows(waveform, text: str, segments, *, timestamp_precision_ms=0):
     duration_ms = len(waveform) / 16
+    # Qwen quantizes timestamps to model frames; slicing still stops at real audio samples.
+    anchor_end_ms = (math.ceil(duration_ms / timestamp_precision_ms) * timestamp_precision_ms
+                     if timestamp_precision_ms > 0 else math.ceil(duration_ms))
     if segments is None or segments == []:
         if len(waveform) > 120 * 16_000:
             raise ValueError('Alignment over 120 seconds requires anchored transcript segments')
@@ -193,7 +199,7 @@ def _alignment_windows(waveform, text: str, segments):
         end = segment.get('end_ms')
         if (not isinstance(start, int) or isinstance(start, bool)
                 or not isinstance(end, int) or isinstance(end, bool)
-                or start < previous_end or end <= start or end > math.ceil(duration_ms)
+                or start < previous_end or start >= duration_ms or end <= start or end > anchor_end_ms
                 or not isinstance(segment.get('text'), str) or not segment['text'].strip()):
             raise ValueError('Alignment segments require ordered non-overlapping in-bounds millisecond anchors')
         previous_end = end
