@@ -12,7 +12,7 @@ or endpoints named after Lesson/Curriculum/Reward workflows.
 
 Integrated Admin Lesson authoring uses Core-owned acquisition, prompts and durable review checkpoints.
 AI Service receives only usable audio references and text, never YouTube URLs or business Lesson DTOs.
-The standalone Lesson Prep/portable ZIP workflow was retired on 2026-10-26; see
+Portable ZIP ingestion is outside the current integrated workflow; see
 [D-024](../DECISIONS.md#d-024--integrated-youtube-lesson-authoring-and-free-only-research-2026-10-25).
 
 ## Wire contract

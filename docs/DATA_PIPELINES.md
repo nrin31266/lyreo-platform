@@ -2,10 +2,9 @@
 
 Large datasets are product assets outside Git, not Flyway seed blobs. Flyway owns schema and small stable reference defaults. Importers own acquisition, validation, dry-run, apply, and audit. Exact source URLs, archive shape, environment keys, and commands live in [Data Import](../tools/data-import/README.md).
 
-<a id="0-lesson-prep-tool-acquisition-tool-local-not-a-core-pipeline"></a>
 ## Lesson source preparation
 
-[Integrated Lesson authoring](features/lesson-build.md) owns the active Admin workflow: Core inspects/caches the YouTube source, prepares the selected audio range, orchestrates AI capabilities and persists review checkpoints before explicit publication. Media tools are installed on the Core host with `make setup-media`. The standalone Lesson Prep source and ZIP export workflow were retired on 2026-10-26 after integrated functional verification; existing local artifacts are preserved and portable ZIP ingestion remains outside this phase ([OQ-005](requirements/open-questions.md#oq-005--portable-lesson-source-ingestion-policy), closed).
+[Integrated Lesson authoring](features/lesson-build.md) owns the active Admin workflow: Core inspects/caches the YouTube source, prepares the selected audio range, orchestrates AI capabilities and persists review checkpoints before explicit publication. Media tools are installed on the Core host with `make setup-media`. The obsolete standalone workstation and ZIP export workflow are removed; its remaining local environment/cache/audio artifacts were purged at the owner's request on 2026-10-31. Portable ZIP ingestion remains outside this phase ([OQ-005](requirements/open-questions.md#oq-005--portable-lesson-source-ingestion-policy), closed).
 
 ## Dataset import contract
 

@@ -24,7 +24,7 @@ Groq requests used `whisper-large-v3-turbo`, English, temperature 0, verbose JSO
 
 Local hardware: NVIDIA RTX A2000 Laptop GPU, 4 GB, CUDA, bfloat16, batch size 1, max new tokens 2,048. Initial ASR load took 2.41 s. Peak allocated memory was 2,347 MiB for 114 s and at most 2,400 MiB for the successful windowed runs. **An unchunked 300 s input failed with CUDA OOM.** Longer local samples succeeded when processed sequentially at existing utterance boundaries in windows of at most 120 s. This tests bounded windows, not an automatic production boundary detector. The failed unchunked path was not retried with larger inputs.
 
-The installed package has `MAX_ASR_INPUT_SECONDS = 1200` and `MAX_FORCE_ALIGN_INPUT_SECONDS = 180`; timestamp-enabled ASR orchestrates 180 s chunks. Dedicated `Qwen3ForcedAligner.align()` has no equivalent chunk orchestration. The former Lesson Prep assertion that a 300 s limit matches aligner capability is not evidence that 300 s is safe on this hardware.
+The installed package has `MAX_ASR_INPUT_SECONDS = 1200` and `MAX_FORCE_ALIGN_INPUT_SECONDS = 180`; timestamp-enabled ASR orchestrates 180 s chunks. Dedicated `Qwen3ForcedAligner.align()` has no equivalent chunk orchestration. The former workstation assertion that a 300 s limit matches aligner capability is not evidence that 300 s is safe on this hardware.
 
 ## Timing evidence and quality gate
 

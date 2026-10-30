@@ -27,6 +27,7 @@ then open only the linked canonical context. Do not scan all documentation for a
 | Local infrastructure and Keycloak setup | [Docker](../infra/docker/README.md), [Keycloak](../infra/keycloak/README.md), [CONFIGURATION.md](CONFIGURATION.md) for configuration; [operational questions](requirements/open-questions.md) when relevant |
 | Architecture/product decisions | [DECISIONS.md](DECISIONS.md) |
 | Development workflow, DB, local infra | [DEVELOPMENT.md](DEVELOPMENT.md) |
+| Agent workflow and optional code navigation | [CodeGraph pilot](DEVELOPMENT.md#codegraph-pilot), [engineering contract](../AGENTS.md) |
 | Testing strategy, test types, CI mapping | [TESTING.md](TESTING.md) |
 | Configuration model, env ownership | [CONFIGURATION.md](CONFIGURATION.md) |
 | Data pipelines, dataset import | [DATA_PIPELINES.md](DATA_PIPELINES.md) |

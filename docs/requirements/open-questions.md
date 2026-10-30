@@ -38,9 +38,10 @@ The [PRD](../product/prd.md) and [non-functional requirements](non-functional.md
 
 - **Status**: closed, 2026-10-25
 - **Decision**: integrated Admin authoring replaces the standalone ZIP workflow; portable package
-  ingestion is outside this phase. Lesson Prep source and hooks were retired on 2026-10-26 after
-  replacement regression coverage and functional OIDC publication/read-only verification; local
-  artifacts remain intact. Human teaching/timing quality and independent billing checks remain
+  ingestion is outside this phase. The standalone source and hooks were retired on 2026-10-26 after
+  replacement regression coverage and functional OIDC publication/read-only verification; remaining
+  local workstation artifacts were purged at the owner's request on 2026-10-31. Human teaching/timing
+  quality and independent billing checks remain
   separate unverified gates. See [Lesson Build](../features/lesson-build.md).
 
 ## OQ-006 — Production versus deploy terminology

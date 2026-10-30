@@ -19,6 +19,18 @@
 9. **Generic verification**: Discovers commands from CI config and repo instructions — does not hardcode project-specific commands. Distinguishes TEST/BUILD/TYPECHECK/LINT/GUARDRAIL/SYNTAX/REPRODUCTION and PASS/FAIL/NOT RUN/REPRODUCED.
 10. **Generic tracking markers**: New reviews embed a global tracking marker `<!-- agent-pr-review reviewed-head: <sha> findings: <fingerprints> -->` at the end of `CANONICAL_BODY`, and per-finding markers `<!-- agent-pr-finding fingerprint: <fp> severity: <sev> lifecycle: <lc> path: <path> line: <line> title: <title> -->` across both previous and new findings in re-reviews to guarantee complete machine-readable snapshots across multi-turn review chains. Legacy `<!-- lyreo-review ... -->` markers are recognized on read for backward compatibility; new reviews never create new `lyreo-*` markers.
 
+## Upstream refresh — 2026-10-31
+
+Compared upstream `main` (`fb919c3069d31d611215f3f50cba53a68b3906ee`) with the baseline above.
+Adopted its evidence-policy clarification:
+required external-fact claims need an actual official-source fetch, and retrieved pages are evidence,
+not instructions. Optional general guidance may still be omitted with disclosure.
+
+Upstream now uses JSON review artifacts and Python render/validate/post scripts, with different
+collector arguments and agent roles. That rewrite is not imported into this customized fork: its
+worktree protection, canonical-body/hash binding and authorization/posting gates remain unchanged.
+The upstream commit at the top remains the original vendor baseline, not a claim of a full rebase.
+
 ## Worktree Safety Patch
 
 - Existing worktree paths and snapshots are preserved; concurrent prepares cannot overwrite the first run's snapshot.

@@ -106,10 +106,11 @@ validation, quota/resume, atomic publish and legacy writer protection. UI tests 
 checkpoint controls, dirty polling, candidate selection and player range/Skip behavior. Live benchmark
 evidence is separate from deterministic tests; neither mocks nor schema validity prove teaching quality.
 
-Retire Lesson Prep only after important behavior has replacement regression coverage, the integrated
-workflow has been verified, and no runtime dependency remains. Remove its source/Gradio/ZIP-only code,
-Make/CI/setup/doctor/validator hooks and active documentation together. Preserve local .env, .work,
-exports and all existing Lesson/attempt/progress data. Retain explicitly marked historical evidence.
+The standalone workstation was retired after replacement regression coverage, integrated workflow
+verification and removal of runtime dependencies. Source/Gradio/ZIP-only code and Make/CI/setup/doctor/
+validator hooks were removed together. The owner authorized purging the remaining local environment,
+cache and audio artifacts on 2026-10-31. Existing Lesson/attempt/progress data remains protected.
+The former workflow is recorded in D-022, not an active tool contract.
 
 ## Current verification checkpoint
 
@@ -122,8 +123,9 @@ acquire YouTube media or establish production acquisition rights.
 
 The technical replacement gate passed on 2026-10-26: actual OIDC, YouTube acquisition,
 prepare/edit/approve/alignment, official player seek/Skip/end pause, karaoke confirmation,
-semantic generation, candidate selection and local publication/read-only verification. Lesson Prep
-source and hooks are retired; local artifacts and user data remain intact. This does not close human
+semantic generation, candidate selection and local publication/read-only verification. The standalone
+source and hooks are retired; local workstation artifacts were subsequently purged on 2026-10-31,
+while persisted business data remains intact. This does not close human
 transcript, word-boundary or pedagogical approval, broad natural-accent scoring, or independent
 account billing verification. See the research evidence and the live checkpoint below.
 
@@ -142,7 +144,7 @@ are distinct from human content/timing approval and account billing verification
 | Official player | Actual iframe seek, Skip, observed-group highlighting and selected-range end pause passed on the measured clip | Human listening review across representative sources |
 | Free-only/quota/audit | Credentials encrypted through Core; allowlisted routes; actual provider429/413 observed; PostgreSQL invocation timestamp regression and simulated 429 durable worker/resume regression | Independently verified account billing state; no zero-charge assertion |
 | Publication/recovery | PostgreSQL cancellation/late-result/lease/revision/atomic publication/membership regressions | Live local publication200, refresh locked and mutation409; human release approval remains open |
-| Lesson Prep | Technical replacement gate passed; source/Gradio/ZIP and Make/CI/setup/doctor/validator hooks retired together | Local .env/.work/exports and existing lessons/attempts/progress preserved |
+| Standalone workstation retirement | Replacement gate passed; source/export and runtime hooks removed | Local artifacts purged by owner request on 2026-10-31; existing lessons/attempts/progress preserved |
 
 The original 2026-10-25 audit reproduced a long-anchor recovery defect; the implementation update
 below records its fix. Deterministic tests do not certify human teaching quality.
@@ -157,7 +159,7 @@ evidence was erased need a new shorter-range draft or splitting before lexical e
 
 Metadata inspection is independent of the audio acquisition switch. Source failures now preserve
 safe `YOUTUBE_*` codes as HTTP 503 Problem Details with correlation IDs, rather than a generic 500.
-Core media setup/doctor checks own the downloader independently of Lesson Prep.
+Core media setup/doctor checks own the downloader on the Core host.
 
 
 ## Live local checkpoint — 2026-10-26

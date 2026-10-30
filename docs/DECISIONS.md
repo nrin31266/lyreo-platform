@@ -125,15 +125,12 @@ Rationale: [`http-api-contract.md`](architecture/http-api-contract.md).
 
 ## D-022 — Standalone Lesson Prep Tool and Portable Package Format (2026-09-13)
 
-Status: Superseded by D-024. Standalone source and hooks retired on 2026-10-26 after integrated functional verification. The description below records the former operator workflow.
-Decision: Lesson source acquisition, speech synthesis, transcription, and alignment are executed
-locally inside a dedicated operator workstation (`tools/lesson-prep`) that exports one self-contained,
-portable `*.lesson-source.zip` package (`lesson-source.json` manifest + media bytes). The tool does
-not depend on or mutate Core database tables, Keycloak users/clients, or Cloudflare R2 object storage.
-FastAPI AI Service exposes technical capabilities (`/v1/tts`, `/v1/tts/voices`, `/v1/stt`, `/v1/align`)
-via local file/audio references (`file:///...`) without receiving YouTube URLs or business lesson DTOs.
-Package ingestion into Core database and storage is a separate future phase. Rationale: `DATA_PIPELINES.md`,
-`architecture/ai-execution.md`, and the former workstation README (retained in Git history).
+Status: Superseded by D-024. The former standalone operator workstation exported portable lesson
+source packages without mutating Core, identity or object storage. Its source and hooks were retired
+on 2026-10-26 after integrated functional verification; the owner authorized purging remaining local
+environment/cache/audio artifacts on 2026-10-31. Detailed former contracts remain in Git history.
+Active source preparation belongs to [Lesson Build](features/lesson-build.md); portable ZIP ingestion
+is outside this phase.
 
 ## D-023 — Lean documentation and repository command ownership (2026-09-25)
 
@@ -168,11 +165,12 @@ Quota waits are durable, resumable jobs. Existing encrypted Core credentials rem
 See the bounded [ASR evidence](research/lesson-authoring-asr.md) and
 [semantic evidence](research/lesson-authoring-semantic.md); these are measured research, not release guarantees.
 
-Lesson Prep retirement requires regression coverage, replacement workflow verification and no runtime
-dependency. These technical retirement conditions were met on 2026-10-26: the real OIDC workflow
+Standalone workstation retirement required regression coverage, replacement workflow verification
+and no runtime dependency. These conditions were met on 2026-10-26: the real OIDC workflow
 completed publication, reload showed immutable content, direct mutation returned 409, and replacement
 regressions cover cancellation, late results, quota/resume and atomic publication. The standalone
-source and setup/CI hooks are retired; local secrets, media and exported artifacts are preserved.
+source and setup/CI hooks were retired. Remaining local environment/cache/audio artifacts were
+subsequently purged at the owner's request on 2026-10-31; persisted business data remains protected.
 This does not approve human timing/pedagogical quality or independently verify provider billing.
 The old package ingestion proposal is not part of this phase. Feature owner:
 [Lesson Build](features/lesson-build.md).
