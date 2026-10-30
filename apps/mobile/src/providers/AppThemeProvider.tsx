@@ -4,7 +4,7 @@ import {
   type ThemeColors,
   type ThemeMode,
   type ThemePreference,
-} from '@lyreo/design-system';
+} from '@/theme';
 import { vars } from 'nativewind';
 import { createContext, type PropsWithChildren, useContext, useEffect, useMemo, useState } from 'react';
 import { useColorScheme, View } from 'react-native';

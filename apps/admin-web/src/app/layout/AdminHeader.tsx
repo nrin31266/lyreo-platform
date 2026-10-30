@@ -12,7 +12,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
-import { Sun, Moon, Monitor, Languages } from "lucide-react";
+import { RiSunLine as Sun, RiMoonLine as Moon, RiComputerLine as Monitor, RiTranslate2 as Languages } from "@remixicon/react";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";

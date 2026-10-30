@@ -1,4 +1,3 @@
-import { semanticThemes } from "@lyreo/design-system";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { AppThemeProvider, useAppTheme } from "./AppThemeProvider";
@@ -27,8 +26,6 @@ it("applies and restores a selected theme preference", () => {
   );
   fireEvent.click(screen.getByRole("button"));
   expect(document.documentElement).toHaveClass("dark");
-  expect(document.documentElement.style.getPropertyValue("--success")).toBe(semanticThemes.dark.success);
-  expect(document.documentElement.style.getPropertyValue("--warning")).toBe(semanticThemes.dark.warning);
   expect(localStorage.getItem("lyreo.theme")).toBe("dark");
   cleanup();
   render(

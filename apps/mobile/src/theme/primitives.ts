@@ -12,6 +12,18 @@ export const lyreoBrand = {
  * `foreground`, `primary`, or `border` instead of reaching for these names.
  */
 export const primitiveColors = {
+  // Stone/Blue presentation palette
+  stone50: '#FAFAF9',
+  stone100: '#F5F5F4',
+  stone200: '#E7E5E4',
+  stone500: '#79716B',
+  stone600: '#57534E',
+  stone700: '#44403C',
+  stone800: '#292524',
+  stone900: '#1C1917',
+  blue300: '#8EC5FF',
+  blue700: '#1447E6',
+
   // Neutral ink
   ink950: '#1B0E0B',
   ink900: '#2B1813',

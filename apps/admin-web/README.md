@@ -16,9 +16,10 @@ Tests use Vitest, React Testing Library, and jsdom. Tests cover editor polling/c
 
 ## Local conventions
 
-Admin uses React/Vite, React Router, local shadcn Radix components and the full `b1aIuOuyO` preset
-initialized with `--pointer`. `src/styles/globals.css` owns the default preset palette; feature styles
-live with their owners. Shared EN/VI strings live in `packages/i18n`.
+Admin uses React/Vite, React Router, local shadcn Radix components and the full `b1aIuQ2XC` preset
+(Luma, Stone/Blue, Raleway, Remix Icon, large radius and translucent menus), with pointer cursors.
+`src/styles/globals.css` owns the default preset palette and light/dark success/warning colors;
+feature styles live with their owners. Admin has no dependency on Mobile theme tokens. Shared EN/VI strings live in `packages/i18n`.
 
 Axios owns authenticated transport, timeout, cancellation and Problem Details. TanStack Query owns
 server data, invalidation and polling while jobs are active; mutations do not retry automatically.
@@ -50,6 +51,7 @@ Source inspection does not acquire audio; range confirmation is explicit. YouTub
 clock. `LESSON_TIMING_REUSE_DRAFT` stays a Core quality policy, default false pending human evidence.
 
 Tests cover observable behavior and stay with their owner; shared setup stays in `src/test`.
-Run browser checks across desktop/tablet/mobile, light/dark, keyboard navigation, dirty navigation,
+Prioritize desktop/laptop layouts and browser checks at 1280px and 1440px. Retain existing responsive
+behavior without a separate phone/tablet optimization pass. Check light/dark, keyboard navigation, dirty navigation,
 source-region interactions and the complete authoring workflow. Unit tests do not prove visual layout
 or pedagogical quality. Credentials are never persisted in public Vite configuration.

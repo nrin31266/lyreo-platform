@@ -22,6 +22,11 @@ def flatten_translation_keys(value: object, prefix: str = "") -> set[str]:
 
 def check_raw_colors_and_primitives(root: Path, errors: list[str]) -> None:
     """Ensure feature UI does not embed raw color literals and does not directly access primitiveColors."""
+    mobile_token_files = {
+        root / "apps/mobile/src/theme/primitives.ts",
+        root / "apps/mobile/src/theme/semantic.ts",
+    }
+    color_owners = mobile_token_files | {root / "apps/admin-web/src/styles/globals.css"}
     for base in (root / "apps/admin-web/src", root / "apps/mobile/app", root / "apps/mobile/src"):
         if not base.exists():
             continue
@@ -31,9 +36,9 @@ def check_raw_colors_and_primitives(root: Path, errors: list[str]) -> None:
             if is_generated_path(path, root):
                 continue
             text = path.read_text(encoding="utf-8")
-            if RAW_COLOR_RE.search(text):
-                errors.append(f"raw frontend color literal outside design system: {path.relative_to(root)}")
-            if path.suffix in {".ts", ".tsx"} and "primitiveColors" in text:
+            if path not in color_owners and RAW_COLOR_RE.search(text):
+                errors.append(f"raw frontend color literal outside platform theme: {path.relative_to(root)}")
+            if path not in mobile_token_files and path.suffix in {".ts", ".tsx"} and "primitiveColors" in text:
                 errors.append(f"frontend code must not consume primitiveColors directly: {path.relative_to(root)}")
 
 
@@ -183,7 +188,7 @@ def check_ui_primitive_consumers(root: Path, warnings: list[str]) -> None:
 
 
 def check_frontend(root: Path, errors: list[str], warnings: list[str]) -> None:
-    """Run all frontend design-system, i18n, Tailwind, and theme adapter checks."""
+    """Run all platform-theme, i18n, Tailwind, and theme adapter checks."""
     check_raw_colors_and_primitives(root, errors)
     check_secure_store_usage(root, errors)
     check_i18n_parity_and_keys(root, errors)

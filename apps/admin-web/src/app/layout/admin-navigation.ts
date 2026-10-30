@@ -1,23 +1,8 @@
-import {
-  BookOpen,
-  Radio,
-  Library,
-  Layers,
-  Users,
-  ChartNoAxesCombined,
-  Trophy,
-  Bell,
-  MessagesSquare,
-  ListChecks,
-  Database,
-  Images,
-  Settings2,
-  LayoutDashboard,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { RiBookOpenLine as BookOpen, RiBroadcastLine as Radio, RiBookShelfLine as Library, RiStackLine as Layers, RiGroupLine as Users, RiLineChartLine as ChartNoAxesCombined, RiTrophyLine as Trophy, RiNotification3Line as Bell, RiDiscussLine as MessagesSquare, RiListCheck3 as ListChecks, RiDatabase2Line as Database, RiImage2Line as Images, RiEqualizerLine as Settings2, RiDashboardLine as LayoutDashboard } from "@remixicon/react";
+import type { RemixiconComponentType } from "@remixicon/react";
 export type AdminNavItem = {
   key: string;
-  icon: LucideIcon;
+  icon: RemixiconComponentType;
   path?: string;
   children?: { key: string; path?: string }[];
 };

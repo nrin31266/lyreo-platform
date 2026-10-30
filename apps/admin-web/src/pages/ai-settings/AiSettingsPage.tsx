@@ -5,15 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
-import {
-  Check,
-  KeyRound,
-  LoaderCircle,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Trash2,
-} from "lucide-react";
+import { RiCheckLine as Check, RiKey2Line as KeyRound, RiLoader4Line as LoaderCircle, RiPencilLine as Pencil, RiAddLine as Plus, RiRefreshLine as RefreshCw, RiDeleteBinLine as Trash2 } from "@remixicon/react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import {

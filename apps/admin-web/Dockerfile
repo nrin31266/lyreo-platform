@@ -14,7 +14,6 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL \
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/i18n packages/i18n
-COPY packages/design-system packages/design-system
 COPY apps/admin-web apps/admin-web
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @lyreo/admin-web build

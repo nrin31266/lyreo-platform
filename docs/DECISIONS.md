@@ -218,3 +218,34 @@ boolean is required. Source selection is a selection timestamp, not proof of per
 waveform preparation and AI processing remain separate actions. This supersedes D-024's mandatory
 operator acknowledgment step without establishing source publication rights. Workflow actions share
 one persistent bar; only workspace contents scroll at narrow widths as well as desktop.
+
+## D-028 — Luma Stone/Blue presentation for Admin and Mobile (2026-10-31)
+
+Status: Accepted.
+
+Admin adopts the full shadcn `b1aIuQ2XC` preset: Radix Luma, Stone/Blue, Raleway, Remix Icon,
+large radius and translucent menus. Existing component behavior, translations and accessibility
+extensions survive preset replacement. Admin layout and visual verification prioritize desktop/laptop
+at 1280px and 1440px; retain existing responsive behavior without a separate phone/tablet design pass.
+
+Mobile follows the same visual direction through its own learner semantic tokens, NativeWind and
+React Native components. Embed Raleway through the Expo font plugin, use native-compatible colors
+and a lighter dark-mode blue for text contrast, and preserve safe areas and touch targets.
+
+This supersedes the old preset selection in D-025/D-026, while retaining their independent platform
+ownership and all API, workflow and timing policies. The owning READMEs describe each foundation.
+
+
+## D-029 — App-local theme ownership; shared translations only (2026-10-31)
+
+Status: Accepted.
+
+Remove the shared design-system workspace package. Mobile owns its existing palette, foundation,
+brand metadata and theme types in `apps/mobile/src/theme`; Admin owns success/warning colors in
+its theme CSS alongside the shadcn preset. Each app consumes its own theme without importing
+presentation values from the other app. Keep existing visual values, font configuration and theme
+preferences unchanged. Locale metadata and translations remain shared through `packages/i18n`.
+
+Repository guardrails allow color definitions only in the designated platform token owners and
+continue to reject raw colors or direct primitive access in feature code. This completes the physical
+separation of the visual foundations described in D-025/D-028; their other policies remain in effect.

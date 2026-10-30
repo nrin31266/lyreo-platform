@@ -1,4 +1,4 @@
-import { Pencil, Trash2 } from "lucide-react";
+import { RiPencilLine as Pencil, RiDeleteBinLine as Trash2 } from "@remixicon/react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";

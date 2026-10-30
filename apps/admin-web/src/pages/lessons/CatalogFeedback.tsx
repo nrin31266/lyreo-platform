@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ImageOff, RefreshCw, AlertCircle } from "lucide-react";
+import { RiImageLine as ImageOff, RiRefreshLine as RefreshCw, RiErrorWarningLine as AlertCircle } from "@remixicon/react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";

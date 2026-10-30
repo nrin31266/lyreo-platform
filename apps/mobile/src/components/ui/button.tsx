@@ -1,10 +1,10 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import type { ComponentProps } from 'react';
-import { Pressable } from 'react-native';
+import { Platform, Pressable } from 'react-native';
 import { cn } from '../../lib/utils';
 import { Text } from './text';
 
-const buttonVariants = cva('items-center justify-center rounded-md px-4 active:opacity-80 disabled:opacity-50', {
+const buttonVariants = cva('items-center justify-center rounded-full px-4 active:opacity-80 disabled:opacity-50', {
   variants: {
     variant: {
       default: 'bg-primary',
@@ -15,14 +15,14 @@ const buttonVariants = cva('items-center justify-center rounded-md px-4 active:o
     },
     size: {
       default: 'min-h-11 py-3',
-      sm: 'min-h-9 px-3 py-2',
+      sm: 'px-3 py-2',
       lg: 'min-h-13 px-6 py-4',
     },
   },
   defaultVariants: { variant: 'default', size: 'default' },
 });
 
-const labelVariants = cva('text-center text-sm font-bold', {
+const labelVariants = cva('text-center text-sm font-medium', {
   variants: {
     variant: {
       default: 'text-primary-foreground',
@@ -41,7 +41,7 @@ type ButtonProps = ComponentProps<typeof Pressable> & VariantProps<typeof button
 
 export function Button({ className, labelClassName, variant, size, children, ...props }: ButtonProps) {
   return (
-    <Pressable className={cn(buttonVariants({ variant, size }), className)} {...props}>
+    <Pressable accessibilityRole="button" style={{ minHeight: Platform.OS === 'ios' ? 44 : 48 }} className={cn(buttonVariants({ variant, size }), className)} {...props}>
       {typeof children === 'string'
         ? <Text className={cn(labelVariants({ variant }), labelClassName)}>{children}</Text>
         : children}

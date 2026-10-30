@@ -1,4 +1,4 @@
-import type { ThemePreference } from '@lyreo/design-system';
+import type { ThemePreference } from '@/theme';
 import { supportedLocales, type SupportedLocale } from '@lyreo/i18n';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
@@ -70,9 +70,9 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerStyle={{ padding: 24, paddingTop: 54, paddingBottom: 50, gap: 16 }}>
+    <ScrollView className="flex-1 bg-background" contentContainerStyle={{ padding: 24, paddingTop: 24, paddingBottom: 24, gap: 16 }}>
       <BackButton label={t('mobile:settings.back')} />
-      <Text className="mt-[18px] text-[40px] font-extrabold tracking-[-1.5px] text-foreground">{t('mobile:settings.title')}</Text>
+      <Text className="mt-[18px] text-[40px] font-semibold tracking-tight text-foreground">{t('mobile:settings.title')}</Text>
       <Text className="leading-[22px] text-muted-foreground">{t('mobile:settings.lead')}</Text>
 
       <Section title={t('mobile:settings.appearance')}>
@@ -171,7 +171,7 @@ export default function SettingsScreen() {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <View className="rounded-lg border border-border bg-surface p-5">
-      <Text className="mb-2 text-xl font-extrabold text-foreground">{title}</Text>
+      <Text className="mb-2 text-xl font-semibold text-foreground">{title}</Text>
       {children}
     </View>
   );
@@ -190,9 +190,11 @@ function Toggle({
 }) {
   const { colors } = useAppTheme();
   return (
-    <View className="flex-row items-center justify-between border-b border-border py-2.5">
-      <Text className="font-semibold text-foreground">{label}</Text>
+    <View className="min-h-12 flex-row items-center justify-between gap-3 border-b border-border py-2.5">
+      <Text className="flex-1 font-semibold text-foreground">{label}</Text>
       <Switch
+        accessibilityLabel={label}
+        hitSlop={8}
         value={value}
         disabled={disabled}
         onValueChange={set}
@@ -245,21 +247,23 @@ function ChoiceChips<T extends string>({
   return (
     <View className="gap-2 border-b border-border py-3 last:border-b-0">
       <Text className="font-semibold text-foreground">{label}</Text>
-      <View className="flex-row flex-wrap gap-1.5">
+      <View className="flex-row flex-wrap gap-2">
         {values.map(option => {
           const active = option === value;
           return (
             <Pressable
               key={option}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: active, disabled: !!disabled }}
               disabled={disabled}
               onPress={() => onChange(option)}
               className={active
-                ? 'rounded-full border border-primary bg-primary px-2.5 py-2'
-                : 'rounded-full border border-border bg-surface px-2.5 py-2'}
+                ? 'min-h-12 justify-center rounded-full border border-primary bg-primary px-2.5 py-2'
+                : 'min-h-12 justify-center rounded-full border border-border bg-surface px-2.5 py-2'}
             >
               <Text className={active
-                ? 'text-[11px] font-bold text-primary-foreground'
-                : 'text-[11px] font-bold text-muted-foreground'}
+                ? 'text-sm font-medium text-primary-foreground'
+                : 'text-sm font-medium text-muted-foreground'}
               >
                 {renderLabel(option)}
               </Text>

@@ -7,7 +7,7 @@ import {
   useQueryClient,
   keepPreviousData,
 } from "@tanstack/react-query";
-import { Plus, Search, Trash2, Pencil } from "lucide-react";
+import { RiAddLine as Plus, RiSearchLine as Search, RiDeleteBinLine as Trash2, RiPencilLine as Pencil } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";

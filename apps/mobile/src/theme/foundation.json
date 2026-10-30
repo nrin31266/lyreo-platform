@@ -8,9 +8,9 @@
     "xxl": 48
   },
   "radius": {
-    "sm": 6,
-    "md": 10,
-    "lg": 16,
+    "sm": 14,
+    "md": 20,
+    "lg": 28,
     "pill": 999
   },
   "motion": {
@@ -20,7 +20,7 @@
   },
   "typography": {
     "fontFamily": {
-      "sans": "System"
+      "sans": "Raleway"
     },
     "fontSize": {
       "xs": 12,

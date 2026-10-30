@@ -1,7 +1,13 @@
-import { render } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { fireEvent, render } from '@testing-library/react-native';
+import { Button } from '../components/ui/button';
 
-it('renders a native foundation component', async () => {
-  const view = await render(<Text>Mobile test rail</Text>);
-  expect(view.getByText('Mobile test rail')).toBeTruthy();
+it('keeps the themed button accessible and respects disabled state', async () => {
+  const onPress = jest.fn();
+  const view = await render(<Button onPress={onPress}>Tiếp tục học</Button>);
+  fireEvent.press(view.getByRole('button', { name: 'Tiếp tục học' }));
+  expect(onPress).toHaveBeenCalledTimes(1);
+
+  await view.rerender(<Button disabled onPress={onPress}>Tiếp tục học</Button>);
+  fireEvent.press(view.getByRole('button', { name: 'Tiếp tục học' }));
+  expect(onPress).toHaveBeenCalledTimes(1);
 });

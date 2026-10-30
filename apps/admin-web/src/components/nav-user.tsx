@@ -1,4 +1,4 @@
-import { ChevronsUpDown, LogOut } from 'lucide-react';
+import { RiExpandUpDownLine as ChevronsUpDown, RiLogoutBoxRLine as LogOut } from "@remixicon/react";
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/app/auth';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';

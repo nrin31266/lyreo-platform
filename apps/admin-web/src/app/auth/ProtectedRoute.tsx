@@ -1,4 +1,4 @@
-import { ShieldAlert } from 'lucide-react';
+import { RiShieldKeyholeLine as ShieldAlert } from "@remixicon/react";
 import type { PropsWithChildren } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';

@@ -1,4 +1,3 @@
-import { semanticThemes } from "@lyreo/design-system";
 export type ThemeMode = 'light' | 'dark';
 export type ThemePreference = ThemeMode | 'system';
 import {
@@ -51,8 +50,6 @@ export function AppThemeProvider({ children }: PropsWithChildren) {
     root.dataset.theme = mode;
     root.classList.toggle('dark', mode === 'dark');
     root.style.colorScheme = mode;
-    root.style.setProperty('--success', semanticThemes[mode].success);
-    root.style.setProperty('--warning', semanticThemes[mode].warning);
   }, [mode]);
 
   function setPreference(next: ThemePreference) {

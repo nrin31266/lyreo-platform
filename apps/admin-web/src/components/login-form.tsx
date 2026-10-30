@@ -1,4 +1,4 @@
-import { AudioLines, ArrowRight } from 'lucide-react';
+import { RiVoiceprintLine as AudioLines, RiArrowRightLine as ArrowRight } from "@remixicon/react";
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { Button } from '@/components/ui/button';

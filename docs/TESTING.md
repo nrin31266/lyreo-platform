@@ -97,9 +97,10 @@ Each subproject's `pyproject.toml` declares its test dependencies under a `dev` 
 
 ## 7. Shared TypeScript packages
 
-`packages/design-system` and `packages/i18n` are pure data/token packages. Type correctness is
-verified by `pnpm typecheck`. These packages do not require runtime test suites unless they gain
-logic beyond type exports.
+`packages/i18n` owns shared locale metadata and translation resources. Type correctness is verified
+by `pnpm typecheck`, and repository validation checks EN/VI key parity. Platform theme tokens live
+with each app: Mobile typechecks its local foundation and tests text contrast; Admin tests theme
+selection/persistence and verifies CSS status colors in the browser.
 
 ## 8. Learner Web
 

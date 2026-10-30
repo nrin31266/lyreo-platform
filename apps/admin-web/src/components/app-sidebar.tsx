@@ -1,4 +1,4 @@
-import { AudioLines, X } from 'lucide-react';
+import { RiVoiceprintLine as AudioLines, RiCloseLine as X } from "@remixicon/react";
 import { Button } from '@/components/ui/button';
 import { SheetClose } from '@/components/ui/sheet';
 import { Link } from 'react-router-dom';

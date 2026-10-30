@@ -22,7 +22,7 @@ then open only the linked canonical context. Do not scan all documentation for a
 | Background jobs protocol | [architecture/background-jobs.md](architecture/background-jobs.md) |
 | HTTP API conventions, errors, pagination | [architecture/http-api-contract.md](architecture/http-api-contract.md) |
 | AI execution boundary (Core vs FastAPI) | [architecture/ai-execution.md](architecture/ai-execution.md) |
-| Frontend foundation: tokens, translations, platform UI | [Design System](../packages/design-system/README.md), [i18n](../packages/i18n/README.md), [Admin Web](../apps/admin-web/README.md), [Mobile](../apps/mobile/README.md) |
+| Frontend foundation: tokens, translations, platform UI | [i18n](../packages/i18n/README.md), [Admin Web](../apps/admin-web/README.md), [Mobile](../apps/mobile/README.md#ui-theme-ownership) |
 | Data import implementation and operator setup | [DATA_PIPELINES.md](DATA_PIPELINES.md), [Data Import](../tools/data-import/README.md) |
 | Local infrastructure and Keycloak setup | [Docker](../infra/docker/README.md), [Keycloak](../infra/keycloak/README.md), [CONFIGURATION.md](CONFIGURATION.md) for configuration; [operational questions](requirements/open-questions.md) when relevant |
 | Architecture/product decisions | [DECISIONS.md](DECISIONS.md) |

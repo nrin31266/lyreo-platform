@@ -15,12 +15,12 @@ export default function LessonScreen() {
   const { t } = useTranslation('mobile');
 
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerStyle={{ padding: 24, paddingTop: 54, paddingBottom: 60 }}>
+    <ScrollView className="flex-1 bg-background" contentContainerStyle={{ padding: 24, paddingTop: 24, paddingBottom: 24 }}>
       <BackButton className="mb-9" label={t('lesson.back')} />
-      <Text className="text-[11px] font-extrabold tracking-[1.6px] text-primary">{t('lesson.eyebrow')}</Text>
+      <Text className="text-[11px] font-semibold tracking-[1.6px] text-primary">{t('lesson.eyebrow')}</Text>
 
       <View className="my-[18px] items-center rounded-lg bg-primary p-[22px]">
-        <Text className="text-[26px] tracking-[3px] text-secondary">▂▄▆█▅▃▂▅▇▆▃▂</Text>
+        <Text className="text-[26px] tracking-[3px] text-primary-foreground">▂▄▆█▅▃▂▅▇▆▃▂</Text>
         <Text className="mt-1 text-[13px] text-primary-foreground opacity-70">{t('lesson.audioMeta')}</Text>
       </View>
 
@@ -33,7 +33,7 @@ export default function LessonScreen() {
 
       {showIpa ? (
         <View className="mt-[18px] rounded-lg border border-border bg-surface p-[18px]">
-          <Text className="mb-1.5 font-extrabold text-foreground">{t('lesson.ipaTitle')}</Text>
+          <Text className="mb-1.5 font-semibold text-foreground">{t('lesson.ipaTitle')}</Text>
           <Text className="text-[13px] leading-5 text-muted-foreground">{t('lesson.ipaCopy')}</Text>
         </View>
       ) : null}
@@ -42,22 +42,22 @@ export default function LessonScreen() {
         {showIpa ? t('lesson.hideIpa') : t('lesson.showIpa')}
       </Button>
 
-      <Pressable className="mt-3.5 items-center rounded-full bg-primary p-[18px] active:opacity-80" onPress={() => setRecorded(true)}>
-        <Text className="font-extrabold text-primary-foreground">● {recorded ? t('lesson.recorded') : t('lesson.hold')}</Text>
+      <Pressable accessibilityRole="button" className="mt-3.5 items-center rounded-full bg-primary p-[18px] active:opacity-80" onPress={() => setRecorded(true)}>
+        <Text className="font-semibold text-primary-foreground">● {recorded ? t('lesson.recorded') : t('lesson.hold')}</Text>
       </Pressable>
 
       {recorded ? (
         <View className="mt-5 rounded-lg border border-border bg-surface p-5">
           <View className="border-b border-border pb-4">
-            <Text className="text-[45px] font-extrabold text-primary">84</Text>
+            <Text className="text-[45px] font-semibold text-primary">84</Text>
             <Text className="text-[13px] leading-5 text-muted-foreground">{t('lesson.scoreMeta')}</Text>
           </View>
 
-          <Text className="mb-1.5 mt-3.5 font-extrabold text-foreground">{t('lesson.expressions')}</Text>
+          <Text className="mb-1.5 mt-3.5 font-semibold text-foreground">{t('lesson.expressions')}</Text>
           <Text className="mb-1 text-foreground">grab a cup of coffee · đi uống một tách cà phê</Text>
           <Text className="mb-1 text-foreground">would you like to… · bạn có muốn…</Text>
 
-          <Text className="mb-1.5 mt-3.5 font-extrabold text-foreground">{t('lesson.grammarNote')}</Text>
+          <Text className="mb-1.5 mt-3.5 font-semibold text-foreground">{t('lesson.grammarNote')}</Text>
           <Text className="mb-2 text-foreground">would you like to + V · lời mời/lời đề nghị lịch sự</Text>
 
           <Text className="text-[13px] leading-5 text-muted-foreground">{t('lesson.contextRule')}</Text>

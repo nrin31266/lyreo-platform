@@ -56,4 +56,4 @@ The [development guide](docs/DEVELOPMENT.md) explains the local loop; [testing](
 
 ## Local guides
 
-[Core](apps/core-service/README.md) · [AI Service](apps/ai-service/README.md) · [Admin Web](apps/admin-web/README.md) · [Mobile](apps/mobile/README.md) · [Data Import](tools/data-import/README.md) · [Docker](infra/docker/README.md) · [Keycloak](infra/keycloak/README.md) · [Design System](packages/design-system/README.md) · [i18n](packages/i18n/README.md)
+[Core](apps/core-service/README.md) · [AI Service](apps/ai-service/README.md) · [Admin Web](apps/admin-web/README.md) · [Mobile](apps/mobile/README.md) · [Data Import](tools/data-import/README.md) · [Docker](infra/docker/README.md) · [Keycloak](infra/keycloak/README.md) · [Mobile UI](apps/mobile/README.md#ui-theme-ownership) · [i18n](packages/i18n/README.md)

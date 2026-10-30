@@ -1,4 +1,4 @@
-import { BookOpen, ListChecks, Plus, Settings2 } from 'lucide-react';
+import { RiBookOpenLine as BookOpen, RiListCheck3 as ListChecks, RiAddLine as Plus, RiEqualizerLine as Settings2 } from "@remixicon/react";
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

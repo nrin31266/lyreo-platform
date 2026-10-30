@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import { Pressable } from 'react-native';
+import { cn } from '@/lib/utils';
 import { Text } from '@/components/ui/text';
 
 type BackButtonProps = {
@@ -13,7 +14,7 @@ export function BackButton({ label, className }: BackButtonProps) {
   return (
     <Pressable
       accessibilityRole="button"
-      className={className}
+      className={cn('min-h-12 justify-center self-start', className)}
       onPress={() => {
         if (router.canGoBack()) router.back();
         else router.replace('/');

@@ -4,6 +4,13 @@ Expo SDK 57 + React Native 0.86 (New Architecture), Expo Development Client.
 
 Mobile is the **learner experience**, providing dictation, shadowing, SRS vocabulary, TOEIC practice, and progress analytics.
 
+The current native UI follows Luma's Stone/Blue, Raleway and large-radius direction through
+its local `src/theme`, NativeWind and owned React Native components. Admin keeps an independent
+shadcn foundation. Screens respect safe areas and shared controls retain touch-friendly sizes.
+Raleway Regular/Medium/SemiBold/Bold/ExtraBold are embedded for Android/iOS by the `expo-font`
+plugin using `@expo-google-fonts/raleway` assets, including Vietnamese glyphs. After pulling the
+font/plugin change, rebuild the development client; restarting Metro alone does not embed fonts.
+
 ---
 
 ## 1. Quick Start Guide
@@ -135,7 +142,7 @@ make mobile
 ## 5. Architecture & Native Code Policy
 
 - **Continuous Native Generation (CNG)**: `apps/mobile/android/` and `apps/mobile/ios/` are **generated build artifacts** derived from `app.json` and `package.json`. They are intentionally git-ignored. Do not commit manual edits inside those folders; declare native changes via Expo config plugins instead.
-- **UI Foundation**: Uses NativeWind v4 (Tailwind v3.4), consuming semantic light/dark tokens from `@lyreo/design-system`.
+- **UI Foundation**: Uses NativeWind v4 (Tailwind v3.4), consuming semantic light/dark tokens from its local `src/theme`.
 - **Internationalization**: Uses `@lyreo/i18n` for shared EN/VI resources.
 - **Navigation**: Expo Router route groups separate public and authenticated screens. Root
   `Stack.Protected` guards derive only from `SessionProvider` status.
@@ -166,3 +173,17 @@ make mobile
 | **Port 8081 already in use** | Keycloak runs on 8081. Mobile Metro runs on port **8082** by default to avoid conflicts. `make mobile` automatically uses 8082. |
 | **Android native build fails on Java 25** | Android Gradle Plugin (AGP) requires JDK 17 (or 21 LTS). Install JDK 17 via SDKMAN (`sdk install java 17.0.14-tem`). `make mobile-android-install` automatically prioritizes JDK 17. |
 | **Emulator cannot reach backend services** | In the Android emulator, `localhost` refers to the emulator itself. Use `10.0.2.2` to access host services (e.g. `http://10.0.2.2:8080` for Core). |
+
+
+## UI theme ownership
+
+Mobile owns its presentation foundation in `src/theme`:
+
+- `primitives.ts` owns the primitive palette, brand metadata and foundation exports.
+- `foundation.json` owns spacing, radius, motion and typography; NativeWind reads it directly.
+- `semantic.ts` owns native-compatible light/dark roles; screens consume the public `index.ts` exports.
+
+The current direction is Stone/Blue, Raleway and large radius. Dark mode uses a lighter blue for
+readable text links. Feature code uses semantic roles; raw colors and direct primitive access are
+restricted to the token owners by repository validation. Admin owns its own theme CSS and status
+colors. Only locale metadata and translations remain shared through `@lyreo/i18n`.

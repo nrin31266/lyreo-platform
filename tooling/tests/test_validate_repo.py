@@ -36,7 +36,7 @@ class ValidateRepoTest(unittest.TestCase):
     def test_missing_required_lockfile_fails(self) -> None:
         """Missing required lockfiles must produce explicit validation errors."""
         root = self.create_fixture({
-            "pnpm-lock.yaml": "lockfileVersion: '9.0'\nimporters:\n  apps/admin-web:\n  apps/mobile:\n  packages/design-system:\n  packages/i18n:\n",
+            "pnpm-lock.yaml": "lockfileVersion: '9.0'\nimporters:\n  apps/admin-web:\n  apps/mobile:\n  packages/i18n:\n",
             "apps/ai-service/pyproject.toml": "[project]\nname = \"ai-service\"\n",
             "tools/data-import/pyproject.toml": "[project]\nname = \"data-import\"\n",
         })
@@ -93,7 +93,6 @@ class ValidateRepoTest(unittest.TestCase):
                 "importers:\n"
                 "  apps/admin-web:\n"
                 "  apps/mobile:\n"
-                "  packages/design-system:\n"
                 "  packages/i18n:\n"
             ),
             "apps/ai-service/uv.lock": "version = 1\n",
@@ -186,6 +185,32 @@ class ValidateRepoTest(unittest.TestCase):
         errors: list[str] = []
         check_raw_colors_and_primitives(root, errors)
         self.assertTrue(any("raw frontend color literal" in error for error in errors))
+
+    def test_platform_theme_owners_accept_raw_colors(self) -> None:
+        root = self.create_fixture({
+            "apps/admin-web/src/styles/globals.css": ":root { --success: #2E7D5B; }\n",
+            "apps/mobile/src/theme/primitives.ts": "export const primitiveColors = { white: '#ffffff' };\n",
+            "apps/mobile/src/theme/semantic.ts": (
+                "import { primitiveColors } from './primitives';\n"
+                "export const theme = { surface: primitiveColors.white, overlay: 'rgba(0, 0, 0, 0.5)' };\n"
+            ),
+        })
+        errors: list[str] = []
+        check_raw_colors_and_primitives(root, errors)
+        self.assertEqual([], errors)
+
+    def test_theme_folder_does_not_exempt_other_files(self) -> None:
+        root = self.create_fixture({
+            "apps/mobile/src/theme/overrides.ts": "export const color = '#ff0000';\n",
+            "apps/mobile/src/features/lesson/LessonCard.tsx": (
+                "import { primitiveColors } from '../../theme/primitives';\n"
+            ),
+            "apps/admin-web/src/styles/page.css": ".page { color: #ff0000; }\n",
+        })
+        errors: list[str] = []
+        check_raw_colors_and_primitives(root, errors)
+        self.assertEqual(3, len(errors), errors)
+        self.assertTrue(any("primitiveColors directly" in error for error in errors))
 
     def test_cross_module_infrastructure_import_fails(self) -> None:
         """Importing another business module's infrastructure must fail."""

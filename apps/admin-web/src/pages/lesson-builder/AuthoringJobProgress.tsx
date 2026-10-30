@@ -5,7 +5,7 @@ import {
   AccordionContent,
 } from "@/components/ui/accordion";
 import { useEffect, useState } from "react";
-import { AlertCircle, Settings2 } from "lucide-react";
+import { RiErrorWarningLine as AlertCircle, RiEqualizerLine as Settings2 } from "@remixicon/react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";

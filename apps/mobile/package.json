@@ -12,7 +12,7 @@
     "test:logic": "tsx --test src/tests/*.test.ts"
   },
   "dependencies": {
-    "@lyreo/design-system": "workspace:*",
+    "@expo-google-fonts/raleway": "^0.4.2",
     "@lyreo/i18n": "workspace:*",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@rn-primitives/portal": "^1.5.3",
@@ -23,6 +23,7 @@
     "expo-constants": "~57.0.19",
     "expo-crypto": "~57.0.3",
     "expo-dev-client": "~57.0.19",
+    "expo-font": "~57.0.4",
     "expo-linking": "~57.0.10",
     "expo-localization": "~57.0.2",
     "expo-router": "~57.0.22",
@@ -66,6 +67,11 @@
     ],
     "transformIgnorePatterns": [
       "node_modules/(?!(.pnpm|(jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg))"
-    ]
+    ],
+    "moduleNameMapper": {
+      "^react$": "<rootDir>/node_modules/react",
+      "^react/jsx-runtime$": "<rootDir>/node_modules/react/jsx-runtime",
+      "^react/jsx-dev-runtime$": "<rootDir>/node_modules/react/jsx-dev-runtime"
+    }
   }
 }

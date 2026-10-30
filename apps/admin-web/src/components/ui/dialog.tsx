@@ -1,9 +1,12 @@
+"use client"
+
 import * as React from "react"
-import { cn } from "@/lib/utils"
+import { useTranslation } from "react-i18next"
+import { cn } from "cn"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { Button } from "@/components/ui/button"
-import { XIcon } from "lucide-react"
+import { RiCloseLine } from "@remixicon/react"
 
 function Dialog({
   ...props
@@ -49,12 +52,16 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
-  closeLabel = "Close",
+  closeLabel,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   closeLabel?: string
   showCloseButton?: boolean
 }) {
+  const { t } = useTranslation("common")
+  const returnFocus = React.useRef<HTMLElement | null>(null)
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -65,6 +72,17 @@ function DialogContent({
           className
         )}
         {...props}
+        onOpenAutoFocus={(event) => {
+          returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+          onOpenAutoFocus?.(event)
+        }}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event)
+          if (!event.defaultPrevented && returnFocus.current?.isConnected) {
+            event.preventDefault()
+            returnFocus.current.focus()
+          }
+        }}
       >
         {children}
         {showCloseButton && (
@@ -74,9 +92,9 @@ function DialogContent({
               className="absolute top-4 right-4 bg-secondary"
               size="icon-sm"
             >
-              <XIcon
+              <RiCloseLine
               />
-              <span className="sr-only">{closeLabel}</span>
+              <span className="sr-only">{closeLabel ?? t("actions.close")}</span>
             </Button>
           </DialogPrimitive.Close>
         )}
@@ -98,12 +116,14 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
 function DialogFooter({
   className,
   showCloseButton = false,
+  closeLabel,
   children,
   ...props
 }: React.ComponentProps<"div"> & {
   closeLabel?: string
   showCloseButton?: boolean
 }) {
+  const { t } = useTranslation("common")
   return (
     <div
       data-slot="dialog-footer"
@@ -116,7 +136,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
-          <Button variant="outline">Close</Button>
+          <Button variant="outline">{closeLabel ?? t("actions.close")}</Button>
         </DialogPrimitive.Close>
       )}
     </div>

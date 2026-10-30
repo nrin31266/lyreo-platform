@@ -1,5 +1,5 @@
 import "./lesson-builder.css";
-import { RefreshCw } from "lucide-react";
+import { RiRefreshLine as RefreshCw } from "@remixicon/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { CreateLessonPage } from "./CreateLessonPage";
 import { UnsavedChangesGuard } from "./UnsavedChangesGuard";

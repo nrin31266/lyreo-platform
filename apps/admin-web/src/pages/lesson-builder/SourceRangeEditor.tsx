@@ -3,16 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
 import Regions from "wavesurfer.js/dist/plugins/regions.esm.js";
-import {
-  Play,
-  Pause,
-  Repeat2,
-  ZoomIn,
-  ZoomOut,
-  AudioLines,
-  LoaderCircle,
-  Check,
-} from "lucide-react";
+import { RiPlayLine as Play, RiPauseLine as Pause, RiRepeat2Line as Repeat2, RiZoomInLine as ZoomIn, RiZoomOutLine as ZoomOut, RiVoiceprintLine as AudioLines, RiLoader4Line as LoaderCircle, RiCheckLine as Check } from "@remixicon/react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
