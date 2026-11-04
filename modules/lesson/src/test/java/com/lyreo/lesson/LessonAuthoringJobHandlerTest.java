@@ -30,8 +30,9 @@ class LessonAuthoringJobHandlerTest {
     private final AuthoringJobCommitter committer=mock(AuthoringJobCommitter.class);
     private final BackgroundJob job=mock(BackgroundJob.class);
     private final JobExecutionContext context=mock(JobExecutionContext.class,CALLS_REAL_METHODS);
+    private final ObjectStoragePort storage=mock(ObjectStoragePort.class);
     private final LessonAuthoringJobHandler handler=new LessonAuthoringJobHandler(repository,mock(AuthoringSourcePort.class),
-        mock(ObjectStoragePort.class),ai,semantic,committer);
+        storage,ai,semantic,committer);
     private AuthoringLesson lesson;
     private AuthoringSentence sentence;
 
@@ -121,6 +122,35 @@ class LessonAuthoringJobHandlerTest {
         assertThatThrownBy(()->handler.execute(job,context)).isInstanceOf(IllegalStateException.class).hasMessage("offline");
         verify(ai,times(1)).execute(any(),anyString(),anyMap(),anyMap());
         verifyNoInteractions(committer);
+    }
+    @Test void alignmentCommitsObservedPhraseGroupsWithoutChangingApprovedText() throws Exception {
+        alignment(List.of(Map.of("text","We","start_ms",100,"end_ms",200),
+            Map.of("text","learn","start_ms",250,"end_ms",250),
+            Map.of("text","English","start_ms",300,"end_ms",500)));
+        handler.execute(job,context);
+        assertThat(sentence.text).isEqualTo("We learn English.");
+        assertThat(sentence.words).hasSize(2);
+        assertThat(sentence.words.getLast().text()).isEqualTo("learn English");
+        assertThat(sentence.words.getLast().startMs()).isEqualTo(250);
+        assertThat(sentence.words.getLast().endMs()).isEqualTo(500);
+        assertThat(sentence.issues).contains("GROUPED_TIMING").doesNotContain("TIMING_ZERO_DURATION");
+        verify(committer).commit(eq(job),any(),eq(lesson));
+    }
+    @Test void alignmentWithNoPositiveObservationStillFailsWithoutCommitting() {
+        alignment(List.of(Map.of("text","We","start_ms",100,"end_ms",100),
+            Map.of("text","learn","start_ms",200,"end_ms",200),
+            Map.of("text","English","start_ms",300,"end_ms",300)));
+        assertThatThrownBy(()->handler.execute(job,context)).isInstanceOfSatisfying(PermanentJobException.class,
+            failure->assertThat(failure.errorCode()).isEqualTo("TIMING_ZERO_DURATION"));
+        verifyNoInteractions(committer);
+    }
+    private void alignment(List<Map<String,Object>> words) {
+        lesson.sentences=List.of(sentence);lesson.endMs=1000;lesson.audioObjectKey="test.wav";
+        sentence.coarseStartMs=0L;sentence.coarseEndMs=1000L;
+        when(storage.createDownloadUrl(anyString(),any())).thenReturn(java.net.URI.create("http://storage/test.wav"));
+        when(repository.jobInput(job.id())).thenReturn(new AuthoringRepository.JobInput(lesson.id,"ALIGN",1,false));
+        when(ai.execute(eq(AiCapability.ALIGNMENT),anyString(),anyMap(),anyMap()))
+            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"QWEN","test",Map.of("words",words),1,1,10));
     }
     private AiExecutionResult response(String invalidSurface) {
         var item=new HashMap<String,Object>();

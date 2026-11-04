@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createInstance } from 'i18next';
@@ -51,7 +52,7 @@ afterEach(() => {
 });
 function show() {
   render(
-    <I18nextProvider i18n={i18n}>
+    <QueryClientProvider client={new QueryClient()}><I18nextProvider i18n={i18n}>
       <MemoryRouter>
         <Routes>
           <Route element={<AdminLayout />}>
@@ -60,7 +61,7 @@ function show() {
           </Route>
         </Routes>
       </MemoryRouter>
-    </I18nextProvider>,
+    </I18nextProvider></QueryClientProvider>,
   );
 }
 

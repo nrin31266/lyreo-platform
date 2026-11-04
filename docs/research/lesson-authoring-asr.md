@@ -1,6 +1,8 @@
 # Lesson authoring ASR and timing evidence
 
-Latest: the [2026-10-26 live extension](#live-youtube-extension--2026-10-26) adds continuous YouTube, 20-minute ASR, paired alignment and acquisition evidence. Earlier sections preserve the separate 2026-10-25 experiment.
+Latest timing diagnosis: [2026-11-03 Groq/Qwen comparison](lesson-authoring-timing-2026-11-03.md) includes native JSON evidence and a bounded final-frame correction.
+
+The [2026-10-26 live extension](#live-youtube-extension--2026-10-26) adds continuous YouTube, 20-minute ASR, paired alignment and acquisition evidence. Earlier sections preserve the separate 2026-10-25 experiment.
 
 Measured 2026-10-25. This is a bounded V1 experiment, not a general ASR ranking or proof of karaoke accuracy.
 

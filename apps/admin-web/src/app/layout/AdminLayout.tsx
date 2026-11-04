@@ -1,4 +1,5 @@
 import "./admin-layout.css";
+import { JobRealtimeProvider } from "@/lib/realtime/JobRealtimeProvider";
 import { Suspense, useEffect, useState, type CSSProperties } from "react";
 import { Outlet } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -16,7 +17,7 @@ export function AdminLayout() {
     localStorage.setItem("lyreo.admin.sidebar-collapsed", String(!open));
   }, [open]);
   return (
-    <TooltipProvider>
+    <TooltipProvider><JobRealtimeProvider>
       <SidebarProvider
         open={open}
         onOpenChange={setOpen}
@@ -50,6 +51,6 @@ export function AdminLayout() {
           </div>
         </SidebarInset>
       </SidebarProvider>
-    </TooltipProvider>
+    </JobRealtimeProvider></TooltipProvider>
   );
 }

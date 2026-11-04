@@ -27,7 +27,7 @@ public final class AuthoringLesson {
     public List<Job> jobs = List.of();
     public record Job(UUID jobId, String operation, String status, String currentStep,
                       int progressPercent, String errorMessage, String errorCode, Instant nextRetryAt,
-                      List<Invocation> usage, Instant createdAt) {}
+                      List<Invocation> usage, Instant createdAt, Instant startedAt, Instant finishedAt) {}
     public record Invocation(String provider, String model, Integer inputTokens,
                              Integer outputTokens, long latencyMs, Double audioSeconds) {
         public Invocation(String provider,String model,Integer inputTokens,Integer outputTokens,long latencyMs) {

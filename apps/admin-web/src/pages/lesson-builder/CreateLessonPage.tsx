@@ -6,10 +6,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { RiLink as Link2, RiRefreshLine as RefreshCw, RiLoader4Line as LoaderCircle, RiErrorWarningLine as AlertCircle } from "@remixicon/react";
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
+import { RiLink as Link2, RiSearchLine as Search, RiLoader4Line as LoaderCircle, RiErrorWarningLine as AlertCircle } from "@remixicon/react";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupInput, InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -28,7 +29,8 @@ import {
 } from "@/components/ui/accordion";
 import { ApiError } from "@/lib/api";
 import { SourceRangeEditor } from "./SourceRangeEditor";
-import { defaultRange, timecode } from "./timecode";
+import { defaultRange, sourceOffset, timecode } from "./timecode";
+import { validSelection } from "./timeline-view";
 import * as authoring from "./lesson-builder.api";
 import type { SourceInspection } from "./lesson-builder.types";
 import { metadataSchema } from "@/pages/lessons/catalog.api";
@@ -37,21 +39,6 @@ import { CatalogImage, CatalogError } from "@/pages/lessons/CatalogFeedback";
 const sourceSchema = z.object({
   sourceReference: z.string().trim().pipe(z.url()),
 });
-function isVideoReference(reference: string) {
-  try {
-    const url = new URL(reference);
-    return (
-      ["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"].includes(
-        url.hostname,
-      ) &&
-      /^[\w-]{11}$/.test(
-        url.searchParams.get("v") ?? url.pathname.split("/").pop() ?? "",
-      )
-    );
-  } catch {
-    return false;
-  }
-}
 export function CreateLessonPage() {
   const { t } = useTranslation(["admin", "common"]);
   const navigate = useNavigate();
@@ -71,37 +58,49 @@ export function CreateLessonPage() {
     },
   });
   const sourceReference = sourceForm.watch("sourceReference");
-  const latestReference = useRef(sourceReference);
-  latestReference.current = sourceReference;
-  const inspectionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
+  const inspectionVersion = useRef(0);
+  const inspectionInFlight = useRef(false);
+  const lastInspectedReference = useRef<string | null>(null);
+  const [selectionVersion, setSelectionVersion] = useState(0);
   const [inspection, setInspection] = useState<SourceInspection | null>(null);
-  const [startMs, setStartMs] = useState(0);
-  const [endMs, setEndMs] = useState(120000);
-  const [rangeInputValid, setRangeInputValid] = useState(true);
+  const [startMs, setStartMs] = useState<number | null>(null);
+  const [endMs, setEndMs] = useState<number | null>(null);
+  const [rangeInputValid, setRangeInputValid] = useState(false);
+  const currentRange = useRef({ startMs, endMs });
+  currentRange.current = { startMs, endMs };
   const [error, setError] = useState("");
   const [inspectError, setInspectError] = useState("");
-  const [rangeActions, setRangeActions] = useState<HTMLDivElement | null>(null);
   const inspectionMutation = useMutation({
     mutationFn: authoring.inspectSource,
   });
   const createMutation = useMutation({ mutationFn: authoring.createDraft });
   async function inspectReference(reference: string) {
-    clearTimeout(inspectionTimer.current);
+    if (inspectionInFlight.current) return;
+    inspectionInFlight.current = true;
+    const version = ++inspectionVersion.current;
+    reference = reference.trim();
     setError("");
     setInspectError("");
-    if (!(await sourceForm.trigger())) return;
     try {
-      const next = await inspectionMutation.mutateAsync(reference.trim());
-      if (reference !== latestReference.current) return;
+      if (!(await sourceForm.trigger()) || version !== inspectionVersion.current) return;
+      const next = await inspectionMutation.mutateAsync(reference);
+      if (version !== inspectionVersion.current) return;
+      const refresh = reference === lastInspectedReference.current;
       setInspection(next);
-      metadata.setValue("title", next.title);
-      const [a, b] = defaultRange(next.durationMs);
-      setStartMs(a);
-      setEndMs(b);
+      if (!refresh) metadata.reset({ ...metadata.getValues(), title: next.title });
+      else if (!metadata.getFieldState("title").isDirty) metadata.resetField("title", { defaultValue: next.title });
+      const range = currentRange.current;
+      if (!refresh || (range.startMs !== null && (range.startMs < 0 || range.startMs >= next.durationMs)) ||
+        (range.endMs !== null && (range.startMs === null || !validSelection(range.startMs, range.endMs, next.durationMs)))) {
+        const [start, end] = defaultRange(next.durationMs, reference);
+        setStartMs(start);
+        setEndMs(end);
+        setRangeInputValid(true);
+        setSelectionVersion(value => value + 1);
+      }
+      lastInspectedReference.current = reference;
     } catch (cause) {
-      if (reference !== latestReference.current) return;
+      if (version !== inspectionVersion.current) return;
       const code = cause instanceof ApiError ? cause.code : undefined;
       const known =
         code &&
@@ -120,29 +119,23 @@ export function CreateLessonPage() {
           ? `${message} · ${t("lessonAuthoring.requestId", { id: cause.correlationId })}`
           : message,
       );
+    } finally {
+      inspectionInFlight.current = false;
     }
   }
-  useEffect(() => {
-    if (!isVideoReference(sourceReference)) return;
-    inspectionTimer.current = setTimeout(
-      () => void inspectReference(sourceReference),
-      600,
-    );
-    return () => clearTimeout(inspectionTimer.current);
-  }, [sourceReference]);
+  useEffect(() => () => { inspectionVersion.current += 1; }, []);
   async function create(event: FormEvent) {
     event.preventDefault();
+    if (inspectionInFlight.current) return;
+    const version = inspectionVersion.current;
     setError("");
     if (!(await metadata.trigger())) return;
+    if (version !== inspectionVersion.current) return;
     if (
       !inspection ||
       !rangeInputValid ||
-      !Number.isFinite(startMs) ||
-      !Number.isFinite(endMs) ||
-      startMs < 0 ||
-      endMs <= startMs ||
-      endMs > inspection.durationMs ||
-      endMs - startMs > 600000
+      startMs === null || endMs === null ||
+      !validSelection(startMs, endMs, inspection.durationMs)
     ) {
       setError(t("lessonAuthoring.invalidRange"));
       return;
@@ -160,17 +153,22 @@ export function CreateLessonPage() {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   }
-  const overlap = inspection?.usedRanges.some(
+  const overlap = startMs !== null && endMs !== null && inspection?.usedRanges.some(
     (range) => startMs < range.endMs && endMs > range.startMs,
   );
   return (
     <section className="authoring-page source-page">
+      <div className="source-topbar">
       <header className="authoring-heading">
         <h1>{t("lessonAuthoring.title")}</h1>
         <p className="text-sm text-muted-foreground">
           {t("sourceWorkspace.sourceHint")}
         </p>
       </header>
+      </div>
+      <ol className="source-step-navigation" aria-label={t("lessonAuthoring.title")}>
+        {["source", "wordsTiming", "content", "publish"].map((step, index) => <li key={step} aria-current={index === 0 ? "step" : undefined}><span>{index + 1}</span>{t(`reviewWorkspace.steps.${step}`)}</li>)}
+      </ol>
       <form
         className="source-url-form"
         onSubmit={(event) => {
@@ -183,10 +181,11 @@ export function CreateLessonPage() {
             !!inspectError || !!sourceForm.formState.errors.sourceReference
           }
         >
-          <FieldLabel htmlFor="youtube-source">
+          <FieldLabel htmlFor="youtube-source" >
             {t("lessonAuthoring.youtubeUrl")}
           </FieldLabel>
-          <Input
+          <InputGroup>
+          <InputGroupInput
             id="youtube-source"
             type="url"
             required
@@ -195,6 +194,7 @@ export function CreateLessonPage() {
               !!inspectError || !!sourceForm.formState.errors.sourceReference
             }
             onChange={(event) => {
+              inspectionVersion.current += 1;
               sourceForm.setValue("sourceReference", event.target.value);
               setInspection(null);
               setInspectError("");
@@ -202,34 +202,32 @@ export function CreateLessonPage() {
             }}
             placeholder="https://www.youtube.com/watch?v=…"
           />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton type="submit" variant="secondary" disabled={inspectionMutation.isPending || !sourceReference.trim()}>
+              {inspectionMutation.isPending ? <LoaderCircle className="animate-spin" /> : <Search />}
+              {t("lessonAuthoring.inspect")}
+            </InputGroupButton>
+          </InputGroupAddon>
+          </InputGroup>
           <FieldError>
-            {sourceForm.formState.errors.sourceReference &&
-              t("catalog.invalidField")}
+            {sourceForm.formState.errors.sourceReference
+              ? t("catalog.invalidField")
+              : inspection && inspectError}
           </FieldError>
         </Field>
-        <Button
-          type="submit"
-          variant="ghost"
-          size="icon"
-          title={t("lessonAuthoring.inspect")}
-          disabled={inspectionMutation.isPending || !sourceReference.trim()}
-        >
-          {inspectionMutation.isPending ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
-          <span className="sr-only">{t("lessonAuthoring.inspect")}</span>
-        </Button>
       </form>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       <div className={`source-workspace ${!inspection && !inspectionMutation.isPending ? "source-workspace-empty" : ""}`}>
         <div className="source-media-pane">
           {inspection?.embedAllowed ? (
             <SourceRangeEditor
-              key={inspection.videoId}
+              key={`${inspection.videoId}:${selectionVersion}`}
+              thumbnailUrl={inspection.thumbnailUrl}
               videoId={inspection.videoId}
-              reference={sourceReference.trim()}
               durationMs={inspection.durationMs}
+              initialPositionMs={sourceOffset(inspection.durationMs, sourceReference.trim())}
               startMs={startMs}
               endMs={endMs}
-              actionsContainer={rangeActions}
               onValidityChange={setRangeInputValid}
               onRangeChange={(a, b) => {
                 setStartMs(a);
@@ -254,11 +252,11 @@ export function CreateLessonPage() {
                 <EmptyTitle>{t(inspectError ? "sourceWorkspace.sourceFailed" : "sourceWorkspace.emptyTitle")}</EmptyTitle>
                 <EmptyDescription>{inspectError || t("sourceWorkspace.pasteSource")}</EmptyDescription>
               </EmptyHeader>
-              {inspectError && <EmptyContent><Button variant="outline" onClick={() => void inspectReference(sourceReference)}><RefreshCw data-icon="inline-start" />{t("lessonAuthoring.retryInspect")}</Button></EmptyContent>}
             </Empty>
           )}
         </div>
         {(inspection || inspectionMutation.isPending) && <aside className="source-metadata-pane">
+          <h2 className="source-section-title">{t("reviewWorkspace.lessonInformation")}</h2>
           {inspectionMutation.isPending && !inspection ? <div role="status" aria-label={t("loading")} className="grid gap-5"><Skeleton className="h-5 w-1/2" /><Skeleton className="h-10" /><Skeleton className="aspect-video" /><Skeleton className="h-20" /></div> : <form id="lesson-create-form" onSubmit={create} noValidate>
             <FieldGroup>
               <Field data-invalid={!!metadata.formState.errors.title}>
@@ -277,10 +275,6 @@ export function CreateLessonPage() {
               </Field>
               {inspection && (
                 <>
-                  <CatalogImage
-                    url={metadata.watch("imageUrl") || inspection.thumbnailUrl}
-                    title=""
-                  />
                   {overlap && (
                     <p role="status" className="text-sm text-muted-foreground">
                       {t("lessonAuthoring.overlap")}
@@ -321,9 +315,23 @@ export function CreateLessonPage() {
                       </Field>
                     )}
                   />
+                  <Accordion type="single" collapsible className="source-used-ranges"><AccordionItem value="used-ranges">
+                    <AccordionTrigger className="gap-2 px-3 py-2"><span>{t("lessonAuthoring.usedRanges")} <span className="text-muted-foreground">{inspection.usedRanges.length}</span></span></AccordionTrigger><AccordionContent>
+                    {!inspection.usedRanges.length && <p className="text-sm text-muted-foreground">{t("authoringUi.noUsedRanges")}</p>}
+                    <div className="source-used-list">{inspection.usedRanges.map(range => {
+                      const intersects = startMs !== null && endMs !== null && startMs < range.endMs && endMs > range.startMs;
+                      return <article key={range.lessonId} className="source-used-item">
+                        <Link className="font-medium hover:underline" to={`/lessons/${range.lessonId}`}>{range.title}</Link>
+                        <div className="flex items-center justify-between gap-2">
+                          <Button type="button" variant="ghost" size="sm" onClick={() => { setStartMs(range.startMs); setEndMs(range.endMs); }}>{timecode(range.startMs)}–{timecode(range.endMs)}</Button>
+                          <span className={intersects ? "text-xs text-warning" : "text-xs text-muted-foreground"}>{intersects ? t("authoringUi.overlap") : range.status}</span>
+                        </div>
+                      </article>;
+                    })}</div>
+                  </AccordionContent></AccordionItem></Accordion>
                   <Accordion type="single" collapsible>
                     <AccordionItem value="metadata">
-                      <AccordionTrigger>
+                      <AccordionTrigger className="gap-2 px-3 py-2">
                         {t("sourceWorkspace.additionalInfo")}
                       </AccordionTrigger>
                       <AccordionContent>
@@ -345,6 +353,7 @@ export function CreateLessonPage() {
                                 t("catalog.invalidField")}
                             </FieldError>
                           </Field>
+                          <CatalogImage url={metadata.watch("imageUrl") || inspection.thumbnailUrl} title="" />
                           <Field
                             data-invalid={!!metadata.formState.errors.imageUrl}
                           >
@@ -360,20 +369,7 @@ export function CreateLessonPage() {
                                 t("catalog.invalidField")}
                             </FieldError>
                           </Field>
-                          {!!inspection.usedRanges.length && (
-                            <div>
-                              <h3>{t("lessonAuthoring.usedRanges")}</h3>
-                              {inspection.usedRanges.map((range) => (
-                                <p key={range.lessonId}>
-                                  <Link to={`/lessons/${range.lessonId}`}>
-                                    {range.title}
-                                  </Link>{" "}
-                                  · {timecode(range.startMs)}–
-                                  {timecode(range.endMs)}
-                                </p>
-                              ))}
-                            </div>
-                          )}
+
                         </FieldGroup>
                       </AccordionContent>
                     </AccordionItem>
@@ -387,17 +383,20 @@ export function CreateLessonPage() {
       <footer className="authoring-actionbar">
         <span className="text-xs text-muted-foreground">
           {inspection
-            ? `${timecode(startMs)}–${timecode(endMs)}`
+            ? startMs !== null && endMs !== null && rangeInputValid
+              ? `${timecode(startMs)}–${timecode(endMs)}`
+              : t("sourceSelection.chooseRange")
             : t("sourceWorkspace.sourceHint")}
         </span>
         <div className="authoring-action-buttons">
-          <div ref={setRangeActions} />
           <Button
             type="submit"
             form="lesson-create-form"
             disabled={
               !inspection?.embedAllowed ||
+              inspectionMutation.isPending ||
               !rangeInputValid ||
+              startMs === null || endMs === null ||
               createMutation.isPending
             }
           >

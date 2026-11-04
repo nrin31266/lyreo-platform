@@ -6,7 +6,7 @@ export function splitSentence(sentences: TranscriptSentence[], index: number, of
   const right = sentence.text.slice(offset).trim();
   if (!left || !right) return sentences;
   return [...sentences.slice(0, index), { ...sentence, text: left },
-    { text: right, usage: sentence.usage }, ...sentences.slice(index + 1)];
+    { editorKey: crypto.randomUUID(), text: right, usage: sentence.usage }, ...sentences.slice(index + 1)];
 }
 
 export function mergeSentence(sentences: TranscriptSentence[], index: number): TranscriptSentence[] {
@@ -29,6 +29,27 @@ export function playbackAction(sourceMs: number, startMs: number, endMs: number,
     return next >= endMs ? { pause: true } : { seekMs: next };
   }
   return {};
+}
+
+export function sentencePlaybackRange(sentence: AuthoringSentence, sentences: AuthoringSentence[], durationMs: number) {
+  const startMs = sentence.words[0]?.startMs ?? sentence.previewStartMs;
+  if (startMs == null) return undefined;
+  // Before alignment only a containing segment is known, never claim exact sentence timing.
+  const endMs = sentence.words.at(-1)?.endMs ?? sentences
+    .map(row => row.previewStartMs).find(at => at != null && at > startMs) ?? durationMs;
+  return endMs > startMs ? { startMs, endMs } : undefined;
+}
+
+export function sentencePlaybackAction(atMs: number, sentenceId: string | null, continuous: boolean, sentences: AuthoringSentence[], durationMs: number) {
+  const sentence = sentences.find(row => row.id === sentenceId);
+  const range = sentence && sentencePlaybackRange(sentence, sentences, durationMs);
+  if (!range) return { pause: true };
+  if (atMs < range.startMs) return { seekMs: range.startMs };
+  if (atMs < range.endMs) return {};
+  const next = continuous && sentences.slice(sentences.indexOf(sentence!) + 1)
+    .find(row => row.usage !== 'SKIP' && sentencePlaybackRange(row, sentences, durationMs));
+  return next ? { sentenceId: next.id, seekMs: sentencePlaybackRange(next, sentences, durationMs)!.startMs }
+    : { pause: true, stopMs: range.endMs };
 }
 
 export function thoughtGroupPreview(sentence: Pick<AuthoringSentence, 'text' | 'thoughtGroups'>): string {

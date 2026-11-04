@@ -65,6 +65,8 @@ public final class LessonAuthoringJobHandler implements JobHandler {
         } catch(SourceMaterializationException failure) {
             if(!failure.retryable()) throw new PermanentJobException(failure.errorCode(),failure.getMessage(),failure);
             throw failure;
+        } catch(com.lyreo.lesson.domain.authoring.TimingValidationException failure) {
+            throw new PermanentJobException(failure.code(),failure.getMessage(),failure);
         } catch(RequestValidationException failure) {
             throw new PermanentJobException("AUTHORING_VALIDATION_FAILED",failure.getMessage(),failure);
         }
@@ -73,7 +75,7 @@ public final class LessonAuthoringJobHandler implements JobHandler {
         context.progress("SOURCE_PREPARE",0);
         lesson.audioObjectKey=source.prepare(lesson.sourceReference,lesson.videoId,lesson.startMs,lesson.endMs);
         context.throwIfCancellationRequested();context.progress("TRANSCRIBING",0);
-        var result=invoke(job,AiCapability.STT,"",Map.of("audio_url",audioUrl(lesson)),Map.of("language","English","timestamps",true));
+        var result=invoke(job,AiCapability.STT,"",Map.of("audio_url",audioUrl(lesson)),Map.of("language","English","timestamps",true,"allow_alignment",false));
         context.throwIfCancellationRequested();
         Object text=result.output().get("text");
         LessonAuthoringService.require(text instanceof String && !((String)text).isBlank(),"ASR response has no transcript");
@@ -84,12 +86,17 @@ public final class LessonAuthoringJobHandler implements JobHandler {
             var words=AuthoringText.observed(result.output());
             try {
                 AuthoringText.mapTiming(lesson.sentences,AuthoringText.coalesce(words),lesson.endMs-lesson.startMs);
-                LessonAuthoringService.validateTiming(lesson);lesson.timingStatus="DRAFT_VALID";
-            } catch(RequestValidationException invalid) {
+                AuthoringText.groupUnresolvedTiming(lesson.sentences);
+        LessonAuthoringService.validateTiming(lesson);lesson.timingStatus="DRAFT_VALID";
+            } catch(com.lyreo.lesson.domain.authoring.TimingValidationException failure) {
+            throw new PermanentJobException(failure.code(),failure.getMessage(),failure);
+        } catch(RequestValidationException invalid) {
                 // Raw intervals are useful source anchors even when they cannot drive karaoke.
                 AuthoringText.mapTiming(lesson.sentences,words,lesson.endMs-lesson.startMs);
                 lesson.timingStatus="WHISPER_DRAFT";
             }
+        } catch(com.lyreo.lesson.domain.authoring.TimingValidationException failure) {
+            throw new PermanentJobException(failure.code(),failure.getMessage(),failure);
         } catch(RequestValidationException invalid) {
             String issue=result.output().get("timestamps") instanceof List<?> timestamps && !timestamps.isEmpty()
                 ? (invalid.getMessage().contains("coverage") ? "TIMING_COVERAGE_MISMATCH" : "TIMING_INVALID") : "TIMING_MISSING";
@@ -106,6 +113,7 @@ public final class LessonAuthoringJobHandler implements JobHandler {
             "segments",LessonAuthoringService.alignmentSegments(lesson)),Map.of("language","English"));
         context.throwIfCancellationRequested();
         AuthoringText.mapTiming(lesson.sentences,AuthoringText.coalesce(AuthoringText.observed(result.output())),lesson.endMs-lesson.startMs);
+        AuthoringText.groupUnresolvedTiming(lesson.sentences);
         LessonAuthoringService.validateTiming(lesson);
         lesson.sentences.forEach(s->AuthoringText.eligibility(s,true));
     }

@@ -35,7 +35,7 @@ public final class JdbcAuthoringRepository implements AuthoringRepository {
                 var job=jobs.findById(jobId).orElseThrow();
                 return new AuthoringLesson.Job(jobId,rs.getString("operation"),job.status().name(),job.currentStep(),
                     job.progressPercent(),job.errorMessage(),job.errorCode(),job.nextRetryAt(),mapper.readValue(rs.getString("usage_json"),
-                    mapper.getTypeFactory().constructCollectionType(List.class,AuthoringLesson.Invocation.class)),job.createdAt());
+                    mapper.getTypeFactory().constructCollectionType(List.class,AuthoringLesson.Invocation.class)),job.createdAt(),job.startedAt(),job.finishedAt());
             }).stream().sorted(java.util.Comparator.comparing(AuthoringLesson.Job::createdAt).thenComparing(AuthoringLesson.Job::jobId)).toList();
         return Optional.of(lesson);
     }

@@ -20,7 +20,9 @@ public record BackgroundJob(
     Instant cancelRequestedAt,
     String errorMessage,
     String errorCode,
-    Instant createdAt
+    Instant createdAt,
+    Instant startedAt,
+    Instant finishedAt
 ) {
     public boolean cancellationRequested() {
         return status == BackgroundJobStatus.CANCEL_REQUESTED || cancelRequestedAt != null;

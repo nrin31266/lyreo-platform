@@ -169,6 +169,8 @@ export function LessonsPage() {
       </form>
       <CatalogError
         error={lessons.error || categories.error || channels.error}
+        title={lessons.error ? t("catalog.lessonsLoadFailed") : undefined}
+        retrying={lessons.isFetching || categories.isFetching || channels.isFetching}
         retry={() => {
           void lessons.refetch();
           void categories.refetch();

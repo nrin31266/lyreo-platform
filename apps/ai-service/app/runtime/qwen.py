@@ -119,7 +119,7 @@ class QwenRuntime:
             del model
             text = ' '.join(segment['text'] for segment in segments)
             timestamps = []
-            if request.options.get('timestamps', False) and text:
+            if request.options.get('timestamps', False) and request.options.get('allow_alignment', True) and text:
                 # Unload ASR once before alignment, rather than swapping models per window.
                 timestamps = await self._align_words((audio, 16_000), text, language, segments)
             return ExecuteResponse(
@@ -160,12 +160,21 @@ class QwenRuntime:
             if not items:
                 raise ValueError('Qwen aligner returned no words')
             for item in items:
-                word = _alignment_word(item)
+                word = _bound_alignment_word(_alignment_word(item), len(window) / 16,
+                                             getattr(model, 'timestamp_segment_time', 0))
                 word['index'] = len(words)
                 word['start_ms'] += round(start / 16)
                 word['end_ms'] += round(start / 16)
                 words.append(word)
         return words
+
+
+def _bound_alignment_word(word: dict[str, Any], duration_ms: float, precision_ms: float) -> dict[str, Any]:
+    # A measured final model frame can straddle the actual audio end; do not repair other errors.
+    if (math.isfinite(precision_ms) and precision_ms > 0
+            and 0 <= word['start_ms'] < duration_ms < word['end_ms'] <= math.ceil(duration_ms / precision_ms) * precision_ms):
+        return {**word, 'end_ms': round(duration_ms)}
+    return word
 
 
 def _read_audio(source: Any):
@@ -178,7 +187,7 @@ def _read_audio(source: Any):
 
 def _audio_windows(waveform):
     # shortcut: fixed ASR windows can cut a word; transcript review is required at seams.
-    limit = 120 * 16_000
+    limit = 115 * 16_000
     return [(start, waveform[start:start + limit]) for start in range(0, len(waveform), limit)]
 
 

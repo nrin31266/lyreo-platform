@@ -22,7 +22,7 @@ class JobFailureBoundaryTest {
             var handler = mock(JobHandler.class);
             var job = new BackgroundJob(UUID.randomUUID(), "TEST", "lesson", UUID.randomUUID(),
                 BackgroundJobStatus.RUNNING, 0, "TRANSCRIBING", 0, attempt, 3, null, "worker",
-                Instant.now().plusSeconds(60), null, null, null, java.time.Instant.EPOCH);
+                Instant.now().plusSeconds(60), null, null, null, java.time.Instant.EPOCH, null, null);
             when(repository.claim(anyString(), anyInt(), any())).thenReturn(List.of(job));
             when(repository.findById(job.id())).thenReturn(Optional.of(job));
             when(handler.jobType()).thenReturn("TEST");

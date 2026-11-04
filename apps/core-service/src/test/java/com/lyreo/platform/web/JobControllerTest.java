@@ -42,7 +42,7 @@ class JobControllerTest {
             id, "LESSON_BUILD", "lesson", UUID.randomUUID(),
             BackgroundJobStatus.RUNNING, 10, "GENERATE_TEXT", 40,
             1, 3, null, "worker-1", Instant.now().plusSeconds(60), null, null
-        , null, java.time.Instant.EPOCH)));
+        , null, java.time.Instant.EPOCH, null, null)));
 
         mockMvc.perform(get("/api/v1/jobs/" + id))
             .andExpect(status().isOk())
@@ -50,7 +50,8 @@ class JobControllerTest {
             .andExpect(jsonPath("$.jobType").value("LESSON_BUILD"))
             .andExpect(jsonPath("$.status").value("RUNNING"))
             .andExpect(jsonPath("$.currentStep").value("GENERATE_TEXT"))
-            .andExpect(jsonPath("$.progressPercent").value(40));
+            .andExpect(jsonPath("$.progressPercent").value(40))
+            .andExpect(jsonPath("$.createdAt").value("1970-01-01T00:00:00Z"));
     }
 
     @Test

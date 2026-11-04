@@ -32,9 +32,9 @@ def request(**overrides):
 def test_asr_windows_preserve_every_sample_and_bound_gpu_input():
     audio = Waveform(300 * 16_000 + 1)
     windows = _audio_windows(audio)
-    assert [start for start, _ in windows] == [0, 120 * 16_000, 240 * 16_000]
+    assert [start for start, _ in windows] == [0, 115 * 16_000, 230 * 16_000]
     assert sum(len(window) for _, window in windows) == len(audio)
-    assert all(len(window) <= 120 * 16_000 for _, window in windows)
+    assert all(len(window) <= 115 * 16_000 for _, window in windows)
 
 
 def test_alignment_accepts_only_terminal_frame_rounding_and_never_pads_audio():
@@ -120,8 +120,8 @@ def test_qwen_asr_chunks_before_inference_and_returns_global_segment_anchors(mon
     ))).output
     assert output['text'] == 'First window. Second window.'
     assert output['segments'] == [
-        {'text': 'First window.', 'start_ms': 0, 'end_ms': 120000},
-        {'text': 'Second window.', 'start_ms': 120000, 'end_ms': 125000},
+        {'text': 'First window.', 'start_ms': 0, 'end_ms': 115000},
+        {'text': 'Second window.', 'start_ms': 115000, 'end_ms': 125000},
     ]
     assert transcribe.call_count == 2
     assert runtime._align_words.await_count == 1
@@ -270,3 +270,30 @@ def test_provider_config_errors_keep_nonretryable_classification(monkeypatch, up
     }, json=request(input={'audio_url': 'https://example.invalid/audio.wav'}).model_dump())
     assert response.status_code == upstream_status
     assert 'private' not in response.text
+
+
+def test_alignment_only_bounds_a_small_quantized_audio_end_without_hiding_bad_intervals():
+    from app.runtime.qwen import _bound_alignment_word
+    word = {'word':'all', 'start_ms':45440, 'end_ms':45840}
+    assert _bound_alignment_word(word, 45837, 80)['end_ms'] == 45837
+    assert word['end_ms'] == 45840
+    for invalid in [
+        {'word':'all','start_ms':45440,'end_ms':46000},
+        {'word':'all','start_ms':45440,'end_ms':45890},
+        {'word':'all','start_ms':45840,'end_ms':45840},
+        {'word':'all','start_ms':-80,'end_ms':80},
+    ]:
+        assert _bound_alignment_word(invalid,45837,80) == invalid
+    assert _bound_alignment_word(word,45837,0) == word
+
+
+def test_stt_can_defer_forced_alignment_until_the_caller_confirms_text(monkeypatch):
+    runtime = QwenRuntime(Settings(_env_file=None))
+    monkeypatch.setattr('app.runtime.qwen._read_audio',lambda _: Waveform(120*16000))
+    transcribe = Mock(return_value=[SimpleNamespace(text='Some words.')])
+    runtime._load_asr = AsyncMock(return_value=SimpleNamespace(transcribe=transcribe))
+    runtime._align_words = AsyncMock()
+    result = asyncio.run(runtime.stt(request(input={'audio_url':'file:///unused.wav'},options={'timestamps':True,'allow_alignment':False})))
+    runtime._align_words.assert_not_awaited()
+    assert result.output['timestamps'] == []
+    assert max(s['end_ms']-s['start_ms'] for s in result.output['segments']) <= 115000

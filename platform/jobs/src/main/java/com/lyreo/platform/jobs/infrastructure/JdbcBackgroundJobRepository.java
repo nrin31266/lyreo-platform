@@ -260,7 +260,9 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
             instant(rs, "cancel_requested_at"),
             rs.getString("error_message"),
             rs.getString("error_code"),
-            instant(rs, "created_at")
+            instant(rs, "created_at"),
+            instant(rs, "started_at"),
+            instant(rs, "finished_at")
         );
     }
 

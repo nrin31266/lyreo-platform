@@ -20,6 +20,8 @@ export type AuthoringWord = {
 export type AuthoringAnnotation = { tokenStart: number; tokenEnd: number; surface: string; label: string; explanation: string; importance: string; canonicalForm?: string | null; headwordId?: string | null };
 export type AuthoringNote = { tokenStart: number; tokenEnd: number; text: string };
 export type AuthoringSentence = {
+  previewStartMs?: number | null;
+  timingSource?: string | null;
   id: string;
   text: string;
   usage: SentenceUsage;
@@ -39,6 +41,9 @@ export type AuthoringSentence = {
   thoughtGroups: { tokenStart: number; tokenEnd: number }[];
 };
 export type AuthoringJob = {
+  createdAt?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
   jobId: string;
   operation: string;
   status: string;
@@ -66,5 +71,5 @@ export type LessonDraft = {
   sentences: AuthoringSentence[];
   jobs: AuthoringJob[];
 };
-export type TranscriptSentence = { id?: string; text: string; usage: SentenceUsage };
+export type TranscriptSentence = { id?: string; editorKey?: string; text: string; usage: SentenceUsage };
 export type BuildAccepted = { lessonId: string; jobId: string };

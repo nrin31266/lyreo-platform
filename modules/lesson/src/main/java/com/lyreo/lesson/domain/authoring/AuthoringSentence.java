@@ -5,6 +5,7 @@ import java.util.UUID;
 
 /** Mutable draft data; only the authoring transaction writes it. Published rows are immutable. */
 public final class AuthoringSentence {
+    public String timingSource;
     public UUID id;
     public String text;
     public String usage = "LEARN";

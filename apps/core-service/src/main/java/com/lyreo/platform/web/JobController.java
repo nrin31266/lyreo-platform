@@ -35,7 +35,7 @@ public class JobController {
                 job.currentStep() == null ? "" : job.currentStep(),
                 job.progressPercent(),
                 job.attemptCount(),
-                job.maxAttempts()
+                job.maxAttempts(),job.createdAt(),job.startedAt(),job.finishedAt()
             ))
             .orElseThrow(() -> new ResourceNotFoundException("Background job not found: " + id));
     }
@@ -58,6 +58,9 @@ public class JobController {
         String currentStep,
         int progressPercent,
         int attemptCount,
-        int maxAttempts
+        int maxAttempts,
+        java.time.Instant createdAt,
+        java.time.Instant startedAt,
+        java.time.Instant finishedAt
     ) {}
 }

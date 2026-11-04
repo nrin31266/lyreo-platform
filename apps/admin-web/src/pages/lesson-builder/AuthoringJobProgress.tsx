@@ -1,17 +1,13 @@
-import {
-  Accordion,
-  AccordionItem,
-  AccordionTrigger,
-  AccordionContent,
-} from "@/components/ui/accordion";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { RiRefreshLine, RiCloseLine, RiExternalLinkLine } from "@remixicon/react";
 import { useEffect, useState } from "react";
 import { RiErrorWarningLine as AlertCircle, RiEqualizerLine as Settings2 } from "@remixicon/react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import type { AuthoringJob } from "./lesson-builder.types";
+export const timingErrors = ["TIMING_OUT_OF_BOUNDS", "TIMING_NON_MONOTONIC", "TIMING_COVERAGE_MISMATCH", "TIMING_ZERO_DURATION", "TIMING_OVERLAP", "TIMING_MISSING"];
 const labelCodes = [
   "TRANSCRIPT_REVIEW",
   "TIMING_REVIEW",
@@ -32,6 +28,10 @@ const labelCodes = [
   "PREPARE",
   "ALIGN",
   "SEMANTIC",
+  "IPA",
+  "GENERATING_IPA",
+  "TIMING_INVALID",
+  "TIMING_COVERAGE_MISMATCH",
   "SOURCE_PREPARE",
   "TRANSCRIBING",
   "ALIGNING",
@@ -57,102 +57,75 @@ export const activeJob = (job: AuthoringJob) =>
 export const formatTime = (ms: number) =>
   `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
+export function jobDuration(job: AuthoringJob, now: number): { ms: number; waiting: boolean } | null {
+  const start = Date.parse(job.startedAt ?? job.createdAt ?? '');
+  const end = job.finishedAt ? Date.parse(job.finishedAt) : activeJob(job) ? now : NaN;
+  return Number.isFinite(start) && Number.isFinite(end) ? { ms: Math.max(0, end - start), waiting: !job.startedAt } : null;
+}
+export function JobDuration({ job }: { job: AuthoringJob }) {
+  const { t } = useTranslation('admin');
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!activeJob(job)) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [job.jobId, job.status]);
+  const duration = jobDuration(job, now);
+  return <span className="text-xs text-muted-foreground tabular-nums">{duration ? t(duration.waiting ? 'authoringFlow.waitDuration' : 'authoringFlow.jobDuration', {time: duration.ms < 60000 ? `${(duration.ms / 1000).toFixed(1)}s` : formatTime(duration.ms)}) : '—'}</span>;
+}
+
+export function authoringJobErrorKey(job: AuthoringJob) {
+  return job.errorCode === "AUTHORING_VALIDATION_FAILED" && job.operation === "ALIGN"
+    ? "ALIGNMENT_VALIDATION_FAILED" : job.errorCode === "AUTHORING_VALIDATION_FAILED" && job.operation === "PREPARE"
+      ? "TRANSCRIPT_VALIDATION_FAILED" : job.errorCode;
+}
+
 export function JobProgress({
   job,
   onCancel,
+  onRetry,
+  historical = false,
 }: {
   job: AuthoringJob;
   onCancel: () => void;
+  onRetry?: () => void;
+  historical?: boolean;
 }) {
   const { t, i18n } = useTranslation("admin");
   const describe = useCodeLabel();
-  const knownError = ["AI_CONFIGURATION_REQUIRED", "AI_FREE_TOKEN_BUDGET_EXCEEDED", "AUTHORING_VALIDATION_FAILED", "AI_OUTPUT_INCOMPLETE", "AI_HTTP_400"].includes(job.errorCode ?? "");
+  const knownError = ["AI_CONFIGURATION_REQUIRED", "AI_FREE_TOKEN_BUDGET_EXCEEDED", "AUTHORING_VALIDATION_FAILED", "AI_OUTPUT_INCOMPLETE", "AI_HTTP_400", ...timingErrors].includes(job.errorCode ?? "");
+  const errorLabel = authoringJobErrorKey(job);
   const configurationError = job.errorCode === "AI_CONFIGURATION_REQUIRED" || job.errorCode === "AI_HTTP_400";
-  const [observedSeconds, setObservedSeconds] = useState(0);
-  useEffect(() => {
-    setObservedSeconds(0);
-    if (!activeJob(job)) return;
-    const start = Date.now();
-    const timer = setInterval(
-      () => setObservedSeconds(Math.floor((Date.now() - start) / 1000)),
-      1000,
-    );
-    return () => clearInterval(timer);
-  }, [job.jobId, job.currentStep, job.status]);
-  return (
-    <div
-      className="flex flex-col gap-2 rounded-lg border border-border p-3 text-sm"
-      role="status"
-    >
-      <div className="flex flex-wrap items-center gap-3">
-        <strong>{describe(job.operation)}</strong>
-        <Badge variant={job.status === "FAILED" ? "destructive" : job.status === "SUCCEEDED" ? "success" : "secondary"}>{describe(job.status)}</Badge>
-        <span>{job.currentStep ? describe(job.currentStep) : null}</span>
-        {activeJob(job) ? (
-          <>
-            <span>
-              {t("lessonAuthoring.observedTime", { seconds: observedSeconds })}
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={onCancel}
-            >
-              {t("lessonAuthoring.cancel")}
-            </Button>
-          </>
-        ) : null}
-        <Link to={`/jobs?job=${job.jobId}`}>
-          {t("lessonAuthoring.inspectJob")}
-        </Link>
+  return <article className="authoring-job-card" data-historical={historical} role={historical ? undefined : "status"}>
+    <header className="flex flex-wrap items-center gap-2">
+      <strong className="font-medium">{describe(job.operation)}</strong>
+      <Badge variant={job.status === "FAILED" ? historical ? "warning" : "destructive" : job.status === "SUCCEEDED" ? "success" : "secondary"}>{describe(job.status)}</Badge>
+      {activeJob(job) && job.currentStep && <span className="text-xs text-muted-foreground">{describe(job.currentStep)}</span>}
+      <JobDuration job={job} />
+      <div className="authoring-job-actions ml-auto flex items-center gap-1">
+        {onRetry && <Tooltip><TooltipTrigger asChild><Button type="button" size="icon-sm" variant="ghost" aria-label={t('authoringUi.retryStep')} onClick={onRetry}><RiRefreshLine /></Button></TooltipTrigger><TooltipContent>{t('authoringUi.retryStep')}</TooltipContent></Tooltip>}
+        {activeJob(job) && <Tooltip><TooltipTrigger asChild><Button type="button" size="icon-sm" variant="ghost" aria-label={t('lessonAuthoring.cancel')} onClick={onCancel}><RiCloseLine /></Button></TooltipTrigger><TooltipContent>{t('lessonAuthoring.cancel')}</TooltipContent></Tooltip>}
+        <Tooltip><TooltipTrigger asChild><Button size="icon-sm" variant="ghost" asChild><Link aria-label={t('lessonAuthoring.inspectJob')} to={`/jobs?job=${job.jobId}`}><RiExternalLinkLine /></Link></Button></TooltipTrigger><TooltipContent>{t('lessonAuthoring.inspectJob')}</TooltipContent></Tooltip>
       </div>
-      {job.errorMessage ? (
-        <Alert variant="destructive">
-          <AlertCircle />
-          <AlertTitle>{t("lessonAuthoring.jobFailed")}</AlertTitle>
-          <AlertDescription className="grid gap-2">
-            <p>{knownError ? t(`lessonAuthoring.jobErrors.${job.errorCode}`) : job.errorMessage}</p>
-            {configurationError ? <Button variant="outline" size="sm" className="justify-self-start" asChild>
-              <Link to="/settings/ai#routes"><Settings2 />{t("navigation.routes")}</Link>
-            </Button> : <p>{t("lessonAuthoring.retryFromActions")}</p>}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      <Accordion type="single" collapsible>
-        <AccordionItem value="details" className="border-0">
-          <AccordionTrigger className="py-1 text-xs">
-            {t("catalog.jobDetails")}
-          </AccordionTrigger>
-          <AccordionContent>
-            {job.nextRetryAt && job.status === "RETRY_WAIT" ? (
-              <p>
-                {t("lessonAuthoring.retryAt", {
-                  time: new Date(job.nextRetryAt).toLocaleString(i18n.language),
-                })}
-              </p>
-            ) : null}
-
-            {(job.usage ?? []).map((call, index) => (
-              <p key={index} className="text-sm text-muted-foreground">
-                {call.provider} / {call.model} ·{" "}
-                {call.audioSeconds != null
-                  ? t("waveform.audioUsage", {
-                      seconds: call.audioSeconds.toFixed(1),
-                    })
-                  : null}
-                {call.inputTokens != null || call.outputTokens != null
-                  ? t("lessonAuthoring.usage", {
-                      input: call.inputTokens ?? "—",
-                      output: call.outputTokens ?? "—",
-                      seconds: (call.latencyMs / 1000).toFixed(1),
-                    })
-                  : ` · ${(call.latencyMs / 1000).toFixed(1)} s`}
-              </p>
-            ))}
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
-    </div>
-  );
+    </header>
+    {job.errorMessage && <div className={historical ? "flex items-start gap-2 text-xs text-muted-foreground" : "flex items-start gap-2 text-sm text-destructive"} role={historical ? undefined : "alert"}>
+      {!historical && <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />}
+      <p>{knownError ? t(`lessonAuthoring.jobErrors.${errorLabel}`) : job.errorMessage}</p>
+      {!historical && configurationError && <Button variant="outline" size="sm" asChild><Link to="/settings/ai#routes"><Settings2 />{t("navigation.routes")}</Link></Button>}
+    </div>}
+    {job.nextRetryAt && job.status === "RETRY_WAIT" && <p className="text-xs text-muted-foreground">{t("lessonAuthoring.retryAt", {time: new Date(job.nextRetryAt).toLocaleString(i18n.language)})}</p>}
+    <details className="authoring-job-expanded"><summary>{t('authoringFlow.details')}</summary>
+    <p className="text-xs text-muted-foreground">{t('authoringFlow.durationHelp')}</p>
+    {job.createdAt && job.startedAt && <p className="text-xs text-muted-foreground">{t('authoringFlow.waitDuration', {time:`${(Math.max(0, Date.parse(job.startedAt)-Date.parse(job.createdAt))/1000).toFixed(1)}s`})}</p>}
+    <div className="authoring-job-dates text-xs text-muted-foreground">{(['createdAt','startedAt','finishedAt'] as const).map(key => job[key] && <span key={key}>{t(`authoringFlow.${key}`)}: {new Date(job[key]!).toLocaleString(i18n.language)}</span>)}</div>
+    {(job.usage ?? []).map((call, index) => <p key={index} className="authoring-job-usage">
+      <span>{call.provider} / {call.model}</span>
+      {call.audioSeconds != null && <span>{t("waveform.audioUsage", {seconds: call.audioSeconds.toFixed(1)})}</span>}
+      <span>{call.inputTokens != null || call.outputTokens != null
+        ? t("lessonAuthoring.usage", {input: call.inputTokens ?? "—", output: call.outputTokens ?? "—", seconds: (call.latencyMs / 1000).toFixed(1)})
+        : `${(call.latencyMs / 1000).toFixed(1)} s`}</span>
+    </p>)}
+    </details>
+  </article>;
 }

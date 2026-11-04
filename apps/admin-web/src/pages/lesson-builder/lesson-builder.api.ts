@@ -31,7 +31,7 @@ export const saveTranscript = (
 ) =>
   api<LessonDraft>(`${base}/${encodeURIComponent(id)}/transcript`, {
     method: "PUT",
-    body: JSON.stringify({ revision, sentences }),
+    body: JSON.stringify({ revision, sentences: sentences.map(({ id, text, usage }) => ({ id, text, usage })) }),
   });
 export const approveTranscript = (id: string, revision: number) =>
   api<LessonDraft>(
@@ -78,3 +78,6 @@ export const prepareTranscript = (id: string, revision: number) =>
     `${base}/${encodeURIComponent(id)}/prepare`,
     body({ revision }),
   );
+
+export const saveTiming = (id: string, revision: number, sentenceId: string, words: import('./lesson-builder.types').AuthoringWord[]) =>
+  api<LessonDraft>(`${base}/${encodeURIComponent(id)}/sentences/${encodeURIComponent(sentenceId)}/timing`, { method: 'PUT', body: JSON.stringify({ revision, words }) });

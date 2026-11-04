@@ -7,9 +7,27 @@ Cross-boundary workflow: [Lesson Build](../features/lesson-build.md).
 Product supports Text, Audio and YouTube conceptually. The current phase implements YouTube-first
 Admin authoring; Text/Audio UI and mobile playback/practice are deferred. Source identity is shared
 across lessons; each V1 lesson selects one contiguous range of at most 10 minutes before inference; 2–5 minutes is recommended.
-Videos up to 10 minutes default to their full duration, longer videos default to 0–5 minutes without
-starting acquisition, preview preparation or inference. Metadata exposes the full source timeline;
-Admin may move the range anywhere. Only explicit range confirmation starts media preparation.
+A new source preselects up to two minutes from the URL offset (otherwise zero), bounded by
+source duration. The playhead starts at that offset. Admin can adjust start/end from playback,
+drag/resize or enter timecodes; preparation requires both valid endpoints. An invalid mark preserves the previous selection and shows an error.
+Source inspection runs only after Search or Enter; typing, pasting and blur do not inspect.
+Search also refreshes/retries. Refreshing the same URL preserves edited metadata and a valid range;
+an invalidated range resets to the same two-minute default. Editing the URL invalidates the inspected
+source and stale responses cannot restore it.
+Metadata exposes the full source timeline; Admin may move/resize the range anywhere. The editor
+uses one timeline with a labelled time ruler, resizable range handles and a playhead. Zoom in/out,
+horizontal scrolling, full-video fit and selection fit change only the visible time window.
+Vertical mouse-wheel over the timeline zooms around the pointer without seeking or changing the
+selection; horizontal/Shift-wheel and browser Ctrl/Meta-wheel keep their native behavior.
+Clicking or dragging on the ruler seeks without changing the selection; hovering shows the time
+at the pointer and keyboard seeking remains available. Without a complete range, the timeline still
+allows seeking and displays a pending start marker; loop and selection fit remain unavailable.
+Desktop source selection uses a viewport-sized grid: 16:9 video and metadata above a full-width
+timeline, with playback and submission controls always visible. Only overflowing metadata scrolls;
+narrow screens can scroll naturally. Playback, zoom and selection controls are grouped separately; lesson title/categories stay visible while used ranges and optional metadata
+are collapsed by default. Icon controls expose hover/focus help, and longer instructions open on click.
+Waveform preparation is deferred.
+URL inspection and selection do not acquire audio or run inference. Explicit transcript preparation starts media acquisition.
 Overlap warns, not blocks.
 
 ### FR-LSN-002 — Independent build dimensions
@@ -124,12 +142,48 @@ stale output không commit và private recording không lộ.
 
 ### FR-LSN-007 — Transcript and karaoke review
 
+Admin uses four numbered steps: Source, Words & timing, Content and Publish.
+Words & timing has Edit words and Listen & check modes sharing the selected sentence and player.
+Save, approve & align performs revision-checked saves, approval and (when required) alignment in order.
+A failure stops the chain and preserves its last saved checkpoint; typing, blur and tab changes never invoke AI.
+Steps 1–2 expose draft save and dedicated realignment as labeled icon actions.
+On desktop the middle review list scrolls within the workspace; the player, toolbar and actions stay visible.
+Source context and the final publication checklist have their own tabs.
 Admin edits/splits/merges transcript, bulk-selects Learn/Watch only/Skip, and explicitly approves
 transcript plus karaoke preview before semantic generation. Only stale dependencies recompute.
-Timing requires real lexical coverage and observed intervals, not fabricated duration.
-A waveform editor provides an overview, zoom, draggable/resizable region, synchronized millisecond
-timecodes, seek and loop with one playback clock. Unknown waveform areas stay visibly unprepared.
-Long-source preview cannot require downloading the complete source first.
+Transcript review always derives short/long sentence warnings from current saved text, including older drafts
+whose stored issue list contains only a timing failure. A counted problem-sentence filter shows text issues
+only; switching the filter clears bulk selection, and select-all applies only to visible sentences. Transcript review shows text/usage issues; timing coverage and interval warnings belong to the Timing step
+and do not imply transcript preparation failed. Each row shows observed time bounds or an explicitly approximate preview anchor; no end time is fabricated. Split/merge and timing edits use direct icon buttons with tooltips, preserving the text caret. Bulk usage actions appear only for selected rows. Timing requires real lexical coverage and observed intervals,
+not fabricated duration. The review workspace has no range selector; source trimming stays on source selection.
+Processing status and job count appear in a compact trigger at the left of the action bar. Clicking opens
+a bottom sheet with current tasks, failures, retry/cancel controls and newest-first history. The current error and retry are immediately visible; model usage and persisted timestamps are available in job details.
+The compact footer combines processing status and persisted elapsed duration, playback/seek/loop/speed controls, and the current primary action. Connection/freshness detail remains in history. Retry, cancel and inspect use direct icon actions in history. The action bar omits repeated step instructions. Only the sheet body scrolls;
+job cards/history do not consume the editor viewport while the sheet is closed.
+The player toggle restores the pane; no separate layout-reset action is shown. Transcript review uses
+direct sentence text fields without repeated preview text or word-level karaoke. Sentence preview prefers
+word timing and falls back to an observed containing-segment start when word coverage is not yet valid.
+Segment preview is approximate and does not satisfy timing review or activity eligibility.
+Opening a draft never starts playback. In Edit words and Listen & check, a sentence play action or
+word click starts that sentence immediately; the default stops at its observed end. Footer Play
+resumes within the selected sentence or restarts it after its end. Before alignment, preview remains
+bounded to the containing observed segment and is explicitly approximate. Footer continuous-play
+and selected-sentence-loop icons are mutually exclusive modes; changing a mode never starts playback.
+Continuous playback advances karaoke selection, scrolls to the next playable sentence, skips Skip
+rows and stops after the last sentence. Switching review tabs, changing the draft revision or opening
+the timing editor pauses playback. Seek buttons stay within the selected sentence in review.
+Both review lists virtualize above 20 sentences, with measured row heights and a small overscan.
+Focused transcript inputs stay mounted; timing renders word controls only for the selected sentence.
+The same player toggle reflects button, keyboard and dragged collapse/expand. Desktop step 1–2
+panes retain at least 240px for the player and 360px for the editor while expanded; collapsing
+the player removes its gutter and reopening restores its previous width.
+The timing list has a compact warning toolbar and a separate manual-confirmation row below it.
+A source range editor provides draggable endpoints and whole-region movement, millisecond timecodes,
+an integrated seek area above the range, external play/speed/loop controls and one YouTube playback clock. Waveform UI is
+currently deferred. Playback updates must not rerender transcript/content forms on each clock tick.
+Timing review exposes observed words/groups and permits revision-checked manual interval edits without
+altering lexical coverage or estimating missing word durations. Blocking timing errors and review warnings
+are distinguished; these rules do not claim ASR confidence or pedagogical quality. Dedicated alignment may retain zero-duration tokens in an explicit observed phrase group within the same sentence, including at least one positive observed interval, with GROUPED_TIMING requiring human review. It must preserve all text and token coverage; wholly unresolved sentences, reversed intervals, overlaps and out-of-bounds intervals still fail.
 
 ### FR-LSN-008 — Contextual generation and candidate review
 

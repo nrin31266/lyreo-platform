@@ -11,6 +11,7 @@ import com.lyreo.lesson.application.authoring.*;
 import com.lyreo.lesson.application.port.AuthoringRepository;
 import com.lyreo.lesson.application.port.AuthoringSourcePort;
 import com.lyreo.lesson.domain.authoring.AuthoringLesson;
+import com.lyreo.lesson.domain.authoring.AuthoringSentence;
 import com.lyreo.lesson.infrastructure.LessonAuthoringConfiguration;
 import com.lyreo.lesson.infrastructure.persistence.JdbcLessonPracticeRepository;
 import com.lyreo.lexicon.api.LexiconLinkService;
@@ -434,6 +435,17 @@ class LessonAuthoringIT {
         service.align(draft.id,draft.revision);
     }
 
+    @Test void optionsPersistWithoutMutatingContentAndManualTimingReopensKaraoke() throws Exception {
+        var draft=prepared();draft=service.approve(draft.id,draft.revision);draft=service.karaoke(draft.id,draft.revision);
+        var sentence=draft.sentences.getFirst();var changed=new ArrayList<>(sentence.words);var first=changed.getFirst();
+        changed.set(0,new AuthoringSentence.Word(first.text(),first.startMs(),first.endMs()-10,first.charStart(),first.charEnd(),first.tokenStart(),first.tokenEnd()));
+        draft=service.timing(draft.id,draft.revision,sentence.id,changed);
+        assertThat(draft.karaokeReviewedRevision).isNull();assertThat(service.get(draft.id).sentences.getFirst().timingSource).isEqualTo("MANUAL");
+        var invalid=new ArrayList<>(changed);var word=invalid.getFirst();invalid.set(0,new AuthoringSentence.Word(word.text(),0,9000,word.charStart(),word.charEnd(),word.tokenStart(),word.tokenEnd()));
+        var current=draft;assertThatThrownBy(()->service.timing(current.id,current.revision,sentence.id,invalid)).isInstanceOf(com.lyreo.lesson.domain.authoring.TimingValidationException.class)
+            .extracting(error -> ((com.lyreo.lesson.domain.authoring.TimingValidationException)error).code()).isEqualTo("TIMING_OUT_OF_BOUNDS");
+        assertThat(service.get(draft.id).revision).isEqualTo(draft.revision);
+    }
     private AuthoringLesson prepared() throws Exception {
         var accepted=service.create("Authoring","https://www.youtube.com/watch?v=abcdefghijk",0,5000);
         run(accepted);return service.get(accepted.lessonId());

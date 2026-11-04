@@ -4,28 +4,55 @@ import { RiImageLine as ImageOff, RiRefreshLine as RefreshCw, RiErrorWarningLine
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { ApiError } from "@/lib/api";
 export function CatalogError({
   error,
   retry,
+  retrying = false,
+  title,
 }: {
   error: unknown;
   retry?: () => void;
+  retrying?: boolean;
+  title?: string;
 }) {
   const { t } = useTranslation("admin");
-  return error ? (
-    <Alert variant="destructive">
-      <AlertCircle />
-      <AlertTitle>{t("catalog.requestFailed")}</AlertTitle>
-      <AlertDescription className="gap-3">
-        {error instanceof Error ? error.message : t("catalog.requestFailed")}
-        {retry && (
-          <Button variant="outline" size="sm" onClick={retry}>
-            <RefreshCw data-icon="inline-start" />{t("catalog.retry")}
-          </Button>
-        )}
-      </AlertDescription>
+  if (!error) return null;
+  const status = error instanceof ApiError ? error.status : undefined;
+  const help = status === 0 ? "connectionFailed"
+    : status === 401 ? "sessionExpired"
+    : status === 403 ? "accessDenied"
+    : status === 429 ? "tooManyRequests"
+    : status !== undefined && status >= 500 ? "serviceUnavailable"
+    : "requestFailedHelp";
+  // Domain validation details are safe and actionable; internal failures are not.
+  const detail = error instanceof ApiError && [400, 409, 422].includes(error.status)
+    ? error.detail : undefined;
+  return (
+    <Alert className="flex flex-wrap items-center gap-4 p-5">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
+        <AlertCircle className="size-5" aria-hidden="true" />
+      </span>
+      <div className="min-w-0 flex-1 basis-64 space-y-1">
+        <AlertTitle>{title ?? t("catalog.requestFailed")}</AlertTitle>
+        <AlertDescription className="break-words">
+          <p>{t(`catalog.${help}`)}</p>
+          {detail && <p>{detail}</p>}
+          {error instanceof ApiError && error.correlationId && (
+            <p className="mt-2 font-mono text-xs">
+              {t("catalog.errorReference", { id: error.correlationId })}
+            </p>
+          )}
+        </AlertDescription>
+      </div>
+      {retry && status !== 401 && status !== 403 && (
+        <Button type="button" variant="outline" size="sm" onClick={retry} disabled={retrying}>
+          <RefreshCw data-icon="inline-start" aria-hidden="true" className={retrying ? "motion-safe:animate-spin" : undefined} />
+          {t(retrying ? "catalog.retrying" : "catalog.retry")}
+        </Button>
+      )}
     </Alert>
-  ) : null;
+  );
 }
 export function CatalogSkeleton() {
   const { t } = useTranslation("admin");

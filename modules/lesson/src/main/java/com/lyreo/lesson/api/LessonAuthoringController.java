@@ -55,12 +55,16 @@ public class LessonAuthoringController {
     @PutMapping("/{id}/candidates") public LessonAuthoringResponse candidates(@PathVariable UUID id,@RequestBody CandidatesRequest request) {
         return LessonAuthoringResponse.from(service.candidates(id,request.revision(),request.dictationSentenceIds(),request.shadowingSentenceIds()));
     }
+    @PutMapping("/{id}/sentences/{sentenceId}/timing") public LessonAuthoringResponse timing(@PathVariable UUID id,@PathVariable UUID sentenceId,@RequestBody TimingRequest request) {
+        return LessonAuthoringResponse.from(service.timing(id,request.revision(),sentenceId,request.words()));
+    }
     @PostMapping("/{id}/publish") public LessonAuthoringResponse publish(@PathVariable UUID id,@RequestBody RevisionRequest request) {
         return LessonAuthoringResponse.from(service.publish(id,request.revision()));
     }
     private static ResponseEntity<LessonAuthoringService.Accepted> accepted(LessonAuthoringService.Accepted result) {
         return ResponseEntity.accepted().location(URI.create("/api/v1/jobs/"+result.jobId())).body(result);
     }
+    public record TimingRequest(long revision,List<com.lyreo.lesson.domain.authoring.AuthoringSentence.Word> words) {}
     public record InspectRequest(@NotBlank String sourceReference) {}
     public record CreateRequest(@NotBlank String title,@NotBlank String sourceReference,long startMs,long endMs,String description,String imageUrl,List<UUID> categoryIds) {}
     public record RevisionRequest(long revision) {}

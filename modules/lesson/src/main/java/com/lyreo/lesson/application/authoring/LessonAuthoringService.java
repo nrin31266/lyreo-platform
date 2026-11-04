@@ -172,6 +172,23 @@ public class LessonAuthoringService {
         }
         return true;
     }
+    @Transactional public AuthoringLesson timing(UUID id,long revision,UUID sentenceId,List<AuthoringSentence.Word> words) {
+        var lesson=editable(id,revision);requireNoActiveJob(lesson);
+        require(words!=null && !words.isEmpty() && words.size()<=2000,"Provide observed word intervals");
+        var sentence=lesson.sentences.stream().filter(row->row.id.equals(sentenceId)).findFirst()
+            .orElseThrow(()->new RequestValidationException("Sentence does not belong to this lesson"));
+        require(words.size()==sentence.words.size(),"Manual timing preserves existing word groups");
+        for(int i=0;i<words.size();i++) {
+            var old=sentence.words.get(i);var word=words.get(i);
+            require(word!=null && old.text().equals(word.text()) && old.tokenStart()==word.tokenStart() && old.tokenEnd()==word.tokenEnd()
+                && old.charStart()==word.charStart() && old.charEnd()==word.charEnd(),"Timing edit cannot change lexical coverage");
+        }
+        sentence.words=List.copyOf(words);sentence.timingSource="MANUAL";
+        validateTiming(lesson);
+        lesson.sentences.forEach(row->{row.issues=AuthoringText.issues(row);AuthoringText.eligibility(row,true);});
+        lesson.timingStatus="VALID";lesson.karaokeReviewedRevision=null;
+        repository.save(lesson);return lesson;
+    }
     @Transactional public AuthoringLesson approve(UUID id,long revision) {
         var lesson=editable(id,revision);
         require(!lesson.sentences.isEmpty(),"Prepare the transcript first");
@@ -262,13 +279,15 @@ public class LessonAuthoringService {
         require(Set.of("VALID","DRAFT_VALID").contains(lesson.timingStatus),"Valid reviewed timing is required");
     }
     public static void validateTiming(AuthoringLesson lesson) {
-        long previousEnd=-1;
+        long previousEnd=-1;int index=0;
         for(var sentence:lesson.sentences) {
-            require(!sentence.words.isEmpty(),"Missing timing for a sentence");
+            if(sentence.words.isEmpty())throw new com.lyreo.lesson.domain.authoring.TimingValidationException("TIMING_MISSING","Sentence has no observed timing");
             for(var word:sentence.words) {
-                require(word.startMs()>=previousEnd && word.endMs()>word.startMs()
-                    && word.endMs()<=lesson.endMs-lesson.startMs,"Timing has overlap, zero duration, or range errors");
-                previousEnd=word.endMs();
+                String detail="word="+index+", startMs="+word.startMs()+", endMs="+word.endMs()+", durationMs="+(lesson.endMs-lesson.startMs);
+                String code=word.startMs()<0 || word.endMs()>lesson.endMs-lesson.startMs ? "TIMING_OUT_OF_BOUNDS"
+                    : word.endMs()<=word.startMs() ? "TIMING_ZERO_DURATION" : word.startMs()<previousEnd ? "TIMING_OVERLAP" : null;
+                if(code!=null)throw new com.lyreo.lesson.domain.authoring.TimingValidationException(code,detail);
+                previousEnd=word.endMs();index++;
             }
         }
     }

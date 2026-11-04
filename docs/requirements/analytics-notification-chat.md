@@ -58,7 +58,9 @@ Là Admin, tôi muốn nhận progress/completion/failure để không phải đ
 #### AC-NTF-001 — Realtime plus fallback
 
 Given job changes state, when event phát, then authorized Admin có thể nhận update qua realtime và
-vẫn query `/api/v1/jobs/{id}` làm fallback; realtime không là durability.
+vẫn query `/api/v1/jobs/{id}` làm fallback; realtime không là durability. Admin dùng SSE có heartbeat,
+reconnect/refetch snapshot và polling fallback theo [jobs protocol](../architecture/background-jobs.md).
+Feed Admin từ chối learner/anonymous; chưa mở WebSocket hoặc learner stream.
 
 <a id="us-cht-001--hỏi-tutor-tiếng-anh"></a>
 ### US-CHT-001 — Hỏi tutor tiếng Anh

@@ -10,6 +10,18 @@ export function parseTimecode(value: string): number | null {
         Number((match[3] || '').padEnd(3, '0'))
     : null;
 }
-export function defaultRange(durationMs: number): [number, number] {
-  return [0, durationMs <= 600000 ? durationMs : 300000];
+export function sourceOffset(durationMs: number, reference?: string): number {
+  let seconds = 0;
+  try {
+    const url = new URL(reference || "");
+    const value = url.searchParams.get("t") || url.searchParams.get("start") || url.hash.replace(/^#t=/, "");
+    if (/^\d+(?:s)?$/.test(value)) seconds = Number(value.replace(/s$/, ""));
+    else { const match = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(value); if (match) seconds = Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0); }
+  } catch { /* A source without an offset begins at zero. */ }
+  return Math.min(Math.max(0, seconds * 1000), Math.max(0, durationMs - 1));
+}
+
+export function defaultRange(durationMs: number, reference?: string): [number, number] {
+  const start = sourceOffset(durationMs, reference);
+  return [start, Math.min(durationMs, start + 120000)];
 }

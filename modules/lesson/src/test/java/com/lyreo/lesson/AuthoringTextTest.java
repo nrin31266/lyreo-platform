@@ -10,6 +10,17 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class AuthoringTextTest {
+    @Test void distinguishesCoverageAndIntervalFailuresWithoutReturningTranscriptText() {
+        var sentences=List.of(sentence("Hello everyone."));
+        assertThatThrownBy(()->AuthoringText.mapTiming(sentences,List.of(word("Hello",0,100)),45837))
+            .isInstanceOfSatisfying(com.lyreo.lesson.domain.authoring.TimingValidationException.class,
+                failure->assertThat(failure.code()).isEqualTo("TIMING_COVERAGE_MISMATCH"));
+        assertThatThrownBy(()->AuthoringText.mapTiming(sentences,List.of(word("Hello",0,100),word("everyone",100,45840)),45837))
+            .isInstanceOfSatisfying(com.lyreo.lesson.domain.authoring.TimingValidationException.class,
+                failure->{assertThat(failure.code()).isEqualTo("TIMING_OUT_OF_BOUNDS");
+                    assertThat(failure.getMessage()).contains("word=1", "45840", "45837").doesNotContain("everyone");});
+    }
+
     @Test void splitsQuotesAbbreviationsAndDecimalNumbers() {
         assertThat(AuthoringText.split("Dr. Brown said, \"It costs 2.5 dollars.\" Is that right? Yes!"))
             .extracting(s->s.text).containsExactly("Dr. Brown said, \"It costs 2.5 dollars.\"","Is that right?","Yes!");
@@ -55,9 +66,34 @@ class AuthoringTextTest {
         var sentence=sentence("We learn.");
         AuthoringText.mapTiming(List.of(sentence),List.of(word("We",0,100),word("learn",300,300)),400);
         var draft=new AuthoringLesson();draft.endMs=400;draft.sentences=List.of(sentence);
-        assertThatThrownBy(()->LessonAuthoringService.validateTiming(draft)).hasMessageContaining("zero duration");
+        assertThatThrownBy(()->LessonAuthoringService.validateTiming(draft)).isInstanceOfSatisfying(com.lyreo.lesson.domain.authoring.TimingValidationException.class,
+                failure->assertThat(failure.code()).isEqualTo("TIMING_ZERO_DURATION"));
         assertThatThrownBy(()->AuthoringText.mapTiming(List.of(sentence),List.of(word("We",0,100)),400))
             .hasMessageContaining("coverage");
+    }
+    @Test void alignmentCanRetainUnresolvedTokensOnlyAsExplicitObservedGroupsWithinTheirSentence() {
+        var rows=List.of(sentence("Friday Saturday Sunday."),sentence("Hongdae, for example."));
+        AuthoringText.mapTiming(rows,List.of(word("Friday",100,500),word("Saturday",700,700),word("Sunday",700,700),
+            word("Hongdae",900,900),word("for",1100,1100),word("example",1100,1600)),2000);
+        AuthoringText.groupUnresolvedTiming(rows);
+        assertThat(rows.getFirst().words).containsExactly(new AuthoringSentence.Word("Friday Saturday Sunday",100,700,0,22,0,3));
+        assertThat(rows.getLast().words).containsExactly(new AuthoringSentence.Word("Hongdae, for example",900,1600,0,20,0,3));
+        assertThat(rows).allSatisfy(row->assertThat(row.issues).contains("GROUPED_TIMING").doesNotContain("TIMING_ZERO_DURATION"));
+        var draft=new AuthoringLesson();draft.endMs=2000;draft.sentences=rows;
+        assertThatCode(()->LessonAuthoringService.validateTiming(draft)).doesNotThrowAnyException();
+    }
+    @Test void groupingCannotBorrowTimingFromAnotherSentenceOrRepairReversedIntervals() {
+        var rows=List.of(sentence("Hello."),sentence("World."));
+        AuthoringText.mapTiming(rows,List.of(word("Hello",100,300),word("World",500,500)),1000);
+        AuthoringText.groupUnresolvedTiming(rows);
+        assertThat(rows.getLast().words).hasSize(1).allSatisfy(word->assertThat(word.endMs()).isEqualTo(word.startMs()));
+        var draft=new AuthoringLesson();draft.endMs=1000;draft.sentences=rows;
+        assertThatThrownBy(()->LessonAuthoringService.validateTiming(draft)).hasMessageContaining("word=1");
+        AuthoringText.mapTiming(rows,List.of(word("Hello",100,100),word("World",500,500)),1000);
+        AuthoringText.groupUnresolvedTiming(rows);
+        assertThatThrownBy(()->LessonAuthoringService.validateTiming(draft)).hasMessageContaining("word=0");
+        assertThatThrownBy(()->AuthoringText.mapTiming(List.of(sentence("Hello world.")),List.of(word("Hello",0,200),word("world",400,300)),1000))
+            .isInstanceOf(com.lyreo.lesson.domain.authoring.TimingValidationException.class);
     }
     @Test void refusesToDivideOneObservedIntervalAcrossApprovedSentences() {
         assertThatThrownBy(()->AuthoringText.mapTiming(List.of(sentence("Ice."),sentence("Cream.")),List.of(word("icecream",0,100)),200))

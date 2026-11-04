@@ -21,3 +21,5 @@ Domain/application models remain HTTP-agnostic. Public transport uses explicit A
 ## OpenAPI ownership
 
 Core generates OpenAPI from the implemented HTTP boundary. Development/test may expose the descriptor and Swagger UI; production disables them by default unless deliberately enabled in a controlled environment. The generated descriptor is the source for current endpoint and schema inventory.
+
+Revision-checked authoring timing edits use `PUT /api/v1/admin/lesson-authoring/{id}/sentences/{sentenceId}/timing` with `revision` and observed `words`; they preserve lexical coverage, clear karaoke approval and reject published drafts.

@@ -8,7 +8,11 @@ holds prepared audio and raw evidence. Mobile playback is a later phase.
 
 ## Authoring checkpoints
 
-Inspect a YouTube URL, see existing ranges, choose one contiguous segment and enter the editor directly after metadata inspection.
+Submit a YouTube URL using Search or Enter, see existing ranges and choose one contiguous segment.
+Typing/pasting does not inspect; Search also refreshes or retries. Refreshing the same URL keeps
+edited metadata and a valid selection. Source selection uses React Timeline Editor for range
+movement/resizing, zoom and horizontal scrolling, with full-video and padded-selection fit controls.
+The YouTube clock drives its playhead; the timeline does not run a separate playback clock.
 Local acquisition is operator-enabled for public videos supported by the configured downloader; no channel allowlist or licence-document upload is required. The
 current acquisition path downloads the explicitly confirmed source range, then normalizes it as
 16 kHz mono PCM WAV. Existing cached full sources can still supply selected ranges. Exact normalized range assets can be reused across lessons.
@@ -21,17 +25,19 @@ need the configured downloader on the Core host; audio preparation also needs FF
 source-tool failures return safe `503` Problem Details with stable `YOUTUBE_*` codes.
 
 PREPARE stops at transcript review. Edit/split/merge stable sentences; choose Learn, Watch only or
-Skip in bulk. Draft word evidence supports player seeking. Learn receives semantic output; Watch
+Skip in bulk. The admin response exposes nullable `sentences[].previewStartMs`, relative to the selected clip,
+using the first observed word or the containing segment start. It supports sentence preview even before
+word alignment; raw segment evidence remains internal and preview anchors do not imply karaoke readiness. Learn receives semantic output; Watch
 only contributes context; Skip is excluded from semantic context and skipped in Admin playback.
 Review issues are derived from actual coverage/timing evidence, never invented ASR confidence.
 
 Structurally valid provisional Whisper timing needs explicit karaoke preview confirmation. Dedicated
 alignment is required when timing is absent/stale or preview is inadequate. Until human-referenced
 quality acceptance, deployment policy also requires local alignment for structurally valid draft timing. Coalescing may only
-combine adjacent touching/overlapping observed intervals into multi-token timing groups; it may not
+combine adjacent touching/overlapping observed intervals into multi-token timing groups. Dedicated alignment additionally retains isolated zero-duration tokens with an adjacent positive observed interval in the same sentence, flagged GROUPED_TIMING for human review. All-zero sentences remain invalid. Neither path may
 invent positive per-word duration, stretch silence or hide unresolved lexical coverage. Qwen alignment
 window bounds may reach the next timestamp frame at the audio end; the adapter uses the loaded
-model's frame precision and slices only existing samples, preserving raw word timing. Invalid timing
+model's frame precision and slices only existing samples, without extending audio samples. A positive final word ending in the single model frame that straddles the actual audio boundary is clipped to the sample boundary in the Qwen adapter; negative, reversed, zero-length and more distant intervals remain invalid. Invalid timing
 blocks confirmation/publication. Approved lexical edits require bounded anchored realignment; absent
 anchors or unsafe long windows fail clearly instead of proportional text/audio splitting.
 
@@ -49,10 +55,16 @@ publishes explicitly. Publication and selected membership are one immutable tran
 
 ## Admin management and workspace
 
-Admin uses a viewport-based editing workspace with independently scrollable player and editor panes.
-On smaller screens, Player/Editor switches preserve state; content lists scroll inside the workspace
-and the single workflow action bar stays visible.
-Source, transcript, timing and content navigation exposes the authoring checkpoints. Active jobs
+Admin review uses resizable/collapsible panes bounded to the desktop viewport. The middle sentence/content
+list scrolls while the video, tab controls and primary actions stay visible. Source selection and published
+reading can still grow naturally. Player/actions remain accessible;
+job status/count sits at the left of the action bar and opens a bottom sheet with a scrollable details body. Source trimming stays on the source screen; the review
+workspace uses player controls without a range selector. timing issues are presented in the Timing step. Clock subscriptions update playback leaves instead of
+rerendering editing forms. On smaller screens, Player/Editor switches preserve state.
+One numbered tab row exposes Source, Transcript, Timing, Content and Publish without a second step row.
+Source shows the draft source context; the final checklist and publication action live in Publish.
+Long transcript lists render only the visible window and a small overscan through TanStack Virtual;
+row heights are measured, editor values survive filtering/unmounting, and the focused row stays mounted. Active jobs
 have compact progress with expandable details; loading uses skeletons. Poll only while jobs are active,
 keep unsaved local edits and candidate revision intact, and confirm navigation away from dirty edits.
 Published lessons have a separate read view with metadata and availability controls.
@@ -207,12 +219,16 @@ and asynchronous `/api/v1/admin/lesson-source-previews` creation/read/audio endp
 zero-based with a default size of 20 and maximum 100. Missing categories or channels do not prevent
 reading legacy lessons.
 
-Source metadata inspection does not acquire audio. Default selection is full duration at ≤10 minutes,
-otherwise the first five minutes; the whole timeline remains available. Explicit confirmation creates
-a durable preview job for that exact range. Range preparation and peaks are cached; unprepared areas
-stay empty. Preview publication is job-lease/cancellation fenced. YouTube is the sole playback clock;
-WaveSurfer renders real prepared peaks and sends seek/region commands without starting another audio
-player. Source selection never enables publication rights.
+Source metadata inspection does not acquire audio. The source editor preselects up to two minutes
+from the URL offset, positions playback there, and exposes the whole source via one timeline. Admin
+can mark start/end at the YouTube clock, drag/resize or enter timecodes. The desktop grid groups
+video, transport and timeline beside lesson metadata. Short desktop screens allow page scrolling
+with a sticky submission row; longer metadata scrolls inside its own column.
+A pending start appears as a marker; complete selections support drag/resize.
+a labelled time ruler and dot playhead allow seeking without moving the range. Hovering shows pointer time.
+Waveform UI and automatic preview preparation are deferred by owner request; the existing preview API
+remains available with its lease/cancellation fencing. Transcript preparation acquires the selected range,
+reusing normalized cached audio. YouTube is the sole playback clock. Source selection never enables publication rights.
 
 Core retains raw STT timing evidence and reports coverage/interval issues separately from missing
 output. `LESSON_TIMING_REUSE_DRAFT` defaults to false pending human quality acceptance. Enabling it
@@ -250,12 +266,45 @@ then succeeded. Browser publication returned 200, reload showed PUBLISHED/read-o
 mutation returned 409. Fixture ID: `74abbdc8-b0cd-4285-b7e6-b29d51531da1`. This is an automated
 internal workflow fixture, not human listening/pedagogical approval or authorization for release.
 
-Source URL paste inspects metadata and opens the source workspace directly. It does not download
-media or start inference automatically. Loading the selected-range waveform remains an explicit
-operator action, with no rights checkbox or attestation flag in the API. Workflow submissions for
+Source URL Search or Enter inspects metadata and opens the source workspace. Paste and blur do
+not inspect. Inspection and range selection do not download audio or start inference. Waveform UI
+is deferred; there is no rights checkbox or attestation flag in the API. Workflow submissions for
 Transcript, Timing and Content are grouped in the one persistent action bar.
 
 The desktop workflow was rechecked with local Qwen transcription/alignment and Groq semantic
 generation on a 20-second source range. Fixture `084bca30-47e7-4242-b125-5bffc808226b` was
 created and published through Admin; reload returned PUBLISHED with six sentences and three
 selected sentences per activity. This is an automated internal fixture, not human language-quality approval.
+
+
+## Timing edit API
+
+`PUT /api/v1/admin/lesson-authoring/{id}/sentences/{sentenceId}/timing` performs revision-checked
+interval edits without altering word/group coverage. It validates all intervals and clears karaoke
+approval. Published content rejects this mutation.
+
+## Four-step review workspace and timing correction — 2026-11-03
+
+Admin follows Source → Words & timing → Content → Publish. The second step shares the player and
+selected sentence between Edit words and Listen & check; its combined action saves, approves and
+aligns serially with the revision from each response. Draft-only save and dedicated realignment use direct icon actions in steps 1–2.
+Failure leaves the last durable checkpoint visible. Human karaoke confirmation is still required.
+Sentence actions use direct icons with tooltips; only the active listening row expands word timing. The compact footer combines status/history, the existing playback controls and one primary action; history exposes retry/cancel/inspect icons. Desktop review
+keeps the player/actions visible and bounds scrolling to the sentence list and history.
+Both Edit words and Listen & check reuse the measured virtual list above 20 sentences; timing
+selection scrolls by index even when its row is not mounted. Clock ticks only update playback leaves.
+Review starts paused. Sentence/word actions explicitly play the selected sentence and stop at its
+observed end by default. The footer offers exclusive continuous-play and sentence-loop toggles;
+toggles alone do not start playback. Continuous mode advances selection and karaoke across playable
+sentences, skipping Skip rows. Review-context changes and timing-edit opening pause the player.
+Unaligned transcript preview uses containing-segment bounds, without claiming exact sentence timing.
+
+Core requests native STT timestamps while passing `allow_alignment=false`: Groq can return its
+existing timestamps, whereas Qwen transcription defers forced alignment until the transcript is
+approved. ASR windows are at most 115 seconds, leaving room for bounded alignment padding.
+Timing failures retain specific safe codes rather than a misleading transcript-mismatch label.
+See the [measured Groq/Qwen report](../research/lesson-authoring-timing-2026-11-03.md).
+
+Job durations and SSE observation follow the [jobs protocol](../architecture/background-jobs.md).
+No frontend timer or notification can change authoritative workflow state. No WebSocket, extra
+broker or change to learner delivery is introduced by this workspace.

@@ -67,13 +67,18 @@ public final class AuthoringText {
         var actual = new StringBuilder();
         observed.forEach(w -> actual.append(lexical(w.text)));
         if (expected.isEmpty() || !expected.toString().contentEquals(actual))
-            throw new RequestValidationException("Timing token coverage differs from transcript; dedicated alignment is required");
+            throw new TimingValidationException("TIMING_COVERAGE_MISMATCH", "Timing token coverage differs from approved transcript");
         long previousStart = -1;
-        for (var word : observed) {
-            if (lexical(word.text).isEmpty() || word.startMs < 0 || word.endMs < word.startMs
-                || word.endMs > durationMs || word.startMs < previousStart)
-                throw new RequestValidationException("Invalid or non-monotonic timing interval");
-            previousStart = word.startMs;
+        for (int index=0;index<observed.size();index++) {
+            var word=observed.get(index);
+            String detail="word="+index+", startMs="+word.startMs+", endMs="+word.endMs+", durationMs="+durationMs;
+            if (word.startMs<0 || word.endMs>durationMs)
+                throw new TimingValidationException("TIMING_OUT_OF_BOUNDS",detail);
+            if (word.endMs<word.startMs || word.startMs<previousStart)
+                throw new TimingValidationException("TIMING_NON_MONOTONIC",detail);
+            if (lexical(word.text).isEmpty())
+                throw new TimingValidationException("TIMING_COVERAGE_MISMATCH","Empty timing token; word="+index);
+            previousStart=word.startMs;
         }
         int observedIndex = 0;
         for (var sentence : sentences) {
@@ -125,6 +130,35 @@ public final class AuthoringText {
             }
         }
         return List.copyOf(groups);
+    }
+    /** Keep unresolved model tokens in an observed phrase, never assign them invented word durations. */
+    public static void groupUnresolvedTiming(List<AuthoringSentence> sentences) {
+        for(var sentence:sentences) {
+            var groups=new ArrayList<AuthoringSentence.Word>();
+            for(var word:sentence.words) {
+                int first=groups.size();
+                if(word.endMs()>word.startMs())
+                    while(first>0 && groups.get(first-1).startMs()==groups.get(first-1).endMs())first--;
+                if(first<groups.size()) {
+                    word=timingGroup(sentence,groups.get(first),word);
+                    groups.subList(first,groups.size()).clear();
+                }
+                groups.add(word);
+            }
+            int lastPositive=groups.size()-1;
+            while(lastPositive>=0 && groups.get(lastPositive).startMs()==groups.get(lastPositive).endMs())lastPositive--;
+            if(lastPositive>=0 && lastPositive<groups.size()-1) {
+                var group=timingGroup(sentence,groups.get(lastPositive),groups.getLast());
+                groups.subList(lastPositive,groups.size()).clear();
+                groups.add(group);
+            }
+            sentence.words=List.copyOf(groups);
+            sentence.issues=issues(sentence);
+        }
+    }
+    private static AuthoringSentence.Word timingGroup(AuthoringSentence sentence,AuthoringSentence.Word first,AuthoringSentence.Word last) {
+        return new AuthoringSentence.Word(sentence.text.substring(first.charStart(),last.charEnd()),
+            first.startMs(),Math.max(first.endMs(),last.endMs()),first.charStart(),last.charEnd(),first.tokenStart(),last.tokenEnd());
     }
     public static List<String> issues(AuthoringSentence sentence) {
         var issues = new ArrayList<String>();
@@ -195,7 +229,7 @@ public final class AuthoringText {
         if (!(raw instanceof Number number) || !Double.isFinite(number.doubleValue()))
             throw new RequestValidationException("Missing or non-finite timestamp");
         double value = number.doubleValue() * (word.containsKey(ms) ? 1 : 1000);
-        if (value < 0 || value > Long.MAX_VALUE) throw new RequestValidationException("Timestamp outside supported range");
+        if (value < 0 || value > Long.MAX_VALUE) throw new TimingValidationException("TIMING_OUT_OF_BOUNDS","Timestamp outside supported range");
         return Math.round(value);
     }
 }

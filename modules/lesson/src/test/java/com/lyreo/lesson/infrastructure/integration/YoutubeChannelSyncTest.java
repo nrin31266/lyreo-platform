@@ -50,7 +50,7 @@ class YoutubeChannelSyncTest {
           "worker-a",
           null,
           null,
-          null, null, java.time.Instant.EPOCH);
+          null, null, java.time.Instant.EPOCH, null, null);
 
   @BeforeEach
   void setup() {
