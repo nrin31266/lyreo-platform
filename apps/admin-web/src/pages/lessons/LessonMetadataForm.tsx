@@ -1,3 +1,4 @@
+import { categoryName } from "./catalog.api";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
@@ -29,7 +30,7 @@ export function LessonMetadataForm({
   onSaved: () => void;
   onCancel: () => void;
 }) {
-  const { t } = useTranslation("admin");
+  const { t, i18n } = useTranslation("admin");
   const client = useQueryClient();
   const categories = useCategories();
   const form = useForm<Metadata>({
@@ -104,7 +105,7 @@ export function LessonMetadataForm({
                         )
                       }
                     />
-                    {c.name}
+                    {categoryName(c, i18n.language)}
                   </label>
                 ))}
               </div>

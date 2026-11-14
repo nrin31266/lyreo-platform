@@ -59,6 +59,52 @@ class LessonAuthoringServiceTest {
         assertThat(lesson.timingStatus).isEqualTo("STALE");assertThat(lesson.sentences.getFirst().words).isEmpty();
         assertThat(lesson.sentences.getFirst().coarseEndMs).isEqualTo(500);assertThat(lesson.semanticRevision).isNull();
     }
+    @Test void hiddenSentencesStayStoredButDoNotBlockTimingOrBecomeExerciseSelections() {
+        var first=lesson.sentences.getFirst();
+        var repeated=new AuthoringSentence(UUID.randomUUID(),"Learn.","WATCH_ONLY");
+        repeated.coarseStartMs=200L;repeated.coarseEndMs=500L;
+        lesson.sentences=List.of(first,repeated);
+        service.transcript(lesson.id,5,List.of(new LessonAuthoringService.SentenceInput(first.id,first.text,null),
+            new LessonAuthoringService.SentenceInput(repeated.id,repeated.text,null,true)));
+        assertThat(lesson.sentences.getLast().hidden).isTrue();
+        assertThat(lesson.sentences.getLast().text).isEqualTo("Learn.");
+        assertThat(lesson.sentences.getLast().usage).isEqualTo("WATCH_ONLY");
+        assertThat(lesson.sentences.getFirst().words).hasSize(2);
+        assertThat(lesson.approvedRevision).isNull();
+        assertThat(lesson.karaokeReviewedRevision).isNull();
+        assertThatCode(()->LessonAuthoringService.validateTiming(lesson)).doesNotThrowAnyException();
+        assertThat(LessonAuthoringService.alignmentSegments(lesson)).containsExactly(
+            java.util.Map.of("text","We learn.","start_ms",0L,"end_ms",500L));
+        service.transcript(lesson.id,5,List.of(new LessonAuthoringService.SentenceInput(first.id,first.text,null),
+            new LessonAuthoringService.SentenceInput(repeated.id,repeated.text,null)));
+        assertThat(lesson.sentences.getLast().hidden).isTrue();
+        assertThatThrownBy(()->service.transcript(lesson.id,5,List.of(
+            new LessonAuthoringService.SentenceInput(first.id,first.text,null,true),
+            new LessonAuthoringService.SentenceInput(repeated.id,repeated.text,null,true))))
+            .hasMessageContaining("visible sentence");
+    }
+    @Test void restoringHiddenInvalidTimingRequiresAlignmentAndPreservesAudio() {
+        lesson.sourceType="TEXT";lesson.audioObjectKey="speech.wav";
+        var first=lesson.sentences.getFirst();
+        var repeated=new AuthoringSentence(UUID.randomUUID(),"Learn.","LEARN");
+        repeated.hidden=true;repeated.coarseStartMs=200L;repeated.coarseEndMs=500L;
+        lesson.sentences=List.of(first,repeated);lesson.timingStatus="VALID";
+        service.transcript(lesson.id,5,List.of(new LessonAuthoringService.SentenceInput(first.id,first.text,null),
+            new LessonAuthoringService.SentenceInput(repeated.id,repeated.text,null,false)));
+        assertThat(lesson.sentences.getLast().hidden).isFalse();
+        assertThat(lesson.timingStatus).isEqualTo("STALE");
+        assertThat(lesson.audioObjectKey).isEqualTo("speech.wav");
+    }
+    @Test void splittingInvalidRawTimingKeepsSafeSourceAnchorsForRealignment() {
+        var first=lesson.sentences.getFirst();
+        first.words=List.of(new AuthoringSentence.Word("We",300,400,0,2,0,1),
+            new AuthoringSentence.Word("learn",200,500,3,8,1,2));
+        service.transcript(lesson.id,5,List.of(new LessonAuthoringService.SentenceInput(first.id,"We!",null),
+            new LessonAuthoringService.SentenceInput(null,"Learn!",null)));
+        assertThat(lesson.timingStatus).isEqualTo("STALE");
+        assertThat(LessonAuthoringService.alignmentSegments(lesson)).hasSize(1);
+        assertThat(lesson.sentences.getLast().coarseEndMs).isEqualTo(500L);
+    }
     @Test void lexicalEditAndSplitRetainOneObservedAlignmentWindow() {
         var first=lesson.sentences.getFirst();
         service.transcript(lesson.id,5,List.of(new LessonAuthoringService.SentenceInput(first.id,"We!","LEARN"),
@@ -151,27 +197,9 @@ class LessonAuthoringServiceTest {
             new LessonAuthoringService.SentenceInput(null,"Teach!","LEARN")));
         assertThatThrownBy(()->LessonAuthoringService.alignmentSegments(lesson)).hasMessageContaining("No safe ASR");
     }
-    @Test void semanticRequiresExplicitKaraokeAndCurrentApproval() {
-        lesson.karaokeReviewedRevision=null;
-        assertThatThrownBy(()->service.generate(lesson.id,5)).hasMessageContaining("karaoke");
-        verifyNoInteractions(jobs);
-    }
-    @Test void candidateOnlyEditKeepsApprovalAndDoesNotCallAi() {
-        service.candidates(lesson.id,5,List.of(lesson.sentences.getFirst().id),List.of());
-        assertThat(lesson.approvedRevision).isEqualTo(2L);assertThat(lesson.semanticRevision).isEqualTo(2L);
-        verifyNoInteractions(jobs);
-    }
-    @Test void activeRegenerationCannotSilentlyOverwriteCandidateEdits() {
-        lesson.activeJobId=UUID.randomUUID();
-        var job=mock(com.lyreo.platform.jobs.domain.BackgroundJob.class);
-        when(job.status()).thenReturn(com.lyreo.platform.jobs.domain.BackgroundJobStatus.RUNNING);
-        when(jobs.findById(lesson.activeJobId)).thenReturn(Optional.of(job));
-        assertThatThrownBy(()->service.candidates(lesson.id,5,List.of(),List.of())).hasMessageContaining("active authoring job");
-    }
     @Test void rejectsStaleAndPublishedWritesAndIneligibleSelection() {
         assertThatThrownBy(()->service.approve(lesson.id,4)).hasMessageContaining("refresh");
         lesson.sentences.getFirst().dictationEligible=false;
-        assertThatThrownBy(()->service.candidates(lesson.id,5,List.of(lesson.sentences.getFirst().id),List.of())).hasMessageContaining("Ineligible");
         lesson.publishedAt=Instant.now();
         assertThatThrownBy(()->service.approve(lesson.id,5)).hasMessageContaining("read-only");
     }

@@ -4,8 +4,10 @@ export const categorySchema = z.object({
   id: z.string(),
   name: z.string(),
   lessonCount: z.number(),
+  translations: z.record(z.string(), z.string()).optional(),
 });
 export type Category = z.infer<typeof categorySchema>;
+export const categoryName = (category: Category, locale: string) => category.translations?.[locale] || category.translations?.[locale.split('-')[0]] || category.name;
 export type Channel = {
   id: string;
   title: string;
@@ -15,6 +17,7 @@ export type Channel = {
   syncError: string | null;
   syncJobId: string | null;
   syncStatus: string | null;
+  visible: boolean;
 };
 export type LessonItem = {
   id: string;
@@ -31,6 +34,8 @@ export type LessonItem = {
   description: string;
   imageUrl: string | null;
   visible: boolean;
+  channelVisible: boolean;
+  effectiveVisible: boolean;
 };
 export type LessonPage = {
   items: LessonItem[];
@@ -60,6 +65,7 @@ export const metadataSchema = z.object({
   imageUrl: imageUrlSchema,
   categoryIds: z.array(z.string()).max(100),
 });
+export const createMetadataSchema = metadataSchema.extend({ title: z.string().trim().max(500) });
 export type Metadata = z.infer<typeof metadataSchema>;
 const base = "/api/v1/admin";
 export const fetchLessons = (params: URLSearchParams, signal?: AbortSignal) =>
@@ -75,10 +81,10 @@ export const saveMetadata = (id: string, payload: Metadata) =>
     method: "PUT",
     body: JSON.stringify(payload),
   });
-export const saveCategory = (name: string, id?: string) =>
+export const saveCategory = (name: string, id?: string, translations?: Record<string, string>) =>
   api<Category>(`${base}/lesson-categories${id ? `/${id}` : ""}`, {
     method: id ? "PUT" : "POST",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, translations }),
   });
 export const deleteCategory = (id: string) =>
   api<void>(`${base}/lesson-categories/${id}`, { method: "DELETE" });
@@ -94,3 +100,6 @@ export const syncChannels = (channelIds: string[]) =>
     method: "POST",
     body: JSON.stringify({ channelIds }),
   });
+
+export const fetchSyncConfiguration = (signal?: AbortSignal) => api<{ configured: boolean }>(`${base}/lesson-channels/sync-configuration`, { signal });
+export const setChannelVisibility = (id: string, visible: boolean) => api<void>(`${base}/lesson-channels/${encodeURIComponent(id)}/visibility`, { method: 'PUT', body: JSON.stringify({ visible }) });

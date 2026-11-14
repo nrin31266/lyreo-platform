@@ -18,10 +18,17 @@ export type AuthoringWord = {
   tokenEnd: number;
 };
 export type AuthoringAnnotation = { tokenStart: number; tokenEnd: number; surface: string; label: string; explanation: string; importance: string; canonicalForm?: string | null; headwordId?: string | null };
-export type AuthoringNote = { tokenStart: number; tokenEnd: number; text: string };
+export type AuthoringNote = { tokenStart: number; tokenEnd: number; text: string; kind?: string };
 export type AuthoringSentence = {
+  hidden?: boolean;
   previewStartMs?: number | null;
+  manualFields?: string[];
+  contentStale?: boolean;
   timingSource?: string | null;
+  ipa?: string | null;
+  ipaAccent?: string | null;
+  ipaVersion?: string | null;
+  ipaNeedsReview?: boolean;
   id: string;
   text: string;
   usage: SentenceUsage;
@@ -48,12 +55,19 @@ export type AuthoringJob = {
   operation: string;
   status: string;
   currentStep?: string | null;
+  progressPercent?: number;
   errorMessage?: string | null;
   errorCode?: string | null;
   nextRetryAt?: string | null;
   usage: { provider: string; model: string; inputTokens?: number | null; outputTokens?: number | null; latencyMs: number; audioSeconds?: number | null }[];
 };
 export type LessonDraft = {
+  sourceType?: "YOUTUBE" | "TEXT" | "AUDIO";
+  audioSourceId?: string | null;
+  ttsVoice?: string | null;
+  audioReady?: boolean;
+  audioVersion?: string | null;
+  options?: AuthoringOptions;
   id: string;
   title: string;
   videoId: string;
@@ -71,5 +85,17 @@ export type LessonDraft = {
   sentences: AuthoringSentence[];
   jobs: AuthoringJob[];
 };
-export type TranscriptSentence = { id?: string; editorKey?: string; text: string; usage: SentenceUsage };
+export type TranscriptSentence = { id?: string; editorKey?: string; text: string; usage?: SentenceUsage; hidden?: boolean };
 export type BuildAccepted = { lessonId: string; jobId: string };
+
+export type AuthoringOptions = {
+  activities: string[];
+  annotations: string[];
+  locale: string;
+  density: 'AUTO' | 'CUSTOM';
+  vocabularyLimit: number;
+  grammarLimit: number;
+  pronunciationStrategy: 'DISABLED' | 'ON_DEMAND' | 'PREGENERATE';
+  accent: 'US' | 'UK';
+  pronunciationProvider: 'LOCAL' | 'AI';
+};

@@ -1,3 +1,4 @@
+import { categoryName } from "./catalog.api";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -9,6 +10,7 @@ import {
 } from "@tanstack/react-query";
 import { RiAddLine as Plus, RiSearchLine as Search, RiDeleteBinLine as Trash2, RiPencilLine as Pencil } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -89,6 +91,10 @@ export function LessonsPage() {
     queryKey: catalogKeys.channels,
     queryFn: ({ signal }) => catalog.fetchChannels(signal),
   });
+  const visibility = useMutation({
+    mutationFn: ({ id, visible }: { id: string; visible: boolean }) => catalog.setVisibility(id, visible),
+    onSuccess: () => client.invalidateQueries({ queryKey: catalogKeys.all }),
+  });
   const deletion = useMutation({
     mutationFn: catalog.deleteDraft,
     onSuccess: async () => {
@@ -168,7 +174,7 @@ export function LessonsPage() {
         />
       </form>
       <CatalogError
-        error={lessons.error || categories.error || channels.error}
+        error={visibility.error || lessons.error || categories.error || channels.error}
         title={lessons.error ? t("catalog.lessonsLoadFailed") : undefined}
         retrying={lessons.isFetching || categories.isFetching || channels.isFetching}
         retry={() => {
@@ -217,8 +223,9 @@ export function LessonsPage() {
                         defaultValue: item.status,
                       })}
                     </Badge>
+                    {item.status === "PUBLISHED" && item.channelVisible === false && <Badge variant="outline">{t("catalog.hiddenByChannel")}</Badge>}
                     {item.status === "PUBLISHED" && !item.visible && (
-                      <Badge variant="outline">{t("catalog.hidden")}</Badge>
+                      <Badge variant="outline">{t("catalog.hiddenIndividually")}</Badge>
                     )}
                   </TableCell>
                   <TableCell>
@@ -226,7 +233,7 @@ export function LessonsPage() {
                       {!item.categories.length && <span className="text-muted-foreground">—</span>}
                       {item.categories.map((c) => (
                         <Badge key={c.id} variant="outline">
-                          {c.name}
+                          {categoryName(c, i18n.language)}
                         </Badge>
                       ))}
                     </div>
@@ -235,7 +242,9 @@ export function LessonsPage() {
                     {new Date(item.updatedAt).toLocaleDateString(i18n.language)}
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-1">
+                    <div className="flex items-center gap-2">
+                      {item.status === 'PUBLISHED' && <Switch aria-label={t('catalog.lessonVisibility', { title: item.title })} checked={item.visible}
+                        disabled={visibility.isPending} onCheckedChange={visible => visibility.mutate({ id: item.id, visible })} />}
                       <Button variant="ghost" size="icon" aria-label={t("catalog.editMetadata")} title={t("catalog.editMetadata")} onClick={() => setEditing(item)}>
                         <Pencil />
                       </Button>

@@ -41,7 +41,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-@SpringBootTest(classes=LessonAuthoringIT.Config.class)
+@SpringBootTest(classes=LessonAuthoringIT.Config.class,properties="lyreo.ai-service.internal-token=test-token")
 class LessonAuthoringIT {
     @ServiceConnection static PostgreSQLContainer postgres=new PostgreSQLContainer("postgres:18.6-alpine");
     static {postgres.start();}
@@ -60,6 +60,7 @@ class LessonAuthoringIT {
     @Autowired com.lyreo.lesson.infrastructure.persistence.JdbcSourcePreview previews;
     @Autowired LessonAuthoringJobHandler handler;
     @Autowired AuthoringJobCommitter committer;
+    @Autowired com.lyreo.lesson.application.port.AuthoringMediaPort media;
     @Autowired AuthoringRepository repository;
     @Autowired AuthoringSourcePort source;
     @Autowired ObjectStoragePort storage;
@@ -81,14 +82,24 @@ class LessonAuthoringIT {
                 Map.of("text","We","start_ms",0,"end_ms",200),Map.of("text","learn","start_ms",200,"end_ms",500),
                 Map.of("text","Practice","start_ms",600,"end_ms",900),Map.of("text","helps","start_ms",900,"end_ms",1200)),
             "segments",List.of(Map.of("text","We learn. Practice helps.","start_ms",0,"end_ms",1200)))));
-        when(ai.execute(eq(AiCapability.GENERAL_LLM),anyString(),anyMap(),anyMap())).thenAnswer(invocation->{
-            Map<String,Object> input=invocation.getArgument(2);
-            List<Map<String,Object>> targets=(List<Map<String,Object>>)input.get("targets");
-            var items=targets.stream().map(target->Map.of("sentenceId",target.get("sentenceId"),"translation","Bản dịch tiếng Việt.",
-                "dictationPriority","HIGH","shadowingPriority","MEDIUM","vocabulary",List.of(),"grammar",List.of(),
-                "hints",List.of(),"notes",List.of(),"thoughtGroups",List.of())).toList();
-            return result(Map.of("structured",Map.of("targetLocale","vi-VN","items",items)));
-        });
+
+    }
+    @Test void legacyOperationsFailWithoutWritingAndNoLongerBlockDraftWork() throws Exception {
+        for(String operation:List.of("SEMANTIC","IPA")) {
+            var draft=prepared();
+            UUID id=jobs.enqueue(LessonAuthoringService.JOB_TYPE,"lesson",draft.id,50,3,"{}");
+            repository.addJob(draft.id,id,operation,draft.transcriptRevision);
+            draft.activeJobId=id;repository.save(draft);claim(id);
+            var job=jobs.findById(id).orElseThrow();var before=service.get(draft.id);
+            assertThatThrownBy(()->handler.execute(job,mock(JobExecutionContext.class)))
+                .isInstanceOfSatisfying(PermanentJobException.class,error->assertThat(error.errorCode()).isEqualTo("AUTHORING_OPERATION_REMOVED"));
+            assertThatThrownBy(()->committer.commit(job,repository.jobInput(id),before))
+                .isInstanceOfSatisfying(PermanentJobException.class,error->assertThat(error.errorCode()).isEqualTo("AUTHORING_OPERATION_REMOVED"));
+            assertThat(service.get(draft.id).revision).isEqualTo(before.revision);
+            assertThat(transitions.failed(job,"test-worker","AUTHORING_OPERATION_REMOVED","Operation removed",job.currentStep(),job.progressPercent())).isTrue();
+            var approved=service.approve(draft.id,before.revision);
+            assertThat(service.align(draft.id,approved.revision).jobId()).isNotEqualTo(id);
+        }
     }
     @Test void deletionRejectsActiveJobsAndPreservesSharedSources() throws Exception {
         var accepted=service.create("Delete draft","https://www.youtube.com/watch?v=abcdefghijk",0,2000);
@@ -145,11 +156,9 @@ class LessonAuthoringIT {
         assertThat(draft.timingStatus).isEqualTo("DRAFT_VALID");
         draft=service.approve(draft.id,draft.revision);
         draft=service.karaoke(draft.id,draft.revision);
-        run(service.generate(draft.id,draft.revision));draft=service.get(draft.id);
-        assertThat(draft.status).isEqualTo("CONTENT_REVIEW");
         UUID selected=draft.sentences.getFirst().id,excluded=draft.sentences.getLast().id;
-        draft=service.candidates(draft.id,draft.revision,List.of(selected),List.of());
-        draft=service.publish(draft.id,draft.revision);
+        draft.sentences.forEach(row->row.dictationSelected=row.id.equals(selected));
+        draft=legacyPublished(draft);
         assertThat(draft.status).isEqualTo("PUBLISHED");
         UUID id=draft.id;
         long revision=draft.revision;var category=catalog.saveCategory(UUID.randomUUID(),"Published "+UUID.randomUUID());
@@ -185,26 +194,11 @@ class LessonAuthoringIT {
         catalog.visibility(id,true);
         assertThat(practice.findDictationTarget(id,activity,selected)).isPresent();
     }
-    @Test void failedPublicationRollsBackProjectionAndKeepsEditableDraft() throws Exception {
+    @Test void leaseAndRevisionFencesRejectLateAlignmentOutputs() throws Exception {
         var draft=prepared();draft=service.approve(draft.id,draft.revision);draft=service.karaoke(draft.id,draft.revision);
-        run(service.generate(draft.id,draft.revision));draft=service.get(draft.id);
-        // A database conflict after sentence writes proves the transaction does not partially publish.
-        UUID conflicting=draft.sentences.getLast().id;UUID unrelated=UUID.randomUUID();
-        jdbc.update("INSERT INTO lesson(id,title,source_type) VALUES(?,'Legacy','TEXT')",unrelated);
-        jdbc.update("INSERT INTO lesson_sentence(id,lesson_id,position,text) VALUES(?,?,0,'existing')",conflicting,unrelated);
-        UUID id=draft.id;long revision=draft.revision;
-        assertThatThrownBy(()->service.publish(id,revision)).isInstanceOf(RuntimeException.class);
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_sentence WHERE lesson_id=?",Integer.class,id)).isZero();
-        assertThat(service.get(id).publishedAt).isNull();
-        assertThat(jdbc.queryForObject("SELECT text FROM lesson_sentence WHERE id=?",String.class,conflicting)).isEqualTo("existing");
-    }
-    @Test void leaseAndRevisionFencesRejectLateOutputsAndChunkCheckpointSurvivesReload() throws Exception {
-        var draft=prepared();draft=service.approve(draft.id,draft.revision);draft=service.karaoke(draft.id,draft.revision);
-        var accepted=service.generate(draft.id,draft.revision);claim(accepted.jobId());
+        var accepted=service.align(draft.id,draft.revision);claim(accepted.jobId());
         var job=jobs.findById(accepted.jobId()).orElseThrow();
         var input=repository.jobInput(job.id());var output=service.get(draft.id);
-        committer.stage(job,0,output.sentences);
-        assertThat(repository.chunk(job.id(),0)).isPresent();
         jdbc.update("UPDATE background_job SET lease_owner='replacement' WHERE id=?",job.id());
         assertThatThrownBy(()->committer.commit(job,input,output)).isInstanceOf(JobLeaseLostException.class);
         jdbc.update("UPDATE background_job SET lease_owner='test-worker' WHERE id=?",job.id());
@@ -220,9 +214,7 @@ class LessonAuthoringIT {
         assertThat(draft.timingStatus).isEqualTo("DRAFT_VALID");
         assertThat(draft.sentences.getFirst().words).hasSize(1);
         assertThat(draft.sentences.getFirst().issues).contains("GROUPED_TIMING");
-        assertThatThrownBy(()->service.generate(draft.id,draft.revision)).hasMessageContaining("approval");
         var approved=service.approve(draft.id,draft.revision);
-        assertThatThrownBy(()->service.generate(approved.id,approved.revision)).hasMessageContaining("karaoke");
         service.karaoke(approved.id,approved.revision);
         verify(ai,never()).execute(eq(AiCapability.ALIGNMENT),anyString(),anyMap(),anyMap());
     }
@@ -241,14 +233,13 @@ class LessonAuthoringIT {
     }
     @Test void legacyInsertWaitingForPublicationCannotModifyThePublishedLesson() throws Exception {
         var draft=prepared();draft=service.approve(draft.id,draft.revision);draft=service.karaoke(draft.id,draft.revision);
-        run(service.generate(draft.id,draft.revision));draft=service.get(draft.id);
         UUID id=draft.id;long revision=draft.revision;
         var writerPid=new java.util.concurrent.atomic.AtomicInteger();
         var writerStarted=new java.util.concurrent.CountDownLatch(1);
         try(var executor=java.util.concurrent.Executors.newSingleThreadExecutor()) {
             var result=new java.util.concurrent.atomic.AtomicReference<java.util.concurrent.Future<Throwable>>();
             new TransactionTemplate(transactions).executeWithoutResult(status->{
-                service.publish(id,revision);
+                legacyPublished(service.get(id));
                 result.set(executor.submit(()->{
                     try(var connection=java.sql.DriverManager.getConnection(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword())) {
                         try(var statement=connection.createStatement();var row=statement.executeQuery("SELECT pg_backend_pid()")) {
@@ -277,6 +268,24 @@ class LessonAuthoringIT {
         }
         assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_annotation WHERE lesson_id=? AND annotation_type='LEGACY'",Integer.class,id)).isZero();
     }
+    @Test void sentenceVisibilityRoundTripsWithoutLosingAudioTimingOrLegacyUsage() throws Exception {
+        var draft=prepared();var first=draft.sentences.getFirst();var second=draft.sentences.getLast();
+        var audio=draft.audioObjectKey;var words=second.words;
+        draft=service.transcript(draft.id,draft.revision,List.of(
+            new LessonAuthoringService.SentenceInput(first.id,first.text,null),
+            new LessonAuthoringService.SentenceInput(second.id,second.text,null,true)));
+        draft=service.get(draft.id);
+        assertThat(draft.sentences.getLast().hidden).isTrue();
+        assertThat(draft.sentences.getLast().words).isEqualTo(words);
+        assertThat(draft.audioObjectKey).isEqualTo(audio);
+        assertThat(draft.sentences.getLast().usage).isEqualTo(second.usage);
+        draft=service.approve(draft.id,draft.revision);draft=service.karaoke(draft.id,draft.revision);
+        draft=service.transcript(draft.id,draft.revision,List.of(
+            new LessonAuthoringService.SentenceInput(first.id,first.text,null),
+            new LessonAuthoringService.SentenceInput(second.id,second.text,null,false)));
+        assertThat(service.get(draft.id).sentences.getLast().hidden).isFalse();
+        assertThat(draft.karaokeReviewedRevision).isNull();
+    }
     @Test void lexicalEditUsesEvidenceAnchoredAlignmentAndRequiresNewKaraokeReview() throws Exception {
         var draft=prepared();var first=draft.sentences.getFirst();var second=draft.sentences.getLast();
         draft=service.transcript(draft.id,draft.revision,List.of(new LessonAuthoringService.SentenceInput(first.id,"We teach.","LEARN"),
@@ -288,8 +297,7 @@ class LessonAuthoringIT {
             Map.of("text","Practice","start_ms",600,"end_ms",900),Map.of("text","helps","start_ms",900,"end_ms",1200)))));
         run(service.align(draft.id,draft.revision));draft=service.get(draft.id);
         assertThat(draft.timingStatus).isEqualTo("VALID");assertThat(draft.karaokeReviewedRevision).isNull();
-        assertThat(draft.sentences.getFirst().dictationEligible).isTrue();
-        assertThat(draft.sentences.getLast().dictationEligible).isFalse();
+        assertThat(draft.sentences).allSatisfy(row->assertThat(row.words).isNotEmpty());
         var capture=org.mockito.ArgumentCaptor.forClass(Map.class);
         verify(ai).execute(eq(AiCapability.ALIGNMENT),anyString(),capture.capture(),anyMap());
         List<Map<String,Object>> windows=(List<Map<String,Object>>)capture.getValue().get("segments");
@@ -345,24 +353,6 @@ class LessonAuthoringIT {
         }
     }
 
-    @Test void invalidSemanticCorrectionDoesNotOverwritePreviouslyValidatedDraft() throws Exception {
-        var draft=prepared();draft=service.approve(draft.id,draft.revision);draft=service.karaoke(draft.id,draft.revision);
-        run(service.generate(draft.id,draft.revision));draft=service.get(draft.id);
-        String previous=draft.sentences.getFirst().translation;
-        var accepted=service.generate(draft.id,draft.revision);claim(accepted.jobId());
-        var before=service.get(draft.id);
-        clearInvocations(ai);
-        doReturn(result(Map.of("content","{broken"))).when(ai).execute(eq(AiCapability.GENERAL_LLM),anyString(),anyMap(),anyMap());
-        assertThatThrownBy(()->handler.execute(jobs.findById(accepted.jobId()).orElseThrow(),mock(JobExecutionContext.class)))
-            .isInstanceOfSatisfying(PermanentJobException.class,failure->assertThat(failure.errorCode()).isEqualTo("AUTHORING_VALIDATION_FAILED"));
-        verify(ai,times(2)).execute(eq(AiCapability.GENERAL_LLM),anyString(),anyMap(),anyMap());
-        var after=service.get(draft.id);
-        assertThat(after.revision).isEqualTo(before.revision);
-        assertThat(after.semanticRevision).isEqualTo(before.semanticRevision);
-        assertThat(after.sentences.getFirst().translation).isEqualTo(previous);
-        assertThat(repository.chunk(accepted.jobId(),0)).isEmpty();
-        assertThat(repository.jobInput(accepted.jobId()).completed()).isFalse();
-    }
     @Test void cancellationWhileProviderRunsDiscardsOutputAndKeepsDraftCheckpoint() throws Exception {
         var accepted=service.create("Cancel provider","https://www.youtube.com/watch?v=abcdefghijk",0,5000);
         claim(accepted.jobId());
@@ -406,9 +396,6 @@ class LessonAuthoringIT {
         assertThat(after.sentences).isEmpty();
         assertThat(after.audioObjectKey).isNull();
         assertThat(repository.jobInput(accepted.jobId()).completed()).isFalse();
-        assertThatThrownBy(()->committer.stage(jobs.findById(accepted.jobId()).orElseThrow(),0,after.sentences))
-            .isInstanceOf(JobLeaseLostException.class);
-        assertThat(repository.chunk(accepted.jobId(),0)).isEmpty();
     }
     @Test void lexicalEditEvidenceSurvivesReloadAndLetsLongSentenceSplitForAlignment() throws Exception {
         when(source.inspect(anyString())).thenReturn(new AuthoringSourcePort.SourceInfo("abcdefghijk","Long",120_000,true));
@@ -435,7 +422,7 @@ class LessonAuthoringIT {
         service.align(draft.id,draft.revision);
     }
 
-    @Test void optionsPersistWithoutMutatingContentAndManualTimingReopensKaraoke() throws Exception {
+    @Test void manualTimingReopensKaraoke() throws Exception {
         var draft=prepared();draft=service.approve(draft.id,draft.revision);draft=service.karaoke(draft.id,draft.revision);
         var sentence=draft.sentences.getFirst();var changed=new ArrayList<>(sentence.words);var first=changed.getFirst();
         changed.set(0,new AuthoringSentence.Word(first.text(),first.startMs(),first.endMs()-10,first.charStart(),first.charEnd(),first.tokenStart(),first.tokenEnd()));
@@ -445,6 +432,185 @@ class LessonAuthoringIT {
         var current=draft;assertThatThrownBy(()->service.timing(current.id,current.revision,sentence.id,invalid)).isInstanceOf(com.lyreo.lesson.domain.authoring.TimingValidationException.class)
             .extracting(error -> ((com.lyreo.lesson.domain.authoring.TimingValidationException)error).code()).isEqualTo("TIMING_OUT_OF_BOUNDS");
         assertThat(service.get(draft.id).revision).isEqualTo(draft.revision);
+    }
+    @Test void textUsesChosenVoiceAndStopsAtReviewedDraft() throws Exception {
+        var draft=service.createText("Text lesson","We learn. Practice helps.","bf_emma");
+        UUID id=draft.id;
+        assertThat(service.get(id).sourceType).isEqualTo("TEXT");
+        assertThat(service.get(id).endMs).isZero();
+        assertThat(service.get(id).sentences).hasSize(2);
+        when(ai.executeForProvider(eq(AiCapability.TTS),eq("LOCAL_KOKORO"),anyString(),anyMap(),anyMap())).thenReturn(result(Map.of(
+            "audio_base64",java.util.Base64.getEncoder().encodeToString(wav(2)),
+            "segments",List.of(Map.of("start_ms",0,"end_ms",1000),Map.of("start_ms",1000,"end_ms",2000)))));
+        run(service.synthesize(id,draft.revision));draft=service.get(id);
+        assertThat(draft.endMs).isEqualTo(2000);assertThat(draft.audioObjectKey).contains("/tts/");
+        verify(ai,never()).execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap());
+        draft=service.approve(id,draft.revision);
+        when(ai.execute(eq(AiCapability.ALIGNMENT),anyString(),anyMap(),anyMap())).thenReturn(result(Map.of("words",List.of(
+            Map.of("text","We","start_ms",0,"end_ms",200),Map.of("text","learn","start_ms",200,"end_ms",500),
+            Map.of("text","Practice","start_ms",1000,"end_ms",1300),Map.of("text","helps","start_ms",1300,"end_ms",1600)))));
+        run(service.align(id,draft.revision));draft=service.get(id);
+        draft=service.karaoke(id,draft.revision);
+        assertThat(service.get(id).karaokeReviewedRevision).isEqualTo(draft.transcriptRevision);
+        assertThat(service.get(id).publishedAt).isNull();
+        assertThat(catalog.get(id).sourceType()).isEqualTo("TEXT");
+        assertThat(catalog.get(id).channelId()).isNull();assertThat(catalog.get(id).effectiveVisible()).isFalse();
+    }
+    @Test void lateSpeechForOldVoiceCannotCommitOrRetainItsPrivateObject() throws Exception {
+        var draft=service.createText("Changed voice","We learn.","af_heart");
+        var accepted=service.synthesize(draft.id,draft.revision);
+        byte[] bytes=wav(1);
+        when(ai.executeForProvider(eq(AiCapability.TTS),eq("LOCAL_KOKORO"),anyString(),anyMap(),anyMap())).thenAnswer(invocation->{
+            var current=service.get(draft.id);service.voice(draft.id,current.revision,"bf_emma");
+            return result(Map.of("audio_base64",java.util.Base64.getEncoder().encodeToString(bytes),"segments",List.of(Map.of("start_ms",0,"end_ms",1000))));
+        });
+        claim(accepted.jobId());
+        assertThatThrownBy(()->handler.execute(jobs.findById(accepted.jobId()).orElseThrow(),mock(JobExecutionContext.class)))
+            .isInstanceOf(PermanentJobException.class).hasMessageContaining("draft changed");
+        assertThat(service.get(draft.id).audioObjectKey).isNull();
+        assertThat(service.get(draft.id).ttsVoice).isEqualTo("bf_emma");
+        verify(storage).delete(endsWith("/"+accepted.jobId()+".wav"));
+    }
+    @Test void audioUploadSurvivesReloadAndPreparesOnlySelectedRange() throws Exception {
+        byte[] bytes=wav(2);
+        when(storage.get(anyString())).thenAnswer(invocation->new java.io.ByteArrayInputStream(bytes));
+        var source=media.upload("sample.wav",bytes);
+        assertThat(media.source(source.id()).durationMs()).isEqualTo(2000);
+        var accepted=service.createAudio("Audio lesson",source.id(),source.durationMs(),0,2000);
+        run(accepted);var draft=service.get(accepted.lessonId());
+        assertThat(draft.sourceType).isEqualTo("AUDIO");assertThat(draft.videoId).isNull();
+        assertThat(draft.audioSourceId).isEqualTo(source.id());assertThat(draft.sentences).hasSize(2);
+        assertThat(draft.audioObjectKey).contains("/0-2000.wav");
+        assertThat(catalog.get(draft.id).channelId()).isNull();
+    }
+    @Test void channelGateRestoresOnlyIndividuallyVisibleLessonsAndCoversNewDrafts() throws Exception {
+        String channel="UC"+UUID.randomUUID().toString().replace("-","").substring(0,22);
+        jdbc.update("INSERT INTO lesson_youtube_channel(channel_id,title) VALUES(?,'Gate channel')",channel);
+        jdbc.update("INSERT INTO lesson_youtube_source(video_id,title,duration_ms,embed_allowed,channel_id,channel_title) VALUES('abcdefghijk','Source',10000,true,?,'Gate channel') ON CONFLICT(video_id) DO UPDATE SET channel_id=excluded.channel_id",channel);
+        var first=prepared();first=service.approve(first.id,first.revision);first=service.karaoke(first.id,first.revision);
+        first=legacyPublished(first);
+        catalog.channelVisibility(channel,false);
+        assertThat(catalog.get(first.id).visible()).isTrue();assertThat(catalog.get(first.id).effectiveVisible()).isFalse();
+        var next=prepared();assertThat(catalog.get(next.id).channelVisible()).isFalse();
+        UUID activity=jdbc.queryForObject("SELECT id FROM lesson_activity WHERE lesson_id=? AND activity_type='DICTATION'",UUID.class,first.id);
+        var practice=new JdbcLessonPracticeRepository(new NamedParameterJdbcTemplate(jdbc));
+        assertThat(practice.findDictationTarget(first.id,activity,first.sentences.getFirst().id)).isEmpty();
+        catalog.visibility(first.id,false);catalog.channelVisibility(channel,true);
+        assertThat(catalog.get(first.id).effectiveVisible()).isFalse();
+        catalog.visibility(first.id,true);assertThat(catalog.get(first.id).effectiveVisible()).isTrue();
+        assertThat(practice.findDictationTarget(first.id,activity,first.sentences.getFirst().id)).isPresent();
+    }
+    @Test void automaticAudioTitleIsSetOnceAndManualRenameWinsDuringStt() throws Exception {
+        byte[] bytes=wav(2);
+        when(storage.get(anyString())).thenAnswer(call->new java.io.ByteArrayInputStream(bytes));
+        var uploaded=media.upload("lesson.wav",bytes);
+        assertThat(media.source(uploaded.id()).originalFilename()).isEqualTo("lesson.wav");
+        var first=service.createAudio(null,uploaded.id(),2000,0,2000,"lesson.wav");
+        assertThat(catalog.get(first.lessonId()).title()).isEqualTo("lesson.wav");
+        catalog.updateMetadata(first.lessonId(),"lesson.wav","Description",null,List.of());
+        assertThat(service.get(first.lessonId()).automaticTitle).isTrue();
+        run(first);
+        assertThat(catalog.get(first.lessonId()).title()).isEqualTo("We learn.");
+        assertThat(service.get(first.lessonId()).automaticTitle).isFalse();
+        var second=service.createAudio("",uploaded.id(),2000,0,2000,"lesson.wav");
+        when(ai.execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap())).thenAnswer(call->{
+            catalog.updateMetadata(second.lessonId(),"My title","",null,List.of());
+            return result(Map.of("text","A late transcript.","segments",List.of(Map.of("text","A late transcript.","start_ms",0,"end_ms",1500))));
+        });
+        run(second);
+        assertThat(catalog.get(second.lessonId()).title()).isEqualTo("My title");
+        assertThat(service.get(second.lessonId()).automaticTitle).isFalse();
+    }
+    @Test void categoryTranslationsAreValidatedAndPreservedByLegacyUpdates() {
+        UUID id=UUID.randomUUID();
+        var category=catalog.saveCategory(id,"Travel",Map.of("vi","Du lịch"));
+        assertThat(category.translations()).containsEntry("vi","Du lịch");
+        assertThat(catalog.saveCategory(id,"Trips").translations()).containsEntry("vi","Du lịch");
+        assertThatThrownBy(()->catalog.saveCategory(id,"Travel",Map.of("../bad","bad"))).hasMessageContaining("locale");
+        catalog.deleteCategory(id);
+    }
+    @Test void voiceSamplesResumeAfterFailureAndNeverSynthesizeOnListen() throws Exception {
+        var voiceMedia=mock(com.lyreo.lesson.application.port.AuthoringMediaPort.class);
+        when(voiceMedia.voices()).thenReturn(new com.lyreo.lesson.application.port.AuthoringMediaPort.Voices("af_heart",List.of(
+            new com.lyreo.lesson.application.port.AuthoringMediaPort.Voice("af_heart","US","Heart"),
+            new com.lyreo.lesson.application.port.AuthoringMediaPort.Voice("bm_george","UK","George"))));
+        Map<String,byte[]> objects=new java.util.HashMap<>();
+        when(storage.exists(anyString())).thenAnswer(call->objects.containsKey(call.getArgument(0)));
+        when(storage.get(anyString())).thenAnswer(call->new java.io.ByteArrayInputStream(objects.get(call.getArgument(0))));
+        doAnswer(call->{objects.put(call.getArgument(0),call.getArgument(2));return null;}).when(storage).put(anyString(),anyString(),any());
+        var library=new com.lyreo.lesson.infrastructure.integration.VoiceSampleLibrary(voiceMedia,storage,ai,jobs,
+            new NamedParameterJdbcTemplate(jdbc),transactions,new tools.jackson.databind.ObjectMapper());
+        byte[] audio=wav(1);audio[100]=40;
+        when(ai.executeForProvider(eq(AiCapability.TTS),eq("LOCAL_KOKORO"),eq(""),anyMap(),eq(Map.of("voice","af_heart","speed",1.0))))
+            .thenReturn(result(Map.of("audio_base64",java.util.Base64.getEncoder().encodeToString(audio))));
+        when(ai.executeForProvider(eq(AiCapability.TTS),eq("LOCAL_KOKORO"),eq(""),anyMap(),eq(Map.of("voice","bm_george","speed",1.0))))
+            .thenThrow(new IllegalStateException("temporary failure"));
+        UUID id=library.prepare();assertThat(library.prepare()).isEqualTo(id);claim(id);
+        var job=jobs.findById(id).orElseThrow();
+        assertThatThrownBy(()->library.execute(job,mock(JobExecutionContext.class))).hasMessageContaining("temporary failure");
+        assertThat(library.audio("af_heart")).isEqualTo(audio);
+        assertThatThrownBy(()->library.audio("bm_george")).hasMessageContaining("not ready");
+        when(ai.executeForProvider(eq(AiCapability.TTS),eq("LOCAL_KOKORO"),eq(""),anyMap(),eq(Map.of("voice","bm_george","speed",1.0))))
+            .thenReturn(result(Map.of("audio_base64",java.util.Base64.getEncoder().encodeToString(audio))));
+        library.execute(job,mock(JobExecutionContext.class));
+        assertThat(library.catalog().voices()).allMatch(voice->voice.sampleAvailable());
+        verify(ai,times(1)).executeForProvider(eq(AiCapability.TTS),eq("LOCAL_KOKORO"),eq(""),
+            eq(Map.of("text",com.lyreo.lesson.infrastructure.integration.VoiceSampleLibrary.TEXT)),eq(Map.of("voice","af_heart","speed",1.0)));
+        var cancelled=mock(JobExecutionContext.class);
+        doThrow(new com.lyreo.platform.jobs.application.JobCancelledException("cancelled")).when(cancelled).throwIfCancellationRequested();
+        assertThatThrownBy(()->library.execute(job,cancelled)).hasMessageContaining("cancelled");
+        audio[100]=0;objects.replaceAll((key,bytes)->key.endsWith(".wav") ? audio : bytes);
+        assertThatThrownBy(()->library.audio("af_heart")).hasMessageContaining("regenerated");
+        jdbc.update("UPDATE background_job SET status='SUCCEEDED' WHERE id=?",id);
+    }
+    private AuthoringLesson legacyPublished(AuthoringLesson lesson) {
+        return new TransactionTemplate(transactions).execute(status->{
+            lesson.sentences.getFirst().dictationSelected=true;
+            projectLegacyPublished(lesson);
+            lesson.status="PUBLISHED";lesson.publishedAt=java.time.Instant.now();repository.save(lesson);
+            return lesson;
+        });
+    }
+    private void projectLegacyPublished(AuthoringLesson lesson) {
+        var jdbc=new NamedParameterJdbcTemplate(this.jdbc);
+        var mapper=new tools.jackson.databind.ObjectMapper();
+        int position=0;
+        for(var sentence:lesson.sentences) {
+            if("SKIP".equals(sentence.usage)) continue;
+            jdbc.update("""
+                INSERT INTO lesson_sentence(id,lesson_id,position,text,audio_start_ms,audio_end_ms)
+                VALUES(:id,:lesson,:position,:text,:start,:end)
+                """,Map.of("id",sentence.id,"lesson",lesson.id,"position",position++,"text",sentence.text,
+                    "start",sentence.words.getFirst().startMs(),"end",sentence.words.getLast().endMs()));
+            int wordIndex=0;
+            for(var word:sentence.words) jdbc.update("""
+                INSERT INTO lesson_word_timestamp(id,sentence_id,position,surface_text,start_ms,end_ms)
+                VALUES(:id,:sentence,:position,:text,:start,:end)
+                """,Map.of("id",UUID.randomUUID(),"sentence",sentence.id,"position",wordIndex++,"text",word.text(),
+                    "start",word.startMs(),"end",word.endMs()));
+            if("LEARN".equals(sentence.usage)) jdbc.update("""
+                INSERT INTO lesson_annotation(id,lesson_id,sentence_id,annotation_type,payload_json,generated_by)
+                VALUES(:id,:lesson,:sentence,'AUTHORING_SEMANTIC',CAST(:payload AS jsonb),'AI_REVIEWED')
+                """,Map.of("id",UUID.randomUUID(),"lesson",lesson.id,"sentence",sentence.id,"payload",mapper.writeValueAsString(sentence)));
+        }
+        int activityPosition=0;
+        for(String type:List.of("WATCH","DICTATION","SHADOWING")) {
+            var selected=lesson.sentences.stream().filter(s->!"SKIP".equals(s.usage))
+                .filter(s->type.equals("WATCH") || (type.equals("DICTATION") ? s.dictationSelected : s.shadowingSelected)).toList();
+            if(selected.isEmpty()) continue;
+            UUID activity=UUID.randomUUID();
+            jdbc.update("""
+                INSERT INTO lesson_activity(id,lesson_id,activity_type,position) VALUES(:id,:lesson,:type,:position)
+                """,Map.of("id",activity,"lesson",lesson.id,"type",type,"position",activityPosition++));
+            for(var s:selected) jdbc.update("INSERT INTO lesson_activity_sentence(activity_id,sentence_id) VALUES(:activity,:sentence)",
+                Map.of("activity",activity,"sentence",s.id));
+        }
+    }
+    private static byte[] wav(int seconds) throws Exception {
+        var bytes=new java.io.ByteArrayOutputStream();
+        var format=new javax.sound.sampled.AudioFormat(16000,16,1,true,false);
+        javax.sound.sampled.AudioSystem.write(new javax.sound.sampled.AudioInputStream(new java.io.ByteArrayInputStream(new byte[seconds*32000]),format,seconds*16000L),javax.sound.sampled.AudioFileFormat.Type.WAVE,bytes);
+        return bytes.toByteArray();
     }
     private AuthoringLesson prepared() throws Exception {
         var accepted=service.create("Authoring","https://www.youtube.com/watch?v=abcdefghijk",0,5000);

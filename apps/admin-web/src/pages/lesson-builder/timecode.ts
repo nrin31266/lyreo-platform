@@ -21,7 +21,7 @@ export function sourceOffset(durationMs: number, reference?: string): number {
   return Math.min(Math.max(0, seconds * 1000), Math.max(0, durationMs - 1));
 }
 
-export function defaultRange(durationMs: number, reference?: string): [number, number] {
-  const start = sourceOffset(durationMs, reference);
-  return [start, Math.min(durationMs, start + 120000)];
+export function defaultRange(durationMs: number, maxMinutes = 10): [number | null, number | null] {
+  const limitMs = (Number.isFinite(maxMinutes) && maxMinutes >= 0 ? Math.min(10, maxMinutes) : 10) * 60000;
+  return durationMs > 0 && durationMs <= limitMs ? [0, durationMs] : [null, null];
 }

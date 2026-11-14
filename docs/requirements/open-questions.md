@@ -50,3 +50,13 @@ The [PRD](../product/prd.md) and [non-functional requirements](non-functional.md
 - **Type**: question
 
 `compose.prod.yml` and `scripts/verify-prod-env.sh` imply a production contract. Decide whether they describe true production or a deployable baseline before renaming or documenting production guarantees.
+
+## OQ-007 — Lesson exercise selection and publication
+
+**Status:** Open; deferred beyond transcript/timing review.
+
+Decide how Admin selects independent Dictation and Shadowing sentence sets, what contextual
+annotations are needed, and how reviewed drafts become published lessons. Step 2 currently
+retains the full transcript with independent Visible/Hidden review controls; these do not choose
+exercise membership. Do not recreate Learn/Watch only/Skip, exercise selection or a generation/publish
+scaffold before this decision is accepted.

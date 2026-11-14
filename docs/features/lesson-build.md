@@ -6,12 +6,27 @@ Core owns lifecycle/prompts/validation, generic jobs own leases/recovery, AI own
 FastAPI executes capabilities. PostgreSQL holds authoritative drafts/checkpoints; object storage
 holds prepared audio and raw evidence. Mobile playback is a later phase.
 
+## Text and uploaded Audio
+
+The source selector offers YouTube (default), Text and Audio. Text saves before inference and uses
+an explicit TTS job with the saved Kokoro voice. FastAPI returns one WAV plus sentence bounds
+measured from concatenated PCM samples; Core validates duration, normalizes media and fences the
+checkpoint. Transcript approval follows synthesis, then alignment and listening confirmation, ending at a reviewed unpublished draft.
+Text/voice edits invalidate audio and approvals. Audio upload is independently retained by source ID;
+explicit range preparation normalizes only the selected range and reuses PREPARE/STT.
+All three types use the same editor/playback clock, with HTML audio for uploaded/generated media.
+Limits and channel availability are owned by [Lesson requirements](../requirements/lesson.md#fr-lsn-011--text-and-uploaded-audio-authoring).
+
 ## Authoring checkpoints
 
 Submit a YouTube URL using Search or Enter, see existing ranges and choose one contiguous segment.
 Typing/pasting does not inspect; Search also refreshes or retries. Refreshing the same URL keeps
 edited metadata and a valid selection. Source selection uses React Timeline Editor for range
 movement/resizing, zoom and horizontal scrolling, with full-video and padded-selection fit controls.
+Viewing the full source only changes zoom. A separate full-video selection action is available only
+up to ten minutes. These videos are selected in full by default; longer videos have empty endpoints
+and a selection hint until Admin chooses a valid segment. The Admin build configuration may lower
+or disable the automatic threshold; it cannot exceed ten minutes. The timeline never scrolls vertically.
 The YouTube clock drives its playhead; the timeline does not run a separate playback clock.
 Local acquisition is operator-enabled for public videos supported by the configured downloader; no channel allowlist or licence-document upload is required. The
 current acquisition path downloads the explicitly confirmed source range, then normalizes it as
@@ -24,12 +39,18 @@ Metadata inspection does not acquire audio and is independent of the acquisition
 need the configured downloader on the Core host; audio preparation also needs FFmpeg. Expected
 source-tool failures return safe `503` Problem Details with stable `YOUTUBE_*` codes.
 
-PREPARE stops at transcript review. Edit/split/merge stable sentences; choose Learn, Watch only or
-Skip in bulk. The admin response exposes nullable `sentences[].previewStartMs`, relative to the selected clip,
-using the first observed word or the containing segment start. It supports sentence preview even before
-word alignment; raw segment evidence remains internal and preview anchors do not imply karaoke readiness. Learn receives semantic output; Watch
-only contributes context; Skip is excluded from semantic context and skipped in Admin playback.
-Review issues are derived from actual coverage/timing evidence, never invented ASR confidence.
+PREPARE stops at transcript review. Admin edits/splits/merges stable sentences, then saves,
+approves and aligns the current revision. The complete transcript is retained. Each sentence has a compact single-click eye toggle with a tooltip, accessible state text and distinct semantic colors; this is
+not exercise selection. Hidden sentences stay editable/restorable in Edit words and are excluded
+from alignment and Listen & check text. Continuous media playback retains all source audio,
+including pauses and hidden sentence audio; hidden rows simply have no highlight.
+At least one sentence must remain visible. Visibility changes invalidate approval/listening
+confirmation and fence in-flight results, but keep source audio and observed timing. Splits inherit
+visibility; merging different visibility states is disabled. Historical usage fields do not control
+draft visibility. Published read views retain their existing stored semantics.
+The response exposes nullable `sentences[].previewStartMs`, relative to the selected clip, using
+the first observed word or containing segment start. Approximate preview never implies karaoke readiness.
+Review issues come from coverage/timing evidence, never invented ASR confidence. Recognition can return different words/punctuation on repeated runs; Core sentence splitting and review hints are deterministic for the returned transcript, not a stable score for a source URL. Groq word timestamps describe its recognized text, not forced alignment of later editorial changes. The timing reuse policy remains explicit (`LESSON_TIMING_REUSE_DRAFT`); invalid/changed timing requires alignment.
 
 Structurally valid provisional Whisper timing needs explicit karaoke preview confirmation. Dedicated
 alignment is required when timing is absent/stale or preview is inadequate. Until human-referenced
@@ -38,36 +59,37 @@ combine adjacent touching/overlapping observed intervals into multi-token timing
 invent positive per-word duration, stretch silence or hide unresolved lexical coverage. Qwen alignment
 window bounds may reach the next timestamp frame at the audio end; the adapter uses the loaded
 model's frame precision and slices only existing samples, without extending audio samples. A positive final word ending in the single model frame that straddles the actual audio boundary is clipped to the sample boundary in the Qwen adapter; negative, reversed, zero-length and more distant intervals remain invalid. Invalid timing
-blocks confirmation/publication. Approved lexical edits require bounded anchored realignment; absent
+blocks review confirmation. Approved lexical edits require bounded anchored realignment; absent
 anchors or unsafe long windows fail clearly instead of proportional text/audio splitting.
 
-Transcript approval and karaoke confirmation precede SEMANTIC. The semantic operation sends compact
-full context, target Learn IDs and Core-owned schema; output chunks preserve that global context.
-Each new semantic chunk contains at most three Learn targets while retaining the full lesson context.
-A validation correction preserves translations and practice priorities but requests empty optional
-annotation arrays instead of guessing source spans; existing larger validated checkpoints remain reusable.
-Provider exact phrases map to unique source spans in Core; thought groups must partition original
-text in order. Core rejects missing/duplicate targets, altered/ambiguous surfaces, invalid locale,
-enums, bounds and truncation before replacing valid annotations. Candidate eligibility is technical
-Core policy; independent model priorities cannot override it. Admin reviews content/candidates and
-publishes explicitly. Publication and selected membership are one immutable transaction.
-
+The workflow ends when Admin explicitly saves the reviewed transcript/timing revision. It does not
+publish. Content generation, IPA authoring, candidate selection and publication UI/write APIs have
+been removed. Pending SEMANTIC/IPA jobs fail permanently with `AUTHORING_OPERATION_REMOVED`; commit
+fences reject obsolete output. Existing schema, JSON compatibility fields, published content and
+learner history remain intact; no migration or data reset is required.
 
 ## Admin management and workspace
 
-Admin review uses resizable/collapsible panes bounded to the desktop viewport. The middle sentence/content
-list scrolls while the video, tab controls and primary actions stay visible. Source selection and published
-reading can still grow naturally. Player/actions remain accessible;
-job status/count sits at the left of the action bar and opens a bottom sheet with a scrollable details body. Source trimming stays on the source screen; the review
-workspace uses player controls without a range selector. timing issues are presented in the Timing step. Clock subscriptions update playback leaves instead of
-rerendering editing forms. On smaller screens, Player/Editor switches preserve state.
-One numbered tab row exposes Source, Transcript, Timing, Content and Publish without a second step row.
-Source shows the draft source context; the final checklist and publication action live in Publish.
-Long transcript lists render only the visible window and a small overscan through TanStack Virtual;
-row heights are measured, editor values survive filtering/unmounting, and the focused row stays mounted. Active jobs
-have compact progress with expandable details; loading uses skeletons. Poll only while jobs are active,
-keep unsaved local edits and candidate revision intact, and confirm navigation away from dirty edits.
-Published lessons have a separate read view with metadata and availability controls.
+One continuous workspace changes source preparation into Edit words and Listen & check review
+modes, without numbered navigation. The saved draft ID is retained in the creation URL for refresh.
+It uses resizable/collapsible player and editor panes. Source metadata, controls and action
+placement are shared across YouTube/Text/Audio. The full source summary can collapse beside the player.
+Transcript/timing lists virtualize long documents; focus, unsaved text and revision fences survive polling.
+The transcript uses visible input fields in a bounded scrolling region. Possible repeated suffixes of
+the previous sentence are review hints; they never delete words or prove that the audio is wrong.
+Timing failure messages identify the affected sentence when available, and Admin can jump to it.
+The active timing sentence uses foreground emphasis and a short underline beneath only the currently spoken observed word/group.
+Text retains its selected voice and shows the original source until speech generation succeeds; then
+the review region opens. Saving alone never invokes AI, while the primary Generate speech action
+saves first and enqueues TTS for that exact revision. It never runs STT on generated audio.
+Word timecodes remain in the manual timing dialog. Both players support sentence stop, uninterrupted continuous
+playback, mutually exclusive looping, seek and speed through the shared playback clock. Continuous
+mode only disables sentence-end stopping: it never seeks over gaps or hidden sentences, and emphasis
+follows the currently observed sentence/word. Toggling it never starts playback. Preview and active
+word layouts share type metrics; native text underlines fit the active word/group at the text baseline.
+Processing has a prominent operation/status panel above the workspace, real progress or an indeterminate
+indicator, operation-specific retry/cancel controls and durable duration. The footer opens technical history. Short screens
+scroll naturally; the footer never overlays source metadata. Published lessons keep a separate read view.
 
 Presentation metadata lives outside the immutable content snapshot. It includes display title,
 description, image URL and classification. A missing custom image falls back to source metadata.
@@ -84,17 +106,14 @@ The capability stores external image URLs, not downloaded image objects.
 | Change | Reuse | Invalidate/recompute |
 | --- | --- | --- |
 | Source/range | Shared source cache | New draft and preparation |
-| Lexical text | Prepared audio, raw ASR evidence, coarse anchors | Timing, approval, karaoke, semantic, candidates |
-| Punctuation/whitespace with same lexical stream | Re-map existing observed timing | Approval/karaoke, semantic surface spans, candidate derivation |
-| Split/merge preserving lexical order | Repartition timing groups when boundaries map safely | Approval/karaoke, semantic sentence identities, changed candidate selections |
-| Learn/Watch only/Skip | Audio, ASR and timing | Context/membership, approval/karaoke, semantic and candidates |
-| Realignment only | Transcript and matching semantic input | Karaoke confirmation and technical eligibility |
-| Candidate selection only | Transcript, timing, approval, semantic | Selection/progress membership; no model calls |
-| Publish | All approved output | Freeze content and selected membership atomically; no model call |
+| YouTube/Audio lexical edits | Prepared audio and observed coarse evidence | Timing and review approval |
+| Punctuation/split/merge | Safely mapped observed timing | Transcript and listening approval |
+| Text/voice edits | Saved text | Generated audio, timing and review approval |
+| Manual timing or realignment | Transcript | Listening confirmation |
+| Presentation metadata | Audio, transcript and timing | No review invalidation |
 
-Whole-draft revision prevents lost updates; transcript revision/hash identifies AI dependencies.
-Candidate-only changes must not make approved content stale. Timing result identity separately
-invalidates karaoke review. Edits do not trigger inference implicitly; Admin requests stale capabilities.
+Whole-draft revision prevents lost updates; transcript revision identifies inference dependencies.
+No edit implicitly invokes inference. Explicit confirmation records the reviewed revision only.
 
 ## Failure, quota and publication safety
 
@@ -113,9 +132,8 @@ blindly; exhausted quota never enables billing or paid fallback.
 ## Verification and retirement
 
 Require tests for sentence splitting, compound/Unicode token mapping, coverage, zero/overlap groups,
-seconds/milliseconds, window offsets, stale results, all invalidation transitions, strict semantic
-validation, quota/resume, atomic publish and legacy writer protection. UI tests cover editor actions,
-checkpoint controls, dirty polling, candidate selection and player range/Skip behavior. Live benchmark
+seconds/milliseconds, window offsets, stale results, all invalidation transitions, quota/resume, removed-operation fencing and legacy published-reader/writer protection. UI tests cover editor actions,
+checkpoint controls, dirty polling, full-transcript playback and player range behavior. Live benchmark
 evidence is separate from deterministic tests; neither mocks nor schema validity prove teaching quality.
 
 The standalone workstation was retired after replacement regression coverage, integrated workflow
@@ -277,34 +295,48 @@ created and published through Admin; reload returned PUBLISHED with six sentence
 selected sentences per activity. This is an automated internal fixture, not human language-quality approval.
 
 
-## Timing edit API
+## Authoring review API extensions
 
-`PUT /api/v1/admin/lesson-authoring/{id}/sentences/{sentenceId}/timing` performs revision-checked
-interval edits without altering word/group coverage. It validates all intervals and clears karaoke
-approval. Published content rejects this mutation.
+Draft responses include generation options, manual field provenance, stale-content markers, timing
+source and optional IPA metadata. Revision-checked Admin operations are `PUT .../{id}/options`,
+`PUT .../{id}/sentences/{sentenceId}/content`, `PUT .../{id}/sentences/{sentenceId}/timing`,
+`POST .../{id}/replace-generated` and `POST .../{id}/ipa`, under `/api/v1/admin/lesson-authoring`.
+The IPA endpoint returns 202 and a durable job location. Content editing never implicitly invokes AI;
+published content rejects all of these mutations. Existing published snapshots remain readable.
 
-## Four-step review workspace and timing correction — 2026-11-03
 
-Admin follows Source → Words & timing → Content → Publish. The second step shares the player and
-selected sentence between Edit words and Listen & check; its combined action saves, approves and
-aligns serially with the revision from each response. Draft-only save and dedicated realignment use direct icon actions in steps 1–2.
-Failure leaves the last durable checkpoint visible. Human karaoke confirmation is still required.
-Sentence actions use direct icons with tooltips; only the active listening row expands word timing. The compact footer combines status/history, the existing playback controls and one primary action; history exposes retry/cancel/inspect icons. Desktop review
-keeps the player/actions visible and bounds scrolling to the sentence list and history.
-Both Edit words and Listen & check reuse the measured virtual list above 20 sentences; timing
-selection scrolls by index even when its row is not mounted. Clock ticks only update playback leaves.
-Review starts paused. Sentence/word actions explicitly play the selected sentence and stop at its
-observed end by default. The footer offers exclusive continuous-play and sentence-loop toggles;
-toggles alone do not start playback. Continuous mode advances selection and karaoke across playable
-sentences, skipping Skip rows. Review-context changes and timing-edit opening pause the player.
-Unaligned transcript preview uses containing-segment bounds, without claiming exact sentence timing.
+## Superseded four-step workspace
 
-Core requests native STT timestamps while passing `allow_alignment=false`: Groq can return its
-existing timestamps, whereas Qwen transcription defers forced alignment until the transcript is
-approved. ASR windows are at most 115 seconds, leaving room for bounded alignment padding.
-Timing failures retain specific safe codes rather than a misleading transcript-mismatch label.
-See the [measured Groq/Qwen report](../research/lesson-authoring-timing-2026-11-03.md).
+The earlier Source → Words & timing → Content → Publish workspace is superseded by the two-step
+workflow above. Historical measured reports in this document describe their dated implementation;
+they are not the current authoring contract. Content generation and publication require a new product decision.
 
-Job durations and SSE observation follow the [jobs protocol](../architecture/background-jobs.md).
-No frontend timer or notification can change authoritative workflow state. No WebSocket, extra
-broker or change to learner delivery is introduced by this workspace.
+### Reusable voice previews and metadata creation
+
+`VOICE_SAMPLE_PREPARE` is a reference-media job, not a lesson build. Core requests only
+`LOCAL_KOKORO` TTS at speed 1.0, saves each successful PCM WAV and hash under a versioned object
+prefix, and updates the manifest under the job lease fence. Retry skips valid objects; partial
+failure retains successes. The manifest records sample text, library/model version and speed.
+See the [HTTP contract](../architecture/http-api-contract.md) for Admin endpoints.
+
+V011 adds `lesson_metadata.title_automatic`, category `translations` and Audio `original_filename`.
+Creation computes a non-null title server-side. Audio PREPARE commits the first STT sentence only
+while the marker still holds, then clears it; manual changes clear it atomically. The metadata
+form is shared across source modes. Development seed and safe reset procedures are owned by
+[development workflow](../DEVELOPMENT.md).
+
+### Bear/Bee diagnostic — 2026-11-15
+
+A same-audio diagnostic used the existing 218 s canonical clip, without overwriting Admin drafts or
+changing global routing. Saved Groq outputs already contained a repeated `his elbow.` with
+word intervals overlapping the preceding phrase; changing punctuation also changed Core sentence
+counts and review hints across runs. This was present in provider output, not inserted by Core.
+[Groq supports word and segment timestamps](https://console.groq.com/docs/speech-to-text), but these
+describe recognized text, not forced alignment of subsequent editorial changes.
+
+Local Qwen STT took 19.65 s and did not repeat this fragment. Its subsequent alignment took 10.88 s;
+all 58 sentence timings passed the production mapping/validation code, including 8 sentences with
+observed word groups. The 53-sentence Groq snapshot, with only the confirmed repeat hidden in the
+diagnostic copy, aligned in 1.08 s plus a single 0.08 s anchored recovery for `Bye.`; all 52 visible
+sentences then passed validation, also with 8 grouped sentences. Sequential runs include different model load/warm states, so these times are diagnostic, not a
+speed comparison. Neither result constitutes human karaoke approval or a cross-corpus accuracy comparison. Provider selection is explicit in [AI routing configuration](../CONFIGURATION.md#local-speech-recognition-for-authoring); this one clip is not a cross-corpus accuracy claim.

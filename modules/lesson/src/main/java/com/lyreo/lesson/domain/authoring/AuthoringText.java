@@ -59,15 +59,22 @@ public final class AuthoringText {
         if (!text.isBlank() && !tokens(text).isEmpty())
             result.add(new AuthoringSentence(UUID.randomUUID(), text.strip(), "LEARN"));
     }
+    public static boolean repeatsPreviousSuffix(String previous, String current) {
+        String before=lexicalSequence(previous),after=lexicalSequence(current);
+        return !after.isEmpty() && (before.equals(after) || before.endsWith(" "+after));
+    }
 
-    /** Groups only observed intervals; it never estimates a missing token's timestamps. */
-    public static void mapTiming(List<AuthoringSentence> sentences, List<ObservedWord> observed, long durationMs) {
+    private static void requireCoverage(List<AuthoringSentence> sentences, List<ObservedWord> observed) {
         var expected = new StringBuilder();
         sentences.forEach(s -> expected.append(lexical(s.text)));
         var actual = new StringBuilder();
         observed.forEach(w -> actual.append(lexical(w.text)));
         if (expected.isEmpty() || !expected.toString().contentEquals(actual))
             throw new TimingValidationException("TIMING_COVERAGE_MISMATCH", "Timing token coverage differs from approved transcript");
+    }
+    /** Groups only observed intervals; it never estimates a missing token's timestamps. */
+    public static void mapTiming(List<AuthoringSentence> sentences, List<ObservedWord> observed, long durationMs) {
+        requireCoverage(sentences,observed);
         long previousStart = -1;
         for (int index=0;index<observed.size();index++) {
             var word=observed.get(index);
@@ -109,9 +116,25 @@ public final class AuthoringText {
             sentence.coarseStartMs = mapped.getFirst().startMs();
             sentence.coarseEndMs = mapped.getLast().endMs();
             sentence.issues = issues(sentence);
-            eligibility(sentence, false);
         }
         if (observedIndex != observed.size()) throw new RequestValidationException("Unused alignment tokens");
+    }
+    public static List<ObservedWord> coalesce(List<AuthoringSentence> sentences, List<ObservedWord> words) {
+        requireCoverage(sentences,words);
+        var result=new ArrayList<ObservedWord>();int index=0;
+        for(var sentence:sentences) {
+            var observed=new ArrayList<ObservedWord>();int length=0;
+            int expected=lexical(sentence.text).length();
+            while(length<expected && index<words.size()) {
+                var word=words.get(index++);
+                observed.add(word);length+=lexical(word.text).length();
+            }
+            if(length!=expected) throw new RequestValidationException("Timing cannot safely map across sentence boundaries");
+            // Zero-duration words may touch another sentence; only group within the approved sentence.
+            result.addAll(coalesce(observed));
+        }
+        if(index!=words.size()) throw new RequestValidationException("Unused alignment tokens");
+        return List.copyOf(result);
     }
     public static List<ObservedWord> coalesce(List<ObservedWord> words) {
         var groups = new ArrayList<ObservedWord>();
@@ -174,12 +197,6 @@ public final class AuthoringText {
             previousEnd = word.endMs();
         }
         return issues.stream().distinct().toList();
-    }
-    public static void eligibility(AuthoringSentence sentence, boolean aligned) {
-        boolean valid = aligned && "LEARN".equals(sentence.usage) && !sentence.words.isEmpty()
-            && sentence.issues.stream().noneMatch(i -> i.startsWith("TIMING_"));
-        sentence.dictationEligible = valid;
-        sentence.shadowingEligible = valid;
     }
     public static List<ObservedWord> observed(Map<String,Object> output) {
         Object rawWords=output.containsKey("words") ? output.get("words") : output.get("timestamps");

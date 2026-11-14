@@ -23,3 +23,18 @@ it('highlights only the current observed word', () => {
   expect(screen.getByRole('button',{name:'world'})).toHaveAttribute('data-active','true');
   expect(screen.getByRole('button',{name:'Hello'})).toHaveAttribute('data-active','false');
 });
+
+it('marks only the currently spoken word, including gaps and seeks, without a sentence-wide bar', () => {
+  const clock=createPlaybackClock();
+  const sentence={text:'Hello world.',words:[{text:'Hello',startMs:100,endMs:300,charStart:0,charEnd:5},{text:'world',startMs:400,endMs:1100,charStart:6,charEnd:11}]} as AuthoringSentence;
+  const {rerender}=render(<I18nextProvider i18n={i18n}><PlaybackWords timing clock={clock} sentence={sentence} onSeek={()=>{}} /></I18nextProvider>);
+  act(()=>clock.set(600));
+  expect(screen.getByRole('button',{name:'Hello'})).toHaveAttribute('data-active','false');
+  expect(screen.getByRole('button',{name:'world.'})).toHaveAttribute('data-active','true');
+  expect(screen.queryByText('00:00.400')).not.toBeInTheDocument();
+  act(()=>clock.set(350));expect(screen.getByRole('button',{name:'world.'})).toHaveAttribute('data-active','false');
+  expect(document.querySelectorAll('[data-active="true"]')).toHaveLength(0);
+  act(()=>clock.set(5000));expect(screen.getByRole('button',{name:'world.'})).toHaveAttribute('data-active','false');
+  rerender(<I18nextProvider i18n={i18n}><PlaybackWords timing clock={clock} sentence={{...sentence,words:[]}} onSeek={()=>{}} /></I18nextProvider>);
+  expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+});

@@ -7,6 +7,7 @@ import { i18n } from '@/i18n';
 import { RangeTimeline } from './RangeTimeline';
 import { createPlaybackClock } from './playback-clock';
 import { boundedView, selectionView, validSelection, zoomView } from './timeline-view';
+import { timecode } from './timecode';
 
 const model = vi.hoisted(() => ({ props: null as TimelineEditor | null, setTime: vi.fn(), setScrollLeft: vi.fn() }));
 vi.mock('@xzdarcy/react-timeline-editor', async () => {
@@ -56,7 +57,7 @@ it('zooms, fits selection, fits the video and scrolls without changing selection
   act(() => { vi.advanceTimersByTime(20); });
   act(() => model.props!.onScroll?.({ scrollLeft: 50000 * pixelsPerMs } as Parameters<NonNullable<TimelineEditor['onScroll']>>[0]));
   expect(screen.getByText('00:50.000–01:20.000')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Full video' }));
+  fireEvent.click(screen.getByRole('button', { name: 'View full source' }));
   expect(playhead).toHaveAttribute('min', '0');
   expect(playhead).toHaveAttribute('max', '120000');
   expect(onSeek).not.toHaveBeenCalled();
@@ -174,9 +175,9 @@ it('zooms with vertical wheel around the pointer without seeking or editing the 
   vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockReturnValue({ left:0, width:612, height:114 } as DOMRect);
   const { onSeek, onRangeChange } = setup();
   const timeline = screen.getByRole('group', {name:i18n.t('admin:authoringUi.timeline')});
-  expect(fireEvent.wheel(timeline, {deltaY:-300, clientX:162})).toBe(false);
+  expect(fireEvent.wheel(timeline, {deltaY:-300, clientX:159})).toBe(false);
   expect(screen.getByText('00:15.000–01:15.000')).toBeInTheDocument();
-  fireEvent.wheel(timeline, {deltaY:300, clientX:162});
+  fireEvent.wheel(timeline, {deltaY:300, clientX:159});
   expect(screen.getByText('00:00.000–02:00.000')).toBeInTheDocument();
   expect(onSeek).not.toHaveBeenCalled();
   expect(onRangeChange).not.toHaveBeenCalled();
@@ -186,7 +187,7 @@ it('keeps wheel zoom within one second and the full source, including line and p
   setup();
   const timeline = screen.getByRole('group', {name:i18n.t('admin:authoringUi.timeline')});
   for (let i=0;i<12;i++) fireEvent.wheel(timeline, {deltaY:-20, deltaMode:1, clientX:312});
-  const span = () => 600 * model.props!.scale! * 1000 / model.props!.scaleWidth!;
+  const span = () => 588 * model.props!.scale! * 1000 / model.props!.scaleWidth!;
   expect(span()).toBeCloseTo(1000);
   for (let i=0;i<12;i++) fireEvent.wheel(timeline, {deltaY:3, deltaMode:2, clientX:312});
   expect(span()).toBeCloseTo(120000);
@@ -198,4 +199,14 @@ it('leaves browser zoom and horizontal or Shift-wheel scrolling unhandled', () =
     expect(fireEvent.wheel(timeline, {deltaY:-100, clientX:312, ...event})).toBe(true);
   }
   expect(screen.getByText('00:00.000–02:00.000')).toBeInTheDocument();
+});
+it.each([30001, 304000, 763000, 7200000])('fits all %d milliseconds without extending the track past the source', durationMs => {
+  setup(durationMs);
+  const sourceRight = model.props!.minScaleCount! * model.props!.scaleWidth! + model.props!.startLeft!;
+  expect(sourceRight).toBeCloseTo(600);
+  expect(screen.getByRole('button', {name:'Zoom timeline out'})).toBeDisabled();
+  expect(screen.getByText(`Source end · ${timecode(durationMs)}`)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name:'Zoom timeline in'}));
+  fireEvent.click(screen.getByRole('button', {name:'View full source'}));
+  expect(model.props!.minScaleCount! * model.props!.scaleWidth! + model.props!.startLeft!).toBeCloseTo(600);
 });

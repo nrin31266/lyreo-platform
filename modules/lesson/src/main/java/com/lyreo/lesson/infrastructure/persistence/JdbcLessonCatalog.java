@@ -15,13 +15,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Repository
 public class JdbcLessonCatalog implements LessonCatalogPort {
   private final NamedParameterJdbcTemplate jdbc;
+  private final tools.jackson.databind.ObjectMapper mapper;
   private final com.lyreo.platform.jobs.application.BackgroundJobService jobs;
 
   public JdbcLessonCatalog(
       NamedParameterJdbcTemplate jdbc,
-      com.lyreo.platform.jobs.application.BackgroundJobService jobs) {
+      com.lyreo.platform.jobs.application.BackgroundJobService jobs,tools.jackson.databind.ObjectMapper mapper) {
     this.jdbc = jdbc;
-    this.jobs = jobs;
+    this.jobs = jobs;this.mapper=mapper;
   }
 
   @Override
@@ -70,7 +71,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
     var items =
         jdbc.query(
             "SELECT l.*,m.title AS"
-                + " display_title,m.description,m.image_url,m.visible,GREATEST(m.updated_at,l.updated_at)"
+                + " display_title,m.description,m.image_url,m.visible,COALESCE(ch.visible,TRUE) AS channel_visible,GREATEST(m.updated_at,l.updated_at)"
                 + " AS metadata_updated_at,s.thumbnail_url,a.source_start_ms,a.source_end_ms,a.lesson_id,s.channel_id,COALESCE(ch.title,s.channel_title)"
                 + " AS channel_title"
                 + from
@@ -94,19 +95,20 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
                     rs.getString("image_url") == null
                         ? rs.getString("thumbnail_url")
                         : rs.getString("image_url"),
-                    rs.getBoolean("visible")));
+                    rs.getBoolean("visible"),rs.getBoolean("channel_visible"),
+                    "PUBLISHED".equals(rs.getString("status")) && rs.getBoolean("visible") && rs.getBoolean("channel_visible")));
     if (items.isEmpty()) return new Page(items, total, page, size);
     var memberships =
         jdbc.query(
             """
-            SELECT m.lesson_id,c.id,c.name FROM lesson_category_membership m JOIN lesson_category c ON c.id=m.category_id
+            SELECT m.lesson_id,c.id,c.name,c.translations FROM lesson_category_membership m JOIN lesson_category c ON c.id=m.category_id
             WHERE m.lesson_id IN (:ids) ORDER BY lower(c.name)
             """,
             new MapSqlParameterSource("ids", items.stream().map(Item::id).toList()),
             (rs, n) ->
                 new Membership(
                     rs.getObject(1, UUID.class),
-                    new Category(rs.getObject(2, UUID.class), rs.getString(3), 0)));
+                    new Category(rs.getObject(2, UUID.class), rs.getString(3), 0,translations(rs.getString(4)))));
     var byLesson =
         memberships.stream()
             .collect(
@@ -132,7 +134,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
                         byLesson.getOrDefault(item.id(), List.of()),
                         item.description(),
                         item.imageUrl(),
-                        item.visible()))
+                        item.visible(),item.channelVisible(),item.effectiveVisible()))
             .toList(),
         total,
         page,
@@ -144,26 +146,39 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
   @Override
   public List<Category> categories() {
     return jdbc.query(
-        "SELECT c.id,c.name,count(m.lesson_id) AS count FROM lesson_category c LEFT JOIN"
+        "SELECT c.id,c.name,count(m.lesson_id) AS count,c.translations FROM lesson_category c LEFT JOIN"
             + " lesson_category_membership m ON m.category_id=c.id GROUP BY c.id ORDER BY"
             + " lower(c.name)",
         new MapSqlParameterSource(),
-        (rs, n) -> new Category(rs.getObject(1, UUID.class), rs.getString(2), rs.getLong(3)));
+        (rs, n) -> new Category(rs.getObject(1, UUID.class), rs.getString(2), rs.getLong(3),translations(rs.getString(4))));
   }
 
   @Override
   @Transactional
-  public Category saveCategory(UUID id, String name) {
+  public Category saveCategory(UUID id,String name) { return saveCategory(id,name,null); }
+
+  @Override
+  @Transactional
+  public Category saveCategory(UUID id, String name, java.util.Map<String,String> translations) {
     if (name == null || name.isBlank() || name.strip().length() > 100)
       throw new RequestValidationException("Category name must contain 1–100 characters");
+    if(translations!=null && (translations.size()>50 || translations.entrySet().stream().anyMatch(entry->
+        entry.getKey()==null || !entry.getKey().matches("[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*") || entry.getValue()==null || entry.getValue().isBlank() || entry.getValue().length()>100)))
+      throw new RequestValidationException("Provide valid locale names of 1–100 characters");
     try {
-      var args = new MapSqlParameterSource("id", id).addValue("name", name.strip());
-      if (jdbc.update("UPDATE lesson_category SET name=:name WHERE id=:id", args) == 0)
-        jdbc.update("INSERT INTO lesson_category(id,name) VALUES(:id,:name)", args);
-      return new Category(id, name.strip(), 0);
+      var args = new MapSqlParameterSource("id", id).addValue("name", name.strip())
+          .addValue("translations",translations==null ? null : mapper.writeValueAsString(translations));
+      if (jdbc.update("UPDATE lesson_category SET name=:name,translations=COALESCE(CAST(:translations AS jsonb),translations) WHERE id=:id", args) == 0)
+        jdbc.update("INSERT INTO lesson_category(id,name,translations) VALUES(:id,:name,COALESCE(CAST(:translations AS jsonb),'{}'::jsonb))", args);
+      return jdbc.queryForObject("SELECT c.id,c.name,(SELECT count(*) FROM lesson_category_membership WHERE category_id=c.id),c.translations FROM lesson_category c WHERE c.id=:id",
+          args,(rs,n)->new Category(rs.getObject(1,UUID.class),rs.getString(2),rs.getLong(3),translations(rs.getString(4))));
     } catch (DuplicateKeyException duplicate) {
       throw new StateConflictException("A category with this name already exists");
     }
+  }
+
+  private java.util.Map<String,String> translations(String json) {
+    return mapper.readValue(json,mapper.getTypeFactory().constructMapType(java.util.Map.class,String.class,String.class));
   }
 
   @Override
@@ -209,8 +224,16 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
                   ? job.errorMessage()
                   : rs.getString("sync_error"),
               rs.getObject("sync_job_id", UUID.class),
-              job == null ? null : job.status().name());
+              job == null ? null : job.status().name(),rs.getBoolean("visible"));
         });
+  }
+
+  @Override
+  @Transactional
+  public void channelVisibility(String channelId, boolean visible) {
+    if (jdbc.update("UPDATE lesson_youtube_channel SET visible=:visible WHERE channel_id=:id",
+        java.util.Map.of("id",channelId,"visible",visible)) == 0)
+      throw new ResourceNotFoundException("Channel not found");
   }
 
   @Override
@@ -278,6 +301,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
     }
     jdbc.update(
         "UPDATE lesson_metadata SET"
+            + " title_automatic=CASE WHEN CAST(:title AS text) IS NOT NULL AND :title<>title THEN FALSE ELSE title_automatic END,"
             + " title=COALESCE(:title,title),description=:description,image_url=:image,updated_at=now()"
             + " WHERE lesson_id=:id",
         args.addValue("title", title == null ? null : title.strip())

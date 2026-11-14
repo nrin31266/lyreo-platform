@@ -55,6 +55,11 @@ public final class AiInvocationService {
         Map<String, Object> input,
         Map<String, Object> options
     ) {
+        return executeForProvider(capability,null,businessPrompt,input,options);
+    }
+
+    public AiExecutionResult executeForProvider(AiCapability capability,String provider,String businessPrompt,
+        Map<String,Object> input,Map<String,Object> options) {
         List<AiRoute> candidates;
         try {
             candidates = router.candidates(capability);
@@ -67,6 +72,11 @@ public final class AiInvocationService {
             );
         }
 
+        if(provider!=null) {
+            candidates=candidates.stream().filter(route->provider.equalsIgnoreCase(route.providerCode())
+                || "LOCAL_KOKORO".equals(provider) && "KOKORO".equalsIgnoreCase(route.providerCode())).toList();
+            if(candidates.isEmpty()) throw new AiExecutionException("No enabled route for selected provider",false,"AI_ROUTE_NOT_CONFIGURED");
+        }
         AiExecutionException last = null;
         for (AiRoute route : candidates) {
             if (!permittedFreeRoute(route)) {

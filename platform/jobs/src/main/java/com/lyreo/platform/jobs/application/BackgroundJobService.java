@@ -35,6 +35,10 @@ public class BackgroundJobService {
         return repository.findById(jobId);
     }
 
+    public Optional<BackgroundJob> latest(String type, String ownerModule, UUID ownerReferenceId) {
+        return repository.latest(type, ownerModule, ownerReferenceId);
+    }
+
     /** Hold the generic job fence until the caller's business transaction commits. */
     @org.springframework.transaction.annotation.Transactional(
         propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)

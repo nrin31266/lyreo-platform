@@ -102,6 +102,7 @@ services:
         VITE_KEYCLOAK_URL: /auth
         VITE_KEYCLOAK_REALM: lyreo
         VITE_KEYCLOAK_CLIENT_ID: lyreo-admin-web
+        VITE_YOUTUBE_AUTO_SELECT_MAX_MINUTES: ${VITE_YOUTUBE_AUTO_SELECT_MAX_MINUTES:-10}
     restart: unless-stopped
 
   edge:

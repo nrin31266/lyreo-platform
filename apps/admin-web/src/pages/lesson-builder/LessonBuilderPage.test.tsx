@@ -24,26 +24,23 @@ vi.mock("./lesson-builder.api", () => ({
   inspectSource: vi.fn(),
   createDraft: vi.fn(),
   saveTranscript: vi.fn(),
+  saveTextSource: vi.fn(),
+  synthesizeText: vi.fn(),
+  saveVoice: vi.fn(),
   approveTranscript: vi.fn(),
   alignTranscript: vi.fn(),
   reviewKaraoke: vi.fn(),
-  generateSemantic: vi.fn(),
-  saveCandidates: vi.fn(),
-  publishLesson: vi.fn(),
   prepareTranscript: vi.fn(),
-  saveOptions: vi.fn(),
-  saveContent: vi.fn(),
   saveTiming: vi.fn(),
-  generateIpa: vi.fn(),
-  replaceGenerated: vi.fn(),
 }));
 vi.mock("@/pages/lessons/catalog.api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/pages/lessons/catalog.api")>()),
   fetchCategories: vi.fn().mockResolvedValue([]),
+  fetchMetadata: vi.fn().mockResolvedValue({id:"lesson-a",title:"A lesson",categories:[],description:"",imageUrl:""}),
 }));
 vi.mock("@/pages/jobs/jobs.api", () => ({ cancelJob: vi.fn() }));
-vi.mock("./YouTubePreview", () => ({
-  YouTubePreview: ({
+vi.mock("./AudioPreview", () => ({
+  LessonPlayer: ({
     onAvailabilityChange, seek,
   }: {
     onAvailabilityChange?: (ready: boolean) => void;
@@ -52,6 +49,8 @@ vi.mock("./YouTubePreview", () => ({
     <><button onClick={() => onAvailabilityChange?.(true)}>Ready player</button><output aria-label="Player seek">{seek?.atMs}</output></>
   ),
 }));
+
+vi.mock('./VoiceSelect', () => ({VoiceSelect: ({value}:{value:string}) => <button type="button" aria-label="Selected voice">{value}</button>}));
 
 const original: LessonDraft = {
   id: "lesson-a",
@@ -197,10 +196,10 @@ describe("lesson authoring checkpoints", () => {
     await show();
     expect(screen.getByRole("button", { name: "Edit words" })).toHaveAttribute("aria-pressed", "true");
     selectReviewMode('Listen & check');
-    expect(screen.getByText("Timing does not cover the transcript")).toBeVisible();
+    expect(screen.getByText("The words and playback times do not match. Check the transcript, then align again.")).toBeVisible();
     selectReviewMode('Edit words');
-    expect(screen.queryByText("Timing does not cover the transcript")).not.toBeInTheDocument();
-    expect(screen.getByText("Long sentence: consider splitting it")).toBeVisible();
+    expect(screen.queryByText("The words and playback times do not match. Check the transcript, then align again.")).not.toBeInTheDocument();
+    expect(screen.getByText("This sentence is long. Splitting it can make listening and review easier.")).toBeVisible();
     expect(screen.queryByRole("slider", { name: "Playback position" })).not.toBeInTheDocument();
     expect(screen.queryByText("Build options")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reset layout" })).not.toBeInTheDocument();
@@ -214,11 +213,11 @@ describe("lesson authoring checkpoints", () => {
     current.sentences[0].issues = ["TIMING_COVERAGE_MISMATCH"];
     await show();
     expect(screen.getByLabelText("Text for sentence 1")).toBeVisible();
-    expect(screen.getAllByRole("button", { name: "Align approved transcript" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Save and align timing" })).toHaveLength(1);
     selectReviewMode('Listen & check');
     expect(screen.getByText("Words are saved. Timing is not ready.")).toBeVisible();
-    expect(screen.queryByText("Timing does not cover the transcript")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Confirm karaoke review" })).not.toBeInTheDocument();
+    expect(screen.queryByText("The words and playback times do not match. Check the transcript, then align again.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save reviewed draft" })).not.toBeInTheDocument();
   });
 
   it("opens timing edits directly from the sentence icon", async () => {
@@ -250,18 +249,14 @@ describe("lesson authoring checkpoints", () => {
     expect(screen.getByLabelText("Player seek")).toHaveTextContent(String(atMs));
   });
 
-  it("uses one numbered tab row with source context and a gated publication step", async () => {
+  it('keeps source context beside review without numbered navigation or unfinished steps', async () => {
     await show();
-    expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual([
-      "1. Source", "2. Words & timing", "3. Content", "4. Publish",
-    ]);
-    expect(screen.getByRole("tab", { name: "4. Publish" })).toBeDisabled();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "1. Source" }), { button: 0, ctrlKey: false });
-    expect(screen.getByRole("link", { name: original.sourceReference })).toHaveAttribute("href", original.sourceReference);
-    expect(screen.queryByRole("button", { name: "Publish lesson" })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.getByText('Selected source', {selector:'summary'})).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name:'Publish lesson'})).not.toBeInTheDocument();
   });
 
-  it("filters problem sentences and bulk-selects only visible rows", async () => {
+  it("filters word suggestions without exercise selection", async () => {
     current.sentences[0].issues = ["SHORT_SENTENCE", "TIMING_MISSING"];
     current.sentences.push({ ...structuredClone(current.sentences[0]), id: "s2", text: "Another full sentence.", issues: ["TIMING_MISSING"] });
     await show();
@@ -271,11 +266,48 @@ describe("lesson authoring checkpoints", () => {
     expect(filter).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("textbox", { name: "Text for sentence 1" })).toBeVisible();
     expect(screen.queryByRole("textbox", { name: "Text for sentence 2" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select all sentences" }));
-    fireEvent.click(screen.getByRole("button", { name: "Watch only" }));
-    fireEvent.click(filter);
-    expect(screen.getByRole("combobox", { name: "Usage for sentence 1" })).toHaveTextContent("Watch only");
-    expect(screen.getByRole("combobox", { name: "Usage for sentence 2" })).toHaveTextContent("Learn");
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', {name:'Sentence 1 visibility'})).toBeVisible();
+  });
+
+  it('keeps hidden words editable, saves visibility separately from exercise usage and excludes them from listening', async () => {
+    current.sentences.push({...structuredClone(current.sentences[0]),id:'s2',text:'Repeated fragment.',hidden:true});
+    await show();
+    expect(screen.getByRole('button',{name:'Sentence 2 visibility'})).toHaveTextContent('Hidden');
+    expect(screen.getByRole('textbox',{name:'Text for sentence 2'})).toHaveValue('Repeated fragment.');
+    fireEvent.change(screen.getByRole('textbox',{name:'Text for sentence 1'}),{target:{value:'Hello world!'}});
+    fireEvent.click(screen.getByRole('button',{name:'Save transcript'}));
+    await act(async()=>{await vi.advanceTimersByTimeAsync(1);});
+    expect(api.saveTranscript).toHaveBeenCalledWith('lesson-a',1,[{id:'s1',text:'Hello world!'},{id:'s2',text:'Repeated fragment.',hidden:true}]);
+  });
+
+  it('toggles Text visibility once without requesting new speech', async () => {
+    current.sourceType='TEXT';current.audioReady=true;current.ttsVoice='af_heart';
+    current.sentences.push({...structuredClone(current.sentences[0]),id:'s2',text:'Second sentence.'});
+    await show();
+    const visibility=screen.getByRole('button',{name:'Sentence 2 visibility'});
+    expect(visibility).toHaveAttribute('aria-pressed','true');
+    fireEvent.click(visibility);
+    expect(visibility).toHaveAttribute('aria-pressed','false');
+    expect(screen.getByRole('button',{name:'Sentence 1 visibility'})).toBeDisabled();
+    expect(visibility).toHaveTextContent('Hidden');
+    expect(screen.queryByRole('button',{name:'Generate speech'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Save and align timing'}));
+    await act(async()=>{await vi.advanceTimersByTimeAsync(1);});
+    expect(api.saveTranscript).toHaveBeenCalledWith('lesson-a',1,[{id:'s1',text:'Hello world.'},{id:'s2',text:'Second sentence.',hidden:true}]);
+    expect(api.synthesizeText).not.toHaveBeenCalled();
+  });
+
+  it('clears unsaved state after restoring visibility and saving an unchanged revision', async () => {
+    current.sentences.push({...structuredClone(current.sentences[0]),id:'s2',text:'Second sentence.'});
+    await show();
+    vi.mocked(api.saveTranscript).mockResolvedValue(structuredClone(current));
+    const visibility=screen.getByRole('button',{name:'Sentence 2 visibility'});
+    fireEvent.click(visibility);fireEvent.click(visibility);
+    fireEvent.click(screen.getByRole('button',{name:'Save transcript'}));
+    await act(async()=>{await vi.advanceTimersByTimeAsync(1);});
+    expect(screen.getByRole('button',{name:'Save transcript'})).toBeDisabled();
+    expect(visibility).toHaveAttribute('aria-pressed','true');
   });
 
   it("explains when the problem-sentence filter has no matches", async () => {
@@ -291,14 +323,59 @@ describe("lesson authoring checkpoints", () => {
     expect(screen.queryByText("Processing did not complete")).not.toBeInTheDocument();
     const trigger = screen.getByRole("button", { name: "Processing and history" });
     expect(trigger.closest("footer")).toBeInTheDocument();
-    expect(trigger).toHaveTextContent("Failed");
+    expect(screen.getByRole("region", {name: "Processing status"})).toHaveTextContent("Failed");
     fireEvent.click(trigger);
     expect(screen.getByRole("dialog", { name: "Processing and history" })).toHaveAttribute("data-side", "bottom");
-    expect(screen.getAllByText("Alignment output failed validation. Open processing details or retry alignment.").some(element => element.closest("[role=dialog]"))).toBe(true);
+    expect(screen.getAllByText("The words could not be matched to the audio. Check the transcript, then retry alignment.").some(element => element.closest("[role=dialog]"))).toBe(true);
     fireEvent.click(screen.getByText("Processing details"));
     expect(screen.getByText("local / whisper")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Details and usage" })).not.toBeInTheDocument();
-    expect(screen.queryByText("The AI content did not match the transcript. Try generating the content again.")).not.toBeInTheDocument();
+    expect(screen.queryByText("This processing result could not be used. Your saved work is safe; retry this step.")).not.toBeInTheDocument();
+  });
+
+  it('retries alignment from its named status action without preparing the source again', async () => {
+    current.approvedRevision=current.transcriptRevision;
+    current.jobs=[{jobId:'failed',operation:'ALIGN',status:'FAILED',errorCode:'AUTHORING_VALIDATION_FAILED',usage:[]}];
+    vi.mocked(api.alignTranscript).mockResolvedValue({lessonId:current.id,jobId:'retry'});
+    await show();
+    await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Retry alignment'}));});
+    expect(api.alignTranscript).toHaveBeenCalledWith('lesson-a',1);
+    expect(api.prepareTranscript).not.toHaveBeenCalled();
+    expect(api.saveTranscript).not.toHaveBeenCalled();
+  });
+  it('requires review of changed saved words before retrying an older alignment failure', async () => {
+    current.jobs=[{jobId:'failed',operation:'ALIGN',status:'FAILED',errorCode:'TIMING_ZERO_DURATION',errorMessage:'sentence=1, word=0',usage:[]}];
+    await show();
+    expect(screen.queryByRole('button',{name:'Retry alignment'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Review sentence 1'})).not.toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'Save and align timing'})).toBeEnabled();
+  });
+  it('locates a timing failure and shows a possible repeat without prescribing a merge', async () => {
+    current.approvedRevision=current.transcriptRevision;
+    current.jobs=[{jobId:'failed',operation:'ALIGN',status:'FAILED',errorCode:'TIMING_ZERO_DURATION',errorMessage:'sentence=1, word=0, startMs=0, endMs=0',usage:[]}];
+    current.sentences[0].issues=['SHORT_SENTENCE','POSSIBLE_REPEAT'];
+    await show();
+    fireEvent.click(screen.getByRole('button',{name:'Review sentence 1'}));
+    expect(screen.getByRole('button',{name:'Edit words'})).toHaveAttribute('aria-pressed','true');
+    expect(screen.getByText(/This repeats the end of the previous sentence/)).toBeVisible();
+    expect(screen.queryByText(/This sentence is very short/)).not.toBeInTheDocument();
+  });
+
+  it('names the unfiltered next sentence before merging and saves both texts with one identity', async () => {
+    current.sentences[0].issues=['SHORT_SENTENCE'];
+    current.sentences.push({...structuredClone(current.sentences[0]),id:'sentence-b',text:'Next sentence.',issues:[]});
+    vi.mocked(api.saveTranscript).mockImplementation(async (_id,_revision,rows)=>{
+      current={...current,revision:2,transcriptRevision:2,sentences:rows.map(row=>({...current.sentences[0],...row,id:row.id!}))};
+      return structuredClone(current);
+    });
+    await show();
+    fireEvent.click(screen.getByRole('button',{name:'Word suggestions (1)'}));
+    expect(screen.queryByLabelText('Text for sentence 2')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Merge with sentence 2 in the original order'}));
+    expect(screen.getByLabelText('Text for sentence 1')).toHaveValue('Hello world. Next sentence.');
+    await saveDraft();
+    expect(api.saveTranscript).toHaveBeenCalledWith('lesson-a',1,[{id:original.sentences[0].id,text:'Hello world. Next sentence.'}]);
+    expect(current.sentences).toHaveLength(1);
   });
 
   it("uses one alignment action and preserves approved words on retry", async () => {
@@ -313,8 +390,8 @@ describe("lesson authoring checkpoints", () => {
       return { lessonId: current.id, jobId: "retry" };
     });
     await show();
-    expect(screen.getByRole("alert")).toHaveTextContent("An observed word has no positive duration.");
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Align approved transcript" })); });
+    expect(screen.getByRole("alert")).toHaveTextContent("Some words have no duration yet. Run alignment again.");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save and align timing" })); });
     expect(api.alignTranscript).toHaveBeenCalledWith("lesson-a", 1);
     expect(api.saveTranscript).not.toHaveBeenCalled();
     expect(api.prepareTranscript).not.toHaveBeenCalled();
@@ -331,7 +408,7 @@ describe("lesson authoring checkpoints", () => {
     vi.mocked(api.saveTranscript).mockResolvedValue(saved);
     vi.mocked(api.approveTranscript).mockResolvedValue(approved);
     vi.mocked(api.alignTranscript).mockImplementation(async () => {current={...approved,jobs:[{jobId:'align-new',operation:'ALIGN',status:'RUNNING',usage:[]}]};return {lessonId:current.id,jobId:'align-new'};});
-    await act(async () => {fireEvent.click(screen.getByRole('button',{name:'Save, approve & align'}));});
+    await act(async () => {fireEvent.click(screen.getByRole('button',{name:'Save and align timing'}));});
     expect(api.saveTranscript).toHaveBeenCalledWith('lesson-a',1,expect.any(Array));
     expect(api.approveTranscript).toHaveBeenCalledWith('lesson-a',2);
     expect(api.alignTranscript).toHaveBeenCalledWith('lesson-a',3);
@@ -343,7 +420,7 @@ describe("lesson authoring checkpoints", () => {
     fireEvent.change(screen.getByLabelText('Text for sentence 1'),{target:{value:'Saved correction.'}});
     vi.mocked(api.saveTranscript).mockResolvedValue({...current,revision:2,transcriptRevision:2,sentences:[{...current.sentences[0],text:'Saved correction.'}]});
     vi.mocked(api.approveTranscript).mockRejectedValue(new ApiError(409,'Changed'));
-    await act(async () => {fireEvent.click(screen.getByRole('button',{name:'Save, approve & align'}));});
+    await act(async () => {fireEvent.click(screen.getByRole('button',{name:'Save and align timing'}));});
     expect(api.alignTranscript).not.toHaveBeenCalled();
     expect(screen.getByLabelText('Text for sentence 1')).toHaveValue('Saved correction.');
     expect(screen.getByRole('alert')).toHaveTextContent('changed');
@@ -391,184 +468,20 @@ describe("lesson authoring checkpoints", () => {
       "My corrected transcript.",
     );
     expect(
-      screen.getByRole("button", { name: "Save, approve & align" }),
+      screen.getByRole("button", { name: "Save and align timing" }),
     ).toBeEnabled();
     vi.mocked(api.saveTranscript).mockRejectedValue(
       new ApiError(409, "Changed"),
     );
     await saveDraft();
     expect(api.saveTranscript).toHaveBeenCalledWith("lesson-a", 1, [
-      { id: "s1", text: "My corrected transcript.", usage: "LEARN" },
+      { id: "s1", text: "My corrected transcript." },
     ]);
     expect(screen.getByRole("alert")).toHaveTextContent(
       "The lesson changed or is locked",
     );
     expect(screen.getByLabelText("Text for sentence 1")).toHaveValue(
       "My corrected transcript.",
-    );
-  });
-
-  it("shows thought groups from transcript tokens when observed timing crosses their boundary", async () => {
-    current.approvedRevision =
-      current.karaokeReviewedRevision =
-      current.semanticRevision =
-        current.transcriptRevision;
-    current.sentences[0] = {
-      ...current.sentences[0],
-      text: "“New York” rocks.",
-      words: [
-        {
-          text: "New York",
-          startMs: 0,
-          endMs: 500,
-          charStart: 1,
-          charEnd: 9,
-          tokenStart: 0,
-          tokenEnd: 2,
-        },
-        {
-          text: "rocks",
-          startMs: 500,
-          endMs: 1000,
-          charStart: 11,
-          charEnd: 16,
-          tokenStart: 2,
-          tokenEnd: 3,
-        },
-      ],
-      thoughtGroups: [
-        { tokenStart: 0, tokenEnd: 1 },
-        { tokenStart: 1, tokenEnd: 3 },
-      ],
-    };
-    await show();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "3. Content" }), {
-      button: 0,
-      ctrlKey: false,
-    });
-    expect(screen.getByText(/“New \/ York” rocks\./)).toBeVisible();
-  });
-
-  it("locks downstream tabs while transcript edits are unsaved", async () => {
-    await show();
-    fireEvent.change(screen.getByLabelText("Text for sentence 1"), { target: { value: "Unsaved correction." } });
-    expect(screen.getByRole("tab", { name: "3. Content" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Listen & check" })).toBeDisabled();
-    expect(screen.getByLabelText("Text for sentence 1")).toHaveValue("Unsaved correction.");
-    expect(screen.getByRole("button", { name: "Save, approve & align" })).toBeEnabled();
-  });
-
-  it("does not unlock generation from ASR timing or transcript approval alone", async () => {
-    current.approvedRevision = 1;
-    await show();
-    expect(screen.getByRole("button", { name: "Listen & check" })).toHaveAttribute("aria-pressed", "true");
-    expect(
-      screen.queryByRole("button", { name: "Generate learning content" }),
-    ).not.toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "3. Content" }), {
-      button: 0,
-      ctrlKey: false,
-    });
-    expect(
-      screen.getByRole("tab", { name: "3. Content" }),
-    ).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "Generate learning content" })).not.toBeInTheDocument();
-    selectReviewMode('Listen & check');
-    expect(
-      screen.getByRole("button", { name: "Confirm karaoke review" }),
-    ).toBeDisabled();
-    expect(
-      screen.getByRole("button", {name: /Grouped ASR timing needs manual review/}),
-    ).toBeInTheDocument();
-    expect(api.generateSemantic).not.toHaveBeenCalled();
-  });
-
-  it("preserves custom candidate selection across refreshes and requires saving before publication", async () => {
-    current.approvedRevision =
-      current.karaokeReviewedRevision =
-      current.semanticRevision =
-        1;
-    current.status = "CONTENT_REVIEW";
-    await show();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "3. Content" }), {
-      button: 0,
-      ctrlKey: false,
-    });
-    const shadowing = screen.getByRole("checkbox", {
-      name: /Shadowing · MEDIUM/,
-    });
-    fireEvent.click(shadowing);
-    await act(async () => {
-      void client.refetchQueries({ queryKey: ["authoring"] });
-      await vi.advanceTimersByTimeAsync(1);
-    });
-    expect(shadowing).toBeChecked();
-    expect(
-      screen.getByRole("button", { name: "Save activity selection" }),
-    ).toBeEnabled();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "4. Publish" }), { button: 0, ctrlKey: false });
-    expect(
-      screen.getByRole("button", { name: "Publish lesson" }),
-    ).toBeDisabled();
-    expect(
-      screen.getByRole("checkbox", { name: /I reviewed the translations/ }),
-    ).toBeDisabled();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "3. Content" }), { button: 0, ctrlKey: false });
-    vi.mocked(api.saveCandidates).mockResolvedValue({
-      ...current,
-      revision: 2,
-      sentences: [{ ...current.sentences[0], shadowingSelected: true }],
-    });
-    await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: "Save activity selection" }),
-      );
-    });
-    expect(api.saveCandidates).toHaveBeenCalledWith(
-      "lesson-a",
-      1,
-      ["s1"],
-      ["s1"],
-    );
-  });
-
-  it("saves custom candidates against the revision where editing began despite refreshes", async () => {
-    current.approvedRevision =
-      current.karaokeReviewedRevision =
-      current.semanticRevision =
-        1;
-    await show();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "3. Content" }), {
-      button: 0,
-      ctrlKey: false,
-    });
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: /Shadowing · MEDIUM/ }),
-    );
-    current = { ...current, revision: 2 };
-    await act(async () => {
-      void client.refetchQueries({ queryKey: ["authoring"] });
-      await vi.advanceTimersByTimeAsync(1);
-    });
-    vi.mocked(api.saveCandidates).mockRejectedValue(
-      new ApiError(409, "Changed"),
-    );
-    await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: "Save activity selection" }),
-      );
-    });
-    expect(api.saveCandidates).toHaveBeenCalledWith(
-      "lesson-a",
-      1,
-      ["s1"],
-      ["s1"],
-    );
-    expect(
-      screen.getByRole("checkbox", { name: /Shadowing · MEDIUM/ }),
-    ).toBeChecked();
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "The lesson changed or is locked",
     );
   });
 
@@ -590,7 +503,7 @@ describe("lesson authoring checkpoints", () => {
     expect(confirmation).not.toBeChecked();
     selectReviewMode('Listen & check');
     expect(
-      screen.getByRole("button", { name: "Confirm karaoke review" }),
+      screen.getByRole("button", { name: "Save reviewed draft" }),
     ).toBeDisabled();
   });
 
@@ -624,48 +537,15 @@ describe("lesson authoring checkpoints", () => {
     );
   });
 
-  it("locks every content mutation after publication", async () => {
-    current.status = "PUBLISHED";
-    current.approvedRevision =
-      current.karaokeReviewedRevision =
-      current.semanticRevision =
-        1;
-    await show();
-    selectReviewMode('Edit words');
-    expect(screen.getByLabelText("Text for sentence 1")).toBeDisabled();
-    expect(
-      screen.getByRole("button", { name: "Save, approve & align" }),
-    ).toBeDisabled();
-    selectReviewMode('Listen & check');
-    expect(screen.getByRole("button", { name: "Run dedicated alignment" })).toBeDisabled();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "3. Content" }), {
-      button: 0,
-      ctrlKey: false,
-    });
-    for (const name of [
-      "Regenerate learning content",
-      "Save activity selection",
-    ]) {
-      expect(screen.getByRole("button", { name })).toBeDisabled();
-    }
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "4. Publish" }), { button: 0, ctrlKey: false });
-    expect(screen.getByRole("button", { name: "Publish lesson" })).toBeDisabled();
-    expect(
-      screen.getByText(
-        "Published. Content and selected activities are locked.",
-      ),
-    ).toBeInTheDocument();
-  });
-
   it("hides metadata until a source is ready and renders both loading panes together", async () => {
     vi.mocked(api.inspectSource).mockImplementation(() => new Promise(() => {}));
     await show("/lessons/new");
     expect(screen.getByText("Start with a source video")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Lesson title")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("YouTube URL"), { target: { value: "https://youtu.be/abcdefghijk" } });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Search" })); });
-    expect(screen.getAllByRole("status")).toHaveLength(2);
-    expect(screen.queryByLabelText("Lesson title")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", {name: "Processing status"})).toHaveTextContent("Checking source information");
+    expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
   });
   it("edits exact range endpoints and rejects invalid timecodes before preparing audio", async () => {
     vi.mocked(api.inspectSource).mockResolvedValue({videoId:"abcdefghijk", title:"Video", durationMs:223000, embedAllowed:true, usedRanges:[]});
@@ -726,6 +606,21 @@ describe("lesson authoring checkpoints", () => {
       screen.getByRole("button", { name: "Prepare transcript" }),
     ).toBeEnabled();
   });
+  it("requires a chosen range for videos above ten minutes before preparation", async () => {
+    vi.mocked(api.inspectSource).mockResolvedValue({videoId:"abcdefghijk", title:"Long video", durationMs:600001, embedAllowed:true, usedRanges:[]});
+    await show("/lessons/new");
+    fireEvent.change(screen.getByLabelText("YouTube URL"), {target:{value:"https://youtu.be/abcdefghijk"}});
+    await act(async () => { fireEvent.click(screen.getByRole("button", {name:"Search"})); });
+    expect(screen.getByLabelText("Start")).toHaveValue("");
+    expect(screen.getByLabelText("End")).toHaveValue("");
+    expect(screen.queryByRole("button", {name:"Select full video"})).not.toBeInTheDocument();
+    expect(screen.getByRole("button", {name:"Prepare transcript"})).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Start"), {target:{value:"00:05.000"}});
+    fireEvent.change(screen.getByLabelText("End"), {target:{value:"00:30.000"}});
+    fireEvent.blur(screen.getByLabelText("End"));
+    expect(screen.getByRole("button", {name:"Prepare transcript"})).toBeEnabled();
+    expect(api.createDraft).not.toHaveBeenCalled();
+  });
   it("only inspects a pasted URL after Search, without starting acquisition or AI", async () => {
     vi.mocked(api.inspectSource).mockResolvedValue({
       videoId: "abcdefghijk",
@@ -744,7 +639,11 @@ describe("lesson authoring checkpoints", () => {
     fireEvent.blur(screen.getByLabelText("YouTube URL"));
     expect(api.inspectSource).not.toHaveBeenCalled();
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Search" })); });
-    expect(screen.getByLabelText("Lesson title")).toHaveValue("Auto source");
+    expect(screen.getByLabelText("Title")).toHaveAttribute("placeholder", "Auto source");
+    await act(async () => { await vi.dynamicImportSettled(); });
+    expect(screen.getByLabelText("Start")).toHaveValue("00:00.000");
+    expect(screen.getByLabelText("End")).toHaveValue("02:00.000");
+    expect(screen.getByRole("button", {name:"Select full video"})).toHaveAttribute("aria-pressed", "true");
     expect(api.createDraft).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Load waveform" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Start")).toHaveValue("00:00.000");
@@ -757,14 +656,14 @@ describe("lesson authoring checkpoints", () => {
     await show("/lessons/new");
     fireEvent.change(screen.getByLabelText("YouTube URL"), { target: { value: "https://youtu.be/abcdefghijk" } });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Search" })); });
-    fireEvent.change(screen.getByLabelText("Lesson title"), { target: { value: "My edited title" } });
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "My edited title" } });
     fireEvent.change(screen.getByLabelText("End"), { target: { value: "00:25.000" } });
     fireEvent.blur(screen.getByLabelText("End"));
     fireEvent.change(screen.getByLabelText("Start"), { target: { value: "00:05.000" } });
     fireEvent.blur(screen.getByLabelText("Start"));
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Search" })); });
     expect(api.inspectSource).toHaveBeenCalledTimes(2);
-    expect(screen.getByLabelText("Lesson title")).toHaveValue("My edited title");
+    expect(screen.getByLabelText("Title")).toHaveValue("My edited title");
     expect(screen.getByLabelText("Start")).toHaveValue("00:05.000");
     expect(screen.getByLabelText("End")).toHaveValue("00:25.000");
   });
@@ -795,7 +694,7 @@ describe("lesson authoring checkpoints", () => {
     fireEvent.change(screen.getByLabelText("YouTube URL"), { target: { value: "https://youtu.be/abcdefghijk" } });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Search" })); });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Search" })); });
-    expect(screen.getByLabelText("Lesson title")).toHaveValue("Video");
+    expect(screen.getByLabelText("Title")).toHaveAttribute("placeholder", "Video");
     expect(screen.getByRole("alert")).not.toHaveTextContent("private stderr");
     expect(screen.getByRole("button", { name: "Search" })).toBeEnabled();
   });
@@ -808,9 +707,9 @@ describe("lesson authoring checkpoints", () => {
     fireEvent.change(screen.getByLabelText("Start"), { target: { value: "00:05.000" } });
     fireEvent.change(screen.getByLabelText("End"), { target: { value: "01:00.000" } });
     fireEvent.blur(screen.getByLabelText("End"));
-    fireEvent.change(screen.getByLabelText("Lesson title"), { target: { value: "My edited title" } });
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "My edited title" } });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Search" })); });
-    expect(screen.getByLabelText("Lesson title")).toHaveValue("My edited title");
+    expect(screen.getByLabelText("Title")).toHaveValue("My edited title");
     expect(screen.getByLabelText("End")).toHaveValue("00:30.000");
   });
   it("ignores a stale A response after editing A to B and back and blocks duplicate submits", async () => {
@@ -826,10 +725,10 @@ describe("lesson authoring checkpoints", () => {
     fireEvent.change(input, { target: { value: "https://youtu.be/lmnopqrstuv" } });
     fireEvent.change(input, { target: { value: "https://youtu.be/abcdefghijk" } });
     await act(async () => { resolve(source); });
-    expect(screen.queryByLabelText("Lesson title")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Prepare transcript" })).toBeDisabled();
     await act(async () => { fireEvent.submit(input.closest("form")!); });
-    expect(screen.getByLabelText("Lesson title")).toHaveValue("Video");
+    expect(screen.getByLabelText("Title")).toHaveAttribute("placeholder", "Video");
     fireEvent.change(input, { target: { value: "https://youtu.be/lmnopqrstuv" } });
     expect(screen.getByRole("button", { name: "Prepare transcript" })).toBeDisabled();
     expect(api.createDraft).not.toHaveBeenCalled();
@@ -875,8 +774,8 @@ describe("lesson authoring checkpoints", () => {
     });
     expect(api.inspectSource).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Lesson title")).toHaveValue(
-      "Recovered video",
+    expect(screen.getByLabelText("Title")).toHaveAttribute(
+      "placeholder", "Recovered video",
     );
   });
   it("clears an earlier preparation error when inspecting another source", async () => {
@@ -914,81 +813,68 @@ describe("lesson authoring checkpoints", () => {
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
-  it("explains validation failures without directing the user to provider settings", async () => {
-    current.jobs = [{ jobId: "validation", operation: "SEMANTIC", status: "FAILED", errorCode: "AUTHORING_VALIDATION_FAILED", errorMessage: "Thought groups must sequentially partition source", usage: [] }];
+
+
+  it('saves the reviewed revision and stays an unpublished draft without later steps', async () => {
+    current.approvedRevision = 1;
+    vi.mocked(api.reviewKaraoke).mockImplementation(async () => ({ ...current, revision: 2, karaokeReviewedRevision: 1 }));
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "Processing and history" }));
-    expect(screen.getByText("The AI content did not match the transcript. Try generating the content again.")).toBeVisible();
-    expect(screen.queryByText("Thought groups must sequentially partition source")).not.toBeInTheDocument();
-    expect(document.querySelector('a[href="/settings/ai#routes"]')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name:'Ready player'}));
+    fireEvent.click(screen.getByRole('checkbox', {name:/I played and checked/}));
+    await act(async () => { fireEvent.click(screen.getByRole('button', {name:'Save reviewed draft'})); });
+    expect(api.reviewKaraoke).toHaveBeenCalledWith('lesson-a', 1);
+    expect(screen.getByText('Transcript and timing reviewed')).toBeVisible();
+    expect(screen.getByRole('link', {name:'Back to lessons'})).toHaveAttribute('href', '/lessons');
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', {name:'Publish lesson'})).not.toBeInTheDocument();
   });
-  it("shows current jobs and historical attempts with compact action menus", async () => {
-    current.jobs = [
-      {
-        jobId: "completed-job",
-        operation: "PREPARE",
-        status: "SUCCEEDED",
-        usage: [],
-      },
-      {
-        jobId: "running-job",
-        operation: "ALIGN",
-        status: "RUNNING",
-        currentStep: "Active alignment",
-        usage: [],
-      },
-      {
-        jobId: "failed-job",
-        operation: "SEMANTIC",
-        status: "FAILED",
-        errorMessage: "Failed attempt stays visible",
-        usage: [],
-      },
-      {
-        jobId: "cancelled-job",
-        operation: "ALIGN",
-        status: "CANCELLED",
-        errorMessage: "Cancelled attempt stays visible",
-        usage: [],
-      },
-    ];
+  it('does not offer retry for removed historical operations', async () => {
+    current.jobs=[{jobId:'old-semantic',operation:'SEMANTIC',status:'FAILED',errorCode:'AUTHORING_OPERATION_REMOVED',usage:[]}];
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "Processing and history" }));
-    expect(screen.getByText("Active alignment")).toBeVisible();
-    expect(screen.getByText("Failed attempt stays visible")).toBeVisible();
-    expect(screen.getByText("Cancelled attempt stays visible")).toBeVisible();
-    expect(document.querySelector('a[href="/jobs?job=completed-job"]')).toBeVisible();
-    expect(screen.queryByRole("button", { name: /Job history/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Details and usage" })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', {name:'Processing status'})).toHaveTextContent('This operation has been removed');
+    expect(screen.queryByRole('button', {name:'Retry step'})).not.toBeInTheDocument();
   });
-  it("shows mixed terminal job details immediately after opening history after publication", async () => {
-    current.status = "PUBLISHED";
-    current.jobs = [
-      {
-        jobId: "old-failure",
-        operation: "SEMANTIC",
-        status: "FAILED",
-        errorMessage: "Earlier content attempt failed",
-        usage: [],
-      },
-      {
-        jobId: "completed-retry",
-        operation: "SEMANTIC",
-        status: "SUCCEEDED",
-        usage: [],
-      },
-      {
-        jobId: "old-cancellation",
-        operation: "ALIGN",
-        status: "CANCELLED",
-        errorMessage: "Earlier alignment was cancelled",
-        usage: [],
-      },
-    ];
+
+  it('resumes Text in the same workspace with the saved voice and hides preliminary sentences until audio is ready', async () => {
+    current.sourceType='TEXT';current.audioReady=false;current.ttsVoice='af_sarah';current.endMs=0;current.timingStatus='MISSING';
+    await show('/lessons/new?draft=lesson-a');
+    expect(screen.getByLabelText('English text')).toHaveValue('Hello world.');
+    expect(screen.getByRole('button',{name:'Selected voice'})).toHaveTextContent('af_sarah');
+    expect(screen.queryByLabelText('Text for sentence 1')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Edit words'})).not.toBeInTheDocument();
+    vi.mocked(api.synthesizeText).mockImplementation(async () => {current={...current,revision:2,jobs:[{jobId:'speech',operation:'TTS',status:'RUNNING',usage:[]}]};return {lessonId:current.id,jobId:'speech'};});
+    await act(async () => {fireEvent.click(screen.getByRole('button',{name:'Generate speech'}));});
+    expect(api.synthesizeText).toHaveBeenCalledWith('lesson-a',1);
+    current={...current,revision:3,audioReady:true,endMs:1000,jobs:[{jobId:'speech',operation:'TTS',status:'SUCCEEDED',usage:[]}]};
+    await act(async () => {await vi.advanceTimersByTimeAsync(2600);});
+    expect(screen.getByLabelText('Text for sentence 1')).toHaveValue('Hello world.');
+    expect(screen.getAllByRole('button',{name:'Selected voice'})).toHaveLength(1);
+    expect(api.saveVoice).not.toHaveBeenCalled();
+  });
+
+  it('keeps source metadata edits from being discarded by a speech action', async () => {
+    current.sourceType='TEXT';current.audioReady=false;current.ttsVoice='af_sarah';current.endMs=0;
+    client.setQueryData(['catalog','metadata','lesson-a'],{id:'lesson-a',title:'A lesson',categories:[],description:'',imageUrl:''});
+    await show('/lessons/new?draft=lesson-a');
+    await act(async () => {await vi.advanceTimersByTimeAsync(20);});
+    fireEvent.change(screen.getByLabelText('Title'),{target:{value:'Unsaved title'}});
+    expect(screen.getByRole('button',{name:'Generate speech'})).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Title'),{target:{value:'A lesson'}});
+    expect(screen.getByRole('button',{name:'Generate speech'})).toBeEnabled();
+    expect(api.synthesizeText).not.toHaveBeenCalled();
+  });
+
+  it('keeps the caret position after batched selection events and splits without crashing', async () => {
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "Processing and history" }));
-    expect(screen.getByText("Earlier content attempt failed")).toBeVisible();
-    expect(screen.getByText("Earlier alignment was cancelled")).toBeVisible();
-    expect(document.querySelector('a[href="/jobs?job=completed-retry"]')).toBeVisible();
+    const input=screen.getByLabelText('Text for sentence 1') as HTMLTextAreaElement;
+    act(() => {
+      input.focus();
+      input.setSelectionRange(3,3);fireEvent.select(input);
+      input.setSelectionRange(6,6);fireEvent.select(input);
+    });
+    fireEvent.click(screen.getByRole('button',{name:'Split at cursor'}));
+    expect(screen.getByLabelText('Text for sentence 1')).toHaveValue('Hello');
+    expect(screen.getByLabelText('Text for sentence 2')).toHaveValue('world.');
   });
+
 });

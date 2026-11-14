@@ -99,6 +99,15 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @Override
+    protected ResponseEntity<Object> handleMaxUploadSizeExceededException(
+        org.springframework.web.multipart.MaxUploadSizeExceededException ex,HttpHeaders headers,HttpStatusCode status,WebRequest request
+    ) {
+        var problem=ApiProblemFactory.create(HttpStatus.valueOf(413),"payload-too-large","Upload too large",
+            "Audio uploads support up to 30 MiB per file.","PAYLOAD_TOO_LARGE",resolveHttpServletRequest(request),null);
+        return new ResponseEntity<>(problem,problemHeaders(headers),status);
+    }
+
+    @Override
     protected ResponseEntity<Object> handleHttpMessageNotReadable(
         HttpMessageNotReadableException ex,
         HttpHeaders headers,

@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
@@ -12,6 +13,7 @@ import { I18nextProvider } from "react-i18next";
 import { i18n } from "@/i18n";
 import { CategoriesPage } from "./CategoriesPage";
 import { ChannelsPage } from "./ChannelsPage";
+import { OrganizationPage } from "./OrganizationPage";
 import { LessonMetadataForm } from "./LessonMetadataForm";
 import * as api from "./catalog.api";
 vi.mock("./catalog.api", async (original) => ({
@@ -22,6 +24,8 @@ vi.mock("./catalog.api", async (original) => ({
   saveMetadata: vi.fn(),
   saveCategory: vi.fn(),
   syncChannels: vi.fn(),
+  fetchSyncConfiguration: vi.fn(),
+  setChannelVisibility: vi.fn(),
 }));
 let client: QueryClient;
 beforeEach(async () => {
@@ -32,6 +36,7 @@ beforeEach(async () => {
   });
   vi.mocked(api.fetchCategories).mockResolvedValue([]);
   vi.mocked(api.fetchChannels).mockResolvedValue([]);
+  vi.mocked(api.fetchSyncConfiguration).mockResolvedValue({configured: true});
 });
 afterEach(() => {
   cleanup();
@@ -79,6 +84,8 @@ it("keeps invalid image URLs out of metadata requests and invalidates the catalo
         description: "",
         imageUrl: null,
         visible: true,
+        channelVisible: true,
+        effectiveVisible: true,
       }}
       onSaved={saved}
       onCancel={() => {}}
@@ -111,6 +118,7 @@ it("selects channels for one explicit synchronization request", async () => {
       syncError: null,
       syncJobId: null,
       syncStatus: null,
+      visible: true,
     },
   ]);
   vi.mocked(api.syncChannels).mockResolvedValue({ jobId: "job-a" });
@@ -125,4 +133,40 @@ it("selects channels for one explicit synchronization request", async () => {
       expect.anything(),
     ),
   );
+});
+
+it("keeps categories and channels in one tabbed workspace", async () => {
+  show(<OrganizationPage />);
+  expect(screen.getByRole('tab', {name: 'Categories'})).toHaveAttribute('aria-selected','true');
+  await userEvent.click(screen.getByRole('tab', {name: 'Source channels'}));
+  await waitFor(() => expect(screen.getByRole('tab', {name: 'Source channels'})).toHaveAttribute('aria-selected','true'));
+  expect(api.fetchChannels).toHaveBeenCalled();
+});
+it("explains missing synchronization configuration and disables sync", async () => {
+  vi.mocked(api.fetchSyncConfiguration).mockResolvedValue({configured: false});
+  show(<ChannelsPage />);
+  await screen.findByText(/synchronization is not enabled/);
+  expect(screen.getByRole('button', {name: 'Sync selected (0)'})).toBeDisabled();
+  expect(api.syncChannels).not.toHaveBeenCalled();
+});
+it("retries the same synchronization instead of just reloading the list", async () => {
+  vi.mocked(api.fetchChannels).mockResolvedValue([{id:'UCabcdefghijklmnopqrstuv',title:'Channel',lessonCount:1,avatarUrl:null,syncedAt:null,syncError:null,syncJobId:null,syncStatus:null,visible:true}]);
+  vi.mocked(api.syncChannels).mockRejectedValueOnce(new Error('Sync failed')).mockResolvedValueOnce({jobId:'retry-job'});
+  show(<ChannelsPage />);
+  fireEvent.click(await screen.findByRole('button', {name: 'Sync metadata'}));
+  fireEvent.click(await screen.findByRole('button', {name: 'Retry'}));
+  await waitFor(() => expect(api.syncChannels).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(api.syncChannels).mock.calls.map(call => call[0])).toEqual([['UCabcdefghijklmnopqrstuv'],['UCabcdefghijklmnopqrstuv']]);
+});
+
+it("localizes one category ID and edits Vietnamese without dropping other translations", async () => {
+  vi.mocked(api.fetchCategories).mockResolvedValue([{id:'travel',name:'Travel',lessonCount:0,translations:{vi:'Du lịch',fr:'Voyage'}}]);
+  await i18n.changeLanguage('vi');show(<CategoriesPage />);
+  expect(await screen.findByRole('cell',{name:'Du lịch'})).toBeVisible();
+  await userEvent.click(screen.getByRole('button',{name:i18n.t('admin:catalog.editMetadata')}));
+  expect(screen.getByLabelText(i18n.t('admin:catalog.categoryDefaultName'))).toHaveValue('Travel');
+  fireEvent.change(screen.getByLabelText(i18n.t('admin:catalog.categoryVietnameseName')),{target:{value:'Đi du lịch'}});
+  await userEvent.click(screen.getByRole('button',{name:i18n.t('admin:catalog.save')}));
+  await waitFor(()=>expect(api.saveCategory).toHaveBeenCalledWith('Travel','travel',{vi:'Đi du lịch',fr:'Voyage'}));
+  expect(api.categoryName({id:'travel',name:'Travel',lessonCount:0},'vi')).toBe('Travel');
 });

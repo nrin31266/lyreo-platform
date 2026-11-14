@@ -39,6 +39,17 @@ public final class S3ObjectStorageAdapter implements ObjectStoragePort {
     }
 
     @Override
+    public boolean exists(String objectKey) {
+        try {
+            client.headObject(software.amazon.awssdk.services.s3.model.HeadObjectRequest.builder().bucket(bucket).key(objectKey).build());
+            return true;
+        } catch(software.amazon.awssdk.services.s3.model.S3Exception failure) {
+            if(failure.statusCode()==404) return false;
+            throw failure;
+        }
+    }
+
+    @Override
     public void delete(String objectKey) {
         client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(objectKey).build());
     }

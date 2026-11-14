@@ -5,10 +5,19 @@ import java.util.UUID;
 
 /** Mutable draft data; only the authoring transaction writes it. Published rows are immutable. */
 public final class AuthoringSentence {
+    public java.util.Set<String> manualFields = new java.util.HashSet<>();
+    public java.util.Map<String,String> manualSources = new java.util.HashMap<>();
+    public java.util.Map<String,String> manualLocales = new java.util.HashMap<>();
+    public boolean contentStale;
     public String timingSource;
+    public String ipa;
+    public String ipaAccent;
+    public String ipaVersion;
+    public boolean ipaNeedsReview;
     public UUID id;
     public String text;
     public String usage = "LEARN";
+    public boolean hidden;
     public List<Word> words = List.of();
     // Retain observed source evidence only while editable words are stale.
     public List<AuthoringText.ObservedWord> sourceWords = List.of();
@@ -50,7 +59,11 @@ public final class AuthoringSentence {
                        int tokenStart, int tokenEnd) {}
     public record Annotation(int tokenStart, int tokenEnd, String surface, String label,
                              String explanation, String importance, String canonicalForm, UUID headwordId) {}
-    public record Hint(int tokenStart, int tokenEnd, String text) {}
-    public record Note(int tokenStart, int tokenEnd, String text) {}
+    public record Hint(int tokenStart, int tokenEnd, String text, String kind) {
+        public Hint(int tokenStart,int tokenEnd,String text) {this(tokenStart,tokenEnd,text,"DICTATION");}
+    }
+    public record Note(int tokenStart, int tokenEnd, String text, String kind) {
+        public Note(int tokenStart,int tokenEnd,String text) {this(tokenStart,tokenEnd,text,"USAGE");}
+    }
     public record Group(int tokenStart, int tokenEnd) {}
 }

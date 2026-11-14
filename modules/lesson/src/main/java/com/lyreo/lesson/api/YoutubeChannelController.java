@@ -18,6 +18,11 @@ public class YoutubeChannelController {
     this.channels = channels;
   }
 
+  @GetMapping("/sync-configuration")
+  public java.util.Map<String, Boolean> configuration() {
+    return java.util.Map.of("configured", channels.configured());
+  }
+
   @PostMapping("/sync")
   public ResponseEntity<Accepted> sync(@RequestBody Request request) {
     UUID job = channels.synchronize(request.channelIds());

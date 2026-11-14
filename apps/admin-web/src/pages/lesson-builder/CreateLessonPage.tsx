@@ -1,9 +1,14 @@
+import { ProcessingStatus } from "./ProcessingStatus";
+import { AuthoringPrompt } from "./AuthoringPrompt";
+import { CreateMetadataFields } from "./CreateMetadataFields";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { CreateMediaLessonPage } from "./CreateMediaLessonPage";
 import "./lesson-builder.css";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { RiLink as Link2, RiSearchLine as Search, RiLoader4Line as LoaderCircle, RiErrorWarningLine as AlertCircle } from "@remixicon/react";
@@ -11,7 +16,6 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupInput, InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Field,
@@ -19,7 +23,6 @@ import {
   FieldLabel,
   FieldError,
 } from "@/components/ui/field";
-import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Accordion,
@@ -28,18 +31,19 @@ import {
   AccordionContent,
 } from "@/components/ui/accordion";
 import { ApiError } from "@/lib/api";
+import { env } from "@/config/env";
 import { SourceRangeEditor } from "./SourceRangeEditor";
 import { defaultRange, sourceOffset, timecode } from "./timecode";
 import { validSelection } from "./timeline-view";
 import * as authoring from "./lesson-builder.api";
 import type { SourceInspection } from "./lesson-builder.types";
-import { metadataSchema } from "@/pages/lessons/catalog.api";
+import { createMetadataSchema as metadataSchema } from "@/pages/lessons/catalog.api";
 import { useCategories, catalogKeys } from "@/pages/lessons/catalog.queries";
-import { CatalogImage, CatalogError } from "@/pages/lessons/CatalogFeedback";
+import { CatalogError } from "@/pages/lessons/CatalogFeedback";
 const sourceSchema = z.object({
   sourceReference: z.string().trim().pipe(z.url()),
 });
-export function CreateLessonPage() {
+function CreateYouTubePage({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
   const { t } = useTranslation(["admin", "common"]);
   const navigate = useNavigate();
   const client = useQueryClient();
@@ -58,6 +62,7 @@ export function CreateLessonPage() {
     },
   });
   const sourceReference = sourceForm.watch("sourceReference");
+  useEffect(() => { onDirtyChange(!!sourceReference.trim() || metadata.formState.isDirty); }, [sourceReference, metadata.formState.isDirty, onDirtyChange]);
   const inspectionVersion = useRef(0);
   const inspectionInFlight = useRef(false);
   const lastInspectedReference = useRef<string | null>(null);
@@ -87,15 +92,13 @@ export function CreateLessonPage() {
       if (version !== inspectionVersion.current) return;
       const refresh = reference === lastInspectedReference.current;
       setInspection(next);
-      if (!refresh) metadata.reset({ ...metadata.getValues(), title: next.title });
-      else if (!metadata.getFieldState("title").isDirty) metadata.resetField("title", { defaultValue: next.title });
       const range = currentRange.current;
       if (!refresh || (range.startMs !== null && (range.startMs < 0 || range.startMs >= next.durationMs)) ||
         (range.endMs !== null && (range.startMs === null || !validSelection(range.startMs, range.endMs, next.durationMs)))) {
-        const [start, end] = defaultRange(next.durationMs, reference);
+        const [start, end] = defaultRange(next.durationMs, env.youtubeAutoSelectMaxMinutes);
         setStartMs(start);
         setEndMs(end);
-        setRangeInputValid(true);
+        setRangeInputValid(start !== null && end !== null);
         setSelectionVersion(value => value + 1);
       }
       lastInspectedReference.current = reference;
@@ -148,7 +151,7 @@ export function CreateLessonPage() {
         endMs,
       });
       await client.invalidateQueries({ queryKey: catalogKeys.all });
-      navigate(`/lessons/${result.lessonId}`);
+      navigate(`/lessons/new?draft=${result.lessonId}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -158,17 +161,8 @@ export function CreateLessonPage() {
   );
   return (
     <section className="authoring-page source-page">
-      <div className="source-topbar">
-      <header className="authoring-heading">
-        <h1>{t("lessonAuthoring.title")}</h1>
-        <p className="text-sm text-muted-foreground">
-          {t("sourceWorkspace.sourceHint")}
-        </p>
-      </header>
-      </div>
-      <ol className="source-step-navigation" aria-label={t("lessonAuthoring.title")}>
-        {["source", "wordsTiming", "content", "publish"].map((step, index) => <li key={step} aria-current={index === 0 ? "step" : undefined}><span>{index + 1}</span>{t(`reviewWorkspace.steps.${step}`)}</li>)}
-      </ol>
+      {inspectionMutation.isPending && <ProcessingStatus label={t("twoStep.inspecting")} />}
+      {createMutation.isPending && <ProcessingStatus label={t("twoStep.preparing")} />}
       <form
         className="source-url-form"
         onSubmit={(event) => {
@@ -259,62 +253,9 @@ export function CreateLessonPage() {
           <h2 className="source-section-title">{t("reviewWorkspace.lessonInformation")}</h2>
           {inspectionMutation.isPending && !inspection ? <div role="status" aria-label={t("loading")} className="grid gap-5"><Skeleton className="h-5 w-1/2" /><Skeleton className="h-10" /><Skeleton className="aspect-video" /><Skeleton className="h-20" /></div> : <form id="lesson-create-form" onSubmit={create} noValidate>
             <FieldGroup>
-              <Field data-invalid={!!metadata.formState.errors.title}>
-                <FieldLabel htmlFor="source-lessonTitle">
-                  {t("lessonAuthoring.lessonTitle")}
-                </FieldLabel>
-                <Input
-                  id="source-lessonTitle"
-                  disabled={!inspection}
-                  {...metadata.register("title")}
-                  aria-invalid={!!metadata.formState.errors.title}
-                />
-                <FieldError>
-                  {metadata.formState.errors.title && t("catalog.invalidField")}
-                </FieldError>
-              </Field>
-              {inspection && (
-                <>
-                  {overlap && (
-                    <p role="status" className="text-sm text-muted-foreground">
-                      {t("lessonAuthoring.overlap")}
-                    </p>
-                  )}
-                  <Controller
-                    name="categoryIds"
-                    control={metadata.control}
-                    render={({ field }) => (
-                      <Field>
-                        <FieldLabel>{t("catalog.categories")}</FieldLabel>
-                        {categories.isPending ? (
-                          <Skeleton className="h-8" />
-                        ) : categories.isError ? (
-                          <CatalogError error={categories.error} retry={() => void categories.refetch()} />
-                        ) : !categories.data?.length ? (
-                          <p className="text-sm text-muted-foreground">{t("catalog.noCategories")}</p>
-                        ) : (
-                          categories.data.map((c) => (
-                            <label
-                              key={c.id}
-                              className="flex items-center gap-2"
-                            >
-                              <Checkbox
-                                checked={field.value.includes(c.id)}
-                                onCheckedChange={(checked) =>
-                                  field.onChange(
-                                    checked
-                                      ? [...field.value, c.id]
-                                      : field.value.filter((id) => id !== c.id),
-                                  )
-                                }
-                              />
-                              {c.name}
-                            </label>
-                          ))
-                        )}
-                      </Field>
-                    )}
-                  />
+              <CreateMetadataFields form={metadata} titleHint={inspection?.title} imageHint={inspection?.thumbnailUrl || undefined} />
+              {overlap && <p role="status" className="text-sm text-muted-foreground">{t("lessonAuthoring.overlap")}</p>}
+              {inspection && <>
                   <Accordion type="single" collapsible className="source-used-ranges"><AccordionItem value="used-ranges">
                     <AccordionTrigger className="gap-2 px-3 py-2"><span>{t("lessonAuthoring.usedRanges")} <span className="text-muted-foreground">{inspection.usedRanges.length}</span></span></AccordionTrigger><AccordionContent>
                     {!inspection.usedRanges.length && <p className="text-sm text-muted-foreground">{t("authoringUi.noUsedRanges")}</p>}
@@ -329,53 +270,7 @@ export function CreateLessonPage() {
                       </article>;
                     })}</div>
                   </AccordionContent></AccordionItem></Accordion>
-                  <Accordion type="single" collapsible>
-                    <AccordionItem value="metadata">
-                      <AccordionTrigger className="gap-2 px-3 py-2">
-                        {t("sourceWorkspace.additionalInfo")}
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <FieldGroup>
-                          <Field
-                            data-invalid={
-                              !!metadata.formState.errors.description
-                            }
-                          >
-                            <FieldLabel htmlFor="create-description">
-                              {t("catalog.descriptionField")}
-                            </FieldLabel>
-                            <Textarea
-                              id="create-description"
-                              {...metadata.register("description")}
-                            />
-                            <FieldError>
-                              {metadata.formState.errors.description &&
-                                t("catalog.invalidField")}
-                            </FieldError>
-                          </Field>
-                          <CatalogImage url={metadata.watch("imageUrl") || inspection.thumbnailUrl} title="" />
-                          <Field
-                            data-invalid={!!metadata.formState.errors.imageUrl}
-                          >
-                            <FieldLabel htmlFor="create-image">
-                              {t("catalog.imageUrl")}
-                            </FieldLabel>
-                            <Input
-                              id="create-image"
-                              {...metadata.register("imageUrl")}
-                            />
-                            <FieldError>
-                              {metadata.formState.errors.imageUrl &&
-                                t("catalog.invalidField")}
-                            </FieldError>
-                          </Field>
-
-                        </FieldGroup>
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                </>
-              )}
+                </>}
             </FieldGroup>
           </form>}
         </aside>}
@@ -410,4 +305,21 @@ export function CreateLessonPage() {
       </footer>
     </section>
   );
+}
+
+export function CreateLessonPage() {
+  const { t } = useTranslation('admin');
+  const [params, setParams] = useSearchParams();
+  const [dirty, setDirty] = useState(false);
+  const type = params.get('type') === 'text' ? 'text' : params.get('type') === 'audio' ? 'audio' : 'youtube';
+  return <section className="create-lesson-page grid gap-4">
+    <header className="authoring-heading"><h1>{t("navigation.createLesson")}</h1></header>
+    <Tabs value={type} onValueChange={value => { if (value !== type && (!dirty || window.confirm(t("catalog.unsaved")))) { setDirty(false); setParams({ type: value }); } }}>
+    <div className="flex flex-wrap items-center justify-between gap-3"><TabsList aria-label={t('media.sourceType')}>
+      <TabsTrigger value="youtube">YouTube</TabsTrigger><TabsTrigger value="text">{t('media.textType')}</TabsTrigger><TabsTrigger value="audio">Audio</TabsTrigger>
+    </TabsList><AuthoringPrompt type={type} /></div>
+    <TabsContent value="youtube"><CreateYouTubePage onDirtyChange={setDirty} /></TabsContent>
+    <TabsContent value="text"><CreateMediaLessonPage type="text" onDirtyChange={setDirty} /></TabsContent>
+    <TabsContent value="audio"><CreateMediaLessonPage type="audio" onDirtyChange={setDirty} /></TabsContent>
+  </Tabs></section>;
 }

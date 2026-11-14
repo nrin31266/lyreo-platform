@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { defaultRange, sourceOffset, parseTimecode, timecode } from './timecode';
 describe('source range timecodes', () => {
-  it('preselects two minutes from the URL offset, bounded by source duration', () => {
-    expect(defaultRange(1207000)).toEqual([0,120000]);
-    expect(defaultRange(1207000,'https://youtu.be/abcdefghijk?t=15s')).toEqual([15000,135000]);
+  it('selects the whole video up to ten minutes and leaves longer sources unselected', () => {
+    expect(defaultRange(1207000)).toEqual([null,null]);
+    expect(defaultRange(599999)).toEqual([0,599999]);
+    expect(defaultRange(600000)).toEqual([0,600000]);
+    expect(defaultRange(600001)).toEqual([null,null]);
     expect(defaultRange(45000)).toEqual([0,45000]);
-    expect(defaultRange(45000,'https://youtu.be/abcdefghijk?t=40s')).toEqual([40000,45000]);
+    expect(defaultRange(0)).toEqual([null,null]);
+  });
+  it('allows a configured shorter threshold or disabling auto-selection without exceeding ten minutes', () => {
+    expect(defaultRange(120000,2)).toEqual([0,120000]);
+    expect(defaultRange(120001,2)).toEqual([null,null]);
+    expect(defaultRange(45000,0)).toEqual([null,null]);
+    expect(defaultRange(600001,20)).toEqual([null,null]);
+    expect(defaultRange(300000,NaN)).toEqual([0,300000]);
+    expect(defaultRange(300000,-1)).toEqual([0,300000]);
   });
   it('round trips millisecond boundaries and positions after minute ten', () => {
     for (const ms of [0, 59999, 60000, 600001, 7199999])

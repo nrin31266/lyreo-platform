@@ -11,6 +11,7 @@ public interface BackgroundJobRepository {
     UUID enqueue(String jobType, String ownerModule, UUID ownerReferenceId, int priority, int maxAttempts, String configSnapshotJson);
     List<BackgroundJob> claim(String workerId, int limit, Duration lease);
     Optional<BackgroundJob> findById(UUID id);
+    Optional<BackgroundJob> latest(String type, String ownerModule, UUID ownerReferenceId);
     CancellationResult requestCancellation(UUID id);
     boolean isCancellationRequested(UUID id);
 

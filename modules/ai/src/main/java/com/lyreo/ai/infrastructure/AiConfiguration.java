@@ -38,7 +38,7 @@ public class AiConfiguration {
         @Value("${lyreo.ai-service.timeout-seconds:300}") long timeoutSeconds
     ) {
         return new FastApiAiExecutionGateway(
-            builder.baseUrl(baseUrl).codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(8 * 1024 * 1024)).build(),
+            builder.baseUrl(baseUrl).codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(64 * 1024 * 1024)).build(),
             Duration.ofSeconds(timeoutSeconds),
             internalToken
         );

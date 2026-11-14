@@ -9,7 +9,9 @@ public interface LessonCatalogPort {
 
   List<Category> categories();
 
-  Category saveCategory(UUID id, String name);
+  default Category saveCategory(UUID id, String name) { return saveCategory(id,name,null); }
+
+  Category saveCategory(UUID id, String name, java.util.Map<String,String> translations);
 
   void deleteCategory(UUID id);
 
@@ -26,7 +28,9 @@ public interface LessonCatalogPort {
 
   void visibility(UUID lesson, boolean visible);
 
-  record Category(UUID id, String name, long lessonCount) {}
+  void channelVisibility(String channelId, boolean visible);
+
+  record Category(UUID id, String name, long lessonCount, java.util.Map<String,String> translations) {}
 
   record Channel(
       String id,
@@ -36,7 +40,7 @@ public interface LessonCatalogPort {
       Instant syncedAt,
       String syncError,
       UUID syncJobId,
-      String syncStatus) {}
+      String syncStatus, boolean visible) {}
 
   record Item(
       UUID id,
@@ -52,7 +56,7 @@ public interface LessonCatalogPort {
       List<Category> categories,
       String description,
       String imageUrl,
-      boolean visible) {}
+      boolean visible, boolean channelVisible, boolean effectiveVisible) {}
 
   record Page(List<Item> items, long total, int page, int size) {}
 }

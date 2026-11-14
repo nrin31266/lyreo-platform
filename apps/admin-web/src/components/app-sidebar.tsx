@@ -25,16 +25,16 @@ export function AppSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
+            <SidebarMenuButton size="lg" className="group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0" asChild>
               <Link
                 to="/"
                 onClick={() => setOpenMobile(false)}
                 aria-label={`Lyreo · ${t('admin:workspace')}`}
               >
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+                <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-sidebar-primary text-sidebar-primary-foreground [&>img]:size-full [&>img]:object-contain">
                   <AudioLines aria-hidden="true" />
                 </span>
-                <span className="flex flex-col">
+                <span className="flex flex-col group-data-[collapsible=icon]:hidden">
                   <strong>Lyreo</strong>
                   <small className="text-muted-foreground">
                     {t('admin:workspace')}

@@ -24,16 +24,7 @@ const LessonBuilderPage = lazy(() =>
   })),
 );
 
-const CategoriesPage = lazy(() =>
-  import("@/pages/lessons/CategoriesPage").then((m) => ({
-    default: m.CategoriesPage,
-  })),
-);
-const ChannelsPage = lazy(() =>
-  import("@/pages/lessons/ChannelsPage").then((m) => ({
-    default: m.ChannelsPage,
-  })),
-);
+const OrganizationPage = lazy(() => import("@/pages/lessons/OrganizationPage").then(m => ({default: m.OrganizationPage})));
 const LessonDetailPage = lazy(() =>
   import("@/pages/lessons/LessonDetailPage").then((m) => ({
     default: m.LessonDetailPage,
@@ -59,8 +50,9 @@ export function AppRouter() {
       >
         <Route index element={<OverviewPage />} />
         <Route path="lessons" element={<LessonsPage />} />
-        <Route path="lessons/categories" element={<CategoriesPage />} />
-        <Route path="lessons/channels" element={<ChannelsPage />} />
+        <Route path="lessons/organization" element={<OrganizationPage />} />
+        <Route path="lessons/categories" element={<Navigate to="/lessons/organization?tab=categories" replace />} />
+        <Route path="lessons/channels" element={<Navigate to="/lessons/organization?tab=channels" replace />} />
         <Route path="lessons/new" element={<LessonBuilderPage />} />
         <Route path="lessons/:lessonId" element={<LessonDetailPage />} />
         <Route path="jobs" element={<JobsPage />} />

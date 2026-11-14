@@ -87,7 +87,7 @@ export function YouTubePreview({
   transport?: { playing: boolean; rate: number; sequence: number };
   loopRange?: { startMs: number; endMs: number };
   controlsHost?: HTMLElement | null;
-  review?: { sentenceId: string | null; context: string; onSentenceChange: (id: string) => void };
+  review?: { sentenceId: string | null; context: string; onSentenceChange: (id: string | null) => void };
 }) {
   const { t } = useTranslation("admin");
   const host = useRef<HTMLDivElement>(null);
@@ -192,7 +192,7 @@ export function YouTubePreview({
                 const selectedId = playingSentence.current ?? review?.sentenceId;
                 const selected = rows.find(row => row.id === selectedId);
                 const range = selected && sentencePlaybackRange(selected, rows, end-start);
-                if(review && !range) { current.pauseVideo();setIsPlaying(false);return; }
+                if(review && !continuousRef.current && !range) { current.pauseVideo();setIsPlaying(false);return; }
                 const loop = latest.current.loopRange ?? (localLoopRef.current
                   ? review && range ? {startMs:start+range.startMs,endMs:start+range.endMs} : { startMs: start, endMs: end } : undefined);
                 if (
@@ -208,7 +208,7 @@ export function YouTubePreview({
                     current.pauseVideo();setIsPlaying(false);
                     if (action.stopMs !== undefined) { current.seekTo((start+action.stopMs)/1000,true);notify(action.stopMs); }
                   }
-                  if (action.sentenceId) { playingSentence.current=action.sentenceId;review.onSentenceChange(action.sentenceId); }
+                  if (action.sentenceId !== undefined) { playingSentence.current=action.sentenceId;review.onSentenceChange(action.sentenceId); }
                   if (action.seekMs !== undefined) current.seekTo((start+action.seekMs)/1000,true);
                   return;
                 }
@@ -290,8 +290,8 @@ export function YouTubePreview({
     if (current.getPlayerState()===1) { current.pauseVideo();setIsPlaying(false);return; }
     const selected=sentences.find(row=>row.id===review?.sentenceId);
     const range=selected && sentencePlaybackRange(selected,sentences,endMs-startMs);
-    if (review && !range) return;
-    if (range) {
+    if (review && !continuous && !range) return;
+    if (range && !continuous) {
       const atMs=current.getCurrentTime()*1000-startMs;
       if (atMs<range.startMs || atMs>=range.endMs) {
         pendingSeek.current=startMs+range.startMs;
@@ -303,7 +303,7 @@ export function YouTubePreview({
   }
   function skipBy(deltaMs:number) {
     const selected=sentences.find(row=>row.id===review?.sentenceId);
-    const range=selected && sentencePlaybackRange(selected,sentences,endMs-startMs);
+    const range=!continuous && selected ? sentencePlaybackRange(selected,sentences,endMs-startMs) : undefined;
     const min=startMs+(range?.startMs??0),max=range?startMs+range.endMs:endMs;
     const target=Math.max(min,Math.min(max, (player.current?.getCurrentTime()??0)*1000+deltaMs));
     if (player.current && [-1,5].includes(player.current.getPlayerState())) pendingSeek.current=target;
@@ -312,7 +312,7 @@ export function YouTubePreview({
   }
 
   const controls = <div className="player-transport">
-        <Tooltip delayDuration={400}><TooltipTrigger asChild><Button size="icon" variant="outline" disabled={!ready || error || (!!review && !sentences.some(row=>row.id===review.sentenceId))} aria-label={t(isPlaying ? "waveform.pause" : "waveform.play")} onClick={togglePlayback}>
+        <Tooltip delayDuration={400}><TooltipTrigger asChild><Button size="icon" variant="outline" disabled={!ready || error || (!!review && !continuous && !sentences.some(row=>row.id===review.sentenceId))} aria-label={t(isPlaying ? "waveform.pause" : "waveform.play")} onClick={togglePlayback}>
           {isPlaying ? <Pause /> : <Play />}
         </Button></TooltipTrigger><TooltipContent>{t(isPlaying ? "waveform.pause" : "waveform.play")}</TooltipContent></Tooltip>
         <Tooltip delayDuration={400}><TooltipTrigger asChild><Button size="icon" variant="ghost" disabled={!ready || error} aria-label={t("authoringUi.backFive")} onClick={() => skipBy(-5000)}><SkipBack /></Button></TooltipTrigger><TooltipContent>{t("authoringUi.backFive")}</TooltipContent></Tooltip>

@@ -4,11 +4,13 @@ Cross-boundary workflow: [Lesson Build](../features/lesson-build.md).
 
 ### FR-LSN-001 — Lesson source
 
-Product supports Text, Audio and YouTube conceptually. The current phase implements YouTube-first
-Admin authoring; Text/Audio UI and mobile playback/practice are deferred. Source identity is shared
-across lessons; each V1 lesson selects one contiguous range of at most 10 minutes before inference; 2–5 minutes is recommended.
-A new source preselects up to two minutes from the URL offset (otherwise zero), bounded by
-source duration. The playhead starts at that offset. Admin can adjust start/end from playback,
+Admin authoring supports YouTube, Text and uploaded Audio through the same review checkpoints.
+Mobile playback/practice UI remains deferred. YouTube/Audio sources can be reused across lessons;
+each media-based lesson selects one contiguous range of at most 10 minutes before inference; 2–5 minutes is recommended.
+A new YouTube source selects the whole video when its duration is at most ten minutes by default.
+The public Admin build configuration can lower or disable this auto-selection threshold, capped at ten minutes.
+Longer videos start without a selected range and show a short selection hint; full-video selection is hidden above ten minutes.
+The playhead starts at the URL offset (otherwise zero), independently of selection. Admin can adjust start/end from playback,
 drag/resize or enter timecodes; preparation requires both valid endpoints. An invalid mark preserves the previous selection and shows an error.
 Source inspection runs only after Search or Enter; typing, pasting and blur do not inspect.
 Search also refreshes/retries. Refreshing the same URL preserves edited metadata and a valid range;
@@ -142,60 +144,66 @@ stale output không commit và private recording không lộ.
 
 ### FR-LSN-007 — Transcript and karaoke review
 
-Admin uses four numbered steps: Source, Words & timing, Content and Publish.
-Words & timing has Edit words and Listen & check modes sharing the selected sentence and player.
-Save, approve & align performs revision-checked saves, approval and (when required) alignment in order.
-A failure stops the chain and preserves its last saved checkpoint; typing, blur and tab changes never invoke AI.
-Steps 1–2 expose draft save and dedicated realignment as labeled icon actions.
-On desktop the middle review list scrolls within the workspace; the player, toolbar and actions stay visible.
-Source context and the final publication checklist have their own tabs.
-Admin edits/splits/merges transcript, bulk-selects Learn/Watch only/Skip, and explicitly approves
-transcript plus karaoke preview before semantic generation. Only stale dependencies recompute.
-Transcript review always derives short/long sentence warnings from current saved text, including older drafts
-whose stored issue list contains only a timing failure. A counted problem-sentence filter shows text issues
-only; switching the filter clears bulk selection, and select-all applies only to visible sentences. Transcript review shows text/usage issues; timing coverage and interval warnings belong to the Timing step
-and do not imply transcript preparation failed. Each row shows observed time bounds or an explicitly approximate preview anchor; no end time is fabricated. Split/merge and timing edits use direct icon buttons with tooltips, preserving the text caret. Bulk usage actions appear only for selected rows. Timing requires real lexical coverage and observed intervals,
-not fabricated duration. The review workspace has no range selector; source trimming stays on source selection.
-Processing status and job count appear in a compact trigger at the left of the action bar. Clicking opens
-a bottom sheet with current tasks, failures, retry/cancel controls and newest-first history. The current error and retry are immediately visible; model usage and persisted timestamps are available in job details.
-The compact footer combines processing status and persisted elapsed duration, playback/seek/loop/speed controls, and the current primary action. Connection/freshness detail remains in history. Retry, cancel and inspect use direct icon actions in history. The action bar omits repeated step instructions. Only the sheet body scrolls;
-job cards/history do not consume the editor viewport while the sheet is closed.
-The player toggle restores the pane; no separate layout-reset action is shown. Transcript review uses
-direct sentence text fields without repeated preview text or word-level karaoke. Sentence preview prefers
-word timing and falls back to an observed containing-segment start when word coverage is not yet valid.
-Segment preview is approximate and does not satisfy timing review or activity eligibility.
-Opening a draft never starts playback. In Edit words and Listen & check, a sentence play action or
-word click starts that sentence immediately; the default stops at its observed end. Footer Play
-resumes within the selected sentence or restarts it after its end. Before alignment, preview remains
-bounded to the containing observed segment and is explicitly approximate. Footer continuous-play
-and selected-sentence-loop icons are mutually exclusive modes; changing a mode never starts playback.
-Continuous playback advances karaoke selection, scrolls to the next playable sentence, skips Skip
-rows and stops after the last sentence. Switching review tabs, changing the draft revision or opening
-the timing editor pauses playback. Seek buttons stay within the selected sentence in review.
-Both review lists virtualize above 20 sentences, with measured row heights and a small overscan.
-Focused transcript inputs stay mounted; timing renders word controls only for the selected sentence.
-The same player toggle reflects button, keyboard and dragged collapse/expand. Desktop step 1–2
-panes retain at least 240px for the player and 360px for the editor while expanded; collapsing
-the player removes its gutter and reopening restores its previous width.
-The timing list has a compact warning toolbar and a separate manual-confirmation row below it.
-A source range editor provides draggable endpoints and whole-region movement, millisecond timecodes,
-an integrated seek area above the range, external play/speed/loop controls and one YouTube playback clock. Waveform UI is
-currently deferred. Playback updates must not rerender transcript/content forms on each clock tick.
+Admin authoring uses one workspace from source preparation through transcript/timing review, with
+no numbered step navigation. All three source modes share metadata and action placement. YouTube/Audio prepare transcripts explicitly; Text saves without AI
+and requests Kokoro speech explicitly from the source action. Source mode changes confirm before discarding input.
+Words & timing has Edit words and Listen & check modes sharing the player and selected sentence.
+Save and align timing saves, approves the current revision and enqueues alignment only when required.
+Failure preserves the last saved checkpoint. Typing, blur and tab changes never invoke AI.
+Save reviewed draft records the current karaoke-review revision after explicit listening confirmation;
+the lesson stays unpublished. Later edits invalidate the appropriate approval. Refresh restores the checkpoint.
+Transcript rows support direct editing, split/merge, observed or explicitly approximate timing and
+sentence playback. A separate Visible/Hidden control retains the full text and source audio while
+excluding hidden sentences from alignment and listening review. At least one sentence stays visible.
+Visibility is not dictation/shadowing selection, invalidates review approval, and fences stale jobs
+without regenerating audio. Split halves inherit visibility; merge requires matching visibility.
+Historical usage fields remain readable but do not determine draft visibility. No bulk usage control
+or exercise selection is present.
+Text shows the saved source and selected voice until canonical audio is ready; preliminary sentence
+splitting is not presented as model output. The saved voice remains selected in the source pane.
+Text already supplies the transcript, so it is never sent through STT/Groq again.
+A counted filter shows saved short/long text warnings; interval and coverage errors belong to timing review.
+Both lists virtualize above 20 rows, keep focused editors mounted and preserve local unsaved edits across polls.
+The desktop player can collapse and resize; lists scroll within the workspace, and short screens grow naturally.
+Primary actions occupy reserved footer space and do not cover metadata. Source trimming stays in step 1.
+
+Processing feedback is prominent above the workspace, with the operation/stage, durable job status,
+elapsed duration and real progress when supplied. Unknown progress is indeterminate. Queued, running,
+quota/retry wait, cancellation, success and failure remain distinct. Retry invokes the failed supported
+operation; cancellation is explicit. Technical usage/history remains in an expandable bottom sheet.
+Conflicting writes are disabled while processing, but validated previous media remains playable.
+Connection failures do not discard local edits; polling resumes observation when SSE is disconnected.
+
+Opening a draft never starts playback. Sentence/word actions play immediately; default playback stops
+at the observed sentence end. Continuous playback runs uninterrupted to the selected clip end,
+including silence and hidden sentence audio. It never seeks at sentence boundaries; visible sentence
+and word emphasis follow the actual media clock, with no highlighted sentence during gaps. Loop and
+continuous modes are mutually exclusive. Mode/revision changes and timing editing pause playback.
+Active timing review shows plain clickable words with foreground emphasis and a fitted underline
+beneath only the currently spoken observed word/group, driven by observed timing and the shared playback clock.
+Previous words lose their underline; silence shows none. No word or sentence background is filled.
+Detailed per-word timecodes appear only in the timing editor. Missing timing is never simulated.
+
 Timing review exposes observed words/groups and permits revision-checked manual interval edits without
 altering lexical coverage or estimating missing word durations. Blocking timing errors and review warnings
 are distinguished; these rules do not claim ASR confidence or pedagogical quality. Dedicated alignment may retain zero-duration tokens in an explicit observed phrase group within the same sentence, including at least one positive observed interval, with GROUPED_TIMING requiring human review. It must preserve all text and token coverage; wholly unresolved sentences, reversed intervals, overlaps and out-of-bounds intervals still fail.
+Alignment grouping respects approved sentence boundaries. After a partly successful result, Core may
+make one additional alignment call for wholly unresolved sentences using their original, non-overlapping
+observed source anchors. It keeps resolved timing, never estimates durations, and applies the same complete
+coverage/interval checks afterward. A wholly unsuccessful result is not retried automatically.
+An apparent repeated suffix is an Admin review hint, not permission to remove transcript text.
 
 ### FR-LSN-008 — Contextual generation and candidate review
 
-Learn receives Vietnamese translation and sparse contextual vocabulary/grammar/notes. Watch-only
-is context; Skip is excluded. Dictation/Shadowing priorities are independent and cannot override
-Core technical eligibility. Admin defaults to HIGH and may select HIGH+MEDIUM or Custom. Exact
-Lexicon links may remain unresolved; Grammar notes do not require Grammar Bank mapping.
+Content/enrichment generation, IPA authoring, Dictation/Shadowing sentence selection and publication
+are deferred. Their authoring UI and write APIs are removed. Existing stored annotations, options,
+published snapshots and learner practice/history remain readable. See
+[OQ-007](open-questions.md#oq-007--lesson-exercise-selection-and-publication).
 
 ### BR-LSN-006 — Atomic immutable publication
 
-Only current, approved, valid content can publish. Publication and selected candidate membership
-commit atomically and are immutable in V1. Old APIs/writers must not destroy existing learner
+Existing published content and selected candidate membership remain immutable. The two-step authoring
+workflow has no publication action or API. Old APIs/writers must not destroy existing learner
 attempts/progress. Draft revision prevents concurrent overwrites; stale AI/job output cannot commit.
 
 ### BR-LSN-007 — Free-only and retirement gates
@@ -229,6 +237,33 @@ Missing metadata or provider errors must preserve previously valid metadata. Cre
 Core configuration; unconfigured synchronization reports a safe actionable conflict. This does not
 import videos or create lessons automatically.
 
+### FR-LSN-011 — Text and uploaded Audio authoring
+
+Text starts as an editable draft (1–10,000 characters, up to 1,000 sentences), without AI execution. Admin chooses a
+Kokoro US/UK voice from server discovery and explicitly requests speech synthesis. Only local Kokoro
+routes execute this operation; no provider fallback is allowed. The configured default voice is
+preselected. Text is the canonical transcript: generated speech is never transcribed again.
+Sentence boundaries supplied by the synthesizer are measured from actual PCM samples, not estimated
+from text. Each generated sentence must fit the existing 115-second alignment window, and canonical
+audio must fit ten minutes. Over-limit synthesis fails without truncating the saved text.
+Changing sentence text (including punctuation/splits/merges) or voice invalidates generated audio,
+timing and approvals. A fresh explicit synthesis and timing review are required before completing review;
+late output for the previous text/voice cannot commit.
+
+Audio sources accept MP3/WAV/M4A uploads only, at most 30 MiB and two hours. Core probes and decodes
+the file before retaining it privately; filenames/MIME declarations alone are insufficient.
+Admin previews and selects one contiguous range of at most ten minutes (default up to two minutes).
+Only explicit preparation normalizes the selected segment and calls STT. Source IDs persist across
+refresh; arbitrary audio URLs and client storage keys are not accepted. Prepared Text/Audio use the
+same transcript and alignment review checkpoints as YouTube, ending at a reviewed draft.
+
+Categories remain flat CRUD without visibility. Admin manages categories and YouTube channels in
+one page with separate URL-addressable tabs. A channel's visibility gates every associated lesson,
+including future publications, without modifying individual lesson visibility. Relisting the channel
+keeps individually unlisted lessons hidden. Learner availability requires publication, no deletion,
+individual visibility and channel visibility (when applicable). Text/Audio require no channel.
+Historical attempts/progress remain intact, and Admin retains access for management.
+
 ### FR-LSN-010 — Evidence-based timing reuse
 
 Groq supplies transcript and draft word/segment evidence. After transcript approval, reuse is allowed
@@ -236,4 +271,41 @@ only when lexical tokens still match, validation passes and the centrally config
 permits it. Missing/stale/invalid timing requires local forced alignment. Benchmark actual 2/5/10-minute
 lessons against the same transcript and human-checked word references, including listening/karaoke
 review and nonzero source offsets. Without adequate evidence, require local alignment temporarily;
-local output also requires validation and explicit karaoke approval before semantic generation.
+local output also requires validation and explicit karaoke approval before completing review.
+
+### Voice previews, source titles and localized categories
+
+English remains the lesson language; Admin UI locales are Vietnamese and English. Kokoro local
+uses library 0.9.4 and Kokoro-82M v1.0. The picker groups all 28 English voices by US/UK and
+female/male with friendly names; IDs remain stable. Listening and choosing are separate keyboard
+accessible actions, with one preview at a time. A Core job prepares the same fixed English passage
+at speed 1.0 for every voice, stores WAVs and a versioned manifest, reports progress/errors and
+reuses valid successes on retry. Listening only retrieves stored authenticated Admin media.
+
+All three source modes share a heading, tabs, source-left/metadata-right layout and metadata fields.
+Creation title is optional: first normalized Text sentence (120 characters maximum), inspected
+YouTube title, or original Audio filename (generic fallback for older uploads). Successful Audio
+STT replaces an automatic title once with the first sentence; a manual rename wins over late STT.
+Other metadata edits preserve the automatic marker. Title edits do not invalidate content approval;
+database titles remain non-null. Categories have one ID/default English name plus locale translations;
+missing translations fall back to the default name. Admin edits the default and Vietnamese names.
+
+
+### External AI preparation prompts
+
+Each creation mode offers a localized, copyable prompt with a short return-to-Lyreo guide.
+The external AI asks for topic/goal, CEFR level and maximum length before preparing material.
+Text prompts request original English for a single Kokoro narrator within the authoring limits,
+and redirect requests for multiple voices to a single-person retelling or real Audio/YouTube sources. YouTube prompts request verified
+video links, or search queries when browsing is unavailable. Audio prompts cover existing files,
+finding recordings and writing a script, with file-upload constraints and a Text/Kokoro alternative.
+Prompts ask only for missing brief details, distinguish verified source facts from estimates and
+return a clean passage/script block with instructions outside it. Copying is explicit and sends no requests to Core or an AI provider. Clipboard failure leaves the
+prompt available and selected for manual copying; existing draft fields remain intact.
+
+The prompt dialog selects YouTube/Text/Audio independently from the underlying lesson editor.
+It contains only this source selector, the fixed prompt preview and copy action. The external AI
+uses a guided conversation by default to clarify topic, level, length and quantity; authors fill no
+configuration fields in Lyreo. Optional discovery is a short note at the end of the prompt and of
+the AI's first reply, rather than an initial Custom/Random choice. Explained titles, idea discovery and source verification remain in
+the base prompts. Switching prompt type never changes the editor's source or its draft fields.

@@ -1,7 +1,7 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Timeline, type TimelineState, type TimelineEditor } from '@xzdarcy/react-timeline-editor';
 import '@xzdarcy/react-timeline-editor/dist/react-timeline-editor.css';
-import { RiZoomInLine, RiZoomOutLine } from '@remixicon/react';
+import { RiZoomInLine, RiZoomOutLine, RiFullscreenLine, RiFocus3Line } from '@remixicon/react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -10,6 +10,7 @@ import { timecode } from './timecode';
 import { boundedView, selectionView, validSelection, zoomView, type TimelineView } from './timeline-view';
 
 const START_LEFT = 12;
+const END_RIGHT = 12;
 const EFFECTS = { source: { id: 'source', name: 'Source' } };
 
 function TimelineSeek({ clock, view, durationMs, pixelsPerMs, onSeek }: {
@@ -26,9 +27,10 @@ function TimelineSeek({ clock, view, durationMs, pixelsPerMs, onSeek }: {
 }
 
 /** The library edits ranges; YouTube remains the only playback clock. */
-export function RangeTimeline({ clock, durationMs, startMs: start, endMs: end, onSeek, onRangeChange }: {
+export function RangeTimeline({ clock, durationMs, startMs: start, endMs: end, onSeek, onRangeChange, playbackControls, selectionControls }: {
   clock: PlaybackClock; durationMs: number; startMs: number | null; endMs: number | null;
   onSeek: (atMs: number) => void; onRangeChange: (start: number, end: number) => void;
+  playbackControls?: ReactNode; selectionControls?: ReactNode;
 }) {
   const { t } = useTranslation('admin');
   const startMs = start ?? 0, endMs = end ?? 0;
@@ -44,11 +46,15 @@ export function RangeTimeline({ clock, durationMs, startMs: start, endMs: end, o
   const [viewport, setViewport] = useState<TimelineView>({ startMs: 0, endMs: durationMs });
   const view = boundedView(viewport.startMs, viewport.endMs - viewport.startMs, durationMs);
   const spanMs = view.endMs - view.startMs;
-  const pixelsPerMs = Math.max(1, width - START_LEFT) / Math.max(1, spanMs);
+  const pixelsPerMs = Math.max(1, width - START_LEFT - END_RIGHT) / Math.max(1, spanMs);
   const wantedStep = spanMs / 1000 / Math.max(1, width / 100);
   const magnitude = 10 ** Math.floor(Math.log10(Math.max(0.001, wantedStep)));
-  const scale = ([1, 2, 5, 10].find(value => value * magnitude >= wantedStep) ?? 10) * magnitude;
-  const scaleCount = Math.max(1, Math.ceil(durationMs / 1000 / scale));
+  const niceScale = ([1, 2, 5, 10].find(value => value * magnitude >= wantedStep) ?? 10) * magnitude;
+  const fullView = spanMs >= durationMs;
+  const scaleCount = fullView ? Math.max(1, Math.floor((width - START_LEFT - END_RIGHT) / 100))
+    : Math.max(1, Math.ceil(durationMs / 1000 / niceScale));
+  const scale = fullView ? durationMs / 1000 / scaleCount : niceScale;
+  const endX = START_LEFT + (durationMs - view.startMs) * pixelsPerMs;
   const rows = useMemo<TimelineEditor['editorData']>(() => [{ id: 'source', actions: selected ? [{
     id: 'selection', effectId: 'source', start: startMs / 1000, end: endMs / 1000,
     minStart: 0, maxEnd: durationMs / 1000,
@@ -82,7 +88,7 @@ export function RangeTimeline({ clock, durationMs, startMs: start, endMs: end, o
       event.preventDefault();
       event.stopPropagation();
       const box = element!.getBoundingClientRect();
-      const fraction = Math.max(0, Math.min(1, (event.clientX - box.left - START_LEFT) / (box.width - START_LEFT)));
+      const fraction = Math.max(0, Math.min(1, (event.clientX - box.left - START_LEFT) / (box.width - START_LEFT - END_RIGHT)));
       const pixels = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? box.height : 1);
       const factor = 2 ** (Math.max(-300, Math.min(300, pixels)) / 300);
       setViewport(previous => {
@@ -120,16 +126,20 @@ export function RangeTimeline({ clock, durationMs, startMs: start, endMs: end, o
     onRangeChange(next, next + endMs - startMs);
   }
   return <div className="source-timeline-editor">
-    <div className="source-timeline-toolbar" role="toolbar" aria-label={t('sourceTimeline.controls')}>
-      <Tooltip delayDuration={400}><TooltipTrigger asChild><Button type="button" variant="outline" size="icon" aria-label={t('sourceTimeline.zoomOut')}
+    <div className="source-timeline-toolbar" role="toolbar" aria-label={t(playbackControls ? 'sourceSelection.controls' : 'sourceTimeline.controls')}>
+      {playbackControls}
+      <div className="source-toolbar-group" role="group" aria-label={t('sourceTimeline.controls')}>
+      <Tooltip delayDuration={400}><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label={t('sourceTimeline.zoomOut')}
         disabled={spanMs >= durationMs} onClick={() => setViewport(zoomView(view, durationMs, clock.get(), 2))}><RiZoomOutLine /></Button></TooltipTrigger><TooltipContent>{t('sourceTimeline.zoomOut')}</TooltipContent></Tooltip>
-      <Tooltip delayDuration={400}><TooltipTrigger asChild><Button type="button" variant="outline" size="icon" aria-label={t('sourceTimeline.zoomIn')}
+      <Tooltip delayDuration={400}><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label={t('sourceTimeline.zoomIn')}
         disabled={spanMs <= Math.min(1000, durationMs)} onClick={() => setViewport(zoomView(view, durationMs, clock.get(), 0.5))}><RiZoomInLine /></Button></TooltipTrigger><TooltipContent>{t('sourceTimeline.zoomIn')}</TooltipContent></Tooltip>
-      <Button type="button" variant="ghost" size="sm" onClick={() => setViewport({ startMs: 0, endMs: durationMs })}>{t('sourceTimeline.fitVideo')}</Button>
-      <Button type="button" variant="ghost" size="sm" disabled={!selected} onClick={() => setViewport(selectionView(startMs, endMs, durationMs))}>{t('sourceTimeline.fitSelection')}</Button>
+      <Tooltip delayDuration={400}><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label={t('sourceTimeline.fitVideo')} onClick={() => setViewport({ startMs: 0, endMs: durationMs })}><RiFullscreenLine /></Button></TooltipTrigger><TooltipContent>{t('sourceTimeline.fitVideo')}</TooltipContent></Tooltip>
+      <Tooltip delayDuration={400}><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label={t('sourceTimeline.fitSelection')} disabled={!selected} onClick={() => setViewport(selectionView(startMs, endMs, durationMs))}><RiFocus3Line /></Button></TooltipTrigger><TooltipContent>{t('sourceTimeline.fitSelection')}</TooltipContent></Tooltip>
+      </div>
+      {selectionControls}
       <span className="text-xs text-muted-foreground tabular-nums">{timecode(view.startMs)}–{timecode(view.endMs)}</span>
     </div>
-    <div ref={host} className="source-timeline-surface" tabIndex={0} role="group" aria-label={t('authoringUi.timeline')}
+    <div ref={host} className="source-timeline-surface" data-full-view={fullView} tabIndex={0} role="group" aria-label={t('authoringUi.timeline')}
       onPointerDownCapture={() => { dragged.current = false; }}
       onPointerMove={event => {
         if (!hover.current) return;
@@ -149,8 +159,12 @@ export function RangeTimeline({ clock, durationMs, startMs: start, endMs: end, o
       {/* Zero-width virtualized grids can recurse while synchronizing scroll positions. */}
       {width > START_LEFT && <Timeline ref={editor} editorData={rows} effects={EFFECTS} scale={scale} scaleWidth={scale * 1000 * pixelsPerMs}
         scaleSplitCount={5} startLeft={START_LEFT} minScaleCount={scaleCount} maxScaleCount={scaleCount}
-        rowHeight={48} style={{ width: '100%', height: 112 }} autoScroll autoReRender={false}
-        getScaleRender={seconds => seconds * 1000 <= durationMs ? timecode(seconds * 1000) : ''}
+        rowHeight={32} style={{ width: '100%', height: fullView ? 72 : 88 }} autoScroll autoReRender={false}
+        getScaleRender={seconds => {
+          const x = START_LEFT + (seconds * 1000 - view.startMs) * pixelsPerMs;
+          if (x <= 70 || x >= width - 140 || seconds * 1000 >= durationMs) return '';
+          return fullView ? timecode(Math.round(seconds) * 1000).slice(0, -4) : timecode(seconds * 1000);
+        }}
         onScroll={params => {
           const { scrollLeft } = params;
           if (params.clientWidth === 0) return;
@@ -181,6 +195,9 @@ export function RangeTimeline({ clock, durationMs, startMs: start, endMs: end, o
             event.preventDefault(); event.stopPropagation(); moveRange(event.key, event.shiftKey);
           }}>{timecode(startMs)}–{timecode(endMs)}</div>} />}
       {width > START_LEFT && <TimelineSeek clock={clock} view={view} durationMs={durationMs} pixelsPerMs={pixelsPerMs} onSeek={seek} />}
+      <span className="source-timeline-edge source-timeline-edge-start" aria-hidden="true">{timecode(view.startMs)}</span>
+      {endX <= width - END_RIGHT + 1 && <span className="source-end-marker" style={{ left: endX }}><span>{t('sourceTimeline.sourceEnd')} · {timecode(durationMs)}</span></span>}
+      {!selected && <span className="source-timeline-empty">{t('sourceTimeline.noSelection')}</span>}
       {!selected && start !== null && start >= view.startMs && start <= view.endMs && <span className="source-start-marker" role="img" aria-label={`${t('waveform.start')}: ${timecode(start)}`} style={{ left: START_LEFT + (start - view.startMs) * pixelsPerMs }} />}
       <span ref={hover} className="source-timeline-hover" aria-hidden="true" hidden />
     </div>

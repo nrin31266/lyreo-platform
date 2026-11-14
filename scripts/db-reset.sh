@@ -1,53 +1,56 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Development-only database reset for Lyreo application database.
-# Resets ONLY the Lyreo app development database (default: lyreo_dev).
-# Does NOT touch Keycloak database (lyreo_keycloak) or Docker volumes.
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+COMPOSE=(docker compose --env-file "$ROOT/infra/docker/.env" -f "$ROOT/compose.dev.yml")
+SCOPE=lessons
+if [[ "${1:-}" == "--database" ]]; then SCOPE=database; shift; fi
+[[ $# -eq 0 ]] || { echo 'Usage: db-reset.sh [--database]' >&2; exit 1; }
 
-ENV_FILE="infra/docker/.env"
-if [[ -f "$ENV_FILE" ]]; then
-  POSTGRES_DB=$(grep -E '^POSTGRES_DB=' "$ENV_FILE" | cut -d= -f2- | tr -d ' "\r' || true)
-  POSTGRES_USER=$(grep -E '^POSTGRES_USER=' "$ENV_FILE" | cut -d= -f2- | tr -d ' "\r' || true)
-  KEYCLOAK_DB=$(grep -E '^KEYCLOAK_DB=' "$ENV_FILE" | cut -d= -f2- | tr -d ' "\r' || true)
-fi
-
-TARGET_DB="${POSTGRES_DB:-lyreo_dev}"
-TARGET_USER="${POSTGRES_USER:-lyreo}"
-KEYCLOAK_DB_NAME="${KEYCLOAK_DB:-lyreo_keycloak}"
-
-# Safety checks: explicitly reject empty, system, or Keycloak database targets
-if [[ -z "$TARGET_DB" ]]; then
-  echo "ERROR: Target database name cannot be empty." >&2
-  exit 1
-fi
-
+# Resolve the actual container target without evaluating .env as shell code.
+SETTINGS=$("${COMPOSE[@]}" exec -T postgres sh -c 'printf "%s\n%s\n%s\n" "$POSTGRES_DB" "$POSTGRES_USER" "${KEYCLOAK_DB:-lyreo_keycloak}"')
+TARGET_DB=$(sed -n '1p' <<< "$SETTINGS")
+TARGET_USER=$(sed -n '2p' <<< "$SETTINGS")
+KEYCLOAK_DB_NAME=$(sed -n '3p' <<< "$SETTINGS")
 case "$TARGET_DB" in
-  postgres|template0|template1|"$KEYCLOAK_DB_NAME"|lyreo_keycloak)
-    echo "ERROR: Refusing to reset unsafe, system, or Keycloak database: '$TARGET_DB'" >&2
-    exit 1
-    ;;
+  ''|postgres|template0|template1|"$KEYCLOAK_DB_NAME"|lyreo_keycloak)
+    echo "ERROR: Refusing unsafe database: '$TARGET_DB'" >&2; exit 1;;
 esac
-
-echo "Target application database to reset: '$TARGET_DB' (owner: '$TARGET_USER')"
-
-# Verify PostgreSQL container is running
-if ! docker compose --env-file infra/docker/.env -f compose.dev.yml ps --status running --format '{{.Service}}' | grep -q '^postgres$'; then
-  echo "ERROR: PostgreSQL container is not running. Start it with 'make dev-infra' first." >&2
-  exit 1
+[[ "$TARGET_DB" == *_dev ]] || { echo 'ERROR: Reset requires a local database name ending in _dev.' >&2; exit 1; }
+PSQL=("${COMPOSE[@]}" exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "$TARGET_USER" -d "$TARGET_DB")
+echo "Database: $TARGET_DB | Scope: $SCOPE"
+if [[ "$SCOPE" == lessons ]]; then
+  echo 'DELETE: lessons, their authoring/build jobs, practice/progress and linked speech attempts.'
+  echo 'KEEP: imported TOEIC/lexicon/grammar, releases/import history, users, AI settings, categories, channels and all storage files.'
+else
+  echo 'DELETE: the WHOLE application database, including imported TOEIC/lexicon/grammar and all application configuration/history.'
 fi
-
-echo "Terminating active connections to '$TARGET_DB'..."
-docker compose --env-file infra/docker/.env -f compose.dev.yml exec -T postgres psql -U "$TARGET_USER" -d postgres -c \
-  "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$TARGET_DB' AND pid <> pg_backend_pid();" >/dev/null
-
-echo "Dropping database '$TARGET_DB'..."
-docker compose --env-file infra/docker/.env -f compose.dev.yml exec -T postgres psql -U "$TARGET_USER" -d postgres -c \
-  "DROP DATABASE IF EXISTS \"$TARGET_DB\";" >/dev/null
-
-echo "Recreating database '$TARGET_DB' with owner '$TARGET_USER'..."
-docker compose --env-file infra/docker/.env -f compose.dev.yml exec -T postgres psql -U "$TARGET_USER" -d postgres -c \
-  "CREATE DATABASE \"$TARGET_DB\" OWNER \"$TARGET_USER\";" >/dev/null
-
-echo "Database '$TARGET_DB' reset successfully."
-echo "Run 'make core' to apply Flyway migrations (V001..V008)."
+if [[ "$SCOPE" == lessons ]]; then
+  COUNTS=''
+  for TABLE in lesson lesson_authoring lesson_sentence lesson_word_timestamp lesson_annotation lesson_activity lesson_activity_sentence sentence_pronunciation lesson_metadata lesson_category_membership lesson_authoring_job lesson_build_job lesson_build_job_step lesson_progress lesson_activity_progress lesson_practice_attempt; do
+    [[ -z "$COUNTS" ]] || COUNTS+=' UNION ALL '
+    COUNTS+="SELECT '$TABLE' AS affected_table,count(*) AS rows FROM $TABLE"
+  done
+  COUNTS+=" UNION ALL SELECT 'speech_attempt',count(*) FROM speech_attempt WHERE lesson_id IN (SELECT id FROM lesson) OR sentence_id IN (SELECT id FROM lesson_sentence)"
+  COUNTS+=" UNION ALL SELECT 'background_job',count(*) FROM background_job WHERE owner_module='lesson' AND job_type IN ('LESSON_AUTHORING','LESSON_BUILD') AND owner_reference_id IN (SELECT id FROM lesson)"
+  "${PSQL[@]}" -c "$COUNTS;"
+else
+  "${PSQL[@]}" -c 'SELECT relname AS affected_table,n_live_tup AS estimated_rows FROM pg_stat_user_tables ORDER BY relname;'
+fi
+if [[ "${APPLY:-0}" == 0 ]]; then
+  echo "Preview only. To execute, pass APPLY=1 CONFIRM=$TARGET_DB."
+  exit 0
+fi
+[[ "${APPLY:-}" == 1 && "${CONFIRM:-}" == "$TARGET_DB" ]] || { echo "ERROR: Require APPLY=1 CONFIRM=$TARGET_DB." >&2; exit 1; }
+CONNECTIONS=$("${PSQL[@]}" -Atc 'SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid();')
+[[ "$CONNECTIONS" == 0 ]] || { echo 'ERROR: Stop Core and other application database connections before reset.' >&2; exit 1; }
+if [[ "$SCOPE" == lessons ]]; then
+  "${PSQL[@]}" < "$ROOT/infra/postgres/reset-lessons.sql"
+  echo 'Lesson reset completed. Imported banks and reference data were preserved.'
+else
+  "${COMPOSE[@]}" exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "$TARGET_USER" -d postgres -v target="$TARGET_DB" -v owner="$TARGET_USER" <<'SQL'
+SELECT format('DROP DATABASE %I', :'target') \gexec
+SELECT format('CREATE DATABASE %I OWNER %I', :'target', :'owner') \gexec
+SQL
+  echo 'Database recreated. Start Core to apply Flyway migrations; imported content must be restored or imported again.'
+fi

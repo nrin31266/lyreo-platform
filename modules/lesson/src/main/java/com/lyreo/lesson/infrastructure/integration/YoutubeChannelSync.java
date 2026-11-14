@@ -51,6 +51,9 @@ public class YoutubeChannelSync implements YoutubeChannelPort, JobHandler {
   }
 
   @Override
+  public boolean configured() { return !apiKey.isBlank(); }
+
+  @Override
   public String jobType() {
     return "YOUTUBE_CHANNEL_SYNC";
   }

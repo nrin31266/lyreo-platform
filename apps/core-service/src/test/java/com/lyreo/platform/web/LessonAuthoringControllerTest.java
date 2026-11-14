@@ -15,6 +15,35 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class LessonAuthoringControllerTest {
+    @Test void repeatedSuffixIsAReadTimeReviewHintAndNeverChangesTranscriptText() throws Exception {
+        var service=mock(LessonAuthoringService.class);
+        var draft=new AuthoringLesson();draft.id=UUID.randomUUID();draft.endMs=5000;
+        var first=new AuthoringSentence(UUID.randomUUID(),"They sting him on his elbow.","LEARN");
+        var next=new AuthoringSentence(UUID.randomUUID(),"his elbow.","LEARN");
+        next.hidden=true;
+        draft.sentences=List.of(first,next);when(service.get(draft.id)).thenReturn(draft);
+        var mvc=MockMvcBuilders.standaloneSetup(new LessonAuthoringController(service,
+            mock(com.lyreo.lesson.application.port.LessonCatalogPort.class))).build();
+        mvc.perform(get("/api/v1/admin/lesson-authoring/"+draft.id)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.sentences[1].issues").value(org.hamcrest.Matchers.hasItem("POSSIBLE_REPEAT")))
+            .andExpect(jsonPath("$.sentences[1].text").value("his elbow."));
+        mvc.perform(get("/api/v1/admin/lesson-authoring/"+draft.id)).andExpect(jsonPath("$.sentences[1].hidden").value(true))
+            .andExpect(jsonPath("$.sentences[0].hidden").value(false));
+        org.assertj.core.api.Assertions.assertThat(next.issues).isEmpty();
+        verify(service,times(2)).get(draft.id);verifyNoMoreInteractions(service);
+    }
+    @Test void withdrawnAuthoringWritesAreNotMapped() throws Exception {
+        var service=mock(LessonAuthoringService.class);
+        var mvc=MockMvcBuilders.standaloneSetup(new LessonAuthoringController(service,mock(com.lyreo.lesson.application.port.LessonCatalogPort.class))).build();
+        String base="/api/v1/admin/lesson-authoring/"+UUID.randomUUID();
+        for(String path:List.of("generate","ipa","replace-generated","publish"))
+            mvc.perform(post(base+"/"+path).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isNotFound());
+        for(String path:List.of("options","candidates","sentences/"+UUID.randomUUID()+"/content"))
+            mvc.perform(put(base+"/"+path).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isNotFound());
+        verifyNoInteractions(service);
+    }
     @Test void inspectTranslatesExpectedSourceFailuresToSafeServiceUnavailableProblems() throws Exception {
         var service = mock(LessonAuthoringService.class);
         var mvc = MockMvcBuilders.standaloneSetup(new LessonAuthoringController(service,mock(com.lyreo.lesson.application.port.LessonCatalogPort.class)))

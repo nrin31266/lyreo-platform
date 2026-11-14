@@ -121,7 +121,22 @@ class MockRuntime:
         schema = request.options.get("response_schema")
         sentences = request.input.get("sentences") or []
 
-        if schema == "lesson_authoring_v1":
+        if schema == "lesson_authoring_v2":
+            properties = request.options.get("json_schema", {}).get("properties", {})
+            structured = {key: [] for key in properties}
+            structured["s"] = []
+            for sentence in sentences:
+                if sentence.get("u") != "LEARN":
+                    continue
+                row = {"i": sentence["i"]}
+                fields = properties.get("s", {}).get("items", {}).get("properties", {})
+                if "tr" in fields:
+                    row["tr"] = f"[mock] {sentence['x']}"
+                for key in ("d", "s"):
+                    if key in fields:
+                        row[key] = "H" if sentence.get(key) else "M"
+                structured["s"].append(row)
+        elif schema == "lesson_authoring_v1":
             structured = {
                 "targetLocale": "vi-VN",
                 "items": [{

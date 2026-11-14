@@ -10,6 +10,12 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class AuthoringTextTest {
+    @Test void identifiesRepeatedSuffixAsAReviewHintWithoutChangingTheWords() {
+        assertThat(AuthoringText.repeatsPreviousSuffix("They sting him on his elbow.","his elbow.")).isTrue();
+        assertThat(AuthoringText.repeatsPreviousSuffix("Hello!","Hello!")).isTrue();
+        assertThat(AuthoringText.repeatsPreviousSuffix("A shell.","hell.")).isFalse();
+        assertThat(AuthoringText.repeatsPreviousSuffix("Hello!","Next sentence.")).isFalse();
+    }
     @Test void distinguishesCoverageAndIntervalFailuresWithoutReturningTranscriptText() {
         var sentences=List.of(sentence("Hello everyone."));
         assertThatThrownBy(()->AuthoringText.mapTiming(sentences,List.of(word("Hello",0,100)),45837))
@@ -98,6 +104,27 @@ class AuthoringTextTest {
     @Test void refusesToDivideOneObservedIntervalAcrossApprovedSentences() {
         assertThatThrownBy(()->AuthoringText.mapTiming(List.of(sentence("Ice."),sentence("Cream.")),List.of(word("icecream",0,100)),200))
             .hasMessageContaining("sentence boundaries");
+        assertThatThrownBy(()->AuthoringText.coalesce(List.of(sentence("Ice."),sentence("Cream.")),List.of(word("icecream",0,100))))
+            .hasMessageContaining("sentence boundaries");
+    }
+    @Test void trailingZeroDurationWordDoesNotJoinTheFollowingSentence() {
+        var sentences=List.of(sentence("We learn."),sentence("English daily."));
+        var words=AuthoringText.coalesce(sentences,List.of(word("We",0,100),word("learn",140,140),
+            word("English",140,300),word("daily",300,400)));
+        AuthoringText.mapTiming(sentences,words,500);
+        AuthoringText.groupUnresolvedTiming(sentences);
+        var draft=new AuthoringLesson();draft.endMs=500;draft.sentences=sentences;
+        assertThatCode(()->LessonAuthoringService.validateTiming(draft)).doesNotThrowAnyException();
+        assertThat(sentences.getFirst().words).extracting(AuthoringSentence.Word::text).containsExactly("We learn");
+        assertThat(sentences.getLast().words.getFirst().startMs()).isEqualTo(140);
+    }
+    @Test void positiveOverlapAcrossSentencesStillFailsValidation() {
+        var sentences=List.of(sentence("We."),sentence("Learn."));
+        AuthoringText.mapTiming(sentences,AuthoringText.coalesce(sentences,List.of(word("We",0,100),word("Learn",90,200))),300);
+        var draft=new AuthoringLesson();draft.endMs=300;draft.sentences=sentences;
+        assertThatThrownBy(()->LessonAuthoringService.validateTiming(draft))
+            .isInstanceOfSatisfying(com.lyreo.lesson.domain.authoring.TimingValidationException.class,
+                failure->assertThat(failure.code()).isEqualTo("TIMING_OVERLAP"));
     }
     private static AuthoringSentence sentence(String text) {return new AuthoringSentence(UUID.randomUUID(),text,"LEARN");}
     private static AuthoringText.ObservedWord word(String text,long start,long end) {return new AuthoringText.ObservedWord(text,start,end);}

@@ -11,15 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthoringJobCommitter {
     private final AuthoringRepository repository;
     public AuthoringJobCommitter(AuthoringRepository repository) {this.repository=repository;}
-    @Transactional public void stage(BackgroundJob job,int index,java.util.List<com.lyreo.lesson.domain.authoring.AuthoringSentence> sentences) {
-        var input=repository.jobInput(job.id());
-        var current=repository.find(input.lessonId(),true).orElseThrow();
-        repository.assertJobLease(job.id(),job.leaseOwner());
-        if(current.publishedAt!=null || !Objects.equals(current.activeJobId,job.id())
-            || current.transcriptRevision!=input.transcriptRevision())
-            throw new PermanentJobException("AUTHORING_STALE","Discarded stale semantic chunk");
-        repository.stageChunk(job.id(),index,sentences);
-    }
     @Transactional public void commit(BackgroundJob job,AuthoringRepository.JobInput input,AuthoringLesson output) {
         var current=repository.find(input.lessonId(),true).orElseThrow();
         repository.assertJobLease(job.id(),job.leaseOwner());
@@ -29,13 +20,19 @@ public class AuthoringJobCommitter {
         if("PREPARE".equals(input.operation())) {
             current.audioObjectKey=output.audioObjectKey;current.sentences=output.sentences;
             current.timingEvidence=output.timingEvidence;current.transcriptRevision++;current.timingStatus=output.timingStatus;current.status="TRANSCRIPT_REVIEW";
+        } else if("TTS".equals(input.operation())) {
+            current.audioObjectKey=output.audioObjectKey;current.endMs=output.endMs;current.sentences=output.sentences;
+            current.timingStatus="MISSING";current.timingEvidence=java.util.Map.of();
+            current.approvedRevision=null;current.karaokeReviewedRevision=null;current.semanticRevision=null;current.status="TRANSCRIPT_REVIEW";
         } else if("ALIGN".equals(input.operation())) {
             current.sentences=output.sentences;current.timingStatus="VALID";current.karaokeReviewedRevision=null;
             current.status="TIMING_REVIEW";
         } else {
-            current.sentences=output.sentences;current.semanticRevision=current.transcriptRevision;
-            current.status="CONTENT_REVIEW";
+            throw new PermanentJobException("AUTHORING_OPERATION_REMOVED","This authoring operation is no longer supported");
         }
-        current.activeJobId=null;repository.save(current);repository.completeJob(job.id());
+        current.activeJobId=null;repository.save(current);
+        if("PREPARE".equals(input.operation()) && "AUDIO".equals(current.sourceType) && !current.sentences.isEmpty())
+            repository.renameAutomatic(current.id,LessonAuthoringService.automaticTitle(current.sentences.getFirst().text));
+        repository.completeJob(job.id());
     }
 }

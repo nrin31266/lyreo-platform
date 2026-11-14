@@ -76,6 +76,12 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
     }
 
     @Override
+    public Optional<BackgroundJob> latest(String type, String ownerModule, UUID ownerReferenceId) {
+        return jdbc.query("SELECT * FROM background_job WHERE job_type=:type AND owner_module=:module AND owner_reference_id=:owner ORDER BY created_at DESC,id DESC LIMIT 1",
+            Map.of("type",type,"module",ownerModule,"owner",ownerReferenceId),this::map).stream().findFirst();
+    }
+
+    @Override
     public Optional<BackgroundJob> findById(UUID id) {
         return jdbc.query(
             "SELECT * FROM background_job WHERE id = :id",

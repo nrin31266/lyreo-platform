@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
 import type { TranscriptSentence } from './lesson-builder.types';
 
-export function TranscriptList<T extends TranscriptSentence>({ sentences, visibleRows, filtered, emptyMessage, children, className = '', scrollToId }: {
+export function TranscriptList<T extends TranscriptSentence>({ sentences, visibleRows, filtered, emptyMessage, children, className = '', scrollToId, scrollRequest = 0 }: {
   sentences: T[];
   visibleRows: number[];
   filtered: boolean;
@@ -10,6 +10,7 @@ export function TranscriptList<T extends TranscriptSentence>({ sentences, visibl
   children: (sentence: T, index: number) => ReactNode;
   className?: string;
   scrollToId?: string | null;
+  scrollRequest?: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
@@ -41,7 +42,7 @@ export function TranscriptList<T extends TranscriptSentence>({ sentences, visibl
     if (index<0) return;
     if (virtual) virtualizer.scrollToIndex(index,{align:'auto'});
     else scrollRef.current?.querySelector<HTMLElement>(`[data-index="${index}"]`)?.scrollIntoView?.({block:'nearest'});
-  }, [scrollToId]);
+  }, [scrollToId, scrollRequest]);
 
   const rows = virtual ? virtualizer.getVirtualItems() : visibleRows.map((_, index) => ({ index, key: keys[index], start: 0 }));
   return <div ref={scrollRef} className={`authoring-sentence-list ${className}`} role="list" style={{ overflowAnchor: 'none' }}

@@ -30,7 +30,7 @@ public class LessonAuthoringController {
     @org.springframework.transaction.annotation.Transactional
     @PostMapping("/drafts") public ResponseEntity<LessonAuthoringService.Accepted> create(@Valid @RequestBody CreateRequest request) {
         var result=service.create(request.title(),request.sourceReference(),request.startMs(),request.endMs());
-        catalog.updateMetadata(result.lessonId(),request.title(),request.description()==null ? "" : request.description(),request.imageUrl(),request.categoryIds()==null ? List.of() : request.categoryIds());
+        catalog.updateMetadata(result.lessonId(),null,request.description()==null ? "" : request.description(),request.imageUrl(),request.categoryIds()==null ? List.of() : request.categoryIds());
         return accepted(result);
     }
     @GetMapping("/{id}") public LessonAuthoringResponse get(@PathVariable UUID id) {return LessonAuthoringResponse.from(service.get(id));}
@@ -49,25 +49,15 @@ public class LessonAuthoringController {
     @PostMapping("/{id}/karaoke-review") public LessonAuthoringResponse karaoke(@PathVariable UUID id,@RequestBody RevisionRequest request) {
         return LessonAuthoringResponse.from(service.karaoke(id,request.revision()));
     }
-    @PostMapping("/{id}/generate") public ResponseEntity<LessonAuthoringService.Accepted> generate(@PathVariable UUID id,@RequestBody RevisionRequest request) {
-        return accepted(service.generate(id,request.revision()));
-    }
-    @PutMapping("/{id}/candidates") public LessonAuthoringResponse candidates(@PathVariable UUID id,@RequestBody CandidatesRequest request) {
-        return LessonAuthoringResponse.from(service.candidates(id,request.revision(),request.dictationSentenceIds(),request.shadowingSentenceIds()));
-    }
     @PutMapping("/{id}/sentences/{sentenceId}/timing") public LessonAuthoringResponse timing(@PathVariable UUID id,@PathVariable UUID sentenceId,@RequestBody TimingRequest request) {
         return LessonAuthoringResponse.from(service.timing(id,request.revision(),sentenceId,request.words()));
-    }
-    @PostMapping("/{id}/publish") public LessonAuthoringResponse publish(@PathVariable UUID id,@RequestBody RevisionRequest request) {
-        return LessonAuthoringResponse.from(service.publish(id,request.revision()));
     }
     private static ResponseEntity<LessonAuthoringService.Accepted> accepted(LessonAuthoringService.Accepted result) {
         return ResponseEntity.accepted().location(URI.create("/api/v1/jobs/"+result.jobId())).body(result);
     }
     public record TimingRequest(long revision,List<com.lyreo.lesson.domain.authoring.AuthoringSentence.Word> words) {}
     public record InspectRequest(@NotBlank String sourceReference) {}
-    public record CreateRequest(@NotBlank String title,@NotBlank String sourceReference,long startMs,long endMs,String description,String imageUrl,List<UUID> categoryIds) {}
+    public record CreateRequest(@jakarta.validation.constraints.Size(max=500) String title,@NotBlank String sourceReference,long startMs,long endMs,String description,String imageUrl,List<UUID> categoryIds) {}
     public record RevisionRequest(long revision) {}
     public record TranscriptRequest(long revision,@NotNull List<LessonAuthoringService.SentenceInput> sentences) {}
-    public record CandidatesRequest(long revision,List<UUID> dictationSentenceIds,List<UUID> shadowingSentenceIds) {}
 }

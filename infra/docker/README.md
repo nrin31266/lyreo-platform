@@ -24,10 +24,12 @@ Stop giữ volume:
 docker compose --env-file infra/docker/.env -f compose.dev.yml down
 ```
 
-Reset **toàn bộ local DB** (destructive):
+Reset bài học thường dùng chỉ xem trước bằng `make db-reset`; xem [phạm vi và xác nhận](../../docs/DEVELOPMENT.md).
+
+Xoá **toàn bộ volume**, gồm dữ liệu import và Keycloak (destructive):
 
 ```bash
-docker compose --env-file infra/docker/.env -f compose.dev.yml down -v
+make down-v CONFIRM=lyreo-volumes
 ```
 
 Sau reset phải chạy lại `make keycloak-seed`.

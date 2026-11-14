@@ -15,10 +15,16 @@ describe('authoring edits', () => {
     ]);
     expect(splitSentence(rows, 0, 0)).toBe(rows);
   });
+  it('preserves visibility on split and prevents mixed-visibility merges', () => {
+    const hidden=[{...rows[0],hidden:true}, rows[1]];
+    expect(splitSentence(hidden,0,6).slice(0,2)).toEqual([expect.objectContaining({hidden:true}),expect.objectContaining({hidden:true})]);
+    expect(mergeSentence(hidden,0)).toBe(hidden);
+    expect(mergeSentence(hidden.map(row=>({...row,hidden:true})),0)[0].hidden).toBe(true);
+  });
   it('merges adjacent rows without losing content or silently changing usage', () => {
     expect(mergeSentence(rows, 0)).toEqual([{ id: 'a', text: 'Hello world. Next sentence.', usage: 'LEARN' }]);
     const different: TranscriptSentence[] = [rows[0], { ...rows[1], usage: 'WATCH_ONLY' }];
-    expect(mergeSentence(different, 0)).toBe(different);
+    expect(mergeSentence(different, 0)).toEqual([{ ...rows[0], text: 'Hello world. Next sentence.' }]);
   });
 });
 
@@ -33,10 +39,16 @@ describe('sentence listening policy', () => {
     expect(sentencePlaybackAction(1100, 'a', false, sentences, 5000)).toEqual({pause: true, stopMs: 1000});
     expect(sentencePlaybackAction(0, 'a', false, sentences, 5000)).toEqual({seekMs: 100});
   });
-  it('advances across gaps and Skip rows only in continuous mode, stopping at the final sentence', () => {
-    expect(sentencePlaybackAction(1000, 'a', true, sentences, 5000)).toEqual({sentenceId: 'b', seekMs: 2500});
-    expect(sentencePlaybackAction(4000, 'b', true, sentences, 5000)).toEqual({pause: true, stopMs: 4000});
-    expect(sentencePlaybackAction(1000, null, true, sentences, 5000)).toEqual({pause: true});
+  it('keeps continuous playback unchanged through gaps and excluded rows, using the clock only for highlighting', () => {
+    expect(sentencePlaybackAction(1000, 'a', true, sentences, 5000)).toEqual({sentenceId:null});
+    expect(sentencePlaybackAction(1500, null, true, sentences, 5000)).toEqual({});
+    expect(sentencePlaybackAction(2600, null, true, sentences, 5000)).toEqual({sentenceId:'b'});
+    expect(sentencePlaybackAction(2700, 'b', true, sentences, 5000)).toEqual({});
+    expect(sentencePlaybackAction(500, 'b', true, sentences, 5000)).toEqual({sentenceId:'a'});
+    expect(sentencePlaybackAction(4100, 'b', true, sentences, 5000)).toEqual({sentenceId:null});
+    expect(sentencePlaybackAction(5000, null, true, sentences, 5000)).toEqual({pause:true,stopMs:5000});
+    const hidden=sentences.map(row=>({...row,hidden:row.id==='b'}));
+    expect(sentencePlaybackAction(2600, null, true, hidden, 5000)).toEqual({});
   });
   it('bounds approximate preview by the next distinct segment anchor without inventing word timing', () => {
     const approximate = sentences.map((row,index)=>({...row,words:[],previewStartMs:index===2?2000:100}));

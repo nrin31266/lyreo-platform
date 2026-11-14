@@ -59,6 +59,8 @@ chỉ để “phòng xa”.
 
 ## 4. Dev identities
 
+Tra cứu tài khoản, mật khẩu mẫu và địa chỉ đăng nhập tại [Tài khoản development local](../../docs/ACCOUNT.md).
+
 Dev user/password nằm trong `infra/keycloak/.env`, copy từ `.env.example` và gitignored.
 Không dùng password mẫu ngoài local development.
 

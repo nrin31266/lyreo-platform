@@ -25,6 +25,7 @@ then open only the linked canonical context. Do not scan all documentation for a
 | Frontend foundation: tokens, translations, platform UI | [i18n](../packages/i18n/README.md), [Admin Web](../apps/admin-web/README.md), [Mobile](../apps/mobile/README.md#ui-theme-ownership) |
 | Data import implementation and operator setup | [DATA_PIPELINES.md](DATA_PIPELINES.md), [Data Import](../tools/data-import/README.md) |
 | Local infrastructure and Keycloak setup | [Docker](../infra/docker/README.md), [Keycloak](../infra/keycloak/README.md), [CONFIGURATION.md](CONFIGURATION.md) for configuration; [operational questions](requirements/open-questions.md) when relevant |
+| Local development accounts and login | [ACCOUNT.md](ACCOUNT.md) |
 | Architecture/product decisions | [DECISIONS.md](DECISIONS.md) |
 | Development workflow, DB, local infra | [DEVELOPMENT.md](DEVELOPMENT.md) |
 | Agent workflow and optional code navigation | [CodeGraph pilot](DEVELOPMENT.md#codegraph-pilot), [engineering contract](../AGENTS.md) |

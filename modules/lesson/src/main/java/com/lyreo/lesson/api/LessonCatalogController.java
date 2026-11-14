@@ -45,13 +45,13 @@ public class LessonCatalogController {
   @PostMapping("/lesson-categories")
   @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
   public LessonCatalogPort.Category create(@RequestBody CategoryName request) {
-    return catalog.saveCategory(UUID.randomUUID(), request.name());
+    return catalog.saveCategory(UUID.randomUUID(), request.name(),request.translations());
   }
 
   @PutMapping("/lesson-categories/{id}")
   public LessonCatalogPort.Category rename(
       @PathVariable UUID id, @RequestBody CategoryName request) {
-    return catalog.saveCategory(id, request.name());
+    return catalog.saveCategory(id, request.name(),request.translations());
   }
 
   @DeleteMapping("/lesson-categories/{id}")
@@ -81,6 +81,11 @@ public class LessonCatalogController {
     catalog.visibility(id, request.visible());
   }
 
+  @PutMapping("/lesson-channels/{id}/visibility")
+  public void channelVisibility(@PathVariable String id, @RequestBody Visibility request) {
+    catalog.channelVisibility(id, request.visible());
+  }
+
   public record Visibility(boolean visible) {}
 
   public record Metadata(
@@ -90,5 +95,5 @@ public class LessonCatalogController {
     }
   }
 
-  public record CategoryName(String name) {}
+  public record CategoryName(String name,java.util.Map<String,String> translations) {}
 }

@@ -15,11 +15,13 @@ import {
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { CatalogError, CatalogSkeleton, CatalogImage } from "./CatalogFeedback";
 import { catalogKeys } from "./catalog.queries";
-import { fetchChannels, syncChannels } from "./catalog.api";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
+import { fetchChannels, syncChannels, fetchSyncConfiguration, setChannelVisibility } from "./catalog.api";
 const active = (status: string | null) =>
   !!status &&
   ["QUEUED", "RUNNING", "RETRY_WAIT", "CANCEL_REQUESTED"].includes(status);
-export function ChannelsPage() {
+export function ChannelsPage({ embedded = false }: { embedded?: boolean }) {
   const { t, i18n } = useTranslation("admin");
   const client = useQueryClient();
   const [selected, setSelected] = useState<string[]>([]);
@@ -28,6 +30,11 @@ export function ChannelsPage() {
     queryFn: ({ signal }) => fetchChannels(signal),
     refetchInterval: (q) =>
       q.state.data?.some((c) => active(c.syncStatus)) ? 2500 : false,
+  });
+  const configuration = useQuery({ queryKey: [...catalogKeys.channels, 'sync-configuration'], queryFn: ({ signal }) => fetchSyncConfiguration(signal) });
+  const visibility = useMutation({
+    mutationFn: ({ id, visible }: { id: string; visible: boolean }) => setChannelVisibility(id, visible),
+    onSuccess: () => client.invalidateQueries({ queryKey: catalogKeys.all }),
   });
   const mutation = useMutation({
     mutationFn: syncChannels,
@@ -40,12 +47,13 @@ export function ChannelsPage() {
     <section className="grid gap-4">
       <div className="page-heading">
         <div>
-          <h1>{t("catalog.channels")}</h1>
+          {!embedded && <h1>{t("catalog.channels")}</h1>}
           <p className="lead">{t("catalog.channelSyncHelp")}</p>
+          <p className="text-sm text-muted-foreground">{t("catalog.channelVisibilityHelp")}</p>
         </div>
         <Button
           disabled={
-            !selected.length || selected.length > 50 || mutation.isPending
+            !configuration.data?.configured || !selected.length || selected.length > 50 || mutation.isPending
           }
           onClick={() => mutation.mutate(selected)}
         >
@@ -53,9 +61,11 @@ export function ChannelsPage() {
         </Button>
       </div>
       <CatalogError
-        error={query.error || mutation.error}
-        retry={() => void query.refetch()}
+        error={query.error || configuration.error || visibility.error}
+        retry={() => void Promise.all([query.refetch(), configuration.refetch()])}
       />
+      {configuration.data?.configured === false && <Alert><AlertDescription>{t('catalog.syncNotConfigured')}</AlertDescription></Alert>}
+      <CatalogError error={mutation.error} retry={() => mutation.variables && mutation.mutate(mutation.variables)} retrying={mutation.isPending} />
       {query.isPending ? (
         <CatalogSkeleton />
       ) : query.data?.length ? (
@@ -66,6 +76,7 @@ export function ChannelsPage() {
               <TableHead>{t("catalog.channels")}</TableHead>
               <TableHead>{t("catalog.lessonCount")}</TableHead>
               <TableHead>{t("catalog.updated")}</TableHead>
+              <TableHead>{t("catalog.visibility")}</TableHead>
               <TableHead>{t("catalog.actions")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -112,9 +123,13 @@ export function ChannelsPage() {
                     : t("catalog.neverSynced")}
                 </TableCell>
                 <TableCell>
+                  <Switch aria-label={t('catalog.channelVisibility', { title: c.title })} checked={c.visible}
+                    disabled={visibility.isPending} onCheckedChange={visible => visibility.mutate({ id: c.id, visible })} />
+                </TableCell>
+                <TableCell>
                   <Button
                     variant="outline"
-                    disabled={mutation.isPending || active(c.syncStatus)}
+                    disabled={!configuration.data?.configured || mutation.isPending || active(c.syncStatus)}
                     onClick={() => mutation.mutate([c.id])}
                   >
                     {t(

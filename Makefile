@@ -1,4 +1,4 @@
-.PHONY: help init-env doctor setup setup-media deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset keycloak-seed down core ai admin mobile \
+.PHONY: help init-env doctor setup setup-media deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset db-recreate seed-dev keycloak-seed down core ai admin mobile \
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
         ai-local clean-cache clean \
@@ -18,7 +18,7 @@ help:
 	  '  make deps-java                   Compile and install internal Java artifacts required by Core into local Maven cache' \
 	  '' \
 	  'Run' \
-	  '  make core                        Run Spring Boot locally' \
+	  '  make core                        Run Core; rebuild/restart after saved Java/resources change' \
 	  '  make ai                          Run FastAPI locally' \
 	  '  make ai-local                    Run FastAPI locally with local Qwen/Kokoro weights' \
 	  '  make admin                       Run Admin Vite dev server' \
@@ -35,7 +35,10 @@ help:
 	  'Infrastructure' \
 	  '  make dev-infra                   Start PostgreSQL + Keycloak only' \
 	  '  make db-shell                    Open psql inside PostgreSQL container against Lyreo dev DB' \
-	  '  make db-reset                    Reset local Lyreo application DB (preserves Keycloak)' \
+	  '  make db-reset                    Preview lesson-only reset; keeps imported banks and configuration' \
+	  '  make db-recreate                 Preview destructive whole application database recreation' \
+	  '  make seed-dev                    Seed local default categories after Core migrations' \
+	  '  make down-v CONFIRM=lyreo-volumes Delete ALL volumes, including imports and Keycloak' \
 	  '  make keycloak-seed               Verify realm/client/roles and seed dev users' \
 	  '' \
 	  'Mobile native' \
@@ -100,8 +103,9 @@ deps-java:
 	./mvnw -B -pl apps/core-service -am -DskipTests -DskipITs install
 
 setup-media:
-	uv tool install yt-dlp==2026.10.21
+	uv tool install --upgrade --with-executables-from 'deno==2.9.8' 'yt-dlp[default]==2026.10.26'
 	@command -v yt-dlp >/dev/null || { echo 'Add the uv tool bin directory to PATH before starting Core.'; exit 1; }
+	@command -v deno >/dev/null || { echo 'Add the uv tool bin directory to PATH so yt-dlp can find Deno.'; exit 1; }
 	@command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null || { echo 'Install FFmpeg (including ffprobe) on the Core host.'; exit 1; }
 
 deps: deps-java
@@ -134,6 +138,12 @@ db-shell:
 db-reset:
 	./scripts/db-reset.sh
 
+db-recreate:
+	./scripts/db-reset.sh --database
+
+seed-dev:
+	docker compose --env-file infra/docker/.env -f compose.dev.yml exec -T postgres sh -c 'exec psql -X -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/seed/dev.sql
+
 keycloak-seed:
 	set -a; . ./infra/keycloak/.env; set +a; ./infra/keycloak/scripts/bootstrap-keycloak.sh; ./infra/keycloak/scripts/seed-dev-users.sh
 
@@ -141,10 +151,11 @@ down:
 	docker compose --env-file infra/docker/.env -f compose.dev.yml down
 
 down-v:
+	@test "$(CONFIRM)" = "lyreo-volumes" || { echo "Refusing volume deletion: use CONFIRM=lyreo-volumes. This removes application data AND Keycloak." >&2; exit 1; }
 	docker compose --env-file infra/docker/.env -f compose.dev.yml down -v
 	
-core: deps-java
-	cd apps/core-service && set -a && . ./.env && set +a && ../../mvnw spring-boot:run
+core:
+	@set -a; . ./apps/core-service/.env; set +a; python3 scripts/core_dev.py
 
 ai:
 	cd apps/ai-service && set -a && . ./.env && set +a && uv run --locked uvicorn app.main:app --reload --port 8000
@@ -249,6 +260,7 @@ validate:
 	    tools/data-import/lexicon_vi_context.py \
 	    tools/data-import/validate_lexicon_release.py \
 	    tools/data-import/common.py \
+	    scripts/core_dev.py \
 	    tools/data-import/tests; \
 	  status=$$?; rm -rf "$$tmp"; exit $$status
 	bash -n scripts/*.sh apps/mobile/scripts/*.sh tools/data-import/scripts/*.sh infra/keycloak/scripts/*.sh infra/postgres/init/*.sh

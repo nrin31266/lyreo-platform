@@ -12,6 +12,7 @@ from .providers.openai_compatible import OpenAICompatibleProvider
 from .runtime.kokoro import KokoroRuntime
 from .runtime.mock import MockRuntime
 from .runtime.nlp import LightweightNlpRuntime
+from .runtime.ipa import IpaRuntime
 from .runtime.qwen import QwenRuntime
 from .schemas import ExecuteRequest, ExecuteResponse, HealthResponse
 from .security import verify_internal_token
@@ -149,11 +150,13 @@ async def tts_voices():
     Static metadata only — no model load. Preview callers can discover available
     voices without hard-coding Kokoro metadata.
     """
-    return {'voices': kokoro.voices()}
+    return {'voices': kokoro.voices(), 'default_voice': cfg.kokoro_default_voice}
 
 
 @app.post('/v1/nlp/analyze', response_model=ExecuteResponse, dependencies=[Depends(verify_internal_token)])
 async def nlp(req: ExecuteRequest):
+    if req.options.get("operation") == "sentence_ipa_v1":
+        return await IpaRuntime().analyze(req)
     if is_mock():
         return await mock.nlp(req)
     return await nlp_runtime.analyze(req)

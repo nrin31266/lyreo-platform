@@ -30,6 +30,9 @@ Editor text, selection and playback state stay local and cannot be overwritten b
 Transcript lists above 20 visible sentences use TanStack Virtual with measured row heights and overscan.
 Draft values remain in the editor state, and the focused row stays mounted while scrolling. Split sentences
 receive local editor keys that are omitted from API payloads.
+Sentence fields show their input surface; the transcript card fills its bounded parent so the list scrolls
+instead of growing behind the panel. Merge help names the next sentence in the original order, including
+when suggestions hide intermediate rows. Possible repeated suffixes are review hints, never automatic deletions.
 
 The sidebar uses one navigation configuration, nested menus and explicit Coming soon entries for
 unimplemented areas. These entries do not imply feature completeness. AI configuration uses one sidebar entry and top tabs for providers and routing. Task pages prefer
@@ -43,7 +46,8 @@ groups the current step’s submissions. Loading states use skeletons.
 
 `/lessons` lists/filters/pages lessons; `/lessons/new` inspects sources and creates drafts;
 `/lessons/:lessonId` resumes drafts or opens the separate published view. Categories and source
-channels have dedicated screens and queries. Filters remain in the URL.
+channels share `/lessons/organization` with URL-addressable tabs and independent queries. Old
+category/channel routes redirect to the corresponding tab. Filters remain in the URL.
 
 Metadata (display title, description, image URL and categories) can change independently of published
 learning content. Draft deletion is soft and requires stopped jobs. Published lessons can be unlisted
@@ -69,23 +73,36 @@ timeline seek control and React Timeline Editor range handles. Zoom in/out, full
 selection fit (10% padding on either side), pointer-centred mouse-wheel zoom and horizontal scrolling
 only change the viewport. Vertical wheel zooms on the timeline; horizontal/Shift-wheel and browser
 Ctrl/Meta-wheel keep their native behavior;
-millisecond timecodes and keyboard controls remain available. New sources preselect up to two
-minutes from the URL offset (otherwise zero), bounded by duration; an obsolete range after a
-duration refresh resets to this default. Marks and timecodes remain available for manual adjustment.
+millisecond timecodes and keyboard controls remain available. The timeline has no vertical scroll;
+horizontal scrolling remains available when zoomed in. The most zoomed-out view fits the exact source duration without horizontal scrolling. The compact track
+uses gray outside the selection, a colored selected segment, and an explicit source-end marker.
+YouTube videos up to ten minutes are selected in full by default; longer videos require an explicit range.
+`VITE_YOUTUBE_AUTO_SELECT_MAX_MINUTES` can lower this threshold
+or disable it with `0` (default/cap: `10`; invalid values fall back to `10`). Vite reads it at startup/build time.
+URL offsets position playback independently. An obsolete range after a duration refresh resets to this default.
+The full-video selection button is hidden above ten minutes. Marks and timecodes remain available for manual adjustment.
 Desktop source selection groups the 16:9 video, playback and range selection in the left column,
-with lesson metadata in the right column and one submission row. Each boundary groups its timecode
-and player-mark action. Short desktop screens scroll the page while keeping submission available;
+with lesson metadata in the right column and one submission row. Playback, speed, looping, zoom,
+range marks, full-video selection and help share one compact toolbar above the timeline.
+Timecodes remain in their own labeled fields; help uses separate bullet points.
+Short desktop screens scroll the page while keeping submission available;
 below 960px the page stacks naturally.
 Title/categories remain visible; used ranges and optional metadata are collapsed. Icon actions have
 hover/focus tooltips and longer selection help opens in a dialog. Waveform UI is deferred.
 
 
-Draft review uses four steps with Edit words / Listen & check modes in Words & timing. The combined
-Save, approve & align action stops at any failed checkpoint; Save draft without AI has a direct icon.
+Authoring stays in one workspace from source preparation through Edit words / Listen & check.
+There is no numbered step navigator or unfinished content/publish screen. Text retains its saved
+voice and hides preliminary sentence rows until generated audio is ready; the primary source action
+saves then starts TTS, while Save draft remains free of inference. Save and align timing stops at
+any failed checkpoint; final confirmation saves a reviewed, unpublished draft.
 Sentence icons preserve split caret position and show observed/approximate timing explicitly.
-Steps 1–2 use a page-wide step navigator. Failed or missing timing reopens word review; the footer
-groups processing status/error, history, playback/seek/loop/speed and one primary action. When all word timing is missing,
+A compact colored status above the workspace shows preparation, active work, wait, cancellation
+or failure, with operation-specific recovery labels and a jump to an affected sentence when a timing diagnostic supplies it.
+Technical history stays in the footer with playback/seek/loop/speed and the primary action. When all word timing is missing,
 Listen & check explains the next action instead of repeating a warning for every sentence.
+Karaoke marks only the currently spoken observed word/group with a fitted underline. Previous words
+lose their underline; silence shows none. Text backgrounds remain unfilled.
 Dedicated realignment of valid timing has its own icon.
 Job history exposes retry/cancel/inspect icons and expands model usage/timestamps on demand.
 Elapsed time uses persisted job timestamps; reopening a page or sheet does not reset it.
@@ -93,6 +110,15 @@ Both word and timing lists reuse the existing virtualizer above 20 rows. A focus
 mounted while scrolling; timing selection scrolls into the measured list and expands only one set of
 word controls. Review starts paused; sentence/word actions play immediately and stop at the selected
 sentence end. Footer icons toggle continuous playback or sentence looping without starting playback.
-Continuous playback follows karaoke selection and skips Skip rows. Changing review tabs/revision or
+Continuous playback follows karaoke selection through every sentence in the draft. Changing review tabs/revision or
 opening timing edits pauses the video. Timing review has a compact warning toolbar and confirmation
-below the list, with complete confirmation guidance available from the information icon.
+below the list, with grouped-word guidance available from a focusable information label.
+
+Text and Audio source tabs reuse the authoring review workspace. Text saves a draft before explicit
+Kokoro synthesis; Audio accepts private file uploads and range selection. See the canonical
+[Lesson source requirements](../../docs/requirements/lesson.md#fr-lsn-011--text-and-uploaded-audio-authoring).
+
+Sentence visibility uses a single-click Visible/Hidden button with an eye icon and semantic state colors in Edit words. It preserves text/audio
+and is independent of exercise usage. Listen & check shows only visible
+sentences; continuous playback keeps the original audio and pauses, while its highlights follow the
+media clock without sentence-boundary seeks; Admin can still preview/edit hidden rows in Edit words and restore them.

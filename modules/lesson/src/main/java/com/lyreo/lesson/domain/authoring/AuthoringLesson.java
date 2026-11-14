@@ -5,8 +5,13 @@ import java.util.List;
 import java.util.UUID;
 
 public final class AuthoringLesson {
+    public AuthoringOptions options = AuthoringOptions.defaults();
+    public String sourceType = "YOUTUBE";
+    public UUID audioSourceId;
+    public String ttsVoice;
     public UUID id;
     public String title;
+    public boolean automaticTitle;
     public String videoId;
     public String sourceReference;
     public long startMs;
@@ -17,7 +22,7 @@ public final class AuthoringLesson {
     public Long karaokeReviewedRevision;
     public Long semanticRevision;
     public String status;
-    public String timingStatus;
+    public String timingStatus = "MISSING";
     public boolean alignmentRequired;
     public String audioObjectKey;
     public java.util.Map<String,Object> timingEvidence = java.util.Map.of();

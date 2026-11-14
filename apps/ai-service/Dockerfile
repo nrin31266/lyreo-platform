@@ -2,6 +2,7 @@
 FROM python:3.12-slim
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends espeak-ng && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir uv
 COPY apps/ai-service/pyproject.toml apps/ai-service/uv.lock ./
 # Install runtime dependencies only; the application is imported directly from /app/app.

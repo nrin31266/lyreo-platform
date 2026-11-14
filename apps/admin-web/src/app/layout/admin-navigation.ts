@@ -20,13 +20,8 @@ export const adminNavGroups: { key: string; items: AdminNavItem[] }[] = [
         children: [
           { key: "lessonList", path: "/lessons" },
           { key: "createLesson", path: "/lessons/new" },
-          { key: "categories", path: "/lessons/categories" },
+          { key: "organization", path: "/lessons/organization" },
         ],
-      },
-      {
-        key: "sources",
-        icon: Radio,
-        children: [{ key: "channels", path: "/lessons/channels" }],
       },
       {
         key: "languageLibrary",
@@ -79,6 +74,8 @@ export const adminNavItems = adminNavGroups
 export function getNavTitleKey(pathname: string, hash = ""): string {
   const exact = adminNavItems.find((item) => item.path === pathname + hash);
   if (exact) return exact.labelKey;
+  if (["/lessons/categories", "/lessons/channels"].includes(pathname)) return "admin:navigation.organization";
+  if (/^\/lessons\/[^/]+$/.test(pathname)) return 'admin:authoringFlow.editorTitle';
   const matched = [...adminNavItems]
     .sort((a, b) => b.path.length - a.path.length)
     .find(

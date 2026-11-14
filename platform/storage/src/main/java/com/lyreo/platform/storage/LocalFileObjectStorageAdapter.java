@@ -50,6 +50,9 @@ public final class LocalFileObjectStorageAdapter implements ObjectStoragePort {
     }
 
     @Override
+    public boolean exists(String objectKey) { return Files.isRegularFile(resolve(objectKey)); }
+
+    @Override
     public void delete(String objectKey) {
         try {
             Files.deleteIfExists(resolve(objectKey));

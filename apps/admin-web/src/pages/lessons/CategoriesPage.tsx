@@ -24,33 +24,37 @@ import {
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { CatalogError, CatalogSkeleton } from "./CatalogFeedback";
 import { useCategories, catalogKeys } from "./catalog.queries";
-import { saveCategory, deleteCategory } from "./catalog.api";
-const schema = z.object({ name: z.string().trim().min(1).max(100) });
-export function CategoriesPage() {
-  const { t } = useTranslation("admin");
+import { saveCategory, deleteCategory, categoryName } from "./catalog.api";
+const schema = z.object({ name: z.string().trim().min(1).max(100), vi: z.string().trim().max(100) });
+export function CategoriesPage({ embedded = false }: { embedded?: boolean }) {
+  const { t, i18n } = useTranslation("admin");
   const client = useQueryClient();
   const query = useCategories();
   const [id, setId] = useState<string>();
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "" },
+    defaultValues: { name: "", vi: "" },
   });
   const mutation = useMutation({
     mutationFn: async (
-      command: { name: string; id?: string } | { deleteId: string },
+      command: { name: string; vi: string; id?: string } | { deleteId: string },
     ) => {
       if ("deleteId" in command) await deleteCategory(command.deleteId);
-      else await saveCategory(command.name, command.id);
+      else {
+        const translations = { ...query.data?.find(c => c.id === command.id)?.translations };
+        if (command.vi) translations.vi = command.vi; else delete translations.vi;
+        await saveCategory(command.name, command.id, translations);
+      }
     },
     onSuccess: async () => {
-      form.reset({ name: "" });
+      form.reset({ name: "", vi: "" });
       setId(undefined);
       await client.invalidateQueries({ queryKey: catalogKeys.all });
     },
   });
   return (
     <section className="grid gap-4">
-      <h1>{t("catalog.categories")}</h1>
+      {!embedded && <h1>{t("catalog.categories")}</h1>}
       <CatalogError
         error={query.error || mutation.error}
         retry={() => void query.refetch()}
@@ -62,7 +66,7 @@ export function CategoriesPage() {
         <FieldGroup className="max-w-sm flex-1">
           <Field data-invalid={!!form.formState.errors.name}>
             <FieldLabel htmlFor="category-name">
-              {t("catalog.categoryName")}
+              {t("catalog.categoryDefaultName")}
             </FieldLabel>
             <Input
               id="category-name"
@@ -72,6 +76,11 @@ export function CategoriesPage() {
             <FieldError>
               {form.formState.errors.name && t("catalog.invalidField")}
             </FieldError>
+          </Field>
+          <Field data-invalid={!!form.formState.errors.vi}>
+            <FieldLabel htmlFor="category-vi">{t("catalog.categoryVietnameseName")}</FieldLabel>
+            <Input id="category-vi" {...form.register("vi")} aria-invalid={!!form.formState.errors.vi} />
+            <FieldError>{form.formState.errors.vi && t("catalog.invalidField")}</FieldError>
           </Field>
         </FieldGroup>
         <Button type="submit" disabled={mutation.isPending}>
@@ -83,7 +92,7 @@ export function CategoriesPage() {
             variant="outline"
             onClick={() => {
               setId(undefined);
-              form.reset({ name: "" });
+              form.reset({ name: "", vi: "" });
             }}
           >
             {t("catalog.cancel")}
@@ -104,7 +113,7 @@ export function CategoriesPage() {
           <TableBody>
             {query.data.map((c) => (
               <TableRow key={c.id}>
-                <TableCell>{c.name}</TableCell>
+                <TableCell>{categoryName(c, i18n.language)}</TableCell>
                 <TableCell>{c.lessonCount}</TableCell>
                 <TableCell>
                   <Button
@@ -114,7 +123,7 @@ export function CategoriesPage() {
                     title={t("catalog.editMetadata")}
                     onClick={() => {
                       setId(c.id);
-                      form.reset({ name: c.name });
+                      form.reset({ name: c.name, vi: c.translations?.vi || "" });
                     }}
                   >
                     <Pencil />

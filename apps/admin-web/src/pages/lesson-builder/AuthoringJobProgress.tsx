@@ -26,6 +26,8 @@ const labelCodes = [
   "STALE",
   "WHISPER_DRAFT",
   "PREPARE",
+  "TTS",
+  "SYNTHESIZING",
   "ALIGN",
   "SEMANTIC",
   "IPA",
@@ -43,6 +45,7 @@ const labelCodes = [
   "TIMING_OVERLAP",
   "TIMING_ZERO_DURATION",
   "GROUPED_TIMING",
+  "POSSIBLE_REPEAT",
 ] as const;
 export function useCodeLabel() {
   const { t } = useTranslation("admin");
@@ -77,8 +80,20 @@ export function JobDuration({ job }: { job: AuthoringJob }) {
 
 export function authoringJobErrorKey(job: AuthoringJob) {
   return job.errorCode === "AUTHORING_VALIDATION_FAILED" && job.operation === "ALIGN"
-    ? "ALIGNMENT_VALIDATION_FAILED" : job.errorCode === "AUTHORING_VALIDATION_FAILED" && job.operation === "PREPARE"
+    ? "ALIGNMENT_VALIDATION_FAILED" : job.errorCode === "AUTHORING_VALIDATION_FAILED" && job.operation === "TTS"
+      ? "TTS_VALIDATION_FAILED" : job.errorCode === "AUTHORING_VALIDATION_FAILED" && job.operation === "PREPARE"
       ? "TRANSCRIPT_VALIDATION_FAILED" : job.errorCode;
+}
+
+export function jobRetryLabelKey(job: AuthoringJob) {
+  return job.operation === 'ALIGN' ? 'twoStep.retryAlign'
+    : job.operation === 'TTS' ? 'twoStep.retryTts'
+    : job.operation === 'PREPARE' ? 'twoStep.retryPrepare' : 'authoringUi.retryStep';
+}
+export function jobProblemSentence(job: AuthoringJob) {
+  if (!job.errorCode?.startsWith('TIMING_')) return null;
+  const value=Number(/^sentence=(\d+),/.exec(job.errorMessage ?? '')?.[1]);
+  return Number.isSafeInteger(value) && value>0 ? value : null;
 }
 
 export function JobProgress({
@@ -94,7 +109,7 @@ export function JobProgress({
 }) {
   const { t, i18n } = useTranslation("admin");
   const describe = useCodeLabel();
-  const knownError = ["AI_CONFIGURATION_REQUIRED", "AI_FREE_TOKEN_BUDGET_EXCEEDED", "AUTHORING_VALIDATION_FAILED", "AI_OUTPUT_INCOMPLETE", "AI_HTTP_400", ...timingErrors].includes(job.errorCode ?? "");
+  const knownError = ["AUTHORING_OPERATION_REMOVED", "AI_CONFIGURATION_REQUIRED", "AI_FREE_TOKEN_BUDGET_EXCEEDED", "AUTHORING_VALIDATION_FAILED", "AI_OUTPUT_INCOMPLETE", "AI_HTTP_400", ...timingErrors].includes(job.errorCode ?? "");
   const errorLabel = authoringJobErrorKey(job);
   const configurationError = job.errorCode === "AI_CONFIGURATION_REQUIRED" || job.errorCode === "AI_HTTP_400";
   return <article className="authoring-job-card" data-historical={historical} role={historical ? undefined : "status"}>
@@ -104,7 +119,7 @@ export function JobProgress({
       {activeJob(job) && job.currentStep && <span className="text-xs text-muted-foreground">{describe(job.currentStep)}</span>}
       <JobDuration job={job} />
       <div className="authoring-job-actions ml-auto flex items-center gap-1">
-        {onRetry && <Tooltip><TooltipTrigger asChild><Button type="button" size="icon-sm" variant="ghost" aria-label={t('authoringUi.retryStep')} onClick={onRetry}><RiRefreshLine /></Button></TooltipTrigger><TooltipContent>{t('authoringUi.retryStep')}</TooltipContent></Tooltip>}
+        {onRetry && <Tooltip><TooltipTrigger asChild><Button type="button" size="icon-sm" variant="ghost" aria-label={t(jobRetryLabelKey(job))} onClick={onRetry}><RiRefreshLine /></Button></TooltipTrigger><TooltipContent>{t(jobRetryLabelKey(job))}</TooltipContent></Tooltip>}
         {activeJob(job) && <Tooltip><TooltipTrigger asChild><Button type="button" size="icon-sm" variant="ghost" aria-label={t('lessonAuthoring.cancel')} onClick={onCancel}><RiCloseLine /></Button></TooltipTrigger><TooltipContent>{t('lessonAuthoring.cancel')}</TooltipContent></Tooltip>}
         <Tooltip><TooltipTrigger asChild><Button size="icon-sm" variant="ghost" asChild><Link aria-label={t('lessonAuthoring.inspectJob')} to={`/jobs?job=${job.jobId}`}><RiExternalLinkLine /></Link></Button></TooltipTrigger><TooltipContent>{t('lessonAuthoring.inspectJob')}</TooltipContent></Tooltip>
       </div>

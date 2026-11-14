@@ -11,9 +11,31 @@ R2 require owner-specific configuration; full Grammar/TOEIC import integration u
 development R2 bucket as described in [Data Import](../tools/data-import/README.md). Do not
 infer model quality or production behavior from mock responses.
 
+Core follows saved Java/resource changes across modules with a compile-and-DevTools restart loop;
+see [Core reload behavior](../apps/core-service/README.md#local-run-and-verification). Keep editor
+save preferences as they are. `make deps-java` remains a setup/dependency-update step, not a step
+repeated by the running watcher.
+
 ## Database workflow
 
-Core startup applies Flyway migrations and validates Hibernate mappings. Append a new versioned migration for every schema change; do not edit established migrations or let Hibernate mutate schema. Test PostgreSQL-specific behavior with Testcontainers. `make db-shell` inspects the local database; `make db-reset` deliberately resets only the local Lyreo application database while preserving Keycloak. Review the reset prompt and target before using it.
+Core startup applies Flyway migrations and validates Hibernate mappings. Append a new versioned migration for every schema change; do not edit established migrations or let Hibernate mutate schema. Test PostgreSQL-specific behavior with Testcontainers. `make db-shell` inspects the local database. `make db-reset` only previews a lesson reset.
+Stop Core first, then use `make db-reset APPLY=1 CONFIRM=lyreo_dev` (replace with the actual printed
+`*_dev` database name) to remove lessons, lesson progress/practice, linked speech attempts and only
+those lessons' authoring/build jobs. Active lesson jobs and curriculum/vocabulary source links block
+reset. The SQL uses explicit table locks and deletes in one transaction; named publication guards are
+restored before commit. It preserves imported TOEIC/lexicon/grammar, active releases/import history,
+SRS/unrelated speech history, accounts, AI settings, categories, channels and all cached media/voice samples.
+
+`make db-recreate` previews **whole application DB deletion**, including imports and configuration;
+it requires the same `APPLY=1 CONFIRM=<actual_db>` and no application connections to execute.
+`make down-v` refuses volume deletion until `CONFIRM=lyreo-volumes`; that command also deletes Keycloak.
+Neither destructive command is needed for ordinary schema upgrades. Core applies appended migrations;
+the authoring titles/category translation update is the single V011 after unchanged V001–V010.
+
+Development defaults live in [`infra/postgres/seed/dev.sql`](../infra/postgres/seed/dev.sql).
+After Core applies migrations, run `make seed-dev` once. It adds six stable categories with English
+names and Vietnamese translations. Rerunning skips existing IDs/names and preserves Admin edits.
+No automatic reseeding runs at startup. Large banks stay under the [import tools](DATA_PIPELINES.md).
 
 The disposable-development V007–V010 consolidation is recorded in [D-026](DECISIONS.md#d-026--admin-management-lifecycle-and-development-migration-consolidation-2026-10-26). V001–V007 form the consolidated foundation; subsequent schema changes append migrations. Databases with the former development history require the explicitly authorized application DB reset, not Flyway repair.
 

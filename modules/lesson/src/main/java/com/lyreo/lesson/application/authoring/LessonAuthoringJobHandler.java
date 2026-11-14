@@ -26,15 +26,16 @@ import java.util.Objects;
 import java.util.Set;
 
 public final class LessonAuthoringJobHandler implements JobHandler {
+    private com.lyreo.lesson.application.port.AuthoringMediaPort media;
+    public void setMedia(com.lyreo.lesson.application.port.AuthoringMediaPort media) {this.media=media;}
     private final AuthoringRepository repository;
     private final AuthoringSourcePort source;
     private final ObjectStoragePort storage;
     private final AiInvocationService ai;
-    private final AuthoringSemantic semantic;
     private final AuthoringJobCommitter committer;
     public LessonAuthoringJobHandler(AuthoringRepository repository,AuthoringSourcePort source,ObjectStoragePort storage,
-        AiInvocationService ai,AuthoringSemantic semantic,AuthoringJobCommitter committer) {
-        this.repository=repository;this.source=source;this.storage=storage;this.ai=ai;this.semantic=semantic;this.committer=committer;
+        AiInvocationService ai,AuthoringJobCommitter committer) {
+        this.repository=repository;this.source=source;this.storage=storage;this.ai=ai;this.committer=committer;
     }
     @Override public String jobType() {return LessonAuthoringService.JOB_TYPE;}
     @Override public void execute(BackgroundJob job,JobExecutionContext context) throws Exception {
@@ -43,16 +44,19 @@ public final class LessonAuthoringJobHandler implements JobHandler {
         var lesson=repository.find(input.lessonId(),false).orElseThrow();
         if(!Objects.equals(lesson.activeJobId,job.id()) || lesson.transcriptRevision!=input.transcriptRevision() || lesson.publishedAt!=null)
             throw new PermanentJobException("AUTHORING_STALE","Draft changed before authoring job started");
+        boolean committed=false;
         try {
             context.throwIfCancellationRequested();
             switch(input.operation()) {
                 case "PREPARE" -> prepare(job,context,lesson);
+                case "TTS" -> synthesize(job,context,lesson);
                 case "ALIGN" -> align(job,context,lesson);
-                case "SEMANTIC" -> generate(job,context,lesson);
+                case "SEMANTIC", "IPA" -> throw new PermanentJobException("AUTHORING_OPERATION_REMOVED","This authoring operation is no longer supported. Continue with transcript and timing review.");
                 default -> throw new PermanentJobException("AUTHORING_OPERATION_INVALID","Unknown authoring operation");
             }
             context.throwIfCancellationRequested();context.heartbeat();
             committer.commit(job,input,lesson);
+            committed=true;
             context.progress("CHECKPOINT_SAVED",100);
         } catch(AiExecutionException failure) {
             if(Set.of("AI_HTTP_401","AI_HTTP_403","AI_HTTP_404","AI_HTTP_501","AI_ROUTE_NOT_CONFIGURED","AI_FREE_ONLY_ROUTE_BLOCKED").contains(failure.errorCode()))
@@ -69,11 +73,46 @@ public final class LessonAuthoringJobHandler implements JobHandler {
             throw new PermanentJobException(failure.code(),failure.getMessage(),failure);
         } catch(RequestValidationException failure) {
             throw new PermanentJobException("AUTHORING_VALIDATION_FAILED",failure.getMessage(),failure);
+        } finally {
+            if(!committed && "TTS".equals(input.operation()) && lesson.audioObjectKey!=null && lesson.audioObjectKey.endsWith("/"+job.id()+".wav")) {
+                try {storage.delete(lesson.audioObjectKey);} catch(RuntimeException ignored) { /* Keep the original job failure. */ }
+            }
         }
+    }
+    private void synthesize(BackgroundJob job,JobExecutionContext context,AuthoringLesson lesson) {
+        LessonAuthoringService.require("TEXT".equals(lesson.sourceType),"Only text lessons use TTS");
+        context.progress("SYNTHESIZING",0);
+        var result=ai.executeForProvider(AiCapability.TTS,"LOCAL_KOKORO","",
+            Map.of("text",lesson.sentences.stream().map(sentence->sentence.text).collect(java.util.stream.Collectors.joining(" ")),
+                "sentences",lesson.sentences.stream().map(sentence->sentence.text).toList()),
+            Map.of("voice",lesson.ttsVoice));
+        repository.usage(job.id(),new AuthoringLesson.Invocation(result.provider(),result.model(),result.inputTokens(),result.outputTokens(),result.latencyMs(),null));
+        context.throwIfCancellationRequested();
+        Object raw=result.output().get("audio_base64");
+        LessonAuthoringService.require(raw instanceof String && ((String)raw).length()<=90_000_000,"TTS returned no supported audio");
+        byte[] audio;
+        try {audio=java.util.Base64.getDecoder().decode((String)raw);}
+        catch(IllegalArgumentException invalid) {throw new RequestValidationException("TTS returned invalid audio");}
+        Object rawSegments=result.output().get("segments");
+        LessonAuthoringService.require(rawSegments instanceof List<?> && ((List<?>)rawSegments).size()==lesson.sentences.size(),"TTS returned no sentence timing evidence");
+        var segments=(List<?>)rawSegments;
+        for(int i=0;i<segments.size();i++) {
+            LessonAuthoringService.require(segments.get(i) instanceof Map<?,?>,"Invalid TTS timing evidence");
+            var segment=(Map<?,?>)segments.get(i);
+            LessonAuthoringService.require(segment.get("start_ms") instanceof Number && segment.get("end_ms") instanceof Number,"Invalid TTS timing evidence");
+            var sentence=lesson.sentences.get(i);sentence.coarseStartMs=((Number)segment.get("start_ms")).longValue();sentence.coarseEndMs=((Number)segment.get("end_ms")).longValue();
+            LessonAuthoringService.require(sentence.coarseStartMs>=0 && sentence.coarseEndMs>sentence.coarseStartMs
+                && sentence.coarseEndMs-sentence.coarseStartMs<=115000,"Split long text sentences before generating speech");
+        }
+        var stored=media.storeTts(lesson.id,job.id(),audio);
+        lesson.audioObjectKey=stored.key();lesson.endMs=stored.durationMs();
+        try {LessonAuthoringService.alignmentSegments(lesson);}
+        catch(RuntimeException failure) {storage.delete(stored.key());lesson.audioObjectKey=null;throw failure;}
     }
     private void prepare(BackgroundJob job,JobExecutionContext context,AuthoringLesson lesson) {
         context.progress("SOURCE_PREPARE",0);
-        lesson.audioObjectKey=source.prepare(lesson.sourceReference,lesson.videoId,lesson.startMs,lesson.endMs);
+        lesson.audioObjectKey="AUDIO".equals(lesson.sourceType) ? media.prepare(lesson.audioSourceId,lesson.startMs,lesson.endMs)
+            : source.prepare(lesson.sourceReference,lesson.videoId,lesson.startMs,lesson.endMs);
         context.throwIfCancellationRequested();context.progress("TRANSCRIBING",0);
         var result=invoke(job,AiCapability.STT,"",Map.of("audio_url",audioUrl(lesson)),Map.of("language","English","timestamps",true,"allow_alignment",false));
         context.throwIfCancellationRequested();
@@ -85,77 +124,55 @@ public final class LessonAuthoringJobHandler implements JobHandler {
         try {
             var words=AuthoringText.observed(result.output());
             try {
-                AuthoringText.mapTiming(lesson.sentences,AuthoringText.coalesce(words),lesson.endMs-lesson.startMs);
-                AuthoringText.groupUnresolvedTiming(lesson.sentences);
-        LessonAuthoringService.validateTiming(lesson);lesson.timingStatus="DRAFT_VALID";
-            } catch(com.lyreo.lesson.domain.authoring.TimingValidationException failure) {
-            throw new PermanentJobException(failure.code(),failure.getMessage(),failure);
-        } catch(RequestValidationException invalid) {
+                AuthoringText.mapTiming(lesson.sentences,AuthoringText.coalesce(lesson.sentences,words),lesson.endMs-lesson.startMs);
+                LessonAuthoringService.validateTiming(lesson);lesson.timingStatus="DRAFT_VALID";
+            } catch(RequestValidationException invalid) {
                 // Raw intervals are useful source anchors even when they cannot drive karaoke.
                 AuthoringText.mapTiming(lesson.sentences,words,lesson.endMs-lesson.startMs);
                 lesson.timingStatus="WHISPER_DRAFT";
             }
-        } catch(com.lyreo.lesson.domain.authoring.TimingValidationException failure) {
-            throw new PermanentJobException(failure.code(),failure.getMessage(),failure);
         } catch(RequestValidationException invalid) {
             String issue=result.output().get("timestamps") instanceof List<?> timestamps && !timestamps.isEmpty()
                 ? (invalid.getMessage().contains("coverage") ? "TIMING_COVERAGE_MISMATCH" : "TIMING_INVALID") : "TIMING_MISSING";
             lesson.sentences.forEach(s->{s.words=List.of();s.issues=List.of(issue);});
         }
         AuthoringText.seedCoarse(lesson.sentences,result.output());
-        boolean usable="DRAFT_VALID".equals(lesson.timingStatus);
-        lesson.sentences.forEach(s->AuthoringText.eligibility(s,usable));
     }
     private void align(BackgroundJob job,JobExecutionContext context,AuthoringLesson lesson) {
         context.progress("ALIGNING",0);
+        var visible=lesson.sentences.stream().filter(sentence->!sentence.hidden).toList();
+        var segments=LessonAuthoringService.alignmentSegments(lesson);
+        var sourceAnchors=visible.stream().collect(java.util.stream.Collectors.toMap(sentence->sentence.id,
+            sentence->new AuthoringText.ObservedWord(sentence.text,sentence.coarseStartMs,sentence.coarseEndMs)));
         var result=invoke(job,AiCapability.ALIGNMENT,"",Map.of("audio_url",audioUrl(lesson),
-            "text",String.join(" ",lesson.sentences.stream().map(s->s.text).toList()),
-            "segments",LessonAuthoringService.alignmentSegments(lesson)),Map.of("language","English"));
+            "text",String.join(" ",visible.stream().map(s->s.text).toList()),
+            "segments",segments),Map.of("language","English"));
         context.throwIfCancellationRequested();
-        AuthoringText.mapTiming(lesson.sentences,AuthoringText.coalesce(AuthoringText.observed(result.output())),lesson.endMs-lesson.startMs);
-        AuthoringText.groupUnresolvedTiming(lesson.sentences);
+        AuthoringText.mapTiming(visible,AuthoringText.coalesce(visible,AuthoringText.observed(result.output())),lesson.endMs-lesson.startMs);
+        AuthoringText.groupUnresolvedTiming(visible);
+        recoverUnresolved(job,context,lesson,sourceAnchors);
         LessonAuthoringService.validateTiming(lesson);
-        lesson.sentences.forEach(s->AuthoringText.eligibility(s,true));
     }
-    private void generate(BackgroundJob job,JobExecutionContext context,AuthoringLesson lesson) {
-        LessonAuthoringService.readyForSemantic(lesson);context.progress("GENERATING_CONTENT",0);
-        List<AuthoringSentence> targets=lesson.sentences.stream().filter(s->"LEARN".equals(s.usage)).toList();
-        // Full lesson context is repeated; only the requested output is bounded to prevent truncation.
-        for(int index=0;index<targets.size();) {
-            context.throwIfCancellationRequested();
-            var saved=repository.chunk(job.id(),index);
-            int size=saved.map(List::size).orElse(3);
-            LessonAuthoringService.require(saved.isEmpty() || (size>0 && index+size<=targets.size()),"Invalid semantic checkpoint size");
-            var chunk=targets.subList(index,Math.min(index+size,targets.size()));
-            if(saved.isPresent()) {
-                for(var cached:saved.get()) {
-                    var target=chunk.stream().filter(s->s.id.equals(cached.id)).findFirst().orElseThrow();
-                    copySemantic(cached,target);
-                }
-                index+=chunk.size();continue;
-            }
-            String prompt=semantic.prompt(lesson.sentences,chunk);
-            var input=semantic.input(lesson.sentences,chunk);
-            var options=AuthoringSemantic.options();
-            for(int attempt=0;attempt<2;attempt++) {
-                context.throwIfCancellationRequested();context.heartbeat();
-                var result=invoke(job,AiCapability.GENERAL_LLM,prompt,input,options);
-                context.throwIfCancellationRequested();
-                try {semantic.apply(result.output(),chunk);break;}
-                catch(RequestValidationException invalid) {
-                    if(attempt==1) throw invalid;
-                    // Core validation messages contain no provider output or source text.
-                    prompt=semantic.correctionPrompt(invalid.getMessage());
-                }
-            }
-            committer.stage(job,index,chunk);index+=chunk.size();
+    private void recoverUnresolved(BackgroundJob job,JobExecutionContext context,AuthoringLesson lesson,
+        Map<java.util.UUID,AuthoringText.ObservedWord> sourceAnchors) {
+        var visible=lesson.sentences.stream().filter(sentence->!sentence.hidden).toList();
+        var unresolved=visible.stream().filter(sentence->sentence.words.stream()
+            .noneMatch(word->word.endMs()>word.startMs())).toList();
+        if(unresolved.isEmpty() || unresolved.size()==visible.size()) return;
+        var segments=new java.util.ArrayList<Map<String,Object>>();long previousEnd=-1;
+        for(var sentence:unresolved) {
+            var anchor=sourceAnchors.get(sentence.id);
+            if(anchor==null || anchor.startMs()<previousEnd) return;
+            segments.add(Map.of("text",sentence.text,"start_ms",anchor.startMs(),"end_ms",anchor.endMs()));
+            previousEnd=anchor.endMs();
         }
-    }
-    private static void copySemantic(AuthoringSentence from,AuthoringSentence to) {
-        to.translation=from.translation;to.vocabulary=from.vocabulary;to.grammar=from.grammar;
-        to.dictationPriority=from.dictationPriority;to.shadowingPriority=from.shadowingPriority;
-        to.dictationSelected=from.dictationSelected;to.shadowingSelected=from.shadowingSelected;
-        to.hints=from.hints;to.notes=from.notes;to.thoughtGroups=from.thoughtGroups;
+        context.throwIfCancellationRequested();
+        // One anchored pass for short unresolved fragments; global validation still rejects overlap or missing speech.
+        var result=invoke(job,AiCapability.ALIGNMENT,"",Map.of("audio_url",audioUrl(lesson),
+            "text",String.join(" ",unresolved.stream().map(sentence->sentence.text).toList()),"segments",segments),Map.of("language","English"));
+        context.throwIfCancellationRequested();
+        AuthoringText.mapTiming(unresolved,AuthoringText.coalesce(unresolved,AuthoringText.observed(result.output())),lesson.endMs-lesson.startMs);
+        AuthoringText.groupUnresolvedTiming(unresolved);
     }
     private AiExecutionResult invoke(BackgroundJob job,AiCapability capability,String prompt,Map<String,Object> input,Map<String,Object> options) {
         var result=ai.execute(capability,prompt,input,options);

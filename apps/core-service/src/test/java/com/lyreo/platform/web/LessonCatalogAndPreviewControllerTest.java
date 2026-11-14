@@ -31,6 +31,10 @@ class LessonCatalogAndPreviewControllerTest {
             context.register(MethodSecurity.class);
             context.registerBean(LessonCatalogPort.class,()->catalog);
             context.registerBean(SourcePreviewPort.class,()->previews);
+            context.registerBean(com.lyreo.lesson.application.port.AuthoringMediaPort.class,()->mock(com.lyreo.lesson.application.port.AuthoringMediaPort.class));
+            context.registerBean(com.lyreo.lesson.application.authoring.LessonAuthoringService.class,()->mock(com.lyreo.lesson.application.authoring.LessonAuthoringService.class));
+            context.registerBean(com.lyreo.lesson.application.port.VoiceSamplesPort.class,()->mock(com.lyreo.lesson.application.port.VoiceSamplesPort.class));
+            context.registerBean(com.lyreo.lesson.api.LessonMediaController.class);
             context.registerBean(LessonCatalogController.class);
             context.registerBean(SourcePreviewController.class);
             context.refresh();
@@ -39,7 +43,11 @@ class LessonCatalogAndPreviewControllerTest {
             assertThatThrownBy(()->context.getBean(SourcePreviewController.class).audio(UUID.randomUUID())).isInstanceOf(AccessDeniedException.class);
             assertThatThrownBy(()->context.getBean(LessonCatalogController.class).update(UUID.randomUUID(),new LessonCatalogController.Metadata(null,List.of())))
                 .isInstanceOf(AccessDeniedException.class);
-            verifyNoInteractions(catalog,previews);
+            assertThatThrownBy(()->context.getBean(com.lyreo.lesson.api.LessonMediaController.class).sourceAudio(UUID.randomUUID())).isInstanceOf(AccessDeniedException.class);
+            assertThatThrownBy(()->context.getBean(com.lyreo.lesson.api.LessonMediaController.class).lessonAudio(UUID.randomUUID())).isInstanceOf(AccessDeniedException.class);
+            assertThatThrownBy(()->context.getBean(com.lyreo.lesson.api.LessonMediaController.class).voices()).isInstanceOf(AccessDeniedException.class);
+            assertThatThrownBy(()->context.getBean(com.lyreo.lesson.api.LessonMediaController.class).sample("af_heart")).isInstanceOf(AccessDeniedException.class);
+            verifyNoInteractions(catalog,previews,context.getBean(com.lyreo.lesson.application.port.AuthoringMediaPort.class));
         } finally {SecurityContextHolder.clearContext();}
     }
     @Test void previewMediaSupportsByteRangesWithoutExposingStorageUrls() throws Exception {
