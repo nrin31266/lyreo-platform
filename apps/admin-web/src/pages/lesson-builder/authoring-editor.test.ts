@@ -15,10 +15,10 @@ describe('authoring edits', () => {
     ]);
     expect(splitSentence(rows, 0, 0)).toBe(rows);
   });
-  it('preserves visibility on split and prevents mixed-visibility merges', () => {
+  it('keeps legacy split data readable and allows merging every draft row', () => {
     const hidden=[{...rows[0],hidden:true}, rows[1]];
     expect(splitSentence(hidden,0,6).slice(0,2)).toEqual([expect.objectContaining({hidden:true}),expect.objectContaining({hidden:true})]);
-    expect(mergeSentence(hidden,0)).toBe(hidden);
+    expect(mergeSentence(hidden,0)[0].text).toBe('Hello world. Next sentence.');
     expect(mergeSentence(hidden.map(row=>({...row,hidden:true})),0)[0].hidden).toBe(true);
   });
   it('merges adjacent rows without losing content or silently changing usage', () => {

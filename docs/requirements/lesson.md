@@ -147,24 +147,31 @@ stale output không commit và private recording không lộ.
 Admin authoring uses one workspace from source preparation through transcript/timing review, with
 no numbered step navigation. All three source modes share metadata and action placement. YouTube/Audio prepare transcripts explicitly; Text saves without AI
 and requests Kokoro speech explicitly from the source action. Source mode changes confirm before discarding input.
-Words & timing has Edit words and Listen & check modes sharing the player and selected sentence.
-Save and align timing saves, approves the current revision and enqueues alignment only when required.
-Failure preserves the last saved checkpoint. Typing, blur and tab changes never invoke AI.
-Save reviewed draft records the current karaoke-review revision after explicit listening confirmation;
-the lesson stays unpublished. Later edits invalidate the appropriate approval. Refresh restores the checkpoint.
-Transcript rows support direct editing, split/merge, observed or explicitly approximate timing and
-sentence playback. A separate Visible/Hidden control retains the full text and source audio while
-excluding hidden sentences from alignment and listening review. At least one sentence stays visible.
-Visibility is not dictation/shadowing selection, invalidates review approval, and fences stale jobs
-without regenerating audio. Split halves inherit visibility; merge requires matching visibility.
-Historical usage fields remain readable but do not determine draft visibility. No bulk usage control
-or exercise selection is present.
+YouTube/Audio preparation saves transcript/audio and automatically queues alignment; explicit Text
+speech generation saves audio and queues alignment without STT. Each preparation checkpoint is fenced and
+atomic with its follow-up enqueue; recovery cannot enqueue duplicate alignment. Initial alignment
+never approves words or listening review. Valid provider timing may be reused only under the existing
+explicit timing-reuse policy. Failed/cancelled alignment retains transcript/audio and retries only alignment.
+One sentence list combines direct text editing, split/merge, observed or explicitly approximate timing,
+karaoke, sentence playback and the existing manual timing dialog. Editing pauses karaoke and marks
+timing for updating. Save and realign explicitly saves the transcript and requests alignment; Text
+lexical changes require explicit audio regeneration. Typing, blur, opening the page and selection changes
+never invoke AI. Save reviewed draft approves the transcript and records listening review only after
+explicit listening confirmation; the lesson stays unpublished. Later edits invalidate approval. Laptop authoring keeps playback and the contextual primary action in a
+bottom dock; unchanged valid drafts do not offer a no-op save/realign. Grouped word timing is shown as
+compact information, while timing validation errors remain visible.
+The complete transcript participates in alignment, validation and draft listening. There is no sentence
+visibility control. Legacy hidden fields remain readable; draft rows with these flags stay visible and
+require complete alignment and renewed review. Explicit saving or successful alignment normalizes
+legacy flags; GET never writes. Published snapshots retain their stored semantics. Exercise sentence
+selection remains outside this workflow.
 Text shows the saved source and selected voice until canonical audio is ready; preliminary sentence
 splitting is not presented as model output. The saved voice remains selected in the source pane.
 Text already supplies the transcript, so it is never sent through STT/Groq again.
 A counted filter shows saved short/long text warnings; interval and coverage errors belong to timing review.
-Both lists virtualize above 20 rows, keep focused editors mounted and preserve local unsaved edits across polls.
-The desktop player can collapse and resize; lists scroll within the workspace, and short screens grow naturally.
+The sentence list virtualizes above 20 rows, keeps focused editors mounted and preserves local unsaved edits across polls.
+The desktop player can collapse and resize; on laptops the sentence list and expanded source details
+scroll above the reserved bottom dock.
 Primary actions occupy reserved footer space and do not cover metadata. Source trimming stays in step 1.
 
 Processing feedback is prominent above the workspace, with the operation/stage, durable job status,
@@ -176,9 +183,9 @@ Connection failures do not discard local edits; polling resumes observation when
 
 Opening a draft never starts playback. Sentence/word actions play immediately; default playback stops
 at the observed sentence end. Continuous playback runs uninterrupted to the selected clip end,
-including silence and hidden sentence audio. It never seeks at sentence boundaries; visible sentence
+including all speech and silence. It never seeks at sentence boundaries; sentence
 and word emphasis follow the actual media clock, with no highlighted sentence during gaps. Loop and
-continuous modes are mutually exclusive. Mode/revision changes and timing editing pause playback.
+continuous modes are mutually exclusive. Revision changes, transcript editing and timing editing pause playback.
 Active timing review shows plain clickable words with foreground emphasis and a fitted underline
 beneath only the currently spoken observed word/group, driven by observed timing and the shared playback clock.
 Previous words lose their underline; silence shows none. No word or sentence background is filled.

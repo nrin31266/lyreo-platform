@@ -26,7 +26,7 @@ public class LessonAuthoringConfiguration {
         @org.springframework.beans.factory.annotation.Value("${lyreo.lesson.timing.reuse-draft:false}") boolean reuseDraft) {
         var service=new LessonAuthoringService(repository,source,jobs);service.setReuseDraftTiming(reuseDraft);return service;
     }
-    @Bean AuthoringJobCommitter authoringJobCommitter(AuthoringRepository repository) {return new AuthoringJobCommitter(repository);}
+    @Bean AuthoringJobCommitter authoringJobCommitter(AuthoringRepository repository,LessonAuthoringService authoring) {return new AuthoringJobCommitter(repository,authoring);}
     @Bean LessonAuthoringJobHandler lessonAuthoringJobHandler(AuthoringRepository repository,AuthoringSourcePort source,ObjectStoragePort storage,
         AiInvocationService ai,AuthoringJobCommitter committer,com.lyreo.lesson.application.port.AuthoringMediaPort media) {
         var handler=new LessonAuthoringJobHandler(repository,source,storage,ai,committer);handler.setMedia(media);return handler;

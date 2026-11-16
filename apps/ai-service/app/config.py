@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     qwen_aligner_model: str = 'Qwen/Qwen3-ForcedAligner-0.6B'
     qwen_device: str = 'cuda:0'
     qwen_dtype: str = 'bfloat16'
-    qwen_max_inference_batch_size: int = 8
+    qwen_max_inference_batch_size: int = 1
     qwen_max_new_tokens: int = 2048
 
     kokoro_model: str = 'hexgrad/Kokoro-82M'

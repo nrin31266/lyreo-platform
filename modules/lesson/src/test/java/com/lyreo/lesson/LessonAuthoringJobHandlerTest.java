@@ -127,16 +127,23 @@ class LessonAuthoringJobHandlerTest {
         when(ai.execute(eq(AiCapability.ALIGNMENT),anyString(),anyMap(),anyMap()))
             .thenReturn(new AiExecutionResult(UUID.randomUUID(),"QWEN","test",Map.of("words",words),1,1,10));
     }
-    @Test void alignsVisibleSentencesWithoutSendingOrDeletingHiddenText() throws Exception {
+    @Test void alignsEverySentenceIncludingLegacyHiddenText() throws Exception {
         alignment(List.of(Map.of("text","We","start_ms",0,"end_ms",100),
             Map.of("text","learn","start_ms",100,"end_ms",200),
-            Map.of("text","English","start_ms",200,"end_ms",500)));
+            Map.of("text","English","start_ms",200,"end_ms",500),
+            Map.of("text","Continue","start_ms",600,"end_ms",900)));
+        sentence.text="We learn.";
         var hidden=new AuthoringSentence(UUID.randomUUID(),"English.","LEARN");
-        hidden.hidden=true;lesson.sentences=List.of(sentence,hidden);
+        hidden.coarseStartMs=0L;hidden.coarseEndMs=1000L;
+        hidden.hidden=true;
+        var following=new AuthoringSentence(UUID.randomUUID(),"Continue.","LEARN");
+        following.coarseStartMs=0L;following.coarseEndMs=1000L;
+        lesson.sentences=List.of(sentence,hidden,following);
         handler.execute(job,context);
-        verify(ai).execute(eq(AiCapability.ALIGNMENT),eq(""),argThat(input->"We learn English.".equals(input.get("text"))),anyMap());
-        assertThat(lesson.sentences).hasSize(2);
-        assertThat(hidden.text).isEqualTo("English.");assertThat(hidden.words).isEmpty();
+        verify(ai).execute(eq(AiCapability.ALIGNMENT),eq(""),argThat(input->"We learn. English. Continue.".equals(input.get("text"))),anyMap());
+        assertThat(lesson.sentences).hasSize(3);
+        assertThat(following.words.getFirst().startMs()).isEqualTo(600);
+        assertThat(hidden.text).isEqualTo("English.");assertThat(hidden.words).hasSize(1);
         verify(committer).commit(eq(job),any(),eq(lesson));
     }
 }

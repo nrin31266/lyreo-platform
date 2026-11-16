@@ -1,15 +1,4 @@
 {
-  "sentenceVisibility": {
-    "show": "Hiện lại câu trong bản nghe kiểm tra",
-    "hide": "Ẩn câu khỏi bản nghe kiểm tra",
-    "keepOne": "Cần giữ ít nhất một câu đang hiện",
-
-    "label": "Hiển thị câu {{number}}",
-    "visible": "Hiện",
-    "hidden": "Ẩn",
-    "mergeSameState": "Chỉ gộp các câu có cùng trạng thái hiện/ẩn",
-    "suggestionsHelp": "Gợi ý dựa trên bản lời hiện tại. Mỗi lần nhận dạng có thể khác dấu câu hoặc từ, nên số gợi ý cũng có thể đổi. Câu ẩn vẫn được giữ để sửa hoặc hiện lại; không dùng khi căn thời gian và nghe kiểm tra."
-  },
   "workspace": "Không gian quản trị",
   "signIn": "Đăng nhập không gian làm việc",
   "signInFailed": "Đăng nhập thất bại",
@@ -202,7 +191,7 @@
     "merge": "Gộp với câu tiếp",
     "splitCaret": "Đặt con trỏ giữa hai phần văn bản không rỗng trước khi tách.",
     "wordTiming": "Từ karaoke",
-    "unsaved": "Có thay đổi chưa lưu. Lưu lại trước khi nghe kiểm tra.",
+    "unsaved": "Lời đã thay đổi. Lưu và căn chỉnh lại trước khi nghe kiểm tra.",
     "saveTranscript": "Lưu bản chép lời",
     "approveTranscript": "Duyệt bản chép lời",
     "transcriptApproved": "Đã duyệt bản chép lời",
@@ -258,7 +247,7 @@
       "TIMING_MISSING": "Chưa có thời gian phát cho câu này. Hãy chạy căn lại.",
       "TIMING_OVERLAP": "Thời gian phát của các từ đang chồng lên nhau. Hãy căn lại hoặc chỉnh thời gian.",
       "TIMING_ZERO_DURATION": "Chưa xác định được từ này kéo dài bao lâu. Hãy chạy căn lại.",
-      "GROUPED_TIMING": "Một số từ chưa có mốc riêng",
+      "GROUPED_TIMING": "Timing theo cụm",
       "IPA": "Chuẩn bị phiên âm",
       "GENERATING_IPA": "Đang tạo phiên âm tham khảo",
       "TIMING_COVERAGE_MISMATCH": "Lời và thời gian phát chưa khớp. Kiểm tra lời rồi chạy căn lại.",
@@ -599,7 +588,7 @@
     "lessonActions": "Thao tác bài học",
     "sentenceActions": "Thao tác câu {{number}}",
     "noTiming": "Chưa có mốc",
-    "saveApproveAlign": "Lưu và căn thời gian",
+    "saveApproveAlign": "Lưu và căn chỉnh lại",
     "details": "Chi tiết xử lý",
     "createdAt": "Tạo lúc",
     "startedAt": "Bắt đầu",
@@ -613,7 +602,8 @@
     "jobActions": "Thao tác tác vụ",
     "activeSentence": "Câu đang chọn",
     "editorTitle": "Biên soạn bài học",
-    "durationHelp": "Thời lượng tác vụ gồm cả thời gian chờ thử lại; latency từng model được ghi riêng."
+    "durationHelp": "Thời lượng tác vụ gồm cả thời gian chờ thử lại; latency từng model được ghi riêng.",
+    "wordsAndTiming": "Lời và timing"
   },
   "reviewWorkspace": {
     "lessonInformation": "Thông tin bài học",
@@ -624,7 +614,7 @@
     "notRun": "Chưa chạy",
     "sentenceCount": "{{count}} câu",
     "transcriptSuggestions": "Góp ý lời ({{count}})",
-    "timingAfterSave": "Cần lưu lại lời",
+    "timingAfterSave": "Timing cần cập nhật",
     "processingFailed": "Chưa hoàn tất xử lý",
     "processingFailedHelp": "Bản lời đã lưu vẫn được giữ lại. Kiểm tra cấu hình hoặc thử xử lý lại.",
     "wordsHint": "Sửa lời xong → lưu và căn chỉnh.",
@@ -636,8 +626,10 @@
     "playSentence": "Phát câu {{number}}",
     "listenSentenceHint": "Bấm câu hoặc từ để nghe đối chiếu",
     "confirmTiming": "Đã nghe và kiểm tra toàn bộ timing",
+    "confirmTimingShort": "Đã nghe kiểm tra",
     "continuousPlaybackHelp": "Phát liền mạch tới hết đoạn, giữ cả khoảng nghỉ. Lời tự theo vị trí phát. Đổi chế độ không tự phát.",
-    "synthesis": "Tạo giọng đọc"
+    "synthesis": "Tạo giọng đọc",
+    "suggestionsHelp": "Gợi ý dựa trên bản lời đã lưu. Mỗi lần nhận dạng có thể khác từ hoặc dấu câu. Căn chỉnh và nghe kiểm tra luôn bao gồm toàn bộ lời."
   },
   "media": {
     "sourceType": "Nguồn bài học",

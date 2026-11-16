@@ -140,25 +140,25 @@ public final class LessonAuthoringJobHandler implements JobHandler {
     }
     private void align(BackgroundJob job,JobExecutionContext context,AuthoringLesson lesson) {
         context.progress("ALIGNING",0);
-        var visible=lesson.sentences.stream().filter(sentence->!sentence.hidden).toList();
+        var sentences=lesson.sentences;
         var segments=LessonAuthoringService.alignmentSegments(lesson);
-        var sourceAnchors=visible.stream().collect(java.util.stream.Collectors.toMap(sentence->sentence.id,
+        var sourceAnchors=sentences.stream().collect(java.util.stream.Collectors.toMap(sentence->sentence.id,
             sentence->new AuthoringText.ObservedWord(sentence.text,sentence.coarseStartMs,sentence.coarseEndMs)));
         var result=invoke(job,AiCapability.ALIGNMENT,"",Map.of("audio_url",audioUrl(lesson),
-            "text",String.join(" ",visible.stream().map(s->s.text).toList()),
+            "text",String.join(" ",sentences.stream().map(s->s.text).toList()),
             "segments",segments),Map.of("language","English"));
         context.throwIfCancellationRequested();
-        AuthoringText.mapTiming(visible,AuthoringText.coalesce(visible,AuthoringText.observed(result.output())),lesson.endMs-lesson.startMs);
-        AuthoringText.groupUnresolvedTiming(visible);
+        AuthoringText.mapTiming(sentences,AuthoringText.coalesce(sentences,AuthoringText.observed(result.output())),lesson.endMs-lesson.startMs);
+        AuthoringText.groupUnresolvedTiming(sentences);
         recoverUnresolved(job,context,lesson,sourceAnchors);
         LessonAuthoringService.validateTiming(lesson);
     }
     private void recoverUnresolved(BackgroundJob job,JobExecutionContext context,AuthoringLesson lesson,
         Map<java.util.UUID,AuthoringText.ObservedWord> sourceAnchors) {
-        var visible=lesson.sentences.stream().filter(sentence->!sentence.hidden).toList();
-        var unresolved=visible.stream().filter(sentence->sentence.words.stream()
+        var sentences=lesson.sentences;
+        var unresolved=sentences.stream().filter(sentence->sentence.words.stream()
             .noneMatch(word->word.endMs()>word.startMs())).toList();
-        if(unresolved.isEmpty() || unresolved.size()==visible.size()) return;
+        if(unresolved.isEmpty() || unresolved.size()==sentences.size()) return;
         var segments=new java.util.ArrayList<Map<String,Object>>();long previousEnd=-1;
         for(var sentence:unresolved) {
             var anchor=sourceAnchors.get(sentence.id);

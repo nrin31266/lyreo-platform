@@ -268,23 +268,76 @@ class LessonAuthoringIT {
         }
         assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_annotation WHERE lesson_id=? AND annotation_type='LEGACY'",Integer.class,id)).isZero();
     }
-    @Test void sentenceVisibilityRoundTripsWithoutLosingAudioTimingOrLegacyUsage() throws Exception {
-        var draft=prepared();var first=draft.sentences.getFirst();var second=draft.sentences.getLast();
-        var audio=draft.audioObjectKey;var words=second.words;
-        draft=service.transcript(draft.id,draft.revision,List.of(
+    @Test void legacyHiddenDraftRequiresFullAlignmentWithoutWritingOnRead() throws Exception {
+        var draft=prepared();var second=draft.sentences.getLast();second.hidden=true;
+        draft.approvedRevision=draft.transcriptRevision;draft.karaokeReviewedRevision=draft.transcriptRevision;
+        repository.save(draft);long revision=draft.revision;
+        var read=service.get(draft.id);
+        assertThat(read.alignmentRequired).isTrue();assertThat(read.sentences.getLast().hidden).isTrue();
+        assertThat(service.get(draft.id).revision).isEqualTo(revision);
+        assertThatThrownBy(()->service.karaoke(read.id,read.revision)).hasMessageContaining("complete transcript");
+        var audio=read.audioObjectKey;
+        var first=read.sentences.getFirst();
+        var saved=service.transcript(read.id,read.revision,List.of(
             new LessonAuthoringService.SentenceInput(first.id,first.text,null),
             new LessonAuthoringService.SentenceInput(second.id,second.text,null,true)));
-        draft=service.get(draft.id);
-        assertThat(draft.sentences.getLast().hidden).isTrue();
-        assertThat(draft.sentences.getLast().words).isEqualTo(words);
-        assertThat(draft.audioObjectKey).isEqualTo(audio);
-        assertThat(draft.sentences.getLast().usage).isEqualTo(second.usage);
-        draft=service.approve(draft.id,draft.revision);draft=service.karaoke(draft.id,draft.revision);
-        draft=service.transcript(draft.id,draft.revision,List.of(
-            new LessonAuthoringService.SentenceInput(first.id,first.text,null),
-            new LessonAuthoringService.SentenceInput(second.id,second.text,null,false)));
-        assertThat(service.get(draft.id).sentences.getLast().hidden).isFalse();
-        assertThat(draft.karaokeReviewedRevision).isNull();
+        assertThat(saved.sentences.getLast().hidden).isFalse();assertThat(saved.timingStatus).isEqualTo("STALE");
+        assertThat(saved.audioObjectKey).isEqualTo(audio);assertThat(saved.karaokeReviewedRevision).isNull();
+        assertThat(saved.approvedRevision).isNull();
+    }
+    @Test void checkpointAndFollowupRollBackTogetherAndConcurrentRecoveryQueuesOnlyOnce() throws Exception {
+        service.setReuseDraftTiming(false);
+        var accepted=service.create("Atomic","https://www.youtube.com/watch?v=abcdefghijk",0,5000);
+        claim(accepted.jobId());var job=jobs.findById(accepted.jobId()).orElseThrow();
+        var input=repository.jobInput(job.id());var output=service.get(accepted.lessonId());
+        output.audioObjectKey="checkpoint.wav";output.sentences=com.lyreo.lesson.domain.authoring.AuthoringText.split("We learn.");
+        assertThatThrownBy(()->new TransactionTemplate(transactions).execute(status->{
+            committer.commit(job,input,output);throw new IllegalStateException("rollback");
+        })).hasMessageContaining("rollback");
+        assertThat(repository.jobInput(job.id()).completed()).isFalse();
+        assertThat(service.get(output.id).sentences).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_authoring_job WHERE lesson_id=?",Long.class,output.id)).isEqualTo(1L);
+        var start=new java.util.concurrent.CountDownLatch(1);
+        try(var executor=java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var commits=new ArrayList<java.util.concurrent.Future<?>>();
+            for(int i=0;i<2;i++) commits.add(executor.submit(()->{try {start.await();}catch(InterruptedException error){throw new RuntimeException(error);}committer.commit(job,input,output);}));
+            start.countDown();for(var commit:commits) commit.get(5,java.util.concurrent.TimeUnit.SECONDS);
+        }
+        assertThat(repository.jobInput(job.id()).completed()).isTrue();
+        var saved=service.get(output.id);
+        assertThat(saved.audioObjectKey).isEqualTo("checkpoint.wav");assertThat(saved.sentences).hasSize(1);
+        assertThat(saved.approvedRevision).isNull();assertThat(saved.karaokeReviewedRevision).isNull();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_authoring_job WHERE lesson_id=? AND operation='ALIGN'",Long.class,output.id)).isEqualTo(1L);
+    }
+    @Test void initialAlignmentIsAtomicRecoverableAndNeverApprovesTranscript() throws Exception {
+        service.setReuseDraftTiming(false);
+        var accepted=service.create("Automatic alignment","https://www.youtube.com/watch?v=abcdefghijk",0,5000);
+        run(accepted);var checkpoint=service.get(accepted.lessonId());
+        UUID alignment=checkpoint.activeJobId;
+        assertThat(alignment).isNotNull().isNotEqualTo(accepted.jobId());
+        assertThat(repository.jobInput(alignment).operation()).isEqualTo("ALIGN");
+        assertThat(checkpoint.approvedRevision).isNull();assertThat(checkpoint.karaokeReviewedRevision).isNull();
+        // Recovery after the business commit must not enqueue or invoke STT again.
+        handler.execute(jobs.findById(accepted.jobId()).orElseThrow(),mock(JobExecutionContext.class));
+        assertThat(service.get(checkpoint.id).activeJobId).isEqualTo(alignment);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_authoring_job WHERE lesson_id=?",Long.class,checkpoint.id)).isEqualTo(2L);
+        claim(alignment);var job=jobs.findById(alignment).orElseThrow();
+        when(ai.execute(eq(AiCapability.ALIGNMENT),anyString(),anyMap(),anyMap())).thenThrow(new PermanentJobException("TEST","alignment failed"));
+        assertThatThrownBy(()->handler.execute(job,mock(JobExecutionContext.class))).hasMessageContaining("alignment failed");
+        transitions.failed(job,"test-worker","TEST","alignment failed",null,0);
+        var failed=service.get(checkpoint.id);
+        assertThat(failed.audioObjectKey).isEqualTo(checkpoint.audioObjectKey);assertThat(failed.sentences).hasSize(2);
+        var retry=service.align(failed.id,failed.revision);
+        jobs.cancel(retry.jobId());
+        assertThat(service.get(failed.id).audioObjectKey).isEqualTo(checkpoint.audioObjectKey);
+        when(ai.execute(eq(AiCapability.ALIGNMENT),anyString(),anyMap(),anyMap())).thenReturn(result(Map.of("words",List.of(
+            Map.of("text","We","start_ms",0,"end_ms",200),Map.of("text","learn","start_ms",200,"end_ms",500),
+            Map.of("text","Practice","start_ms",600,"end_ms",900),Map.of("text","helps","start_ms",900,"end_ms",1200)))));
+        failed=service.get(failed.id);
+        run(service.align(failed.id,failed.revision));var aligned=service.get(failed.id);
+        assertThat(aligned.timingStatus).isEqualTo("VALID");assertThat(aligned.approvedRevision).isNull();
+        assertThat(aligned.karaokeReviewedRevision).isNull();
+        verify(ai,times(1)).execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap());
     }
     @Test void lexicalEditUsesEvidenceAnchoredAlignmentAndRequiresNewKaraokeReview() throws Exception {
         var draft=prepared();var first=draft.sentences.getFirst();var second=draft.sentences.getLast();
@@ -445,12 +498,20 @@ class LessonAuthoringIT {
         run(service.synthesize(id,draft.revision));draft=service.get(id);
         assertThat(draft.endMs).isEqualTo(2000);assertThat(draft.audioObjectKey).contains("/tts/");
         verify(ai,never()).execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap());
-        draft=service.approve(id,draft.revision);
+        assertThat(draft.approvedRevision).isNull();
+        UUID initialAlign=draft.activeJobId;claim(initialAlign);
+        var failedJob=jobs.findById(initialAlign).orElseThrow();
+        when(ai.execute(eq(AiCapability.ALIGNMENT),anyString(),anyMap(),anyMap())).thenThrow(new PermanentJobException("TEST","alignment failed"));
+        assertThatThrownBy(()->handler.execute(failedJob,mock(JobExecutionContext.class))).hasMessageContaining("alignment failed");
+        transitions.failed(failedJob,"test-worker","TEST","alignment failed",null,0);
+        assertThat(service.get(id).audioObjectKey).isEqualTo(draft.audioObjectKey);
+        assertThat(service.get(id).sentences).hasSize(2);
         when(ai.execute(eq(AiCapability.ALIGNMENT),anyString(),anyMap(),anyMap())).thenReturn(result(Map.of("words",List.of(
             Map.of("text","We","start_ms",0,"end_ms",200),Map.of("text","learn","start_ms",200,"end_ms",500),
             Map.of("text","Practice","start_ms",1000,"end_ms",1300),Map.of("text","helps","start_ms",1300,"end_ms",1600)))));
         run(service.align(id,draft.revision));draft=service.get(id);
-        draft=service.karaoke(id,draft.revision);
+        assertThat(draft.approvedRevision).isNull();
+        draft=service.approve(id,draft.revision);draft=service.karaoke(id,draft.revision);
         assertThat(service.get(id).karaokeReviewedRevision).isEqualTo(draft.transcriptRevision);
         assertThat(service.get(id).publishedAt).isNull();
         assertThat(catalog.get(id).sourceType()).isEqualTo("TEXT");

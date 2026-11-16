@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 from typing import Any
 from urllib.parse import unquote, urlparse
 
 from ..config import Settings
 from ..schemas import ExecuteRequest, ExecuteResponse
+from .execution import run_serialized
+
+logger = logging.getLogger(__name__)
 
 
 def _empty_cuda_cache() -> None:
@@ -25,14 +29,14 @@ class QwenRuntime:
     ASR and ForcedAligner are loaded independently. Lyreo usually transcribes first and
     performs a dedicated alignment step only when the selected lesson activities need
     precise timestamps. Keeping the models separate avoids loading the aligner for plain
-    transcription and avoids accidentally keeping two aligner copies in GPU memory.
+    transcription. Both wrappers stay cached, with only the active model on GPU.
     """
 
     def __init__(self, cfg: Settings):
         self.cfg = cfg
         self._asr = None
         self._aligner = None
-        self._load_lock = asyncio.Lock()
+        self._active_model = None
         self._inference_lock = asyncio.Lock()
 
     def _dtype(self):
@@ -44,101 +48,109 @@ class QwenRuntime:
             raise ValueError(f'Unsupported torch dtype: {self.cfg.qwen_dtype}') from exc
 
     async def _load_asr(self):
-        if self._asr is not None:
-            return self._asr
+        if self._asr is None:
+            from qwen_asr import Qwen3ASRModel
 
-        async with self._load_lock:
-            if self._asr is None:
-                if self._aligner is not None:
-                    del self._aligner
-                    self._aligner = None
-                    import gc
-                    gc.collect()
-                    _empty_cuda_cache()
-
-                from qwen_asr import Qwen3ASRModel
-
-                self._asr = await asyncio.to_thread(
-                    Qwen3ASRModel.from_pretrained,
-                    self.cfg.qwen_asr_model,
-                    dtype=self._dtype(),
-                    device_map=self.cfg.qwen_device,
-                    max_inference_batch_size=self.cfg.qwen_max_inference_batch_size,
-                    max_new_tokens=self.cfg.qwen_max_new_tokens,
-                )
-        return self._asr
+            self._asr = await asyncio.to_thread(
+                Qwen3ASRModel.from_pretrained,
+                self.cfg.qwen_asr_model,
+                dtype=self._dtype(),
+                device_map='cpu',
+                max_inference_batch_size=self.cfg.qwen_max_inference_batch_size,
+                max_new_tokens=self.cfg.qwen_max_new_tokens,
+            )
+        return await self._activate(self._asr)
 
     async def _load_aligner(self):
-        if self._aligner is not None:
-            return self._aligner
+        if self._aligner is None:
+            from qwen_asr import Qwen3ForcedAligner
 
-        async with self._load_lock:
-            if self._aligner is None:
-                if self._asr is not None:
-                    del self._asr
-                    self._asr = None
-                    import gc
-                    gc.collect()
-                    _empty_cuda_cache()
+            self._aligner = await asyncio.to_thread(
+                Qwen3ForcedAligner.from_pretrained,
+                self.cfg.qwen_aligner_model,
+                dtype=self._dtype(),
+                device_map='cpu',
+            )
+        return await self._activate(self._aligner)
 
-                from qwen_asr import Qwen3ForcedAligner
-
-                self._aligner = await asyncio.to_thread(
-                    Qwen3ForcedAligner.from_pretrained,
-                    self.cfg.qwen_aligner_model,
-                    dtype=self._dtype(),
-                    device_map=self.cfg.qwen_device,
-                )
-        return self._aligner
+    async def _activate(self, model):
+        if self._active_model is model:
+            return model
+        try:
+            if self._active_model is not None:
+                await asyncio.to_thread(_move_model, self._active_model, 'cpu')
+                self._active_model = None
+                _empty_cuda_cache()
+            await asyncio.to_thread(_move_model, model, self.cfg.qwen_device)
+        except Exception:
+            # A failed .to() may leave weights on mixed devices; never reuse that state.
+            self._active_model = None
+            for name in ('_asr', '_aligner'):
+                cached = getattr(self, name)
+                if cached is not None:
+                    try:
+                        await asyncio.to_thread(cached.model.to, 'cpu')
+                        cached.device = cached.model.device
+                    except Exception:
+                        setattr(self, name, None)
+                        logger.exception('Could not return Qwen %s to CPU; invalidated cache', name)
+            _empty_cuda_cache()
+            raise
+        self._active_model = model
+        return model
 
     async def stt(self, request: ExecuteRequest) -> ExecuteResponse:
-        async with self._inference_lock:
-            source = _normalize_audio_source(request.input.get('audio') or request.input.get('audio_url'))
-            if not source:
-                raise ValueError('STT requires input.audio or input.audio_url')
-            audio = await asyncio.to_thread(_read_audio, source)
-            language = request.options.get('language', 'English')
-            model = await self._load_asr()
-            segments = []
-            # Measured on the 4 GB worker: an unchunked 300 s input exhausts VRAM.
-            for start, window in _audio_windows(audio):
+        return await run_serialized(self._inference_lock, self._stt, request)
+
+    async def _stt(self, request: ExecuteRequest) -> ExecuteResponse:
+        source = _normalize_audio_source(request.input.get('audio') or request.input.get('audio_url'))
+        if not source:
+            raise ValueError('STT requires input.audio or input.audio_url')
+        audio = await asyncio.to_thread(_read_audio, source)
+        language = request.options.get('language', 'English')
+        model = await self._load_asr()
+        segments = []
+        # Measured on the 4 GB worker: an unchunked 300 s input exhausts VRAM.
+        for start, window in _audio_windows(audio):
+            _empty_cuda_cache()
+            try:
+                results = await asyncio.to_thread(
+                    model.transcribe, audio=(window, 16_000), language=language,
+                    context=request.options.get('context'), return_time_stamps=False,
+                )
+            finally:
                 _empty_cuda_cache()
-                try:
-                    results = await asyncio.to_thread(
-                        model.transcribe, audio=(window, 16_000), language=language,
-                        context=request.options.get('context'), return_time_stamps=False,
-                    )
-                finally:
-                    _empty_cuda_cache()
-                if not results:
-                    raise ValueError('Qwen ASR returned no transcription result')
-                text = str(getattr(results[0], 'text', '') or '').strip()
-                if text:
-                    segments.append({'text': text, 'start_ms': round(start / 16),
-                                     'end_ms': round((start + len(window)) / 16)})
-            del model
-            text = ' '.join(segment['text'] for segment in segments)
-            timestamps = []
-            if request.options.get('timestamps', False) and request.options.get('allow_alignment', True) and text:
-                # Unload ASR once before alignment, rather than swapping models per window.
-                timestamps = await self._align_words((audio, 16_000), text, language, segments)
-            return ExecuteResponse(
-                output={'text': text, 'language': language, 'timestamps': timestamps, 'segments': segments},
-                metadata={'runtime': 'qwen', 'model': self.cfg.qwen_asr_model},
-            )
+            if not results:
+                raise ValueError('Qwen ASR returned no transcription result')
+            text = str(getattr(results[0], 'text', '') or '').strip()
+            if text:
+                segments.append({'text': text, 'start_ms': round(start / 16),
+                                 'end_ms': round((start + len(window)) / 16)})
+        del model
+        text = ' '.join(segment['text'] for segment in segments)
+        timestamps = []
+        if request.options.get('timestamps', False) and request.options.get('allow_alignment', True) and text:
+            # Switch models once before alignment, rather than once per window.
+            timestamps = await self._align_words((audio, 16_000), text, language, segments)
+        return ExecuteResponse(
+            output={'text': text, 'language': language, 'timestamps': timestamps, 'segments': segments},
+            metadata={'runtime': 'qwen', 'model': self.cfg.qwen_asr_model},
+        )
 
     async def align(self, request: ExecuteRequest) -> ExecuteResponse:
-        async with self._inference_lock:
-            audio = _normalize_audio_source(request.input.get('audio') or request.input.get('audio_url'))
-            text = request.input.get('text')
-            if not audio or not isinstance(text, str) or not text.strip():
-                raise ValueError('Alignment requires audio/audio_url and text')
-            words = await self._align_words(
-                audio, text, request.options.get('language', 'English'), request.input.get('segments'),
-            )
-            return ExecuteResponse(output={'words': words}, metadata={
-                'runtime': 'qwen', 'model': self.cfg.qwen_aligner_model,
-            })
+        return await run_serialized(self._inference_lock, self._align, request)
+
+    async def _align(self, request: ExecuteRequest) -> ExecuteResponse:
+        audio = _normalize_audio_source(request.input.get('audio') or request.input.get('audio_url'))
+        text = request.input.get('text')
+        if not audio or not isinstance(text, str) or not text.strip():
+            raise ValueError('Alignment requires audio/audio_url and text')
+        words = await self._align_words(
+            audio, text, request.options.get('language', 'English'), request.input.get('segments'),
+        )
+        return ExecuteResponse(output={'words': words}, metadata={
+            'runtime': 'qwen', 'model': self.cfg.qwen_aligner_model,
+        })
 
     async def _align_words(self, audio: Any, text: str, language: Any, segments=None) -> list[dict[str, Any]]:
         waveform = await asyncio.to_thread(_read_audio, audio)
@@ -167,6 +179,12 @@ class QwenRuntime:
                 word['end_ms'] += round(start / 16)
                 words.append(word)
         return words
+
+
+def _move_model(runtime, device: str):
+    if str(runtime.model.device) != device:
+        runtime.model.to(device)
+    runtime.device = runtime.model.device
 
 
 def _bound_alignment_word(word: dict[str, Any], duration_ms: float, precision_ms: float) -> dict[str, Any]:

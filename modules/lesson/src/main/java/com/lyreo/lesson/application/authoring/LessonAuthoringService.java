@@ -102,7 +102,7 @@ public class LessonAuthoringService {
     public AuthoringLesson get(UUID id) {return find(id,false);}
     private AuthoringLesson find(UUID id,boolean lock) {
         var lesson=repository.find(id,lock).orElseThrow(()->new ResourceNotFoundException("Authoring lesson not found"));
-        lesson.alignmentRequired=!("VALID".equals(lesson.timingStatus) || reuseDraftTiming && "DRAFT_VALID".equals(lesson.timingStatus));
+        lesson.alignmentRequired=hasLegacyHidden(lesson) || !("VALID".equals(lesson.timingStatus) || reuseDraftTiming && "DRAFT_VALID".equals(lesson.timingStatus));
         return lesson;
     }
     private AuthoringLesson editable(UUID id,long revision) {
@@ -141,7 +141,7 @@ public class LessonAuthoringService {
             require(seen.add(sentenceId),"Duplicate sentence identity");
             var old=previous.get(sentenceId);
             var sentence=new AuthoringSentence(sentenceId,item.text().strip(),old==null ? "LEARN" : old.usage);
-            sentence.hidden=item.hidden()!=null ? item.hidden() : old!=null && old.hidden;
+            sentence.hidden=false;
             if(old!=null) {
                 sentence.coarseStartMs=old.coarseStartMs;sentence.coarseEndMs=old.coarseEndMs;
                 sentence.translation=old.translation;sentence.vocabulary=old.vocabulary;sentence.grammar=old.grammar;
@@ -155,7 +155,7 @@ public class LessonAuthoringService {
             next.add(sentence);length+=item.text().length();
         }
         require(length<=("TEXT".equals(lesson.sourceType) ? 10000 : 200_000),"Transcript exceeds supported size");
-        require(next.stream().anyMatch(sentence->!sentence.hidden),"Keep at least one visible sentence");
+        boolean legacyHidden=hasLegacyHidden(lesson);
         if(sameTranscript(lesson.sentences,next)) return lesson;
         boolean spokenTextChanged=!lesson.sentences.stream().map(row->row.text).toList().equals(next.stream().map(row->row.text).toList());
         var observed=lesson.sentences.stream().flatMap(s->s.words.stream())
@@ -172,6 +172,7 @@ public class LessonAuthoringService {
                 lesson.timingStatus="STALE";
             }
         }
+        if(legacyHidden) lesson.timingStatus="STALE";
         next.forEach(s->s.issues=AuthoringText.issues(s));
         lesson.sentences=next;lesson.transcriptRevision++;
         if(Set.of("VALID","DRAFT_VALID").contains(lesson.timingStatus)) {
@@ -260,7 +261,6 @@ public class LessonAuthoringService {
         require(words!=null && !words.isEmpty() && words.size()<=2000,"Provide observed word intervals");
         var sentence=lesson.sentences.stream().filter(row->row.id.equals(sentenceId)).findFirst()
             .orElseThrow(()->new RequestValidationException("Sentence does not belong to this lesson"));
-        require(!sentence.hidden,"Show the sentence before editing timing");
         require(words.size()==sentence.words.size(),"Manual timing preserves existing word groups");
         for(int i=0;i<words.size();i++) {
             var old=sentence.words.get(i);var word=words.get(i);
@@ -282,13 +282,19 @@ public class LessonAuthoringService {
     }
     @Transactional public Accepted align(UUID id,long revision) {
         var lesson=editable(id,revision);
-        require(Objects.equals(lesson.approvedRevision,lesson.transcriptRevision),"Approve the current transcript before alignment");
-
         require(lesson.audioObjectKey!=null,"Generate or prepare current audio first");
         alignmentSegments(lesson);
         return enqueue(lesson,"ALIGN");
     }
+    private static boolean hasLegacyHidden(AuthoringLesson lesson) {
+        return lesson.publishedAt==null && lesson.sentences.stream().anyMatch(sentence->sentence.hidden);
+    }
+    void alignPrepared(AuthoringLesson lesson) {
+        if(hasLegacyHidden(lesson) || !("VALID".equals(lesson.timingStatus) || reuseDraftTiming && "DRAFT_VALID".equals(lesson.timingStatus)))
+            enqueue(lesson,"ALIGN");
+    }
     private void requireAcceptedTiming(AuthoringLesson lesson) {
+        require(!hasLegacyHidden(lesson),"Align the complete transcript before confirming review");
         require(reuseDraftTiming || "VALID".equals(lesson.timingStatus),"Local alignment is required until draft timing quality has been verified");
     }
     @Transactional public AuthoringLesson karaoke(UUID id,long revision) {
@@ -328,7 +334,6 @@ public class LessonAuthoringService {
         long previousEnd=-1;int index=0,sentenceNumber=0;
         for(var sentence:lesson.sentences) {
             sentenceNumber++;
-            if(sentence.hidden) continue;
             if(sentence.words.isEmpty())throw new com.lyreo.lesson.domain.authoring.TimingValidationException("TIMING_MISSING","sentence="+sentenceNumber+", Sentence has no observed timing");
             for(var word:sentence.words) {
                 String detail="sentence="+sentenceNumber+", word="+index+", startMs="+word.startMs()+", endMs="+word.endMs()+", durationMs="+(lesson.endMs-lesson.startMs);
@@ -343,7 +348,6 @@ public class LessonAuthoringService {
         var windows=new ArrayList<Map<String,Object>>();
         var text=new StringBuilder();long begin=-1,end=-1,previousStart=-1,previousEnd=-1;
         for(var sentence:lesson.sentences) {
-            if(sentence.hidden) continue;
             require(sentence.coarseStartMs!=null && sentence.coarseEndMs!=null,"No safe ASR word boundary for alignment; create a new draft with a shorter source range or split before lexical edits");
             require(sentence.coarseStartMs>=previousStart && sentence.coarseEndMs>=previousEnd
                 && sentence.coarseStartMs>=0 && sentence.coarseEndMs<=lesson.endMs-lesson.startMs,"Unsafe or reordered ASR boundaries for alignment");

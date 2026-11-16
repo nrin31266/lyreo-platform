@@ -57,6 +57,6 @@ The [PRD](../product/prd.md) and [non-functional requirements](non-functional.md
 
 Decide how Admin selects independent Dictation and Shadowing sentence sets, what contextual
 annotations are needed, and how reviewed drafts become published lessons. Step 2 currently
-retains the full transcript with independent Visible/Hidden review controls; these do not choose
-exercise membership. Do not recreate Learn/Watch only/Skip, exercise selection or a generation/publish
+retains the full transcript in one words-and-timing panel, without visibility controls. All
+sentences participate in alignment and listening; exercise membership is a separate future choice. Do not recreate Learn/Watch only/Skip, exercise selection or a generation/publish
 scaffold before this decision is accepted.

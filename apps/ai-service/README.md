@@ -15,6 +15,20 @@ uv run --locked --extra dev python -m pytest
 
 `mock` mode is the normal deterministic development/CI runtime and needs no GPU or paid provider. For local Qwen inference, sync the `qwen` extra and select the local runtime as described in `.env.example`. Kokoro TTS uses its separate `kokoro` extra and system phonemization dependency. Model weights are cached locally and never committed.
 
+`make ai-local` runs one reload-enabled development worker. Qwen models load lazily and
+stay cached in the process: the last-used model stays on the configured device, while the
+other stays in CPU RAM with its original dtype. Switching STT/alignment transfers weights
+between RAM and GPU instead of rebuilding the model from disk. Only one Qwen model uses
+the GPU at a time. Kokoro defaults to CPU and shares one model across US/UK pipelines.
+Local inference calls are serialized within each runtime, including when a cancelled
+request's worker is still finishing. CPU math threads default to two; environment keys
+and the single-item Qwen batch default are documented in `.env.example`.
+
+Stopping/restarting the service, including an automatic `--reload` after Python edits,
+clears the **in-memory** models. Downloaded weights remain in the Hugging Face disk cache;
+the next call loads them into memory again without downloading cached weights. To keep
+models warm while working on Python files, launch the same local command without `--reload`.
+
 Internal capability calls require the service token. FastAPI does not persist provider credentials or business records. Do not log incoming credentials. Use authorized media references for large audio; storage ownership remains outside this process.
 
 ## Lesson authoring execution contract

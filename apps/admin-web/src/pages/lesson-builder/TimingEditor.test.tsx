@@ -1,45 +1,27 @@
-import { TooltipProvider } from '@/components/ui/tooltip';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { I18nextProvider } from 'react-i18next';
 import { i18n } from '@/i18n';
 import { TimingEditor } from './TimingEditor';
-import { createPlaybackClock } from './playback-clock';
 import type { AuthoringSentence } from './lesson-builder.types';
 
-vi.mock('@tanstack/react-virtual', async importOriginal => {
-  const actual=await importOriginal<typeof import('@tanstack/react-virtual')>();
-  return {...actual,useVirtualizer:(options:Parameters<typeof actual.useVirtualizer>[0])=>actual.useVirtualizer({
-    ...options,observeElementRect:(_,callback)=>{callback({width:800,height:300});return ()=>{};},measureElement:()=>128,
-  })};
-});
 afterEach(cleanup);
-
-it('bounds timing DOM, plays explicit sentence/word actions and pauses before editing', () => {
-  const sentences: AuthoringSentence[]=Array.from({length:100},(_,index)=>({
-    id:`s${index}`,text:`Sentence ${index}`,usage:'LEARN',issues:[],vocabulary:[],grammar:[],hints:[],notes:[],thoughtGroups:[],
-    dictationEligible:true,shadowingEligible:true,dictationSelected:false,shadowingSelected:false,
-    words:[{text:'Sentence',startMs:index*2000,endMs:index*2000+500,charStart:0,charEnd:8,tokenStart:0,tokenEnd:1}],
-  }));
-  const play=vi.fn(),pause=vi.fn(),clock=createPlaybackClock();
-  sentences[0].issues=['SHORT_SENTENCE'];
-  sentences[1].issues=['GROUPED_TIMING'];
-  sentences[2].hidden=true;sentences[2].issues=['TIMING_ZERO_DURATION'];
-  render(<I18nextProvider i18n={i18n}><TooltipProvider><TimingEditor activeSentenceId="s0" onPlay={play} onPause={pause} sentences={sentences} revision={1} clock={clock} disabled={false} durationMs={200000} onSave={vi.fn()}/></TooltipProvider></I18nextProvider>);
-  expect(document.querySelectorAll('.timing-item').length).toBeLessThan(15);
-  expect(screen.queryByRole('button',{name:i18n.t('admin:reviewWorkspace.playSentence',{number:100})})).not.toBeInTheDocument();
-  expect(document.querySelectorAll('.timing-word')).toHaveLength(1);
-  expect(screen.queryByRole('button',{name:i18n.t('admin:reviewWorkspace.playSentence',{number:3})})).not.toBeInTheDocument();
-  expect(screen.queryByText(i18n.t('admin:lessonAuthoring.labels.SHORT_SENTENCE'))).not.toBeInTheDocument();
-  expect(screen.getByRole('button',{name:i18n.t('admin:lessonAuthoring.labels.GROUPED_TIMING')})).toBeVisible();
-  expect(screen.getByRole('button',{name:`${i18n.t('admin:authoringUi.nextIssue')} · 1`})).toBeVisible();
-  fireEvent.click(screen.getByRole('button',{name:i18n.t('admin:reviewWorkspace.playSentence',{number:2})}));
-  expect(play).toHaveBeenLastCalledWith('s1');
-  fireEvent.click(screen.getByRole('button',{name:'Sentence 0'}));
-  expect(play).toHaveBeenLastCalledWith('s0',0);
-  act(()=>clock.set(100));
-  expect(document.querySelector('.timing-word')).toHaveAttribute('data-active','true');
-  fireEvent.click(screen.getAllByRole('button',{name:i18n.t('admin:authoringUi.editTiming')})[0]);
+it('pauses before timing edits, preserves the opening revision and retains failed edits', async () => {
+  const sentence = {id:'s0', text:'Hello.', words:[{text:'Hello',startMs:0,endMs:500,charStart:0,charEnd:5,tokenStart:0,tokenEnd:1}]} as AuthoringSentence;
+  const play=vi.fn(),pause=vi.fn(),save=vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  const editor = (revision: number) => <I18nextProvider i18n={i18n}><TimingEditor onPlay={play} onPause={pause} revision={revision} disabled={false} durationMs={1000} onSave={save}>{edit => <button onClick={() => edit(sentence)}>Timing</button>}</TimingEditor></I18nextProvider>;
+  const view=render(editor(1));
+  fireEvent.click(screen.getByRole('button',{name:'Timing'}));
   expect(pause).toHaveBeenCalledOnce();
   expect(screen.getByRole('dialog')).toBeVisible();
+  fireEvent.click(screen.getByRole('button',{name:'Hello'}));
+  expect(play).toHaveBeenCalledWith('s0',0);
+  fireEvent.change(screen.getAllByRole('spinbutton')[1],{target:{value:'600'}});
+  view.rerender(editor(2));
+  await act(async () => {fireEvent.submit(screen.getByRole('dialog').querySelector('form')!);});
+  expect(save).toHaveBeenCalledWith('s0',[expect.objectContaining({endMs:600})],1);
+  expect(screen.getByRole('alert')).toBeVisible();
+  expect(screen.getAllByRole('spinbutton')[1]).toHaveValue(600);
+  await act(async () => {fireEvent.submit(screen.getByRole('dialog').querySelector('form')!);});
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });

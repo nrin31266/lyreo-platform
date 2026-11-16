@@ -31,7 +31,7 @@ export const saveTranscript = (
 ) =>
   api<LessonDraft>(`${base}/${encodeURIComponent(id)}/transcript`, {
     method: "PUT",
-    body: JSON.stringify({ revision, sentences: sentences.map(({ id, text, hidden }) => ({ id, text, hidden })) }),
+    body: JSON.stringify({ revision, sentences: sentences.map(({ id, text }) => ({ id, text })) }),
   }).then(draft => ({ ...draft, endMs: draft.endMs ?? 0 }));
 export const approveTranscript = (id: string, revision: number) =>
   api<LessonDraft>(

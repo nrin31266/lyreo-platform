@@ -13,7 +13,6 @@ export function mergeSentence(sentences: TranscriptSentence[], index: number): T
   if (index >= sentences.length - 1) return sentences;
   const first = sentences[index];
   const second = sentences[index + 1];
-  if (!!first.hidden !== !!second.hidden) return sentences;
   return [...sentences.slice(0, index), { ...first, text: `${first.text.trim()} ${second.text.trim()}` },
     ...sentences.slice(index + 2)];
 }

@@ -10,6 +10,7 @@ from typing import Any
 
 from ..config import Settings
 from ..schemas import ExecuteRequest, ExecuteResponse
+from .execution import run_serialized
 
 # Standard Kokoro-82M English voice catalog from official VOICES.md.
 # Voice prefix encodes accent: 'a*' = American English, 'b*' = British English.
@@ -62,6 +63,8 @@ class KokoroRuntime:
 
     def __init__(self, cfg: Settings):
         self.cfg = cfg
+        self._model = None
+        self._inference_lock = asyncio.Lock()
         self._pipelines: dict[str, Any] = {}
         self._voices: dict[tuple[str, str], Any] = {}
 
@@ -79,6 +82,9 @@ class KokoroRuntime:
         ]
 
     async def tts(self, request: ExecuteRequest) -> ExecuteResponse:
+        return await run_serialized(self._inference_lock, self._tts, request)
+
+    async def _tts(self, request: ExecuteRequest) -> ExecuteResponse:
         text = str(request.input.get('text') or '').strip()
         if not text:
             raise ValueError('Kokoro TTS requires input.text')
@@ -171,7 +177,7 @@ class KokoroRuntime:
         lang_code = _lang_code(accent)
         if lang_code not in self._pipelines:
             try:
-                from kokoro import KModel, KPipeline
+                from kokoro import KPipeline
             except ImportError as exc:
                 raise ValueError(
                     'Kokoro runtime is not installed. Install the optional dependency '
@@ -181,9 +187,11 @@ class KokoroRuntime:
             pipeline = await asyncio.to_thread(
                 KPipeline, lang_code=lang_code, repo_id=self.cfg.kokoro_model, model=False
             )
-            pipeline.model = await asyncio.to_thread(
-                _build_model, self.cfg.kokoro_model, self.cfg.kokoro_device
-            )
+            if self._model is None:
+                self._model = await asyncio.to_thread(
+                    _build_model, self.cfg.kokoro_model, self.cfg.kokoro_device
+                )
+            pipeline.model = self._model
             self._pipelines[lang_code] = pipeline
         return self._pipelines[lang_code]
 

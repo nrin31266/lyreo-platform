@@ -1,15 +1,4 @@
 {
-  "sentenceVisibility": {
-    "show": "Show this sentence in listening review",
-    "hide": "Hide this sentence from listening review",
-    "keepOne": "Keep at least one sentence visible",
-
-    "label": "Sentence {{number}} visibility",
-    "visible": "Visible",
-    "hidden": "Hidden",
-    "mergeSameState": "Only merge sentences with the same visibility",
-    "suggestionsHelp": "Suggestions use the current transcript. Recognition can return different words or punctuation on each run, changing the suggestions. Hidden sentences stay editable and can be restored; alignment and listening review exclude them."
-  },
   "workspace": "Admin workspace",
   "signIn": "Sign in to workspace",
   "signInFailed": "Sign-in failed",
@@ -202,7 +191,7 @@
     "merge": "Merge with next",
     "splitCaret": "Place the text cursor between two nonempty parts before splitting.",
     "wordTiming": "Karaoke words",
-    "unsaved": "Unsaved changes. Save before listening review.",
+    "unsaved": "Words changed. Save and realign before listening review.",
     "saveTranscript": "Save transcript",
     "approveTranscript": "Approve transcript",
     "transcriptApproved": "Transcript approved",
@@ -258,7 +247,7 @@
       "TIMING_MISSING": "This sentence has no playback timing yet. Run alignment again.",
       "TIMING_OVERLAP": "Word playback times overlap. Run alignment again or edit the times.",
       "TIMING_ZERO_DURATION": "The duration of this word is missing. Run alignment again.",
-      "GROUPED_TIMING": "Some words do not have individual timing",
+      "GROUPED_TIMING": "Grouped timing",
       "IPA": "IPA preparation",
       "GENERATING_IPA": "Generating reference IPA",
       "TIMING_COVERAGE_MISMATCH": "The words and playback times do not match. Check the transcript, then align again.",
@@ -599,7 +588,7 @@
     "lessonActions": "Lesson actions",
     "sentenceActions": "Sentence {{number}} actions",
     "noTiming": "No timing yet",
-    "saveApproveAlign": "Save and align timing",
+    "saveApproveAlign": "Save and realign",
     "details": "Processing details",
     "createdAt": "Created",
     "startedAt": "Started",
@@ -613,7 +602,8 @@
     "jobActions": "Job actions",
     "activeSentence": "Selected sentence",
     "editorTitle": "Lesson authoring",
-    "durationHelp": "Elapsed job time includes retry waits; model latency is listed separately."
+    "durationHelp": "Elapsed job time includes retry waits; model latency is listed separately.",
+    "wordsAndTiming": "Words and timing"
   },
   "reviewWorkspace": {
     "lessonInformation": "Lesson information",
@@ -624,7 +614,7 @@
     "notRun": "Not run yet",
     "sentenceCount": "{{count}} sentences",
     "transcriptSuggestions": "Word suggestions ({{count}})",
-    "timingAfterSave": "Save words first",
+    "timingAfterSave": "Timing needs updating",
     "processingFailed": "Processing needs attention",
     "processingFailedHelp": "Your saved transcript is preserved. Check configuration or retry processing.",
     "wordsHint": "Edit words, then save and align.",
@@ -636,8 +626,10 @@
     "playSentence": "Play sentence {{number}}",
     "listenSentenceHint": "Click a sentence or word to listen",
     "confirmTiming": "I listened and checked all timing",
+    "confirmTimingShort": "Listened and checked",
     "continuousPlaybackHelp": "Play through to the clip end, including pauses. Words follow the playback position. Changing this mode does not start playback.",
-    "synthesis": "Speech synthesis"
+    "synthesis": "Speech synthesis",
+    "suggestionsHelp": "Suggestions use the saved transcript. Recognition may return different words or punctuation on each run. Alignment and listening review always include the complete transcript."
   },
   "media": {
     "sourceType": "Lesson source",

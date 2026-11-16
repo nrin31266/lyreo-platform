@@ -72,16 +72,22 @@ The authoring workflow ends at an unpublished reviewed draft. `PUT /{id}/transcr
 `{revision, sentences: [{id?, text}]}`; legacy `usage` is optional and existing stored flags are
 preserved rather than edited by this workflow. Approval requires a non-empty transcript and current
 Text audio, not a LEARN sentence. `/approve`, `/align`, `/prepare`, `/karaoke-review` and observed
-word `/sentences/{sentenceId}/timing` remain revision checked and Admin only.
+word `/sentences/{sentenceId}/timing` remain revision checked and Admin only. Alignment accepts a saved,
+unapproved transcript with current audio. PREPARE/TTS commit their checkpoint and enqueue initial
+alignment atomically under the job fence, subject to the existing timing-reuse policy; alignment never
+automatically approves the transcript or listening review.
 `POST /{id}/karaoke-review` is the final save-reviewed action, never publication. Readiness is derived
 from current transcript approval, valid timing and `karaokeReviewedRevision`; no new workflow status is added.
-Transcript `sentences[]` accepts optional boolean `hidden` (default false for new sentences; omitted
-values preserve saved visibility). Responses expose `hidden`; legacy `usage` remains readable and
-is independent of visibility. Hidden sentences stay stored/editable but do not participate in alignment,
-timing validation or listening review text. Continuous preview audio retains the entire source,
-including hidden sentence audio and silence; hidden rows receive no highlight. Hiding every sentence is rejected. Visibility edits use the same
-revision fence and invalidate review checkpoints while preserving source audio/word evidence.
-No schema migration is needed: visibility lives in the existing authoring JSON document.
+Transcript `sentences[]` retains optional boolean `hidden` and responses retain the field for legacy
+compatibility. Draft authoring always includes every sentence in alignment, validation and listening.
+Explicit transcript saves normalize `hidden` to false and invalidate review; drafts carrying legacy
+flags require full alignment/review. Successful alignment also normalizes these flags. GET does not
+write, and published snapshots retain their stored semantics. Legacy `usage` remains readable.
+`/align` accepts an unapproved saved transcript; it never implies transcript/listening approval.
+PREPARE and TTS checkpoints atomically enqueue initial alignment inside Core under the existing lease
+and revision fence, unless timing reuse is explicitly permitted. Failure/cancellation of alignment
+retains the preparation checkpoint. No request/response shape, endpoint or schema migration changes.
+
 Sentence `issues` may include `POSSIBLE_REPEAT`, a review hint that preserves the complete transcript.
 For sentence-local timing failures, the job `errorMessage` begins with `sentence=N,` (one-based saved
 transcript order), followed by numeric timing diagnostics. Admin uses this prefix only for `TIMING_*`

@@ -59,29 +59,22 @@ class LessonAuthoringServiceTest {
         assertThat(lesson.timingStatus).isEqualTo("STALE");assertThat(lesson.sentences.getFirst().words).isEmpty();
         assertThat(lesson.sentences.getFirst().coarseEndMs).isEqualTo(500);assertThat(lesson.semanticRevision).isNull();
     }
-    @Test void hiddenSentencesStayStoredButDoNotBlockTimingOrBecomeExerciseSelections() {
+    @Test void legacyHiddenTextParticipatesInAlignmentAndExplicitSaveNormalizesIt() {
         var first=lesson.sentences.getFirst();
         var repeated=new AuthoringSentence(UUID.randomUUID(),"Learn.","WATCH_ONLY");
-        repeated.coarseStartMs=200L;repeated.coarseEndMs=500L;
+        repeated.hidden=true;repeated.coarseStartMs=200L;repeated.coarseEndMs=500L;
         lesson.sentences=List.of(first,repeated);
+        assertThat(LessonAuthoringService.alignmentSegments(lesson)).containsExactly(
+            java.util.Map.of("text","We learn. Learn.","start_ms",0L,"end_ms",500L));
+        assertThatThrownBy(()->LessonAuthoringService.validateTiming(lesson)).hasMessageContaining("no observed timing");
+        assertThatThrownBy(()->service.karaoke(lesson.id,5)).hasMessageContaining("complete transcript");
         service.transcript(lesson.id,5,List.of(new LessonAuthoringService.SentenceInput(first.id,first.text,null),
             new LessonAuthoringService.SentenceInput(repeated.id,repeated.text,null,true)));
-        assertThat(lesson.sentences.getLast().hidden).isTrue();
-        assertThat(lesson.sentences.getLast().text).isEqualTo("Learn.");
+        assertThat(lesson.sentences.getLast().hidden).isFalse();
         assertThat(lesson.sentences.getLast().usage).isEqualTo("WATCH_ONLY");
-        assertThat(lesson.sentences.getFirst().words).hasSize(2);
-        assertThat(lesson.approvedRevision).isNull();
-        assertThat(lesson.karaokeReviewedRevision).isNull();
-        assertThatCode(()->LessonAuthoringService.validateTiming(lesson)).doesNotThrowAnyException();
-        assertThat(LessonAuthoringService.alignmentSegments(lesson)).containsExactly(
-            java.util.Map.of("text","We learn.","start_ms",0L,"end_ms",500L));
-        service.transcript(lesson.id,5,List.of(new LessonAuthoringService.SentenceInput(first.id,first.text,null),
-            new LessonAuthoringService.SentenceInput(repeated.id,repeated.text,null)));
-        assertThat(lesson.sentences.getLast().hidden).isTrue();
-        assertThatThrownBy(()->service.transcript(lesson.id,5,List.of(
-            new LessonAuthoringService.SentenceInput(first.id,first.text,null,true),
-            new LessonAuthoringService.SentenceInput(repeated.id,repeated.text,null,true))))
-            .hasMessageContaining("visible sentence");
+        assertThat(lesson.timingStatus).isEqualTo("STALE");
+        assertThat(lesson.approvedRevision).isNull();assertThat(lesson.karaokeReviewedRevision).isNull();
+        verifyNoInteractions(jobs);
     }
     @Test void restoringHiddenInvalidTimingRequiresAlignmentAndPreservesAudio() {
         lesson.sourceType="TEXT";lesson.audioObjectKey="speech.wav";

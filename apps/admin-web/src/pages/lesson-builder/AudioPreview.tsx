@@ -24,7 +24,7 @@ export function PrivateAudio({ url, ...props }: Omit<Props, 'src'> & { url: stri
 }
 export function LessonPlayer({ draft, ...props }: Omit<ComponentProps<typeof YouTubePreview>, 'videoId' | 'startMs' | 'endMs'> & { draft: LessonDraft }) {
   const { t } = useTranslation('admin');
-  const playbackSentences = draft.status === 'PUBLISHED' ? props.sentences : props.sentences.map(row => ({ ...row, usage: 'LEARN' as const }));
+  const playbackSentences = draft.status === 'PUBLISHED' ? props.sentences : props.sentences.map(row => ({ ...row, hidden: false, usage: 'LEARN' as const }));
   if (!draft.sourceType || draft.sourceType === 'YOUTUBE') return <YouTubePreview videoId={draft.videoId ?? ''} startMs={draft.startMs} endMs={draft.endMs} {...props} sentences={playbackSentences} />;
   if (!draft.audioReady) return <p className="text-muted-foreground">{t(draft.sourceType === 'TEXT' ? 'media.audioMissing' : 'twoStep.audioPreparing')}</p>;
   return <PrivateAudio key={draft.audioVersion} url={`/api/v1/admin/lesson-authoring/${draft.id}/audio?v=${draft.audioVersion}`} startMs={0} endMs={draft.endMs - draft.startMs} {...props} sentences={playbackSentences} />;

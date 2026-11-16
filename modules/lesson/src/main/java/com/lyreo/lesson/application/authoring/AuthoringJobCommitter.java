@@ -10,10 +10,12 @@ import org.springframework.transaction.annotation.Transactional;
 /** The same short transaction fences worker ownership and publishes a checkpoint. */
 public class AuthoringJobCommitter {
     private final AuthoringRepository repository;
-    public AuthoringJobCommitter(AuthoringRepository repository) {this.repository=repository;}
+    private final LessonAuthoringService authoring;
+    public AuthoringJobCommitter(AuthoringRepository repository,LessonAuthoringService authoring) {this.repository=repository;this.authoring=authoring;}
     @Transactional public void commit(BackgroundJob job,AuthoringRepository.JobInput input,AuthoringLesson output) {
         var current=repository.find(input.lessonId(),true).orElseThrow();
         repository.assertJobLease(job.id(),job.leaseOwner());
+        if(repository.jobInput(job.id()).completed()) return;
         if(current.publishedAt!=null || !Objects.equals(current.activeJobId,job.id())
             || current.transcriptRevision!=input.transcriptRevision())
             throw new PermanentJobException("AUTHORING_STALE","Authoring output discarded because the draft changed");
@@ -26,6 +28,8 @@ public class AuthoringJobCommitter {
             current.approvedRevision=null;current.karaokeReviewedRevision=null;current.semanticRevision=null;current.status="TRANSCRIPT_REVIEW";
         } else if("ALIGN".equals(input.operation())) {
             current.sentences=output.sentences;current.timingStatus="VALID";current.karaokeReviewedRevision=null;
+            if(current.sentences.stream().anyMatch(sentence->sentence.hidden)) current.approvedRevision=null;
+            current.sentences.forEach(sentence->sentence.hidden=false);
             current.status="TIMING_REVIEW";
         } else {
             throw new PermanentJobException("AUTHORING_OPERATION_REMOVED","This authoring operation is no longer supported");
@@ -34,5 +38,6 @@ public class AuthoringJobCommitter {
         if("PREPARE".equals(input.operation()) && "AUDIO".equals(current.sourceType) && !current.sentences.isEmpty())
             repository.renameAutomatic(current.id,LessonAuthoringService.automaticTitle(current.sentences.getFirst().text));
         repository.completeJob(job.id());
+        if("PREPARE".equals(input.operation()) || "TTS".equals(input.operation())) authoring.alignPrepared(current);
     }
 }
