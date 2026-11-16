@@ -86,8 +86,9 @@ Keep module boundary so future English-only tutor can reuse AI routing, but do n
 ## D-017 — Semantic theming and shared localization (2026-09-07)
 
 Status: Accepted.
-Use shared primitive/semantic design tokens with light/dark themes and `@lyreo/i18n` for intentional
-shared translations. Platform adapters own locale/theme persistence.
+Use semantic design tokens with light/dark themes and `@lyreo/i18n` for intentional
+shared translations. Platform adapters own locale/theme persistence. The shared visual-foundation
+requirement is superseded by D-025; localization remains shared.
 
 ## D-018 — Platform-specific UI component ownership (2026-09-07)
 
@@ -124,15 +125,12 @@ Rationale: [`http-api-contract.md`](architecture/http-api-contract.md).
 
 ## D-022 — Standalone Lesson Prep Tool and Portable Package Format (2026-09-13)
 
-Status: Accepted.
-Decision: Lesson source acquisition, speech synthesis, transcription, and alignment are executed
-locally inside a dedicated operator workstation (`tools/lesson-prep`) that exports one self-contained,
-portable `*.lesson-source.zip` package (`lesson-source.json` manifest + media bytes). The tool does
-not depend on or mutate Core database tables, Keycloak users/clients, or Cloudflare R2 object storage.
-FastAPI AI Service exposes technical capabilities (`/v1/tts`, `/v1/tts/voices`, `/v1/stt`, `/v1/align`)
-via local file/audio references (`file:///...`) without receiving YouTube URLs or business lesson DTOs.
-Package ingestion into Core database and storage is a separate future phase. Rationale: `DATA_PIPELINES.md`,
-`architecture/ai-execution.md`, and `tools/lesson-prep/README.md`.
+Status: Superseded by D-024. The former standalone operator workstation exported portable lesson
+source packages without mutating Core, identity or object storage. Its source and hooks were retired
+on 2026-10-26 after integrated functional verification; the owner authorized purging remaining local
+environment/cache/audio artifacts on 2026-10-31. Detailed former contracts remain in Git history.
+Active source preparation belongs to [Lesson Build](features/lesson-build.md); portable ZIP ingestion
+is outside this phase.
 
 ## D-023 — Lean documentation and repository command ownership (2026-09-25)
 
@@ -145,3 +143,122 @@ Decision: Route tasks through `docs/README.md`; keep one owner per normative fac
 Consequences: Document merges and valid implementation refactors are possible without updating a fixed leaf-doc taxonomy. Link/ID checks remain structural; behavior and module boundaries are verified by tests and targeted validators.
 
 Confirmation: `make validate-docs`, `make validate-repo`, `make test-tooling`, and relevant application checks.
+
+
+## D-024 — Integrated YouTube Lesson authoring and free-only research (2026-10-25)
+
+Status: Accepted. Supersedes D-022 for the current authoring phase.
+
+Admin authors one contiguous YouTube range per Lesson, reviews transcript and karaoke before
+semantic generation, reviews contextual annotations/candidates, and publishes explicitly. Core owns
+business prompts, lifecycle, validation and PostgreSQL checkpoints; FastAPI only executes technical
+capabilities. Text/Audio authoring and mobile playback are deferred, not new work for this phase.
+
+Draft revision and transcript revision are separate: candidate selection cannot invalidate approved
+content. Publication atomically projects immutable content and selected candidate membership. Old
+writers must not mutate published content or cascade-delete learner attempts/progress. Additive Flyway
+migrations preserve existing records; scaffold APIs and implementation are not product contracts.
+
+Free-only execution permits only benchmarked allowlisted models and requires operator confirmation
+of the external projects' free billing path. No billing changes or paid fallback are automatic.
+Quota waits are durable, resumable jobs. Existing encrypted Core credentials remain authoritative.
+See the bounded [ASR evidence](research/lesson-authoring-asr.md) and
+[semantic evidence](research/lesson-authoring-semantic.md); these are measured research, not release guarantees.
+
+Standalone workstation retirement required regression coverage, replacement workflow verification
+and no runtime dependency. These conditions were met on 2026-10-26: the real OIDC workflow
+completed publication, reload showed immutable content, direct mutation returned 409, and replacement
+regressions cover cancellation, late results, quota/resume and atomic publication. The standalone
+source and setup/CI hooks were retired. Remaining local environment/cache/audio artifacts were
+subsequently purged at the owner's request on 2026-10-31; persisted business data remains protected.
+This does not approve human timing/pedagogical quality or independently verify provider billing.
+The old package ingestion proposal is not part of this phase. Feature owner:
+[Lesson Build](features/lesson-build.md).
+
+## D-025 — Independent Admin foundation and conditional timing policy (2026-10-26)
+
+Status: Accepted.
+Admin adopts the full shadcn `b1aIuOuyO` preset (Radix Luma, Stone/Blue, Inter, small radius)
+and owns its colors, typography, spacing and component states independently of Mobile. Remove
+unused prototype components/adapters after consumer and regression checks; preserve real domain/API
+contracts. This supersedes D-017 only for cross-platform visual-token sharing.
+
+Lesson timing reuse is a Core quality-policy decision, independent of STT/alignment providers.
+Keep raw draft evidence; require local alignment temporarily until human-referenced benchmarks and
+karaoke listening review support reuse. This temporary default is configuration, not an architectural
+requirement to align every lesson forever. Source preview prepares only an explicitly confirmed
+range; a long-source full download is not a prerequisite.
+
+## D-026 — Admin management lifecycle and development migration consolidation (2026-10-26)
+
+Status: Accepted.
+
+Admin keeps the unmodified shadcn `b1aIuOuyO` palette initialized with the pointer option. Application
+styles do not override preset colors. Axios owns HTTP transport, TanStack Query owns server state and
+active-job polling, and React Hook Form/Zod own forms and client validation. Local editor state stays
+with the editor. Future sidebar entries are explicitly unavailable, not implemented feature claims.
+
+Display metadata and availability are separate from immutable published learning content. Drafts may
+be soft-deleted after jobs stop; published lessons may be unlisted/relisted while learner history is
+preserved. This extends D-024/D-025 without authorizing in-place published-content editing.
+
+The owner confirmed V007–V010 exist only in disposable development databases and authorized their
+consolidation into V007 plus a local application DB reset. V001–V006 remain unchanged. This is a
+one-time development exception; future schema changes append migrations and deployed histories must
+not be rewritten or repaired to hide changed checksums.
+
+## D-027 — Direct source editing without rights attestation (2026-10-26)
+
+Status: Accepted.
+
+Source URL input opens the editor after metadata inspection; no rights-attestation checkbox or
+boolean is required. Source selection is a selection timestamp, not proof of permission. Explicit
+waveform preparation and AI processing remain separate actions. This supersedes D-024's mandatory
+operator acknowledgment step without establishing source publication rights. Workflow actions share
+one persistent bar; only workspace contents scroll at narrow widths as well as desktop.
+
+## D-028 — Luma Stone/Blue presentation for Admin and Mobile (2026-10-31)
+
+Status: Accepted.
+
+Admin adopts the full shadcn `b1aIuQ2XC` preset: Radix Luma, Stone/Blue, Raleway, Remix Icon,
+large radius and translucent menus. Existing component behavior, translations and accessibility
+extensions survive preset replacement. Admin layout and visual verification prioritize desktop/laptop
+at 1280px and 1440px; retain existing responsive behavior without a separate phone/tablet design pass.
+
+Mobile follows the same visual direction through its own learner semantic tokens, NativeWind and
+React Native components. Embed Raleway through the Expo font plugin, use native-compatible colors
+and a lighter dark-mode blue for text contrast, and preserve safe areas and touch targets.
+
+This supersedes the old preset selection in D-025/D-026, while retaining their independent platform
+ownership and all API, workflow and timing policies. The owning READMEs describe each foundation.
+
+
+## D-029 — App-local theme ownership; shared translations only (2026-10-31)
+
+Status: Accepted.
+
+Remove the shared design-system workspace package. Mobile owns its existing palette, foundation,
+brand metadata and theme types in `apps/mobile/src/theme`; Admin owns success/warning colors in
+its theme CSS alongside the shadcn preset. Each app consumes its own theme without importing
+presentation values from the other app. Keep existing visual values, font configuration and theme
+preferences unchanged. Locale metadata and translations remain shared through `packages/i18n`.
+
+Repository guardrails allow color definitions only in the designated platform token owners and
+continue to reject raw colors or direct primitive access in feature code. This completes the physical
+separation of the visual foundations described in D-025/D-028; their other policies remain in effect.
+
+
+## D-030 — Consolidate unreleased authoring Admin migrations (2026-11-17)
+
+Status: Accepted by the owner.
+
+V012–V015 belong to one uncommitted/unreleased Admin authoring phase. Consolidate their SQL in
+original order into V015, retaining the highest version so future migrations start at V016 and
+never reuse a removed version. V001–V011 remain unchanged. Fresh databases apply twelve files.
+
+The local development database already applied all four original scripts. After checking that
+exact history and the completed schema, back up its history and use Flyway repair once to align
+the consolidated V015 and mark V012–V014 deleted; preserve all application data. Validate history
+and check for pending migrations before restarting Core. This narrow owner-authorized development
+exception does not apply to deployed databases, partial histories or later migration changes.

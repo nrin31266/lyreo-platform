@@ -27,8 +27,8 @@ public final class JdbcLessonPreviewQuery implements LessonPreviewQuery {
     @Override
     public Optional<LessonPreviewView> find(UUID lessonId) {
         List<Map<String, Object>> rows = jdbc.queryForList("""
-            SELECT id,title,source_type,source_text,source_reference,canonical_audio_object_key,status,created_at,updated_at
-              FROM lesson WHERE id=:id
+            SELECT l.id,m.title,source_type,source_text,source_reference,canonical_audio_object_key,status,created_at,m.updated_at
+              FROM lesson l JOIN lesson_metadata m ON m.lesson_id=l.id WHERE l.id=:id AND m.deleted_at IS NULL
             """, Map.of("id", lessonId));
         if (rows.isEmpty()) return Optional.empty();
 

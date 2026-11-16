@@ -1,0 +1,8 @@
+[mcp_servers.codegraph]
+command = "pnpm"
+args = ["dlx", "@colbymchenry/codegraph@1.6.2", "serve", "--mcp"]
+enabled_tools = ["codegraph_explore"]
+startup_timeout_sec = 120
+
+[mcp_servers.codegraph.env]
+DO_NOT_TRACK = "1"

@@ -51,7 +51,8 @@ Là Admin, tôi muốn cấu hình provider/model/fallback theo capability mà k
 #### AC-AI-001 — Credential write/read
 
 Given Admin gửi key qua protected endpoint, when lưu/read settings, then server mã hóa key và response
-chỉ trả metadata masked/configured, không plaintext.
+chỉ trả metadata masked/configured, không plaintext. Admin có thể xoá credential: key và last4 bị xoá,
+provider cùng các route liên quan bị tắt; metadata và invocation audit được giữ lại.
 
 #### AC-AI-002 — Live route resolution
 

@@ -177,7 +177,7 @@ def test_generic_exception_handler_returns_safe_detail(monkeypatch):
     assert "RuntimeError" not in response.text
 
 
-def test_qwen_inference_lock_serializes_execution():
+def test_qwen_inference_lock_serializes_execution(monkeypatch):
     import asyncio
     from unittest.mock import AsyncMock, MagicMock
     from app.config import Settings
@@ -186,6 +186,7 @@ def test_qwen_inference_lock_serializes_execution():
 
     cfg = Settings(_env_file=None)
     runtime = QwenRuntime(cfg)
+    monkeypatch.setattr("app.runtime.qwen._read_audio", lambda _: [0.0] * 16000)
 
     execution_order = []
 

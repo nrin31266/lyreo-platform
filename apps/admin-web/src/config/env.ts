@@ -12,6 +12,7 @@ function normalizePublicUrl(value: string | undefined, fallback: string): string
 }
 
 export const env = {
+  youtubeAutoSelectMaxMinutes: Number(import.meta.env.VITE_YOUTUBE_AUTO_SELECT_MAX_MINUTES ?? 10),
   apiBaseUrl: normalizePublicUrl(import.meta.env.VITE_API_BASE_URL, 'http://localhost:8080'),
   keycloakUrl: normalizePublicUrl(import.meta.env.VITE_KEYCLOAK_URL, 'http://localhost:8081'),
   keycloakRealm: import.meta.env.VITE_KEYCLOAK_REALM ?? 'lyreo',

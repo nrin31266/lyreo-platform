@@ -1,726 +1,148 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/raleway";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-surface: var(--surface);
-  --color-surface-elevated: var(--surface-elevated);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--focus-ring);
-  --color-success: var(--success);
-  --color-warning: var(--warning);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-overlay: var(--overlay);
-
-  --radius-sm: var(--lyreo-radius-sm);
-  --radius-md: var(--lyreo-radius-md);
-  --radius-lg: var(--lyreo-radius-lg);
-  --radius-full: var(--lyreo-radius-pill);
+    --font-heading: var(--font-sans);
+    --font-sans: 'Raleway Variable', sans-serif;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 :root {
-  font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-
-  font-synthesis: none;
+    --success: #2E7D5B;
+    --warning: #8A5918;
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.147 0.004 49.25);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.147 0.004 49.25);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.147 0.004 49.25);
+    --primary: oklch(0.488 0.243 264.376);
+    --primary-foreground: oklch(0.97 0.014 254.604);
+    --secondary: oklch(0.967 0.001 286.375);
+    --secondary-foreground: oklch(0.21 0.006 285.885);
+    --muted: oklch(0.97 0.001 106.424);
+    --muted-foreground: oklch(0.553 0.013 58.071);
+    --accent: oklch(0.97 0.001 106.424);
+    --accent-foreground: oklch(0.216 0.006 56.043);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.923 0.003 48.717);
+    --input: oklch(0.923 0.003 48.717);
+    --ring: oklch(0.709 0.01 56.259);
+    --chart-1: oklch(0.809 0.105 251.813);
+    --chart-2: oklch(0.623 0.214 259.815);
+    --chart-3: oklch(0.546 0.245 262.881);
+    --chart-4: oklch(0.488 0.243 264.376);
+    --chart-5: oklch(0.424 0.199 265.638);
+    --radius: 0.875rem;
+    --sidebar: oklch(0.985 0.001 106.423);
+    --sidebar-foreground: oklch(0.147 0.004 49.25);
+    --sidebar-primary: oklch(0.546 0.245 262.881);
+    --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
+    --sidebar-accent: oklch(0.97 0.001 106.424);
+    --sidebar-accent-foreground: oklch(0.216 0.006 56.043);
+    --sidebar-border: oklch(0.923 0.003 48.717);
+    --sidebar-ring: oklch(0.709 0.01 56.259);
 }
 
-* {
-  box-sizing: border-box;
+.dark {
+    --success: #6FD0A0;
+    --warning: #E8B04A;
+    --background: oklch(0.147 0.004 49.25);
+    --foreground: oklch(0.985 0.001 106.423);
+    --card: oklch(0.216 0.006 56.043);
+    --card-foreground: oklch(0.985 0.001 106.423);
+    --popover: oklch(0.216 0.006 56.043);
+    --popover-foreground: oklch(0.985 0.001 106.423);
+    --primary: oklch(0.424 0.199 265.638);
+    --primary-foreground: oklch(0.97 0.014 254.604);
+    --secondary: oklch(0.274 0.006 286.033);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.268 0.007 34.298);
+    --muted-foreground: oklch(0.709 0.01 56.259);
+    --accent: oklch(0.268 0.007 34.298);
+    --accent-foreground: oklch(0.985 0.001 106.423);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.553 0.013 58.071);
+    --chart-1: oklch(0.809 0.105 251.813);
+    --chart-2: oklch(0.623 0.214 259.815);
+    --chart-3: oklch(0.546 0.245 262.881);
+    --chart-4: oklch(0.488 0.243 264.376);
+    --chart-5: oklch(0.424 0.199 265.638);
+    --sidebar: oklch(0.216 0.006 56.043);
+    --sidebar-foreground: oklch(0.985 0.001 106.423);
+    --sidebar-primary: oklch(0.623 0.214 259.815);
+    --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
+    --sidebar-accent: oklch(0.268 0.007 34.298);
+    --sidebar-accent-foreground: oklch(0.985 0.001 106.423);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.553 0.013 58.071);
 }
 
-body {
-  margin: 0;
-  background: var(--background);
-  color: var(--foreground);
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+    }
+  html {
+    @apply font-sans;
+    }
 }
-
-button,
-input,
-select,
-textarea {
-  font: inherit;
+/* Application aliases do not override preset colors. */
+@theme inline {
+  --color-success: var(--success);
+  --color-warning: var(--warning);
 }
-
-button:focus-visible,
-a:focus-visible,
-select:focus-visible,
-input:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+@layer base {
+  :root { --surface: var(--card); --surface-elevated: var(--popover); --focus-ring: var(--ring); }
+  body { margin:0;font-size:14px; }
+  :where(button,a,input,textarea,select,[tabindex]):focus-visible { outline:2px solid var(--ring);outline-offset:3px; }
 }
-
-/* =========================================================
-   APP SHELL
-   ========================================================= */
-
-.shell {
-  min-height: 100vh;
-
-  display: grid;
-  grid-template-columns: 246px minmax(0, 1fr);
-
-  background: var(--background);
-}
-
-/* =========================================================
-   SIDEBAR
-   ========================================================= */
-
-.shell aside {
-  background: var(--primary);
-  color: var(--primary-foreground);
-
-  padding: 28px 18px;
-
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-
-  border-right: 1px solid
-    color-mix(in srgb, var(--border) 55%, transparent);
-}
-
-/*
- * Dark mode uses a surface token for the sidebar instead of primary.
- * `primary` is reserved for prominent interactive elements / CTA.
- */
-.dark .shell aside {
-  background: var(--surface-elevated);
-  color: var(--foreground);
-}
-
-/* =========================================================
-   BRAND / LOGO
-   ========================================================= */
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-
-  font-size: 20px;
-}
-
-.logo > span {
-  width: 38px;
-  height: 38px;
-
-  display: grid;
-  place-items: center;
-
-  border-radius: 15px;
-
-  background: var(--secondary);
-  color: var(--secondary-foreground);
-
-  font-weight: 900;
-
-  box-shadow:
-    0 6px 18px
-    color-mix(in srgb, var(--foreground) 10%, transparent);
-}
-
-.logo div {
-  display: flex;
-  flex-direction: column;
-}
-
-.logo small {
-  opacity: 0.66;
-
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-}
-
-/* =========================================================
-   SIDEBAR NAVIGATION
-   ========================================================= */
-
-.shell nav {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.shell nav a {
-  position: relative;
-
-  color: var(--primary-foreground);
-  opacity: 0.72;
-
-  text-decoration: none;
-
-  padding: 11px 12px;
-
-  border-radius: 12px;
-
-  font-size: 14px;
-
-  transition:
-    background 0.18s ease,
-    opacity 0.18s ease,
-    transform 0.18s ease;
-}
-
-.shell nav a:hover {
-  background:
-    color-mix(
-      in srgb,
-      var(--surface) 10%,
-      transparent
-    );
-
-  opacity: 1;
-}
-
-.shell nav a.active {
-  background:
-    color-mix(
-      in srgb,
-      var(--surface) 18%,
-      transparent
-    );
-
-  color: var(--primary-foreground);
-
-  opacity: 1;
-
-  font-weight: 650;
-}
-
-.shell nav a.active::before {
-  content: "";
-
-  position: absolute;
-
-  left: 0;
-  top: 9px;
-  bottom: 9px;
-
-  width: 3px;
-
-  border-radius: 999px;
-
-  background: var(--focus-ring);
-}
-
-.dark .shell nav a,
-.dark .shell nav a.active {
-  color: var(--foreground);
-}
-
-/* =========================================================
-   APPEARANCE CONTROLS
-   ========================================================= */
-
-.appearance-controls {
-  display: grid;
-  gap: 12px;
-}
-
-.appearance-controls label {
-  display: grid;
-  gap: 6px;
-
-  font-size: 11px;
-  font-weight: 700;
-
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.appearance-controls button {
-  text-transform: none;
-  letter-spacing: normal;
-  font-weight: 600;
-}
-
-/* =========================================================
-   HEADER
-   ========================================================= */
-
-.admin-header {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-
-  padding: 16px clamp(28px, 5vw, 76px);
-
-  gap: 16px;
-
-  border-bottom: 1px solid var(--border);
-
-  background:
-    color-mix(
-      in srgb,
-      var(--surface) 94%,
-      var(--background)
-    );
-}
-
-/* =========================================================
-   MAIN CONTENT
-   ========================================================= */
-
-.shell main {
-  width: 100%;
-  max-width: 1400px;
-
-  padding: 52px clamp(28px, 5vw, 76px);
-}
-
-/* =========================================================
-   TYPOGRAPHY
-   ========================================================= */
-
-h1 {
-  max-width: 900px;
-
-  margin: 4px 0 14px;
-
-  font-size: clamp(34px, 4vw, 58px);
-
-  letter-spacing: -0.045em;
-}
-
-h2 {
-  margin-top: 0;
-}
-
-.eyebrow {
-  color: var(--primary);
-
-  font-size: 11px;
-  font-weight: 750;
-
-  text-transform: uppercase;
-
-  letter-spacing: 0.16em;
-}
-
-.lead {
-  max-width: 800px;
-
-  color: var(--muted-foreground);
-
-  font-size: 18px;
-
-  line-height: 1.65;
-}
-
-/* =========================================================
-   OVERVIEW STATS
-   ========================================================= */
-
-.stat-grid {
-  display: grid;
-
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-
-  gap: 14px;
-
-  margin-top: 34px;
-}
-
-.stat {
-  display: flex;
-  flex-direction: column;
-
-  gap: 8px;
-
-  padding: 22px;
-
-  background: var(--surface);
-
-  color: var(--foreground);
-
-  border: 1px solid var(--border);
-
-  border-radius: 20px;
-
-  transition:
-    transform 0.18s ease,
-    border-color 0.18s ease,
-    box-shadow 0.18s ease,
-    background 0.18s ease;
-}
-
-.stat:hover {
-  transform: translateY(-2px);
-
-  border-color:
-    color-mix(
-      in srgb,
-      var(--focus-ring) 45%,
-      var(--border)
-    );
-
-  box-shadow:
-    0 10px 28px
-    color-mix(
-      in srgb,
-      var(--foreground) 7%,
-      transparent
-    );
-}
-
-.stat small,
-.stat span {
-  color: var(--muted-foreground);
-}
-
-.stat strong {
-  font-size: 28px;
-
-  color: var(--primary);
-}
-
-/* =========================================================
-   PILLS / BADGES
-   ========================================================= */
-
-.pill-row {
-  display: flex;
-  flex-wrap: wrap;
-
-  gap: 9px;
-}
-
-.pill-row span {
-  padding: 8px 12px;
-
-  background: var(--muted);
-
-  color: var(--foreground);
-
-  border-radius: 999px;
-
-  font-size: 13px;
-
-  transition:
-    background 0.18s ease,
-    transform 0.18s ease;
-}
-
-.pill-row span:hover {
-  background:
-    color-mix(
-      in srgb,
-      var(--muted) 78%,
-      var(--focus-ring)
-    );
-}
-
-/* =========================================================
-   TWO COLUMN LAYOUT
-   ========================================================= */
-
-.two {
-  display: grid;
-
-  grid-template-columns:
-    minmax(0, 1.2fr)
-    minmax(300px, 0.8fr);
-
-  gap: 20px;
-}
-
-/* =========================================================
-   FORMS
-   ========================================================= */
-
-.form label {
-  display: flex;
-  flex-direction: column;
-
-  gap: 7px;
-
-  margin: 12px 0;
-
-  color: var(--muted-foreground);
-}
-
-.form select {
-  padding: 11px;
-
-  color: var(--foreground);
-
-  background: var(--surface);
-
-  border: 1px solid var(--input);
-
-  border-radius: 12px;
-
-  transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
-}
-
-.form select:focus {
-  outline: none;
-
-  border-color: var(--focus-ring);
-
-  box-shadow:
-    0 0 0 3px
-    color-mix(
-      in srgb,
-      var(--focus-ring) 18%,
-      transparent
-    );
-}
-
-.checks {
-  display: grid;
-
-  grid-template-columns:
-    repeat(2, minmax(0, 1fr));
-
-  gap: 6px 16px;
-}
-
-.checks label {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
-/* =========================================================
-   BUTTONS
-   ========================================================= */
-
-.form button,
-button {
-  border: 0;
-
-  border-radius: 12px;
-
-  cursor: pointer;
-}
-
-/* =========================================================
-   FORM GRID
-   ========================================================= */
-
-.form-grid {
-  display: grid;
-
-  grid-template-columns:
-    repeat(2, minmax(0, 1fr));
-
-  gap: 0 14px;
-}
-
-.form-grid .wide {
-  grid-column: 1 / -1;
-}
-
-.form-grid label {
-  margin: 8px 0;
-}
-
-/* =========================================================
-   GENERAL LAYOUT HELPERS
-   ========================================================= */
-
-.row {
-  display: flex;
-
-  gap: 8px;
-}
-
-.job {
-  display: flex;
-  flex-direction: column;
-
-  gap: 10px;
-
-  margin-top: 22px;
-}
-
-/* =========================================================
-   STATES
-   ========================================================= */
-
-.danger {
-  color: var(--destructive);
-}
-
-.muted {
-  color: var(--muted-foreground);
-
-  font-size: 13px;
-}
-
-/* =========================================================
-   CODE BLOCK
-   ========================================================= */
-
-pre {
-  overflow: auto;
-
-  padding: 18px;
-
-  white-space: pre-wrap;
-
-  background: var(--foreground);
-
-  color: var(--background);
-
-  border-radius: 14px;
-}
-
-/* =========================================================
-   TABLE
-   ========================================================= */
-
-table {
-  width: 100%;
-
-  border-collapse: collapse;
-}
-
-th,
-td {
-  padding: 14px 10px;
-
-  text-align: left;
-
-  border-bottom: 1px solid var(--border);
-}
-
-/* =========================================================
-   LOGIN / CENTER STATE
-   ========================================================= */
-
-/*
- * Do not use primary as a page-sized background.
- * Primary is reserved for prominent interactive actions.
- */
-.login,
-.center {
-  min-height: 100vh;
-
-  display: grid;
-
-  place-items: center;
-  align-content: center;
-
-  text-align: center;
-
-  background: var(--background);
-
-  color: var(--foreground);
-}
-
-.login p {
-  color: var(--muted-foreground);
-}
-
-.brand-mark {
-  font-size: 48px;
-
-  color: var(--primary);
-}
-
-/* =========================================================
-   RESPONSIVE — COMPACT TABLET CONTENT
-   ========================================================= */
-
-@media (max-width: 1000px) {
-  .stat-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .two {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .shell main {
-    padding-inline: 28px;
-  }
-}
-
-/* =========================================================
-   RESPONSIVE — MOBILE NAVIGATION
-   Tailwind md starts at 768px, so this must end below 768px.
-   ========================================================= */
-
-@media (max-width: 767.98px) {
-  .shell {
-    grid-template-columns: 1fr;
-  }
-
-  .shell aside {
-    display: none;
-  }
-
-  .shell aside.open {
-    position: fixed;
-
-    top: 0;
-    left: 0;
-    bottom: 0;
-
-    z-index: 50;
-
-    width: 250px;
-
-    display: flex;
-
-    overflow-y: auto;
-  }
-
-  .admin-header {
-    padding: 14px 18px;
-  }
-
-  .shell main {
-    padding: 30px 18px;
-  }
-
-  .two {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* =========================================================
-   RESPONSIVE — SMALL MOBILE
-   ========================================================= */
-
-@media (max-width: 560px) {
-  .stat-grid,
-  .two,
-  .checks,
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .form-grid .wide {
-    grid-column: auto;
-  }
-}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}

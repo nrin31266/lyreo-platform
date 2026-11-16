@@ -1,0 +1,384 @@
+package com.lyreo.lesson.infrastructure.persistence;
+
+import com.lyreo.contracts.errors.RequestValidationException;
+import com.lyreo.contracts.errors.ResourceNotFoundException;
+import com.lyreo.contracts.errors.StateConflictException;
+import com.lyreo.lesson.application.port.LessonCatalogPort;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
+
+@Repository
+public class JdbcLessonCatalog implements LessonCatalogPort {
+  private final NamedParameterJdbcTemplate jdbc;
+  private final tools.jackson.databind.ObjectMapper mapper;
+  private final com.lyreo.platform.jobs.application.BackgroundJobService jobs;
+
+  public JdbcLessonCatalog(
+      NamedParameterJdbcTemplate jdbc,
+      com.lyreo.platform.jobs.application.BackgroundJobService jobs,tools.jackson.databind.ObjectMapper mapper) {
+    this.jdbc = jdbc;
+    this.jobs = jobs;this.mapper=mapper;
+  }
+
+  @Override
+  public Page list(String query, String status, UUID category, String channel, int page, int size) {
+    return query(query, status, category, channel, page, size, null,"","","");
+  }
+
+  @Override public Page list(String query,String status,UUID category,String channel,int page,int size,String source,String cefr,String activity) {return query(query,status,category,channel,page,size,null,source,cefr,activity);}
+
+  private Page query(
+      String query,
+      String status,
+      UUID category,
+      String channel,
+      int page,
+      int size,
+      UUID lessonId,String source,String cefr,String activity) {
+    if (page < 0 || size < 1 || size > 100 || query.length() > 200)
+      throw new RequestValidationException("Invalid catalog query");
+    var args =
+        new MapSqlParameterSource()
+            .addValue(
+                "query",
+                "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
+            .addValue("status", status)
+            .addValue("category", category)
+            .addValue("channel", channel)
+            .addValue("limit", size)
+            .addValue("offset", (long) page * size);
+    var active=jobs.matchingIds(com.lyreo.lesson.application.authoring.LessonAuthoringService.JOB_TYPE,"lesson",java.util.Set.of(com.lyreo.platform.jobs.domain.BackgroundJobStatus.QUEUED,com.lyreo.platform.jobs.domain.BackgroundJobStatus.RUNNING,com.lyreo.platform.jobs.domain.BackgroundJobStatus.RETRY_WAIT,com.lyreo.platform.jobs.domain.BackgroundJobStatus.CANCEL_REQUESTED));
+    var failed=jobs.matchingIds(com.lyreo.lesson.application.authoring.LessonAuthoringService.JOB_TYPE,"lesson",java.util.Set.of(com.lyreo.platform.jobs.domain.BackgroundJobStatus.FAILED));
+    args.addValue("activeJobs",active.isEmpty()?List.of(new UUID(0,0)):active).addValue("failedJobs",failed.isEmpty()?List.of(new UUID(0,0)):failed);
+    String from =
+        """
+         FROM lesson l JOIN lesson_metadata m ON m.lesson_id=l.id LEFT JOIN lesson_authoring a ON a.lesson_id=l.id
+         LEFT JOIN lesson_youtube_source s ON s.video_id=a.video_id
+         LEFT JOIN lesson_youtube_channel ch ON ch.channel_id=s.channel_id
+         WHERE m.title ILIKE :query
+        """;
+    if (lessonId != null) {
+      from += " AND l.id=:lessonId";
+      args.addValue("lessonId", lessonId);
+    }
+    if(status.equals("ANY")) {}
+    else if (status.equals("DELETED")) from += " AND m.deleted_at IS NOT NULL";
+    else {from += " AND m.deleted_at IS NULL";if(status.equals("AI_FAILED")) from+=" AND a.active_job_id IN (:failedJobs)";else if (!status.isEmpty()) from += " AND l.status=:status";}
+    if (category != null)
+      from +=
+          " AND EXISTS(SELECT 1 FROM lesson_category_membership m WHERE m.lesson_id=l.id AND"
+              + " m.category_id=:category)";
+    if (!channel.isEmpty()) from += " AND s.channel_id=:channel";
+    if(!source.isEmpty()) {from+=" AND l.source_type=:source";args.addValue("source",source);}
+    if(!cefr.isEmpty()) {from+=" AND a.content_profile->>'cefr'=:cefr";args.addValue("cefr",cefr);}
+    if(!activity.isEmpty()) {from+=" AND jsonb_exists(a.generation_options->'activities', :activity)";args.addValue("activity",activity);}
+
+    long total = jdbc.queryForObject("SELECT count(*)" + from, args, Long.class);
+    var items =
+        jdbc.query(
+            "SELECT l.*,m.title AS"
+                + " display_title,m.description,m.image_url,m.visible,COALESCE(ch.visible,TRUE) AS channel_visible,GREATEST(m.updated_at,l.updated_at)"
+                + " AS metadata_updated_at,s.thumbnail_url,a.source_start_ms,a.source_end_ms,a.lesson_id,s.channel_id,COALESCE(ch.title,s.channel_title)"
+                + " AS channel_title,m.version AS metadata_version,m.deleted_at,a.revision AS authoring_revision,a.content_profile->>'cefr' AS cefr,a.generation_options->'activities' AS activities,                     a.active_job_id IN (:activeJobs) AS processing,                     a.active_job_id IN (:failedJobs) AS ai_failed"
+                + from
+                + " ORDER BY GREATEST(m.updated_at,l.updated_at) DESC,l.id LIMIT :limit OFFSET"
+                + " :offset",
+            args,
+            (rs, n) ->
+                new Item(
+                    rs.getObject("id", UUID.class),
+                    rs.getString("display_title"),
+                    rs.getString("source_type"),
+                    rs.getString("status"),
+                    rs.getObject("source_start_ms", Long.class),
+                    rs.getObject("source_end_ms", Long.class),
+                    rs.getString("channel_id"),
+                    rs.getString("channel_title"),
+                    rs.getTimestamp("metadata_updated_at").toInstant(),
+                    rs.getObject("lesson_id") != null,
+                    List.of(),
+                    rs.getString("description"),
+                    rs.getString("image_url") == null
+                        ? rs.getString("thumbnail_url")
+                        : rs.getString("image_url"),
+                    rs.getBoolean("visible"),rs.getBoolean("channel_visible"),
+                    "PUBLISHED".equals(rs.getString("status")) && rs.getBoolean("visible") && rs.getBoolean("channel_visible") && rs.getTimestamp("deleted_at")==null,
+                    rs.getLong("metadata_version"),rs.getLong("authoring_revision"),rs.getTimestamp("deleted_at")!=null,
+                    rs.getString("cefr")==null?"UNKNOWN":rs.getString("cefr"),rs.getString("activities")==null?List.of():mapper.readValue(rs.getString("activities"),mapper.getTypeFactory().constructCollectionType(List.class,String.class)),rs.getBoolean("processing"),rs.getBoolean("ai_failed")));
+    if (items.isEmpty()) return new Page(items, total, page, size);
+    var memberships =
+        jdbc.query(
+            """
+            SELECT m.lesson_id,c.id,c.name,c.translations FROM lesson_category_membership m JOIN lesson_category c ON c.id=m.category_id
+            WHERE m.lesson_id IN (:ids) ORDER BY lower(c.name)
+            """,
+            new MapSqlParameterSource("ids", items.stream().map(Item::id).toList()),
+            (rs, n) ->
+                new Membership(
+                    rs.getObject(1, UUID.class),
+                    new Category(rs.getObject(2, UUID.class), rs.getString(3), 0,translations(rs.getString(4)))));
+    var byLesson =
+        memberships.stream()
+            .collect(
+                java.util.stream.Collectors.groupingBy(
+                    Membership::lesson,
+                    java.util.stream.Collectors.mapping(
+                        Membership::category, java.util.stream.Collectors.toList())));
+    return new Page(
+        items.stream()
+            .map(
+                item ->
+                    new Item(
+                        item.id(),
+                        item.title(),
+                        item.sourceType(),
+                        item.status(),
+                        item.startMs(),
+                        item.endMs(),
+                        item.channelId(),
+                        item.channelTitle(),
+                        item.updatedAt(),
+                        item.authoring(),
+                        byLesson.getOrDefault(item.id(), List.of()),
+                        item.description(),
+                        item.imageUrl(),
+                        item.visible(),item.channelVisible(),item.effectiveVisible(),item.version(),item.revision(),item.deleted(),item.cefr(),item.activities(),item.processing(),item.aiFailed()))
+            .toList(),
+        total,
+        page,
+        size);
+  }
+
+  private record Membership(UUID lesson, Category category) {}
+
+  @Override
+  public List<Category> categories() {
+    return jdbc.query(
+        "SELECT c.id,c.name,count(m.lesson_id) AS count,c.translations FROM lesson_category c LEFT JOIN"
+            + " lesson_category_membership m ON m.category_id=c.id GROUP BY c.id ORDER BY"
+            + " lower(c.name)",
+        new MapSqlParameterSource(),
+        (rs, n) -> new Category(rs.getObject(1, UUID.class), rs.getString(2), rs.getLong(3),translations(rs.getString(4))));
+  }
+
+  @Override
+  @Transactional
+  public Category saveCategory(UUID id,String name) { return saveCategory(id,name,null); }
+
+  @Override
+  @Transactional
+  public Category saveCategory(UUID id, String name, java.util.Map<String,String> translations) {
+    if (name == null || name.isBlank() || name.strip().length() > 100)
+      throw new RequestValidationException("Category name must contain 1–100 characters");
+    if(translations!=null && (translations.size()>50 || translations.entrySet().stream().anyMatch(entry->
+        entry.getKey()==null || !entry.getKey().matches("[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*") || entry.getValue()==null || entry.getValue().isBlank() || entry.getValue().length()>100)))
+      throw new RequestValidationException("Provide valid locale names of 1–100 characters");
+    try {
+      var args = new MapSqlParameterSource("id", id).addValue("name", name.strip())
+          .addValue("translations",translations==null ? null : mapper.writeValueAsString(translations));
+      if (jdbc.update("UPDATE lesson_category SET name=:name,translations=COALESCE(CAST(:translations AS jsonb),translations) WHERE id=:id", args) == 0)
+        jdbc.update("INSERT INTO lesson_category(id,name,translations) VALUES(:id,:name,COALESCE(CAST(:translations AS jsonb),'{}'::jsonb))", args);
+      return jdbc.queryForObject("SELECT c.id,c.name,(SELECT count(*) FROM lesson_category_membership WHERE category_id=c.id),c.translations FROM lesson_category c WHERE c.id=:id",
+          args,(rs,n)->new Category(rs.getObject(1,UUID.class),rs.getString(2),rs.getLong(3),translations(rs.getString(4))));
+    } catch (DuplicateKeyException duplicate) {
+      throw new StateConflictException("A category with this name already exists");
+    }
+  }
+
+  private java.util.Map<String,String> translations(String json) {
+    return mapper.readValue(json,mapper.getTypeFactory().constructMapType(java.util.Map.class,String.class,String.class));
+  }
+
+  @Override
+  @Transactional
+  public void deleteCategory(UUID id) {
+    if (jdbc.query(
+            "SELECT id FROM lesson_category WHERE id=:id FOR UPDATE",
+            java.util.Map.of("id", id),
+            (rs, n) -> rs.getObject(1))
+        .isEmpty()) throw new ResourceNotFoundException("Category not found");
+    if (jdbc.queryForObject(
+            "SELECT count(*) FROM lesson_category_membership WHERE category_id=:id",
+            java.util.Map.of("id", id),
+            Long.class)
+        > 0)
+      throw new StateConflictException("Remove category assignments before deleting this category");
+    jdbc.update("DELETE FROM lesson_category WHERE id=:id", java.util.Map.of("id", id));
+  }
+
+  @Override
+  public List<Channel> channels() {
+    return jdbc.query(
+        """
+        SELECT c.*,(SELECT count(*) FROM lesson_authoring a
+          JOIN lesson_youtube_source s ON s.video_id=a.video_id
+          JOIN lesson_metadata m ON m.lesson_id=a.lesson_id AND m.deleted_at IS NULL
+          WHERE s.channel_id=c.channel_id) AS lesson_count
+        FROM lesson_youtube_channel c ORDER BY lower(c.title)
+        """,
+        new MapSqlParameterSource(),
+        (rs, n) -> {
+          UUID jobId = rs.getObject("sync_job_id", UUID.class);
+          var job = jobId == null ? null : jobs.findById(jobId).orElse(null);
+          return new Channel(
+              rs.getString("channel_id"),
+              rs.getString("title"),
+              rs.getLong("lesson_count"),
+              rs.getString("avatar_url"),
+              rs.getTimestamp("synced_at") == null
+                  ? null
+                  : rs.getTimestamp("synced_at").toInstant(),
+              rs.getString("sync_error") == null && job != null
+                  ? job.errorMessage()
+                  : rs.getString("sync_error"),
+              rs.getObject("sync_job_id", UUID.class),
+              job == null ? null : job.status().name(),rs.getBoolean("visible"));
+        });
+  }
+
+  @Override
+  @Transactional
+  public void channelVisibility(String channelId, boolean visible) {
+    if (jdbc.update("UPDATE lesson_youtube_channel SET visible=:visible WHERE channel_id=:id",
+        java.util.Map.of("id",channelId,"visible",visible)) == 0)
+      throw new ResourceNotFoundException("Channel not found");
+  }
+
+  @Override
+  public Item get(UUID lesson) {
+    return query("", "ANY", null, "", 0, 1, lesson,"","","").items().stream()
+        .findFirst()
+        .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
+  }
+
+  @Override
+  @Transactional
+  public void update(UUID lesson, String title, List<UUID> categories) {
+    var current = get(lesson);
+    updateMetadata(lesson, title, current.description(), current.imageUrl(), categories);
+  }
+
+  @Override public void assertVersion(UUID id,Long version,boolean deleted) {
+    var current=jdbc.query("SELECT m.version FROM lesson_metadata m JOIN lesson l ON l.id=m.lesson_id WHERE m.lesson_id=:id AND (m.deleted_at IS NOT NULL)=:deleted FOR UPDATE OF m,l",java.util.Map.of("id",id,"deleted",deleted),(rs,n)->rs.getLong(1));
+    if(current.isEmpty()) throw new ResourceNotFoundException("Lesson not found");
+    if(version==null || !version.equals(current.getFirst())) throw new StateConflictException("Lesson metadata changed; refresh before saving");
+  }
+  private String lock(UUID lesson) {
+    var rows =
+        jdbc.query(
+            """
+            SELECT l.status FROM lesson l JOIN lesson_metadata m ON m.lesson_id=l.id
+            WHERE l.id=:id AND m.deleted_at IS NULL FOR UPDATE OF l,m
+            """,
+            java.util.Map.of("id", lesson),
+            (rs, n) -> rs.getString(1));
+    if (rows.isEmpty()) throw new ResourceNotFoundException("Lesson not found");
+    return rows.getFirst();
+  }
+
+  @Override
+  @Transactional
+  public void updateMetadata(
+      UUID lesson, String title, String description, String imageUrl, List<UUID> categories) {
+    lock(lesson);
+    if (categories == null
+        || categories.size() > 100
+        || categories.stream().anyMatch(java.util.Objects::isNull)
+        || new java.util.HashSet<>(categories).size() != categories.size())
+      throw new RequestValidationException("Provide up to 100 distinct category IDs");
+    if (title != null && (title.isBlank() || title.strip().length() > 500))
+      throw new RequestValidationException("Title must contain 1–500 characters");
+    if (description == null || description.length() > 5000)
+      throw new RequestValidationException("Description exceeds 5000 characters");
+    if (imageUrl != null && !imageUrl.isBlank()) {
+      try {
+        var uri = java.net.URI.create(imageUrl);
+        if (!java.util.Set.of("http", "https").contains(uri.getScheme())
+            || uri.getHost() == null
+            || uri.getUserInfo() != null
+            || imageUrl.length() > 2048) throw new IllegalArgumentException();
+      } catch (IllegalArgumentException invalid) {
+        throw new RequestValidationException("Provide an HTTP(S) image URL");
+      }
+    }
+    var args = new MapSqlParameterSource("id", lesson);
+    if (!categories.isEmpty()) {
+      args.addValue("categories", categories);
+      var found =
+          jdbc.query(
+              "SELECT id FROM lesson_category WHERE id IN (:categories) FOR KEY SHARE",
+              args,
+              (rs, n) -> rs.getObject(1, UUID.class));
+      if (found.size() != categories.size())
+        throw new RequestValidationException("Unknown category");
+    }
+    jdbc.update(
+        "UPDATE lesson_metadata SET"
+            + " title_automatic=CASE WHEN CAST(:title AS text) IS NOT NULL AND :title<>title THEN FALSE ELSE title_automatic END,"
+            + " title=COALESCE(:title,title),description=:description,image_url=:image,version=version+1,updated_at=now()"
+            + " WHERE lesson_id=:id",
+        args.addValue("title", title == null ? null : title.strip())
+            .addValue("description", description)
+            .addValue("image", imageUrl == null || imageUrl.isBlank() ? null : imageUrl));
+    jdbc.update("DELETE FROM lesson_category_membership WHERE lesson_id=:id", args);
+    for (UUID category : categories)
+      jdbc.update(
+          "INSERT INTO lesson_category_membership(lesson_id,category_id) VALUES(:id,:category)",
+          args.addValue("category", category));
+  }
+
+  @Override
+  @Transactional
+  public void deleteDraft(UUID lesson) {
+    boolean published="PUBLISHED".equals(lock(lesson));
+    var linked =
+        jdbc.query(
+            """
+            SELECT job_id FROM lesson_authoring_job WHERE lesson_id=:id
+            UNION SELECT job_id FROM lesson_build_job WHERE lesson_id=:id
+            """,
+            java.util.Map.of("id", lesson),
+            (rs, n) -> rs.getObject(1, UUID.class));
+    if (linked.stream()
+        .map(jobs::findById)
+        .flatMap(java.util.Optional::stream)
+        .anyMatch(
+            job ->
+                java.util.Set.of("QUEUED", "RUNNING", "RETRY_WAIT", "CANCEL_REQUESTED")
+                    .contains(job.status().name())))
+      throw new StateConflictException("Cancel active jobs before deleting this draft");
+    if(published) {
+      jdbc.update("UPDATE lesson_metadata SET deleted_at=now(),visible=FALSE,version=version+1,updated_at=now() WHERE lesson_id=:id",java.util.Map.of("id",lesson));return;
+    }
+    var args=java.util.Map.of("id",lesson);
+    long history=jdbc.queryForObject("SELECT (SELECT count(*) FROM lesson_practice_attempt WHERE lesson_id=:id)+(SELECT count(*) FROM lesson_activity_progress WHERE activity_id IN (SELECT id FROM lesson_activity WHERE lesson_id=:id))",args,Long.class);
+    if(history>0) throw new StateConflictException("A lesson with learner history cannot be permanently deleted");
+    jdbc.update("DELETE FROM lesson_activity_sentence WHERE activity_id IN (SELECT id FROM lesson_activity WHERE lesson_id=:id)",args);
+    jdbc.update("DELETE FROM lesson_job_diagnostic WHERE job_id IN (SELECT job_id FROM lesson_authoring_job WHERE lesson_id=:id)",args);
+    jdbc.update("DELETE FROM lesson_authoring_job WHERE lesson_id=:id",args);
+    jdbc.update("DELETE FROM lesson_category_membership WHERE lesson_id=:id",args);
+    jdbc.update("DELETE FROM lesson_build_job WHERE lesson_id=:id",args);
+    jdbc.update("DELETE FROM lesson_authoring WHERE lesson_id=:id",args);
+    jdbc.update("DELETE FROM lesson_metadata WHERE lesson_id=:id",args);
+    jdbc.update("DELETE FROM lesson WHERE id=:id",args);
+  }
+  @Override @Transactional public void restore(UUID id) {
+    int rows=jdbc.update("UPDATE lesson_metadata SET deleted_at=NULL,visible=FALSE,version=version+1,updated_at=now() WHERE lesson_id=:id AND deleted_at IS NOT NULL",java.util.Map.of("id",id));
+    if(rows!=1) throw new ResourceNotFoundException("Deleted lesson not found");
+  }
+
+  @Override
+  @Transactional
+  public void visibility(UUID lesson, boolean visible) {
+    if (!"PUBLISHED".equals(lock(lesson)))
+      throw new StateConflictException("Only published lessons have visibility controls");
+    jdbc.update(
+        "UPDATE lesson_metadata SET visible=:visible,version=version+1,updated_at=now() WHERE lesson_id=:id",
+        java.util.Map.of("id", lesson, "visible", visible));
+  }
+}

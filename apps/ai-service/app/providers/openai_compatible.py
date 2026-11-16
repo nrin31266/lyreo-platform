@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import math
+import re
 from typing import Any
 
 import httpx
@@ -61,9 +63,24 @@ class OpenAICompatibleProvider:
             **provider_options,
         }
 
-        # Java owns the exact schema contract. OpenAI-compatible providers only receive a generic
-        # JSON-object hint here; Core still validates/projects the returned structure.
-        if request.options.get("response_schema"):
+        if "temperature" in request.options and "temperature" not in provider_options:
+            body["temperature"] = request.options["temperature"]
+        budget = request.options.get("max_output_tokens")
+        if budget is not None and not {"max_tokens", "max_completion_tokens"} & provider_options.keys():
+            if not isinstance(budget, int) or isinstance(budget, bool) or budget <= 0:
+                raise ValueError("max_output_tokens must be a positive integer")
+            body["max_completion_tokens"] = budget
+        if "max_tokens" in body and "max_completion_tokens" in body:
+            raise ValueError("Specify only one completion token budget")
+        schema = request.options.get("json_schema")
+        if isinstance(schema, dict) and schema:
+            name = request.options.get("response_schema") or "lyreo_response"
+            if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", name):
+                raise ValueError("response_schema must be a valid schema name")
+            body["response_format"] = {"type": "json_schema", "json_schema": {
+                "name": name, "strict": True, "schema": schema,
+            }}
+        elif request.options.get("response_schema"):
             body["response_format"] = {"type": "json_object"}
 
         async with httpx.AsyncClient(timeout=120) as client:
@@ -76,7 +93,10 @@ class OpenAICompatibleProvider:
             data = response.json()
 
         usage = data.get("usage") or {}
-        content = data["choices"][0]["message"]["content"]
+        choice = data["choices"][0]
+        content = choice["message"].get("content")
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("AI completion returned no text output")
         structured = _json_object_or_none(content)
         output: dict[str, Any] = {"content": content}
         if structured is not None:
@@ -85,10 +105,13 @@ class OpenAICompatibleProvider:
         return ExecuteResponse(
             output=output,
             usage={
-                "input_tokens": usage.get("prompt_tokens", 0),
-                "output_tokens": usage.get("completion_tokens", 0),
+                target: usage[source]
+                for source, target in (("prompt_tokens", "input_tokens"), ("completion_tokens", "output_tokens"))
+                if isinstance(usage.get(source), (int, float)) and not isinstance(usage[source], bool)
+                and math.isfinite(usage[source]) and usage[source] >= 0
             },
-            metadata={"provider": request.provider, "model": request.model},
+            metadata={"provider": request.provider, "model": request.model,
+                      "finish_reason": choice.get("finish_reason")},
         )
 
 

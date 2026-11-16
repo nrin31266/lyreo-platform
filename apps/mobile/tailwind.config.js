@@ -1,4 +1,4 @@
-const foundation = require('@lyreo/design-system/foundation');
+const foundation = require('./src/theme/foundation.json');
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
@@ -6,6 +6,7 @@ module.exports = {
   presets: [require('nativewind/preset')],
   theme: {
     extend: {
+      fontFamily: { sans: [foundation.typography.fontFamily.sans] },
       colors: {
         background: 'var(--background)',
         foreground: 'var(--foreground)',

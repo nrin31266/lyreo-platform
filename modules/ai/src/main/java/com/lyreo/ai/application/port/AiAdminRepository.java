@@ -20,6 +20,8 @@ public interface AiAdminRepository {
         boolean enabled
     );
 
+    void removeProvider(String code);
+
     UUID saveRoute(
         String capability,
         String providerCode,

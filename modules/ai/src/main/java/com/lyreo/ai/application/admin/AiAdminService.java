@@ -39,6 +39,10 @@ public final class AiAdminService {
         );
     }
 
+    public void removeProvider(String code) {
+        repository.removeProvider(code);
+    }
+
     public UUID saveRoute(
         String capability,
         String providerCode,

@@ -1,6 +1,7 @@
 package com.lyreo.ai.application.execution;
 
 import org.springframework.modulith.NamedInterface;
+import java.util.Map;
 
 /**
  * Failure of one AI route/capability execution.
@@ -14,6 +15,14 @@ import org.springframework.modulith.NamedInterface;
 public final class AiExecutionException extends RuntimeException {
     private final boolean fallbackAllowed;
     private final String errorCode;
+    private long retryAfterSeconds;
+    private AiExecutionResult evidence;
+    private Map<String,Object> diagnostics = Map.of();
+    /** Sanitized private evidence; never part of the public failure message or operational audit. */
+    public Map<String,Object> diagnostics() { return diagnostics; }
+    public AiExecutionException diagnostics(Map<String,Object> values) { diagnostics=Map.copyOf(values);return this; }
+    public AiExecutionResult evidence() {return evidence;}
+    public AiExecutionException evidence(AiExecutionResult result) {this.evidence=result;return this;}
 
     public AiExecutionException(
         String message,
@@ -36,5 +45,12 @@ public final class AiExecutionException extends RuntimeException {
 
     public String errorCode() {
         return errorCode;
+    }
+
+    public long retryAfterSeconds() { return retryAfterSeconds; }
+
+    public AiExecutionException retryAfter(long seconds) {
+        this.retryAfterSeconds = Math.max(0, seconds);
+        return this;
     }
 }

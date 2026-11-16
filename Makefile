@@ -1,7 +1,7 @@
-.PHONY: help init-env doctor setup deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset keycloak-seed down core ai admin mobile \
+.PHONY: help init-env doctor setup setup-media deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset db-recreate seed-dev keycloak-seed down core ai admin mobile \
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
-        ai-local lesson-prep test-lesson-prep clean-prep clean-cache clean \
+        ai-local clean-cache clean \
         test-java verify-java test-ai test-data-import test-tooling test-frontend typecheck build-web validate-docs validate-repo validate check prod-config verify-prod-env down-v \
         import-clean-lexicon import-clean-grammar-toeic
 
@@ -13,14 +13,14 @@ help:
 	  '  make setup                       First-clone setup: env + deps + PostgreSQL/Keycloak bootstrap' \
 	  '  make init-env                    Copy/synchronize local .env files' \
 	  '  make doctor                      Inspect local toolchain/env/data readiness' \
+	  '  make setup-media                 Install the Core YouTube metadata/audio downloader' \
 	  '  make deps                        Sync Python dependencies and install pnpm workspace dependencies' \
 	  '  make deps-java                   Compile and install internal Java artifacts required by Core into local Maven cache' \
 	  '' \
 	  'Run' \
-	  '  make core                        Run Spring Boot locally' \
+	  '  make core                        Run Core; rebuild/restart after saved Java/resources change' \
 	  '  make ai                          Run FastAPI locally' \
 	  '  make ai-local                    Run FastAPI locally with local Qwen/Kokoro weights' \
-	  '  make lesson-prep                 Run local Lesson Prep Gradio workstation' \
 	  '  make admin                       Run Admin Vite dev server' \
 	  '  make mobile                      Run Expo Metro bundler (requires Dev Build installed on device/emulator)' \
 	  '' \
@@ -35,7 +35,10 @@ help:
 	  'Infrastructure' \
 	  '  make dev-infra                   Start PostgreSQL + Keycloak only' \
 	  '  make db-shell                    Open psql inside PostgreSQL container against Lyreo dev DB' \
-	  '  make db-reset                    Reset local Lyreo application DB (preserves Keycloak)' \
+	  '  make db-reset                    Preview lesson-only reset; keeps imported banks and configuration' \
+	  '  make db-recreate                 Preview destructive whole application database recreation' \
+	  '  make seed-dev                    Seed local default categories after Core migrations' \
+	  '  make down-v CONFIRM=lyreo-volumes Delete ALL volumes, including imports and Keycloak' \
 	  '  make keycloak-seed               Verify realm/client/roles and seed dev users' \
 	  '' \
 	  'Mobile native' \
@@ -55,15 +58,13 @@ help:
 	  '  make test-java                   Run fast Java unit tests (Surefire)' \
 	  '  make verify-java                 Run full Java verification: unit + integration tests (Failsafe)' \
 	  '  make test-data-import            Run data importer test suite' \
-	  '  make test-lesson-prep            Run lesson-prep test suite' \
 	  '  make typecheck                   Typecheck TypeScript workspaces' \
 	  '  make test-frontend              Run Admin Web and Mobile tests' \
 	  '  make build-web                  Build Admin Web' \
 	  '' \
 	  'Cleanup' \
-	  '  make clean-prep                  Clean temporary lesson-prep session workspaces' \
 	  '  make clean-cache                 Clean Python bytecode and test caches' \
-	  '  make clean                       Aggregate cleanup: clean-cache + clean-prep' \
+	  '  make clean                       Clean Python bytecode and test caches' \
 	  '' \
 	  'Deployment/config' \
 	  '  make dev-config                  Validate compose.dev.yml syntax/resolution' \
@@ -99,12 +100,17 @@ import-clean-grammar-toeic:
 	./tools/data-import/scripts/import-clean-grammar-toeic.sh $(ARGS)
 
 deps-java:
-	./mvnw -B -pl apps/core-service -am -DskipTests install
+	./mvnw -B -pl apps/core-service -am -DskipTests -DskipITs install
+
+setup-media:
+	uv tool install --upgrade --with-executables-from 'deno==2.9.8' 'yt-dlp[default]==2026.10.26'
+	@command -v yt-dlp >/dev/null || { echo 'Add the uv tool bin directory to PATH before starting Core.'; exit 1; }
+	@command -v deno >/dev/null || { echo 'Add the uv tool bin directory to PATH so yt-dlp can find Deno.'; exit 1; }
+	@command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null || { echo 'Install FFmpeg (including ffprobe) on the Core host.'; exit 1; }
 
 deps: deps-java
 	cd apps/ai-service && uv sync --locked --extra dev
 	cd tools/data-import && uv sync --locked --extra dev
-	cd tools/lesson-prep && uv sync --locked --extra dev
 	pnpm install --frozen-lockfile
 
 setup:
@@ -132,6 +138,12 @@ db-shell:
 db-reset:
 	./scripts/db-reset.sh
 
+db-recreate:
+	./scripts/db-reset.sh --database
+
+seed-dev:
+	docker compose --env-file infra/docker/.env -f compose.dev.yml exec -T postgres sh -c 'exec psql -X -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/seed/dev.sql
+
 keycloak-seed:
 	set -a; . ./infra/keycloak/.env; set +a; ./infra/keycloak/scripts/bootstrap-keycloak.sh; ./infra/keycloak/scripts/seed-dev-users.sh
 
@@ -139,24 +151,18 @@ down:
 	docker compose --env-file infra/docker/.env -f compose.dev.yml down
 
 down-v:
+	@test "$(CONFIRM)" = "lyreo-volumes" || { echo "Refusing volume deletion: use CONFIRM=lyreo-volumes. This removes application data AND Keycloak." >&2; exit 1; }
 	docker compose --env-file infra/docker/.env -f compose.dev.yml down -v
 	
-core: deps-java
-	cd apps/core-service && set -a && . ./.env && set +a && ../../mvnw spring-boot:run
+core:
+	@set -a; . ./apps/core-service/.env; set +a; python3 scripts/core_dev.py
 
 ai:
 	cd apps/ai-service && set -a && . ./.env && set +a && uv run --locked uvicorn app.main:app --reload --port 8000
 
-# Local Qwen runtime: requires GPU/model availability. qwen + kokoro extras both live here
-# because the Lesson Prep Tool may call STT/alignment AND Kokoro TTS in one session.
+# Local Qwen/Kokoro capability runtimes require GPU/model availability.
 ai-local:
 	cd apps/ai-service && set -a && . ./.env && set +a && AI_RUNTIME_MODE=local uv run --locked --extra qwen --extra kokoro uvicorn app.main:app --reload --port 8000
-
-# Lesson Prep Tool. Requires: make ai (AI service), and ffmpeg/ffprobe on PATH.
-# Does NOT require Core, Keycloak, or PostgreSQL.
-lesson-prep:
-	@[ -f tools/lesson-prep/.env ] || { echo 'tools/lesson-prep/.env missing — run make init-env first'; exit 1; }
-	cd tools/lesson-prep && set -a && . ./.env && set +a && uv run --locked python -m lesson_prep.ui_app
 
 admin:
 	pnpm --filter @lyreo/admin-web dev
@@ -209,20 +215,13 @@ test-ai:
 test-data-import:
 	cd tools/data-import && uv run --locked --extra dev python -m pytest
 
-test-lesson-prep:
-	cd tools/lesson-prep && uv run --locked --extra dev python -m pytest
-
-clean-prep:
-	rm -rf tools/lesson-prep/.work/* tools/lesson-prep/.pytest_cache
-	@echo "Cleaned lesson-prep temporary files."
-
 clean-cache:
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 	@echo "Cleaned Python bytecode and test caches."
 
-clean: clean-cache clean-prep
-	@echo "All caches and temporary workspaces cleaned."
+clean: clean-cache
+	@echo "Python bytecode and test caches cleaned."
 
 typecheck:
 	pnpm typecheck
@@ -248,8 +247,6 @@ validate:
 	  PYTHONPYCACHEPREFIX="$$tmp" python3 -m compileall -q \
 	    apps/ai-service/app \
 	    apps/ai-service/tests \
-	    tools/lesson-prep/lesson_prep \
-	    tools/lesson-prep/tests \
 	    tools/data-import/import_grammar.py \
 	    tools/data-import/import_toeic.py \
 	    tools/data-import/import_lexicon.py \
@@ -263,12 +260,13 @@ validate:
 	    tools/data-import/lexicon_vi_context.py \
 	    tools/data-import/validate_lexicon_release.py \
 	    tools/data-import/common.py \
+	    scripts/core_dev.py \
 	    tools/data-import/tests; \
 	  status=$$?; rm -rf "$$tmp"; exit $$status
 	bash -n scripts/*.sh apps/mobile/scripts/*.sh tools/data-import/scripts/*.sh infra/keycloak/scripts/*.sh infra/postgres/init/*.sh
 	$(MAKE) validate-repo
 
-check: validate test-tooling verify-java test-ai test-data-import test-lesson-prep typecheck test-frontend build-web
+check: validate test-tooling verify-java test-ai test-data-import typecheck test-frontend build-web
 
 verify-prod-env:
 	./scripts/verify-prod-env.sh

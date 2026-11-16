@@ -38,3 +38,9 @@ data/generated/
 
 # Personal AI assistant conventions
 CLAUDE.local.md
+
+# Local browser verification output
+.playwright-mcp/
+
+# Local code intelligence index
+.codegraph/

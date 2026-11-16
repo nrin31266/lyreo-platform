@@ -10,6 +10,7 @@ from typing import Any
 
 from ..config import Settings
 from ..schemas import ExecuteRequest, ExecuteResponse
+from .execution import run_serialized
 
 # Standard Kokoro-82M English voice catalog from official VOICES.md.
 # Voice prefix encodes accent: 'a*' = American English, 'b*' = British English.
@@ -62,6 +63,8 @@ class KokoroRuntime:
 
     def __init__(self, cfg: Settings):
         self.cfg = cfg
+        self._model = None
+        self._inference_lock = asyncio.Lock()
         self._pipelines: dict[str, Any] = {}
         self._voices: dict[tuple[str, str], Any] = {}
 
@@ -72,12 +75,16 @@ class KokoroRuntime:
                 'voice_id': voice_id,
                 'language': 'English',
                 'accent': accent,
-                'display': {'name': voice_id.replace('_', ' ').title(), 'accent': accent},
+                'gender': 'FEMALE' if voice_id[1] == 'f' else 'MALE',
+                'display': {'name': voice_id.split('_', 1)[1].title(), 'accent': accent},
             }
             for voice_id, accent in KOKORO_VOICES.items()
         ]
 
     async def tts(self, request: ExecuteRequest) -> ExecuteResponse:
+        return await run_serialized(self._inference_lock, self._tts, request)
+
+    async def _tts(self, request: ExecuteRequest) -> ExecuteResponse:
         text = str(request.input.get('text') or '').strip()
         if not text:
             raise ValueError('Kokoro TTS requires input.text')
@@ -88,12 +95,26 @@ class KokoroRuntime:
         )
         speed = _normalize_speed(request.options.get('speed'))
 
+        sentences = request.input.get('sentences')
+        if sentences is not None and (
+            not isinstance(sentences, list) or not sentences
+            or any(not isinstance(sentence, str) or not sentence.strip() for sentence in sentences)
+            or ' '.join(sentences) != text
+        ):
+            raise ValueError('TTS sentences must cover input.text in order')
+        if sentences is not None and len(text) > 10000:
+            raise ValueError('Lesson TTS supports up to 10000 characters')
+
         pipeline = await self._load(accent)
         voice = await self._load_voice(accent, voice_id)
 
-        samples, segment_count = await asyncio.to_thread(
-            self._synthesize, pipeline, voice, text, speed
-        )
+        if sentences is None:
+            samples, segment_count = await asyncio.to_thread(self._synthesize, pipeline, voice, text, speed)
+            segments = []
+        else:
+            samples, segment_count, segments = await asyncio.to_thread(
+                self._synthesize_sentences, pipeline, voice, sentences, speed
+            )
 
         wav = _to_wav(samples, sample_rate=self.cfg.kokoro_sample_rate)
         return ExecuteResponse(
@@ -102,6 +123,7 @@ class KokoroRuntime:
                 'mime_type': 'audio/wav',
                 'sample_rate': self.cfg.kokoro_sample_rate,
                 'chunks': segment_count,
+                'segments': segments,
             },
             metadata={
                 'runtime': 'kokoro',
@@ -111,6 +133,28 @@ class KokoroRuntime:
                 'speed': speed,
             },
         )
+
+    def _synthesize_sentences(self, pipeline, voice, sentences: list[str], speed: float):
+        samples: list[int] = []
+        segments = []
+        count = 0
+        for sentence in sentences:
+            start = len(samples)
+            audio, chunks = self._synthesize(pipeline, voice, sentence, speed)
+            if not audio:
+                raise ValueError('TTS returned an empty sentence')
+            if len(audio) > self.cfg.kokoro_sample_rate * 115:
+                raise ValueError('Split long text sentences before generating speech')
+            samples.extend(audio)
+            count += chunks
+            if len(samples) > self.cfg.kokoro_sample_rate * 600:
+                raise ValueError('Generated audio exceeds 10 minutes; shorten the text')
+            segments.append({
+                'text': sentence,
+                'start_ms': round(start * 1000 / self.cfg.kokoro_sample_rate),
+                'end_ms': round(len(samples) * 1000 / self.cfg.kokoro_sample_rate),
+            })
+        return samples, count, segments
 
     def resolve_voice(self, voice_id: str, requested_accent: str = '') -> tuple[str, str]:
         """Validate voice/accent without touching the heavy runtime. Returns (voiceId, accent)."""
@@ -133,7 +177,7 @@ class KokoroRuntime:
         lang_code = _lang_code(accent)
         if lang_code not in self._pipelines:
             try:
-                from kokoro import KModel, KPipeline
+                from kokoro import KPipeline
             except ImportError as exc:
                 raise ValueError(
                     'Kokoro runtime is not installed. Install the optional dependency '
@@ -143,9 +187,11 @@ class KokoroRuntime:
             pipeline = await asyncio.to_thread(
                 KPipeline, lang_code=lang_code, repo_id=self.cfg.kokoro_model, model=False
             )
-            pipeline.model = await asyncio.to_thread(
-                _build_model, self.cfg.kokoro_model, self.cfg.kokoro_device
-            )
+            if self._model is None:
+                self._model = await asyncio.to_thread(
+                    _build_model, self.cfg.kokoro_model, self.cfg.kokoro_device
+                )
+            pipeline.model = self._model
             self._pipelines[lang_code] = pipeline
         return self._pipelines[lang_code]
 

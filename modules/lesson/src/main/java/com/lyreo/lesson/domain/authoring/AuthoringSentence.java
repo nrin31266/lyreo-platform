@@ -1,0 +1,78 @@
+package com.lyreo.lesson.domain.authoring;
+
+import java.util.List;
+import java.util.UUID;
+
+/** Mutable draft data; only the authoring transaction writes it. Published rows are immutable. */
+public final class AuthoringSentence {
+    public java.util.Set<String> manualFields = new java.util.HashSet<>();
+    public java.util.Map<String,String> manualSources = new java.util.HashMap<>();
+    public java.util.Map<String,String> manualLocales = new java.util.HashMap<>();
+    public boolean contentStale;
+    public java.util.Map<String,String> contentKeys = new java.util.HashMap<>();
+    public AuthoringProfile.Cefr cefrSuggestion;
+    public AuthoringProfile.ContentType contentTypeSuggestion;
+    public String timingSource;
+    public String ipaRaw;
+    public String ipaDisplayVersion;
+    public java.util.List<String> contentWarnings = new java.util.ArrayList<>();
+    public java.util.Map<String,String> exclusions = new java.util.HashMap<>();
+    public AuthoringCloze.Targets cloze;
+    public boolean clozeManual;
+    public String ipa;
+    public String ipaAccent;
+    public String ipaVersion;
+    public boolean ipaNeedsReview;
+    public UUID id;
+    public String text;
+    public String usage = "LEARN";
+    public boolean hidden;
+    public List<Word> words = List.of();
+    // Retain observed source evidence only while editable words are stale.
+    public List<AuthoringText.ObservedWord> sourceWords = List.of();
+    public List<String> issues = List.of();
+    public Long coarseStartMs;
+    public Long coarseEndMs;
+    public String translation;
+    public List<Annotation> vocabulary = List.of();
+    public List<Annotation> grammar = List.of();
+    public String dictationPriority;
+    public String shadowingPriority;
+    public boolean dictationEligible;
+    public boolean shadowingEligible;
+    public boolean dictationSelected;
+    public boolean shadowingSelected;
+    public List<Hint> hints = List.of();
+    public List<Note> notes = List.of();
+    public List<Group> thoughtGroups = List.of();
+
+    public AuthoringSentence() {}
+    public AuthoringSentence(UUID id, String text, String usage) {
+        this.id = id;
+        this.text = text;
+        this.usage = usage;
+    }
+    public void clearSemantic() {
+        translation = null;
+        vocabulary = List.of();
+        grammar = List.of();
+        dictationPriority = null;
+        shadowingPriority = null;
+        dictationSelected = false;
+        shadowingSelected = false;
+        hints = List.of();
+        notes = List.of();
+        thoughtGroups = List.of();
+    }
+    public record Word(String text, long startMs, long endMs, int charStart, int charEnd,
+                       int tokenStart, int tokenEnd) {}
+    public record Annotation(int tokenStart, int tokenEnd, String surface, String label,
+                             String explanation, String importance, String canonicalForm, UUID headwordId) {}
+    public record Hint(int tokenStart, int tokenEnd, String text, String kind) {
+        public Hint(int tokenStart,int tokenEnd,String text) {this(tokenStart,tokenEnd,text,"DICTATION");}
+    }
+    public record Note(int tokenStart, int tokenEnd, String text, String kind) {
+        public Note(int tokenStart,int tokenEnd,String text) {this(tokenStart,tokenEnd,text,"USAGE");}
+    }
+    public record Group(int tokenStart, int tokenEnd) {}
+}

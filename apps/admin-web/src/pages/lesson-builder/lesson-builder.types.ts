@@ -1,17 +1,122 @@
-export type SourceType = 'TEXT' | 'AUDIO' | 'YOUTUBE';
-
-export type BuildAccepted = {
-  lessonId: string;
-  jobId: string;
-};
-
-export type BuildLessonPayload = {
+export type SentenceUsage = 'LEARN' | 'WATCH_ONLY' | 'SKIP';
+export type Priority = 'HIGH' | 'MEDIUM';
+export type SourceInspection = {
+  videoId: string;
   title: string;
-  sourceType: SourceType;
-  sourceText: string | null;
-  sourceReference: string | null;
+  durationMs: number;
+  embedAllowed: boolean;
+  thumbnailUrl?:string|null;
+  usedRanges: { lessonId: string; title: string; startMs: number; endMs: number; status: string }[];
+};
+export type ClozeTargets = { easy: number[]; medium: number[]; version: string; text: string; textHash?: string };
+export type AuthoringWord = {
+  text: string;
+  startMs: number;
+  endMs: number;
+  charStart: number;
+  charEnd: number;
+  tokenStart: number;
+  tokenEnd: number;
+};
+export type AuthoringAnnotation = { tokenStart: number; tokenEnd: number; surface: string; label: string; explanation: string; importance: string; canonicalForm?: string | null; headwordId?: string | null };
+export type AuthoringNote = { tokenStart: number; tokenEnd: number; text: string; kind?: string };
+export type AuthoringSentence = {
+  ipaRaw?: string | null;
+  ipaDisplayVersion?: string | null;
+  contentWarnings?: string[];
+  exclusions?: Record<string,string>;
+  cloze?: ClozeTargets;
+  clozeManual?: boolean;
+  hidden?: boolean;
+  previewStartMs?: number | null;
+  manualFields?: string[];
+  contentStale?: boolean;
+  timingSource?: string | null;
+  ipa?: string | null;
+  ipaAccent?: string | null;
+  ipaVersion?: string | null;
+  ipaNeedsReview?: boolean;
+  id: string;
+  text: string;
+  usage: SentenceUsage;
+  words: AuthoringWord[];
+  issues: string[];
+  translation?: string | null;
+  vocabulary: AuthoringAnnotation[];
+  grammar: AuthoringAnnotation[];
+  dictationPriority?: Priority | null;
+  shadowingPriority?: Priority | null;
+  dictationEligible: boolean;
+  shadowingEligible: boolean;
+  dictationSelected: boolean;
+  shadowingSelected: boolean;
+  hints: AuthoringNote[];
+  notes: AuthoringNote[];
+  thoughtGroups: { tokenStart: number; tokenEnd: number }[];
+};
+export type AuthoringJob = {
+  attemptCount?: number;
+  result?: {
+    version: number; recordedAt: string; transcriptRevision: number;
+    sentences: number; words: number; audioDurationMs: number; timedSentences: number;
+    completedFeatures: Record<string, number>; vocabularyNotes: number; grammarNotes: number;
+    dictationSentences: number; shadowingSentences: number; warnings: number;
+  } | null;
+  createdAt?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  jobId: string;
+  operation: string;
+  status: string;
+  currentStep?: string | null;
+  progressPercent?: number;
+  errorMessage?: string | null;
+  errorCode?: string | null;
+  nextRetryAt?: string | null;
+  usage: { provider: string; model: string; inputTokens?: number | null; outputTokens?: number | null; latencyMs: number; audioSeconds?: number | null;
+    invocationId?: string | null; capability?: string | null; status?: string | null; fallback?: boolean | null }[];
+};
+export type LessonDraft = {
+  profile?: { cefr: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2' | 'UNKNOWN'; contentType: 'CONVERSATION' | 'MONOLOGUE' | 'LECTURE' | 'STORY' | 'NEWS' | 'MIXED' | 'OTHER' | 'UNKNOWN'; manual: boolean; stale: boolean };
+  statistics?: { wordCount: number; sentenceCount: number; durationMs: number; wordsPerMinute: number | null; dictationCount: number; shadowingCount: number };
+  sourceType?: "YOUTUBE" | "TEXT" | "AUDIO";
+  audioSourceId?: string | null;
+  ttsVoice?: string | null;
+  audioReady?: boolean;
+  audioVersion?: string | null;
+  options?: AuthoringOptions;
+  id: string;
+  title: string;
+  videoId: string;
+  sourceReference: string;
+  startMs: number;
+  endMs: number;
+  revision: number;
+  transcriptRevision: number;
+  status: string;
+  timingStatus: string;
+  alignmentRequired?: boolean;
+  approvedRevision: number | null;
+  karaokeReviewedRevision: number | null;
+  semanticRevision: number | null;
+  contentComplete?: boolean;
+  contentNeeded?: boolean;
+  vocabularyBudget?: number;
+  grammarBudget?: number;
+  sentences: AuthoringSentence[];
+  jobs: AuthoringJob[];
+};
+export type TranscriptSentence = { id?: string; editorKey?: string; text: string; usage?: SentenceUsage; hidden?: boolean };
+export type BuildAccepted = { lessonId: string; jobId: string };
+
+export type AuthoringOptions = {
   activities: string[];
   annotations: string[];
-  accent: string;
-  pronunciationStrategy: string;
+  locale: string;
+  density: 'AUTO' | 'CUSTOM';
+  vocabularyLimit: number;
+  grammarLimit: number;
+  pronunciationStrategy: 'DISABLED' | 'ON_DEMAND' | 'PREGENERATE';
+  accent: 'US' | 'UK';
+  pronunciationProvider: 'LOCAL' | 'AI';
 };

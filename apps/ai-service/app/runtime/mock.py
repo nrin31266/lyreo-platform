@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import re
 
 from ..schemas import ExecuteRequest, ExecuteResponse
 
@@ -15,8 +16,14 @@ class MockRuntime:
             or request.input.get("text")
             or "Mock transcription for Lyreo development."
         )
+        timestamps = []
+        if request.options.get("timestamps", False):
+            aligned = await self.align(request.model_copy(update={"input": {"text": text}}))
+            timestamps = aligned.output["words"]
         return ExecuteResponse(
-            output={"text": text, "language": "English", "timestamps": []},
+            output={"text": text, "language": "English", "timestamps": timestamps,
+                    "segments": [{"text": text, "start_ms": 0, "end_ms": timestamps[-1]["end_ms"]}]
+                    if timestamps else []},
             metadata={"runtime": "mock"},
         )
 
@@ -115,7 +122,38 @@ class MockRuntime:
         schema = request.options.get("response_schema")
         sentences = request.input.get("sentences") or []
 
-        if schema == "lesson_lexical_annotations_v1":
+        if schema == "lesson_content_v1":
+            rows = [(int(i), text) for i, text in re.findall(r"^(\d+)\|(.*)$", request.prompt or "", re.M)]
+            structured = {"tr": [[i, f"[mock] {text}"] for i, text in rows],
+                          "v": [], "g": [], "d": [], "s": [], "m": ["UNKNOWN", "UNKNOWN"]}
+        elif schema == "lesson_authoring_v2":
+            properties = request.options.get("json_schema", {}).get("properties", {})
+            structured = {key: [] for key in properties}
+            structured["s"] = []
+            for sentence in sentences:
+                if sentence.get("u") != "LEARN":
+                    continue
+                row = {"i": sentence["i"]}
+                fields = properties.get("s", {}).get("items", {}).get("properties", {})
+                if "tr" in fields:
+                    row["tr"] = f"[mock] {sentence['x']}"
+                for key in ("d", "s"):
+                    if key in fields:
+                        row[key] = "H" if sentence.get(key) else "M"
+                structured["s"].append(row)
+        elif schema == "lesson_authoring_v1":
+            structured = {
+                "targetLocale": "vi-VN",
+                "items": [{
+                    "sentenceId": target["sentenceId"],
+                    "translation": f"[mock] {target['text']}",
+                    "vocabulary": [], "grammar": [], "hints": [], "notes": [],
+                    "dictationPriority": "HIGH" if target.get("dictationEligible") else "MEDIUM",
+                    "shadowingPriority": "HIGH" if target.get("shadowingEligible") else "MEDIUM",
+                    "thoughtGroups": [target["text"]] if target.get("shadowingEligible") else [],
+                } for target in request.input.get("targets", [])],
+            }
+        elif schema == "lesson_lexical_annotations_v1":
             structured = {"items": []}
         elif schema == "lesson_grammar_annotations_v1":
             structured = {"items": []}
@@ -159,5 +197,7 @@ class MockRuntime:
                 "runtime": "mock",
                 "provider": request.provider,
                 "credential_present": bool(credential),
+                "finish_reason": "stop",
+                "status": "completed",
             },
         )

@@ -1,4 +1,6 @@
 import os
+os.environ.setdefault('OMP_NUM_THREADS', '2')
+os.environ.setdefault('MKL_NUM_THREADS', '2')
 os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
 
 import httpx
@@ -6,12 +8,14 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from .config import settings
+from .providers.errors import provider_error_message
 from .providers.gemini import GeminiProvider
 from .providers.groq import GroqProvider
 from .providers.openai_compatible import OpenAICompatibleProvider
 from .runtime.kokoro import KokoroRuntime
 from .runtime.mock import MockRuntime
 from .runtime.nlp import LightweightNlpRuntime
+from .runtime.ipa import IpaRuntime
 from .runtime.qwen import QwenRuntime
 from .schemas import ExecuteRequest, ExecuteResponse, HealthResponse
 from .security import verify_internal_token
@@ -58,14 +62,21 @@ async def value_error_handler(_: Request, error: ValueError):
 
 
 @app.exception_handler(httpx.HTTPStatusError)
-async def provider_http_error_handler(_: Request, error: httpx.HTTPStatusError):
+async def provider_http_error_handler(request: Request, error: httpx.HTTPStatusError):
     # Do not proxy full provider bodies/headers: they can contain sensitive operational detail.
+    content = {
+        'detail': 'upstream AI provider request failed',
+        'provider_status': error.response.status_code,
+    }
+    message = provider_error_message(error, request)
+    if message:
+        content['provider_message'] = message
     return JSONResponse(
-        status_code=502,
-        content={
-            'detail': 'upstream AI provider request failed',
-            'provider_status': error.response.status_code,
-        },
+        status_code=error.response.status_code
+        if error.response.status_code in {400, 401, 403, 404, 413, 422, 429} else 502,
+        headers={'Retry-After': error.response.headers['Retry-After']}
+        if error.response.status_code == 429 and 'Retry-After' in error.response.headers else None,
+        content=content,
     )
 
 
@@ -143,14 +154,16 @@ async def tts(
 async def tts_voices():
     """Voice discovery for the local TTS runtime.
 
-    Static metadata only — no model load. The Lesson Prep Tool uses this list so it
-    never hard-codes Kokoro voices.
+    Static metadata only — no model load. Preview callers can discover available
+    voices without hard-coding Kokoro metadata.
     """
-    return {'voices': kokoro.voices()}
+    return {'voices': kokoro.voices(), 'default_voice': cfg.kokoro_default_voice}
 
 
 @app.post('/v1/nlp/analyze', response_model=ExecuteResponse, dependencies=[Depends(verify_internal_token)])
 async def nlp(req: ExecuteRequest):
+    if req.options.get("operation") == "sentence_ipa_v1":
+        return await IpaRuntime().analyze(req)
     if is_mock():
         return await mock.nlp(req)
     return await nlp_runtime.analyze(req)

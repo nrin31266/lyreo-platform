@@ -24,6 +24,10 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
         this.jdbc = jdbc;
     }
 
+    @Override public List<UUID> matchingIds(String type,String ownerModule,java.util.Set<BackgroundJobStatus> statuses) {
+        if(statuses.isEmpty()) return List.of();
+        return jdbc.query("SELECT id FROM background_job WHERE job_type=:type AND owner_module=:owner AND status IN (:statuses)",Map.of("type",type,"owner",ownerModule,"statuses",statuses.stream().map(Enum::name).toList()),(rs,n)->rs.getObject(1,UUID.class));
+    }
     @Override
     public UUID enqueue(String type, String ownerModule, UUID ownerReferenceId, int priority, int maxAttempts, String snapshot) {
         UUID id = UUID.randomUUID();
@@ -76,11 +80,27 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
     }
 
     @Override
+    public Optional<BackgroundJob> latest(String type, String ownerModule, UUID ownerReferenceId) {
+        return jdbc.query("SELECT * FROM background_job WHERE job_type=:type AND owner_module=:module AND owner_reference_id=:owner ORDER BY created_at DESC,id DESC LIMIT 1",
+            Map.of("type",type,"module",ownerModule,"owner",ownerReferenceId),this::map).stream().findFirst();
+    }
+
+    @Override
     public Optional<BackgroundJob> findById(UUID id) {
         return jdbc.query(
             "SELECT * FROM background_job WHERE id = :id",
             Map.of("id", id), this::map
         ).stream().findFirst();
+    }
+
+    @Override
+    public com.lyreo.platform.jobs.application.BackgroundJobService.Page list(java.util.Set<BackgroundJobStatus> statuses, String type, int page, int size) {
+        String where = " WHERE 1=1" + (statuses.isEmpty() ? "" : " AND status IN (:statuses)") + (type.isEmpty() ? "" : " AND job_type=:type");
+        var args = new MapSqlParameterSource().addValue("statuses", statuses.stream().map(Enum::name).toList())
+            .addValue("type", type).addValue("offset", page * size).addValue("size", size);
+        long total = jdbc.queryForObject("SELECT count(*) FROM background_job" + where, args, Long.class);
+        var items = jdbc.query("SELECT * FROM background_job" + where + " ORDER BY created_at DESC,id DESC LIMIT :size OFFSET :offset", args, this::map);
+        return new com.lyreo.platform.jobs.application.BackgroundJobService.Page(items, total, page, size);
     }
 
     @Override
@@ -122,6 +142,15 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
     }
 
     @Override
+    public boolean lockForCommit(UUID id, String workerId) {
+        return !jdbc.queryForList("""
+            SELECT id FROM background_job WHERE id=:id AND lease_owner=:worker
+              AND status='RUNNING' AND lease_until>now() AND cancel_requested_at IS NULL
+            FOR UPDATE
+            """, Map.of("id", id, "worker", workerId), UUID.class).isEmpty();
+    }
+
+    @Override
     public boolean heartbeat(UUID id, String workerId, Duration lease) {
         return jdbc.update("""
             UPDATE background_job
@@ -130,6 +159,7 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
              WHERE id = :id
                AND lease_owner = :workerId
                AND status IN ('RUNNING','CANCEL_REQUESTED')
+               AND lease_until > now()
             """, Map.of("id", id, "workerId", workerId, "leaseSeconds", lease.toSeconds())) == 1;
     }
 
@@ -142,6 +172,7 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
              WHERE id = :id
                AND lease_owner = :workerId
                AND status IN ('RUNNING','CANCEL_REQUESTED')
+               AND lease_until > now()
             """, Map.of(
                 "id", id,
                 "workerId", workerId,
@@ -178,6 +209,7 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
              WHERE id = :id
                AND lease_owner = :workerId
                AND status IN ('RUNNING','CANCEL_REQUESTED')
+               AND lease_until > now()
             """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("workerId", workerId)
@@ -199,6 +231,7 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
              WHERE id = :id
                AND lease_owner = :workerId
                AND status = 'RUNNING'
+               AND lease_until > now()
             """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("workerId", workerId)
@@ -245,7 +278,11 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
             rs.getString("lease_owner"),
             instant(rs, "lease_until"),
             instant(rs, "cancel_requested_at"),
-            rs.getString("error_message")
+            rs.getString("error_message"),
+            rs.getString("error_code"),
+            instant(rs, "created_at"),
+            instant(rs, "started_at"),
+            instant(rs, "finished_at")
         );
     }
 

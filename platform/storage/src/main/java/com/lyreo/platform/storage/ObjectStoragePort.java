@@ -7,6 +7,7 @@ import java.time.Duration;
 public interface ObjectStoragePort {
     StoredObject put(String objectKey, String contentType, byte[] content);
     InputStream get(String objectKey);
+    boolean exists(String objectKey);
     void delete(String objectKey);
     URI createDownloadUrl(String objectKey, Duration ttl);
 

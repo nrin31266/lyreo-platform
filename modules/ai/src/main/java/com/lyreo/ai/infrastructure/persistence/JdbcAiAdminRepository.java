@@ -104,6 +104,23 @@ public final class JdbcAiAdminRepository implements AiAdminRepository {
     }
 
     @Override
+    public void removeProvider(String code) {
+        int changed = jdbc.update(
+            """
+            WITH disabled_routes AS (
+                UPDATE ai_capability_route SET enabled=false
+                 WHERE provider_id=(SELECT id FROM ai_provider WHERE code=:code)
+            )
+            UPDATE ai_provider SET encrypted_api_key=NULL, key_last4=NULL,
+                   enabled=false, connection_status='UNKNOWN', last_tested_at=NULL, updated_at=now()
+             WHERE code=:code
+            """,
+            Map.of("code", code)
+        );
+        if (changed == 0) throw new ResourceNotFoundException("Unknown AI provider: " + code);
+    }
+
+    @Override
     public UUID saveRoute(
         String capability,
         String providerCode,

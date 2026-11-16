@@ -5,10 +5,9 @@ Only unresolved product or architecture decisions belong here. Implementation ta
 <a id="gap-001--youtube-p0-hay-sau-lesson-mvp"></a>
 ## OQ-001 — YouTube in the first Lesson release
 
-- **Status**: open
-- **Type**: conflict
-
-The [PRD scope](../product/prd.md#6-scope-va-uu-tien) includes YouTube in Core Lesson, while its earlier release direction listed Text/Audio first. Product ownership must decide the release boundary before the first Lesson release is scoped. The technical adapter alone does not decide priority or policy approval.
+- **Status**: resolved, 2026-10-25
+- **Decision**: YouTube-first Admin authoring; Text/Audio UI and mobile playback/practice deferred.
+  See [D-024](../DECISIONS.md#d-024--integrated-youtube-lesson-authoring-and-free-only-research-2026-10-25).
 
 <a id="gap-002--nguong-hoan-thanh-dictation-70"></a>
 ## OQ-002 — Dictation completion threshold
@@ -37,10 +36,13 @@ The [PRD](../product/prd.md) and [non-functional requirements](non-functional.md
 <a id="gap-011--ingestion-portable-lesson-source"></a>
 ## OQ-005 — Portable Lesson source ingestion policy
 
-- **Status**: open
-- **Type**: decision-needed
-
-The [Lesson Prep package](../DATA_PIPELINES.md#0-lesson-prep-tool-acquisition-tool-local-not-a-core-pipeline) needs a Core ingestion contract. Before implementing import, decide validation, media checksum verification, and storage handling. Endpoint and UI implementation are separate tasks.
+- **Status**: closed, 2026-10-25
+- **Decision**: integrated Admin authoring replaces the standalone ZIP workflow; portable package
+  ingestion is outside this phase. The standalone source and hooks were retired on 2026-10-26 after
+  replacement regression coverage and functional OIDC publication/read-only verification; remaining
+  local workstation artifacts were purged at the owner's request on 2026-10-31. Human teaching/timing
+  quality and independent billing checks remain
+  separate unverified gates. See [Lesson Build](../features/lesson-build.md).
 
 ## OQ-006 — Production versus deploy terminology
 
@@ -48,3 +50,17 @@ The [Lesson Prep package](../DATA_PIPELINES.md#0-lesson-prep-tool-acquisition-to
 - **Type**: question
 
 `compose.prod.yml` and `scripts/verify-prod-env.sh` imply a production contract. Decide whether they describe true production or a deployable baseline before renaming or documenting production guarantees.
+
+## OQ-007 — Lesson exercise selection and publication
+
+**Status:** Admin authoring/publication resolved; learner experience remains open.
+
+Accepted Admin behavior includes optional full-transcript support, budgeted notes, enum profile,
+keep-by-default independent practice selection, deterministic Dictation support preview and atomic
+immutable publication. No checkbox fabricates listening or pronunciation review. Editable copies
+preserve originals; published deletion is recoverable and retains learner history. See
+[FR-LSN-008](lesson.md#fr-lsn-008--contextual-generation-and-candidate-review).
+
+Still decide learner presentation and dictation/shadowing feedback, missions/achievements and reward
+abuse controls. This phase creates no learner attempts or per-sentence coins. Self-service subscription
+entitlements/default policies are deferred.

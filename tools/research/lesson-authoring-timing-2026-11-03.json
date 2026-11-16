@@ -1,0 +1,505 @@
+{
+  "date": "2026-11-03",
+  "audio": {
+    "audio_sha256": "8e78af6a1a40e3690c2811988d57dd8c63c49ea0cd35b466d4e784f001f5307a",
+    "frames": 733056,
+    "sample_rate": 16000,
+    "duration_ms": 45816.0,
+    "selected_duration_ms": 45837
+  },
+  "scope": "One cached public-source clip; structural validation only; no human word-boundary reference.",
+  "models": {
+    "groq": "whisper-large-v3-turbo",
+    "qwen_asr": "Qwen/Qwen3-ASR-0.6B",
+    "qwen_aligner": "Qwen/Qwen3-ForcedAligner-0.6B"
+  },
+  "cases": [
+    {
+      "name": "groq",
+      "wall_seconds": 1.4067876990000059,
+      "word_count": 75,
+      "first_words": [
+        {
+          "index": 0,
+          "word": "Hello",
+          "start_ms": 40,
+          "end_ms": 440
+        },
+        {
+          "index": 1,
+          "word": "everyone.",
+          "start_ms": 440,
+          "end_ms": 1220
+        },
+        {
+          "index": 2,
+          "word": "Welcome",
+          "start_ms": 1220,
+          "end_ms": 2240
+        }
+      ],
+      "last_words": [
+        {
+          "index": 72,
+          "word": "know",
+          "start_ms": 44660,
+          "end_ms": 44960
+        },
+        {
+          "index": 73,
+          "word": "them",
+          "start_ms": 44960,
+          "end_ms": 45440
+        },
+        {
+          "index": 74,
+          "word": "all?",
+          "start_ms": 45440,
+          "end_ms": 46300
+        }
+      ],
+      "violations": [
+        {
+          "index": 33,
+          "type": "OVERLAP",
+          "start_ms": 18840,
+          "previous_end_ms": 19240
+        },
+        {
+          "index": 52,
+          "type": "OVERLAP",
+          "start_ms": 33520,
+          "previous_end_ms": 33960
+        },
+        {
+          "index": 70,
+          "type": "OVERLAP",
+          "start_ms": 44260,
+          "previous_end_ms": 44420
+        },
+        {
+          "index": 74,
+          "type": "OUT_OF_BOUNDS",
+          "start_ms": 45440,
+          "end_ms": 46300
+        }
+      ]
+    },
+    {
+      "name": "qwen-asr",
+      "wall_seconds": 19.73958414799995,
+      "word_count": 0,
+      "first_words": [],
+      "last_words": [],
+      "violations": []
+    },
+    {
+      "name": "qwen-stt-with-timing",
+      "wall_seconds": 10.20223603699992,
+      "word_count": 75,
+      "first_words": [
+        {
+          "word": "Hello",
+          "start_ms": 160,
+          "end_ms": 800,
+          "index": 0
+        },
+        {
+          "word": "everyone",
+          "start_ms": 800,
+          "end_ms": 1440,
+          "index": 1
+        },
+        {
+          "word": "welcome",
+          "start_ms": 1840,
+          "end_ms": 2480,
+          "index": 2
+        }
+      ],
+      "last_words": [
+        {
+          "word": "know",
+          "start_ms": 44640,
+          "end_ms": 45120,
+          "index": 72
+        },
+        {
+          "word": "them",
+          "start_ms": 45120,
+          "end_ms": 45440,
+          "index": 73
+        },
+        {
+          "word": "all",
+          "start_ms": 45440,
+          "end_ms": 45840,
+          "index": 74
+        }
+      ],
+      "violations": [
+        {
+          "index": 74,
+          "type": "OUT_OF_BOUNDS",
+          "start_ms": 45440,
+          "end_ms": 45840
+        }
+      ]
+    },
+    {
+      "name": "groq-aligned",
+      "wall_seconds": 0.22799931500003368,
+      "word_count": 75,
+      "first_words": [
+        {
+          "word": "Hello",
+          "start_ms": 160,
+          "end_ms": 800,
+          "index": 0
+        },
+        {
+          "word": "everyone",
+          "start_ms": 800,
+          "end_ms": 1440,
+          "index": 1
+        },
+        {
+          "word": "Welcome",
+          "start_ms": 1840,
+          "end_ms": 2480,
+          "index": 2
+        }
+      ],
+      "last_words": [
+        {
+          "word": "know",
+          "start_ms": 44640,
+          "end_ms": 45120,
+          "index": 72
+        },
+        {
+          "word": "them",
+          "start_ms": 45120,
+          "end_ms": 45440,
+          "index": 73
+        },
+        {
+          "word": "all",
+          "start_ms": 45440,
+          "end_ms": 45840,
+          "index": 74
+        }
+      ],
+      "violations": [
+        {
+          "index": 74,
+          "type": "OUT_OF_BOUNDS",
+          "start_ms": 45440,
+          "end_ms": 45840
+        }
+      ]
+    },
+    {
+      "name": "qwen-aligned",
+      "wall_seconds": 0.1976799320000282,
+      "word_count": 75,
+      "first_words": [
+        {
+          "word": "Hello",
+          "start_ms": 160,
+          "end_ms": 800,
+          "index": 0
+        },
+        {
+          "word": "everyone",
+          "start_ms": 800,
+          "end_ms": 1440,
+          "index": 1
+        },
+        {
+          "word": "welcome",
+          "start_ms": 1840,
+          "end_ms": 2480,
+          "index": 2
+        }
+      ],
+      "last_words": [
+        {
+          "word": "know",
+          "start_ms": 44640,
+          "end_ms": 45120,
+          "index": 72
+        },
+        {
+          "word": "them",
+          "start_ms": 45120,
+          "end_ms": 45440,
+          "index": 73
+        },
+        {
+          "word": "all",
+          "start_ms": 45440,
+          "end_ms": 45840,
+          "index": 74
+        }
+      ],
+      "violations": [
+        {
+          "index": 74,
+          "type": "OUT_OF_BOUNDS",
+          "start_ms": 45440,
+          "end_ms": 45840
+        }
+      ]
+    },
+    {
+      "name": "groq-edited-aligned",
+      "wall_seconds": 0.1990847809997831,
+      "word_count": 75,
+      "first_words": [
+        {
+          "word": "Hello",
+          "start_ms": 160,
+          "end_ms": 800,
+          "index": 0
+        },
+        {
+          "word": "everybody",
+          "start_ms": 800,
+          "end_ms": 1440,
+          "index": 1
+        },
+        {
+          "word": "Welcome",
+          "start_ms": 1840,
+          "end_ms": 2480,
+          "index": 2
+        }
+      ],
+      "last_words": [
+        {
+          "word": "know",
+          "start_ms": 44640,
+          "end_ms": 45120,
+          "index": 72
+        },
+        {
+          "word": "them",
+          "start_ms": 45120,
+          "end_ms": 45440,
+          "index": 73
+        },
+        {
+          "word": "all",
+          "start_ms": 45440,
+          "end_ms": 45840,
+          "index": 74
+        }
+      ],
+      "violations": [
+        {
+          "index": 74,
+          "type": "OUT_OF_BOUNDS",
+          "start_ms": 45440,
+          "end_ms": 45840
+        }
+      ]
+    },
+    {
+      "name": "qwen-edited-aligned",
+      "wall_seconds": 0.20036906800010001,
+      "word_count": 75,
+      "first_words": [
+        {
+          "word": "Hello",
+          "start_ms": 160,
+          "end_ms": 800,
+          "index": 0
+        },
+        {
+          "word": "everybody",
+          "start_ms": 800,
+          "end_ms": 1440,
+          "index": 1
+        },
+        {
+          "word": "welcome",
+          "start_ms": 1840,
+          "end_ms": 2480,
+          "index": 2
+        }
+      ],
+      "last_words": [
+        {
+          "word": "know",
+          "start_ms": 44640,
+          "end_ms": 45120,
+          "index": 72
+        },
+        {
+          "word": "them",
+          "start_ms": 45120,
+          "end_ms": 45440,
+          "index": 73
+        },
+        {
+          "word": "all",
+          "start_ms": 45440,
+          "end_ms": 45840,
+          "index": 74
+        }
+      ],
+      "violations": [
+        {
+          "index": 74,
+          "type": "OUT_OF_BOUNDS",
+          "start_ms": 45440,
+          "end_ms": 45840
+        }
+      ]
+    },
+    {
+      "name": "groq-aligned-fixed",
+      "http_status": 200,
+      "wall_seconds": 14.832020594999904,
+      "last_word": {
+        "word": "all",
+        "start_ms": 45440,
+        "end_ms": 45816,
+        "index": 74
+      }
+    },
+    {
+      "name": "qwen-aligned-fixed",
+      "http_status": 200,
+      "wall_seconds": 0.19254724999973405,
+      "last_word": {
+        "word": "all",
+        "start_ms": 45440,
+        "end_ms": 45816,
+        "index": 74
+      }
+    },
+    {
+      "name": "groq-edited-aligned-fixed",
+      "http_status": 200,
+      "wall_seconds": 0.1850461069998346,
+      "last_word": {
+        "word": "all",
+        "start_ms": 45440,
+        "end_ms": 45816,
+        "index": 74
+      }
+    },
+    {
+      "name": "qwen-edited-aligned-fixed",
+      "http_status": 200,
+      "wall_seconds": 0.18085055900019142,
+      "last_word": {
+        "word": "all",
+        "start_ms": 45440,
+        "end_ms": 45816,
+        "index": 74
+      }
+    }
+  ],
+  "native_cpu": {
+    "asr": {
+      "load_seconds": 13.148231913000018,
+      "inference_seconds": 22.75359861800007,
+      "device": "cpu",
+      "dtype": "float32",
+      "model": "Qwen/Qwen3-ASR-0.6B"
+    },
+    "aligner": {
+      "load_seconds": 9.017202280999754,
+      "inference_seconds": 2.847706046999974,
+      "device": "cpu",
+      "dtype": "float32",
+      "model": "Qwen/Qwen3-ForcedAligner-0.6B",
+      "timestamp_resolution_ms": 80.0
+    }
+  },
+  "core_validation": {
+    "groq-normalized": {
+      "accepted": false,
+      "errorCode": "TIMING_OUT_OF_BOUNDS",
+      "diagnostic": "word=70, startMs=45440, endMs=46300, durationMs=45837"
+    },
+    "groq-aligned": {
+      "accepted": false,
+      "errorCode": "TIMING_OUT_OF_BOUNDS",
+      "diagnostic": "word=74, startMs=45440, endMs=45840, durationMs=45837"
+    },
+    "qwen-aligned": {
+      "accepted": false,
+      "errorCode": "TIMING_OUT_OF_BOUNDS",
+      "diagnostic": "word=74, startMs=45440, endMs=45840, durationMs=45837"
+    },
+    "groq-edited-aligned": {
+      "accepted": false,
+      "errorCode": "TIMING_OUT_OF_BOUNDS",
+      "diagnostic": "word=74, startMs=45440, endMs=45840, durationMs=45837"
+    },
+    "qwen-edited-aligned": {
+      "accepted": false,
+      "errorCode": "TIMING_OUT_OF_BOUNDS",
+      "diagnostic": "word=74, startMs=45440, endMs=45840, durationMs=45837"
+    },
+    "qwen-stt-with-timing": {
+      "accepted": false,
+      "errorCode": "TIMING_OUT_OF_BOUNDS",
+      "diagnostic": "word=74, startMs=45440, endMs=45840, durationMs=45837"
+    },
+    "groq-aligned-fixed": {
+      "accepted": true,
+      "sentences": 9,
+      "wordGroups": 75
+    },
+    "qwen-aligned-fixed": {
+      "accepted": true,
+      "sentences": 7,
+      "wordGroups": 75
+    },
+    "groq-edited-aligned-fixed": {
+      "accepted": true,
+      "sentences": 9,
+      "wordGroups": 75
+    },
+    "qwen-edited-aligned-fixed": {
+      "accepted": true,
+      "sentences": 7,
+      "wordGroups": 75
+    }
+  },
+  "human_karaoke_approved": false,
+  "actual_samples": {
+    "groq_native_word": {
+      "word": "all?",
+      "start": 45.44,
+      "end": 46.3
+    },
+    "groq_normalized_word": {
+      "index": 74,
+      "word": "all?",
+      "start_ms": 45440,
+      "end_ms": 46300
+    },
+    "qwen_native_asr": {
+      "language": "English",
+      "text": "Hello everyone, welcome to my first slow English podcast. In this podcast, you will listen, and then you will repeat after me. You will repeat after me. This will help you practice your pronunciation, your accent, and your confidence when speaking English. I will speak slowly and clearly during the whole video. I have never seen it before, and we arrived in Bangkok at four p.m. It only snowed once. Do you know them all?",
+      "time_stamps": null
+    },
+    "qwen_native_aligner_last_item": {
+      "text": "all",
+      "start_time": 45.44,
+      "end_time": 45.84
+    },
+    "qwen_normalized_last_word": {
+      "word": "all",
+      "start_ms": 45440,
+      "end_ms": 45816,
+      "index": 74
+    }
+  }
+}

@@ -42,7 +42,7 @@ class JobControllerTest {
             id, "LESSON_BUILD", "lesson", UUID.randomUUID(),
             BackgroundJobStatus.RUNNING, 10, "GENERATE_TEXT", 40,
             1, 3, null, "worker-1", Instant.now().plusSeconds(60), null, null
-        )));
+        , null, java.time.Instant.EPOCH, null, null)));
 
         mockMvc.perform(get("/api/v1/jobs/" + id))
             .andExpect(status().isOk())
@@ -50,7 +50,22 @@ class JobControllerTest {
             .andExpect(jsonPath("$.jobType").value("LESSON_BUILD"))
             .andExpect(jsonPath("$.status").value("RUNNING"))
             .andExpect(jsonPath("$.currentStep").value("GENERATE_TEXT"))
-            .andExpect(jsonPath("$.progressPercent").value(40));
+            .andExpect(jsonPath("$.progressPercent").value(40))
+            .andExpect(jsonPath("$.createdAt").value("1970-01-01T00:00:00Z"));
+    }
+
+    @Test
+    void listUsesBoundedFiltersAndNeverExposesWorkerOrConfiguration() throws Exception {
+        var job = new BackgroundJob(UUID.randomUUID(), "LESSON_AUTHORING", "lesson", UUID.randomUUID(),
+            BackgroundJobStatus.FAILED, 10, "ALIGNING", 40, 1, 3, null, "private-worker", Instant.now(), null,
+            "Invalid timing https://host?token=private-key Bearer private-token api_key=private-key", "TIMING_INVALID", Instant.EPOCH, Instant.EPOCH, Instant.now());
+        when(service.list("FAILED", "LESSON_AUTHORING", 1, 10)).thenReturn(new BackgroundJobService.Page(java.util.List.of(job), 11, 1, 10));
+        mockMvc.perform(get("/api/v1/jobs").param("status", "FAILED").param("type", "LESSON_AUTHORING").param("page", "1").param("size", "10"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.total").value(11)).andExpect(jsonPath("$.page").value(1))
+            .andExpect(jsonPath("$.items[0].errorCode").value("TIMING_INVALID"))
+            .andExpect(jsonPath("$.items[0].errorMessage").value("Invalid timing [URL removed] Bearer [redacted] api_key [redacted]"))
+            .andExpect(jsonPath("$.items[0].ownerReferenceId").value(job.ownerReferenceId().toString()))
+            .andExpect(jsonPath("$.items[0].leaseOwner").doesNotExist()).andExpect(jsonPath("$.items[0].configSnapshotJson").doesNotExist());
     }
 
     @Test

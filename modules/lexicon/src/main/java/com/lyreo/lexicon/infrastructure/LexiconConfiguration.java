@@ -10,6 +10,10 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 @Configuration
 public class LexiconConfiguration {
     @Bean
+    com.lyreo.lexicon.api.LexiconLinkService lexiconLinkService(LexiconRepository repository) {
+        return new com.lyreo.lexicon.api.LexiconLinkService(repository);
+    }
+    @Bean
     LexiconRepository lexiconRepository(NamedParameterJdbcTemplate jdbc) {
         return new JdbcLexiconRepository(jdbc);
     }

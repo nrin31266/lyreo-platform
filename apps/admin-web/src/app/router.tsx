@@ -1,12 +1,40 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
-import { AuthCallbackPage, ProtectedRoute } from '@/app/auth';
-import { AdminLayout } from '@/app/layout/AdminLayout';
-import { CurriculumPage } from '@/pages/curriculum/CurriculumPage';
-import { LexiconPage } from '@/pages/lexicon/LexiconPage';
-import { OverviewPage } from '@/pages/overview/OverviewPage';
-import { AiSettingsPage } from '@/pages/ai-settings/AiSettingsPage';
-import { JobsPage } from '@/pages/jobs/JobsPage';
-import { LessonBuilderPage } from '@/pages/lesson-builder/LessonBuilderPage';
+import { lazy } from "react";
+import { Navigate, Route, Routes } from "react-router-dom";
+import { AuthCallbackPage, ProtectedRoute } from "@/app/auth";
+import { AdminLayout } from "@/app/layout/AdminLayout";
+import { CurriculumPage } from "@/pages/curriculum/CurriculumPage";
+import { LexiconPage } from "@/pages/lexicon/LexiconPage";
+import { OverviewPage } from "@/pages/overview/OverviewPage";
+
+const AiSettingsPage = lazy(() =>
+  import("@/pages/ai-settings/AiSettingsPage").then((module) => ({
+    default: module.AiSettingsPage,
+  })),
+);
+
+const JobsPage = lazy(() =>
+  import("@/pages/jobs/JobsPage").then((module) => ({
+    default: module.JobsPage,
+  })),
+);
+
+const LessonBuilderPage = lazy(() =>
+  import("@/pages/lesson-builder/LessonBuilderPage").then((module) => ({
+    default: module.LessonBuilderPage,
+  })),
+);
+
+const OrganizationPage = lazy(() => import("@/pages/lessons/OrganizationPage").then(m => ({default: m.OrganizationPage})));
+const LessonDetailPage = lazy(() =>
+  import("@/pages/lessons/LessonDetailPage").then((m) => ({
+    default: m.LessonDetailPage,
+  })),
+);
+const LessonsPage = lazy(() =>
+  import("@/pages/lessons/LessonsPage").then((m) => ({
+    default: m.LessonsPage,
+  })),
+);
 
 export function AppRouter() {
   return (
@@ -21,7 +49,12 @@ export function AppRouter() {
         }
       >
         <Route index element={<OverviewPage />} />
+        <Route path="lessons" element={<LessonsPage />} />
+        <Route path="lessons/organization" element={<OrganizationPage />} />
+        <Route path="lessons/categories" element={<Navigate to="/lessons/organization?tab=categories" replace />} />
+        <Route path="lessons/channels" element={<Navigate to="/lessons/organization?tab=channels" replace />} />
         <Route path="lessons/new" element={<LessonBuilderPage />} />
+        <Route path="lessons/:lessonId" element={<LessonDetailPage />} />
         <Route path="jobs" element={<JobsPage />} />
         <Route path="settings/ai" element={<AiSettingsPage />} />
         <Route path="curriculum" element={<CurriculumPage />} />

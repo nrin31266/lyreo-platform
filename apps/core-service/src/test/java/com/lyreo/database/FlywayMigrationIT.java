@@ -52,7 +52,7 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Proves the database and testing foundation on fresh PostgreSQL:
  * 1. Testcontainers provisions real PostgreSQL 18 (alpine).
- * 2. Spring Boot Flyway applies the consolidated baseline and production cutover (V001..V006).
+ * 2. Spring Boot Flyway applies the consolidated baseline and production cutover (V001..V008).
  * 3. Asserts migration status, essential schema objects, indexes, constraints, and reference data.
  */
 @SpringBootTest(classes = FlywayMigrationIT.TestConfig.class)
@@ -84,12 +84,34 @@ class FlywayMigrationIT {
     private PlatformTransactionManager transactions;
 
     @Test
+    void removingProviderErasesCredentialAndDisablesOnlyItsRoutes() {
+        var repository = new com.lyreo.ai.infrastructure.persistence.JdbcAiAdminRepository(
+            new NamedParameterJdbcTemplate(jdbcTemplate));
+        String code = "REMOVE_" + UUID.randomUUID().toString().replace("-", "");
+        UUID provider = repository.saveProvider(code, "Disposable", null, "encrypted", "1234", true);
+        repository.saveRoute("GENERAL_LLM", code, "test-model", 1, false, true);
+        String other = "KEEP_" + UUID.randomUUID().toString().replace("-", "");
+        repository.saveProvider(other, "Keep", null, "keep-secret", "5678", true);
+        UUID otherRoute = repository.saveRoute("GENERAL_LLM", other, "other-model", 1, false, true);
+        repository.removeProvider(code);
+        var removed = repository.providers().stream().filter(p -> p.id().equals(provider)).findFirst().orElseThrow();
+        assertThat(removed.enabled()).isFalse();
+        assertThat(removed.configured()).isFalse();
+        assertThat(removed.keyLast4()).isNull();
+        assertThat(jdbcTemplate.queryForObject("SELECT encrypted_api_key FROM ai_provider WHERE id=?", String.class, provider)).isNull();
+        assertThat(repository.routes().stream().filter(r -> r.provider().equals(code))).allMatch(r -> !r.enabled());
+        assertThat(repository.routes().stream().filter(r -> r.id().equals(otherRoute))).allMatch(r -> r.enabled());
+        assertThatThrownBy(() -> repository.removeProvider("MISSING_PROVIDER"))
+            .isInstanceOf(com.lyreo.contracts.errors.ResourceNotFoundException.class);
+    }
+
+    @Test
     void verifiesConsolidatedBaselineMigrationsSucceeded() {
         MigrationInfo[] applied = flyway.info().applied();
 
         assertThat(applied)
-            .as("Six migrations must be applied")
-            .hasSize(6);
+            .as("Twelve consolidated migrations must be applied")
+            .hasSize(12);
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
@@ -109,9 +131,13 @@ class FlywayMigrationIT {
         assertThat(applied[4].getState()).isEqualTo(MigrationState.SUCCESS);
         assertThat(applied[5].getVersion().getVersion()).isEqualTo("006");
         assertThat(applied[5].getState()).isEqualTo(MigrationState.SUCCESS);
+        assertThat(applied[6].getVersion().getVersion()).isEqualTo("007");
+        assertThat(applied[6].getState()).isEqualTo(MigrationState.SUCCESS);
+        assertThat(applied[7].getVersion().getVersion()).isEqualTo("008");
+        assertThat(applied[7].getState()).isEqualTo(MigrationState.SUCCESS);
         assertThat(flyway.info().current().getVersion().getVersion())
-            .as("Current Flyway version must be 006")
-            .isEqualTo("006");
+            .as("Current Flyway version must be 015")
+            .isEqualTo("015");
     }
 
     @Test

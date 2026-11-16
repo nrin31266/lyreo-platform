@@ -25,3 +25,12 @@ export type SaveProviderPayload = {
   apiKey: string | null;
   enabled: boolean;
 };
+
+export type SaveRoutePayload = {
+  capability: string;
+  providerCode: string;
+  model: string;
+  priority: number;
+  fallback: boolean;
+  enabled: boolean;
+};

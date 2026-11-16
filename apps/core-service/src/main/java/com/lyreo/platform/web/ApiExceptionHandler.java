@@ -3,6 +3,7 @@ package com.lyreo.platform.web;
 import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.errors.StateConflictException;
+import com.lyreo.contracts.errors.ServiceUnavailableException;
 import com.lyreo.platform.observability.CorrelationIdAccessor;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
@@ -95,6 +96,15 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             errors
         );
         return new ResponseEntity<>(problem, problemHeaders(headers), HttpStatus.BAD_REQUEST);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleMaxUploadSizeExceededException(
+        org.springframework.web.multipart.MaxUploadSizeExceededException ex,HttpHeaders headers,HttpStatusCode status,WebRequest request
+    ) {
+        var problem=ApiProblemFactory.create(HttpStatus.valueOf(413),"payload-too-large","Upload too large",
+            "Audio uploads support up to 30 MiB per file.","PAYLOAD_TOO_LARGE",resolveHttpServletRequest(request),null);
+        return new ResponseEntity<>(problem,problemHeaders(headers),status);
     }
 
     @Override
@@ -320,6 +330,16 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(status)
             .contentType(ApiProblemWriter.APPLICATION_PROBLEM_JSON)
             .body(problem);
+    }
+
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleServiceUnavailable(ServiceUnavailableException ex, HttpServletRequest request) {
+        ProblemDetail problem = ApiProblemFactory.create(
+            HttpStatus.SERVICE_UNAVAILABLE, "service-unavailable", "Service unavailable",
+            ex.getMessage(), ex.errorCode(), request, null
+        );
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+            .contentType(ApiProblemWriter.APPLICATION_PROBLEM_JSON).body(problem);
     }
 
     @ExceptionHandler(Exception.class)

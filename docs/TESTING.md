@@ -76,7 +76,6 @@ dependencies into system Python.
 |---|---|---|
 | AI Service | `apps/ai-service/tests/` | `make test-ai` |
 | Data Import | `tools/data-import/tests/` | `make test-data-import` |
-| Lesson Prep | `tools/lesson-prep/tests/` | `make test-lesson-prep` |
 
 Each subproject's `pyproject.toml` declares its test dependencies under a `dev` extra.
 
@@ -98,9 +97,10 @@ Each subproject's `pyproject.toml` declares its test dependencies under a `dev` 
 
 ## 7. Shared TypeScript packages
 
-`packages/design-system` and `packages/i18n` are pure data/token packages. Type correctness is
-verified by `pnpm typecheck`. These packages do not require runtime test suites unless they gain
-logic beyond type exports.
+`packages/i18n` owns shared locale metadata and translation resources. Type correctness is verified
+by `pnpm typecheck`, and repository validation checks EN/VI key parity. Platform theme tokens live
+with each app: Mobile typechecks its local foundation and tests text contrast; Admin tests theme
+selection/persistence and verifies CSS status colors in the browser.
 
 ## 8. Learner Web
 
@@ -146,7 +146,7 @@ Make targets are the stable interface between developer workflow and CI pipeline
 | CI job | Make targets / commands | What it covers |
 |---|---|---|
 | Java | `make verify-java` | Unit tests (Surefire), integration tests (Failsafe) |
-| Python | `make test-ai`, `make test-data-import`, `make test-lesson-prep` | All Python subproject test suites |
+| Python | `make test-ai`, `make test-data-import` | All Python subproject test suites |
 | Frontend | `make typecheck`, `make test-frontend`, `make build-web` | Type checking, component tests, build verification |
 | Repository policy | `make validate`, `make test-tooling` | Doc validation, syntax checks, repo structure rules |
 | Full check | `make check` | All of the above in sequence |

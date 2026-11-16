@@ -4,14 +4,18 @@ import com.lyreo.ai.application.execution.AiExecutionCommand;
 import com.lyreo.ai.application.execution.AiExecutionException;
 import com.lyreo.ai.application.execution.AiExecutionResult;
 import com.lyreo.ai.application.port.AiExecutionGateway;
+import com.lyreo.ai.domain.AiCapability;
 import java.time.Duration;
 import java.util.Map;
+import java.util.LinkedHashMap;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 /** HTTP adapter from Java AI routing to the private FastAPI capability service. */
 public final class FastApiAiExecutionGateway implements AiExecutionGateway {
+    private static final ObjectMapper JSON = new ObjectMapper();
     private final WebClient client;
     private final Duration timeout;
     private final String internalToken;
@@ -74,6 +78,18 @@ public final class FastApiAiExecutionGateway implements AiExecutionGateway {
                 ? (Map<String, Object>) rawUsage
                 : Map.of();
 
+            Map<?, ?> metadata = response.get("metadata") instanceof Map<?, ?> values ? values : Map.of();
+            Object finish = metadata.get("finish_reason");
+            Object status = metadata.get("status");
+            boolean llm = command.capability() == AiCapability.GENERAL_LLM
+                || command.capability() == AiCapability.REASONING_LLM;
+            boolean completed = command.provider().equalsIgnoreCase("GEMINI")
+                ? "completed".equals(status) : "stop".equals(finish);
+            if ((llm && !completed) || (finish != null && !"stop".equals(finish))
+                || (status != null && !"completed".equals(status))) {
+                throw new AiExecutionException("AI output did not complete", false, "AI_OUTPUT_INCOMPLETE").evidence(new AiExecutionResult(command.invocationId(),command.provider(),command.model(),output,asInteger(usage.get("input_tokens")),asInteger(usage.get("output_tokens")),latency));
+            }
+
             return new AiExecutionResult(
                 command.invocationId(),
                 command.provider(),
@@ -85,10 +101,7 @@ public final class FastApiAiExecutionGateway implements AiExecutionGateway {
             );
         } catch (WebClientResponseException responseFailure) {
             int status = responseFailure.getStatusCode().value();
-            boolean fallbackAllowed = status == 401
-                || status == 403
-                || status == 404
-                || status == 408
+            boolean fallbackAllowed = status == 408
                 || status == 409
                 || status == 425
                 || status == 429
@@ -98,7 +111,8 @@ public final class FastApiAiExecutionGateway implements AiExecutionGateway {
                 fallbackAllowed,
                 "AI_HTTP_" + status,
                 responseFailure
-            );
+            ).retryAfter(status == 429 ? retryAfterSeconds(responseFailure) : 0)
+                .diagnostics(providerDiagnostics(responseFailure, command));
         } catch (WebClientRequestException networkFailure) {
             throw new AiExecutionException(
                 "AI service network request failed", true, "AI_NETWORK", networkFailure
@@ -119,6 +133,47 @@ public final class FastApiAiExecutionGateway implements AiExecutionGateway {
 
     private static long elapsedMs(long startNanos) {
         return Duration.ofNanos(System.nanoTime() - startNanos).toMillis();
+    }
+
+    private Map<String,Object> providerDiagnostics(WebClientResponseException failure, AiExecutionCommand command) {
+        var result = new LinkedHashMap<String,Object>();
+        byte[] body = failure.getResponseBodyAsByteArray();
+        if (body.length > 64 * 1024) return result;
+        try {
+            var data = JSON.readTree(body);
+            var status = data.path("provider_status");
+            if (status.isIntegralNumber() && status.intValue() >= 400 && status.intValue() <= 599) {
+                result.put("provider_status", status.intValue());
+                var message = data.path("provider_message");
+                if (message.isString()) {
+                    String text = message.stringValue();
+                    for (String secret : new String[]{command.credential(), internalToken}) {
+                        if (secret != null && !secret.isBlank()) text = text.replace(secret, "[redacted]");
+                    }
+                    text = text.replaceAll("https?://[^\\s\\\"<>]+|data:[^\\s\\\"<>]+", "[URL removed]")
+                        .replaceAll("(?i)\\b(?:bearer|basic)\\s+[^\\s\\\"',;}]+", "[redacted]")
+                        .replaceAll("(?i)\\b(?:api[_ -]?key|authorization|credential|password|secret|token)\\b(?:[\\\"']?\\s*[:=]\\s*|\\s+)(?:\\\"[^\\\"]*\\\"|'[^']*'|[^\\s,;}]+)", "[redacted]")
+                        .replaceAll("(?is)\\b(?:prompt|input|messages|audio_base64|headers)\\b[\\\"'\\s]*[:=].*", "[request detail removed]")
+                        .replaceAll("\\p{Cntrl}", " ").strip();
+                    if (!text.isBlank()) result.put("provider_message", text.substring(0, Math.min(text.length(), 2048)));
+                }
+            }
+        } catch (RuntimeException ignored) { /* Legacy or non-JSON failures keep their safe HTTP error. */ }
+        return result;
+    }
+
+    private static long retryAfterSeconds(WebClientResponseException failure) {
+        String raw = failure.getHeaders().getFirst("Retry-After");
+        if (raw != null) {
+            try { return Math.max(1, Long.parseLong(raw)); }
+            catch (NumberFormatException ignored) {
+                try {
+                    return Math.max(1, java.time.Duration.between(java.time.Instant.now(),
+                        java.time.ZonedDateTime.parse(raw, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant()).toSeconds());
+                } catch (java.time.format.DateTimeParseException invalid) { /* Safe bounded fallback below. */ }
+            }
+        }
+        return 60;
     }
 
     private static Integer asInteger(Object value) {

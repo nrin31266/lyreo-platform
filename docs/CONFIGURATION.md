@@ -36,3 +36,36 @@ Job polling, lease, and concurrency are deployment tuning settings constrained b
 ## Adding a setting
 
 Identify its owner, secret status, persistence needs, override authority, and audit/snapshot needs. Add exact environment keys to the owning `.env.example` and code. Update this document only when precedence or semantics change. Keep authorization, scoring authority, domain transitions, schema authority, and module boundaries in code and architecture contracts. Public API documentation availability follows the [HTTP contract](architecture/http-api-contract.md).
+
+
+### Local speech recognition for authoring
+
+For local authoring, configure **Admin → AI settings → Routing** with provider `QWEN`:
+
+| Capability | Model | Priority | Enabled |
+|---|---|---|---|
+| STT | `Qwen/Qwen3-ASR-0.6B` | 1 | Yes |
+| ALIGNMENT | `Qwen/Qwen3-ForcedAligner-0.6B` | 1 | Yes |
+
+Disable the Groq STT route when using this local-only setup; other Groq capabilities can stay enabled.
+Routes are persisted in PostgreSQL and survive restarts and lesson-only reset. No hard-coded provider
+fallback overrides Admin routing. Run `make ai-local` with the Qwen dependencies/weights available.
+Local recognition can still make mistakes; transcript review remains required before alignment.
+An explicitly enabled mock development bootstrap remains a separate test configuration.
+
+### Local IPA runtime
+
+The NLP local route (`LOCAL_NLP`) supports reference sentence IPA through system `espeak-ng`.
+Install that binary for host execution; the AI Docker image includes it. Admin chooses LOCAL or AI,
+a US/UK target reference accent and disabled/on-demand/pregenerate timing policy per draft.
+AI uses the configured free-eligible GENERAL_LLM route. Accent selection does not detect source accent.
+
+### Kokoro voice previews
+
+Keep Kokoro library 0.9.4 / `hexgrad/Kokoro-82M` v1.0 for the English catalog.
+Start `make ai-local`, enable a `TTS` route to `LOCAL_KOKORO` (no provider key), then use
+**Prepare missing voice previews** in the Admin voice picker. One Core job generates 28 samples
+with fixed English text and speed 1.0, persists a versioned manifest in the configured object storage
+and skips valid successes on retry. Discovery does not load the heavy model; preview playback
+only downloads existing audio through authenticated Admin endpoints. Generation failures are visible
+in the picker and jobs screen. Model weights/GPU availability are still required for generation.

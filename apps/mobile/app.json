@@ -16,7 +16,51 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-localization"
+      "expo-localization",
+      "expo-font",
+      [
+        "expo-font",
+        {
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "Raleway",
+                "fontDefinitions": [
+                  {
+                    "path": "./node_modules/@expo-google-fonts/raleway/400Regular/Raleway_400Regular.ttf",
+                    "weight": 400
+                  },
+                  {
+                    "path": "./node_modules/@expo-google-fonts/raleway/500Medium/Raleway_500Medium.ttf",
+                    "weight": 500
+                  },
+                  {
+                    "path": "./node_modules/@expo-google-fonts/raleway/600SemiBold/Raleway_600SemiBold.ttf",
+                    "weight": 600
+                  },
+                  {
+                    "path": "./node_modules/@expo-google-fonts/raleway/700Bold/Raleway_700Bold.ttf",
+                    "weight": 700
+                  },
+                  {
+                    "path": "./node_modules/@expo-google-fonts/raleway/800ExtraBold/Raleway_800ExtraBold.ttf",
+                    "weight": 800
+                  }
+                ]
+              }
+            ]
+          },
+          "ios": {
+            "fonts": [
+              "./node_modules/@expo-google-fonts/raleway/400Regular/Raleway_400Regular.ttf",
+              "./node_modules/@expo-google-fonts/raleway/500Medium/Raleway_500Medium.ttf",
+              "./node_modules/@expo-google-fonts/raleway/600SemiBold/Raleway_600SemiBold.ttf",
+              "./node_modules/@expo-google-fonts/raleway/700Bold/Raleway_700Bold.ttf",
+              "./node_modules/@expo-google-fonts/raleway/800ExtraBold/Raleway_800ExtraBold.ttf"
+            ]
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

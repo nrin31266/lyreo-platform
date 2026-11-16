@@ -66,9 +66,11 @@ Các nhóm này là phân loại nhu cầu từ đặc tả, chưa phải market
 | P2 | Analytics/Progress projection, Level/Diamond/Mission |
 | P3 | English tutor Chat và speaking scenarios mở rộng |
 
-YouTube được liệt kê trong P0 Core Lesson nhưng roadmap cũ Phase 1 chỉ nêu Text/Audio. Quyết định
-release còn pending ở [OQ-001](../requirements/open-questions.md#oq-001--youtube-in-the-first-lesson-release);
-khả năng adapter hiện có không tự quyết scope.
+Phase authoring hiện tại ưu tiên YouTube: Admin chọn một đoạn liên tục, duyệt transcript/karaoke,
+sinh contextual content và candidates rồi publish. Tối ưu bài 2–10 phút; Text/Audio UI, mobile
+playback/practice, TTS/IPA, standalone Vocabulary/Grammar Practice và SRS nằm ngoài phase này.
+Published content bất biến trong V1. Chỉ dùng free-tier đã xác minh hoặc local inference;
+không tự bật billing hay chuyển paid provider. Quyết định: [D-024](../DECISIONS.md#d-024--integrated-youtube-lesson-authoring-and-free-only-research-2026-10-25).
 
 ## 7. Solution outline
 

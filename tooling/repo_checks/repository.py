@@ -57,7 +57,6 @@ ENV_OWNER_SCOPES = {
     "infra/docker/.env.example": ("compose.dev.yml", "compose.prod.yml", "compose.gpu.yml", "scripts/init-dev-env.sh"),
     "infra/keycloak/.env.example": ("infra/keycloak/scripts", "scripts/init-dev-env.sh"),
     "tools/data-import/.env.example": ("tools/data-import", "scripts/init-dev-env.sh", "scripts/doctor.sh"),
-    "tools/lesson-prep/.env.example": ("tools/lesson-prep", "scripts/init-dev-env.sh", "scripts/doctor.sh"),
 }
 
 IMPLICIT_ENV_KEYS = {

@@ -1,5 +1,10 @@
 import io
 import wave
+import asyncio
+import base64
+import sys
+import threading
+from types import SimpleNamespace
 
 from unittest.mock import MagicMock
 
@@ -113,6 +118,9 @@ async def test_tts_rejects_blank_input(runtime):
 def test_kokoro_voice_catalog_integrity(runtime):
     voices = runtime.voices()
     assert len(voices) == 28
+    assert sum(v['gender'] == 'FEMALE' for v in voices) == 15
+    assert sum(v['gender'] == 'MALE' for v in voices) == 13
+    assert next(v for v in voices if v['voice_id'] == 'af_heart')['display']['name'] == 'Heart'
     ids = {v["voice_id"] for v in voices}
     # Stale/invalid voices must not be in the catalog
     assert "am_emma" not in ids
@@ -126,3 +134,104 @@ def test_kokoro_voice_catalog_integrity(runtime):
             assert v["accent"] == "US"
         elif v["voice_id"].startswith("b"):
             assert v["accent"] == "UK"
+
+
+def test_sentence_synthesis_returns_observed_pcm_boundaries(runtime):
+    runtime._synthesize = MagicMock(side_effect=[([1] * 2400, 1), ([2] * 4800, 2)])
+    samples, chunks, segments = runtime._synthesize_sentences(None, None, ['First.', 'Second.'], 1.0)
+    assert samples == [1] * 2400 + [2] * 4800
+    assert chunks == 3
+    assert segments == [
+        {'text': 'First.', 'start_ms': 0, 'end_ms': 100},
+        {'text': 'Second.', 'start_ms': 100, 'end_ms': 300},
+    ]
+
+
+def test_sentence_synthesis_stops_when_one_sentence_exceeds_alignment_window(runtime):
+    runtime._synthesize = MagicMock(return_value=([0] * (runtime.cfg.kokoro_sample_rate * 116), 1))
+    with pytest.raises(ValueError, match='Split long text sentences'):
+        runtime._synthesize_sentences(None, None, ['Long sentence.'], 1.0)
+
+
+@pytest.mark.asyncio
+async def test_sentence_text_must_match_before_loading_model(runtime):
+    from app.schemas import ExecuteRequest
+    request = ExecuteRequest(invocation_id='1', provider='LOCAL_KOKORO', model='kokoro',
+                             input={'text': 'Original.', 'sentences': ['Different.']}, options={})
+    with pytest.raises(ValueError, match='cover input.text'):
+        await runtime.tts(request)
+
+
+@pytest.mark.asyncio
+async def test_us_uk_tts_share_one_model_and_cache_voices(runtime, monkeypatch):
+    from app.schemas import ExecuteRequest
+
+    model = object()
+    build_model = MagicMock(return_value=model)
+    pipelines = []
+
+    def pipeline(**kwargs):
+        result = SimpleNamespace(model=None, load_voice=MagicMock(return_value=object()))
+        pipelines.append(result)
+        return result
+
+    monkeypatch.setitem(sys.modules, 'kokoro', SimpleNamespace(KPipeline=pipeline))
+    monkeypatch.setattr('app.runtime.kokoro._build_model', build_model)
+    runtime._synthesize = MagicMock(return_value=([1, 2, 3], 1))
+
+    def request(voice):
+        return ExecuteRequest(invocation_id=voice, provider='LOCAL_KOKORO', model='kokoro',
+                              input={'text': 'Hello'}, options={'voice': voice})
+
+    responses = await asyncio.gather(
+        runtime.tts(request('af_heart')), runtime.tts(request('bf_emma')),
+        runtime.tts(request('af_heart')),
+    )
+    build_model.assert_called_once_with(runtime.cfg.kokoro_model, 'cpu')
+    assert len(pipelines) == 2
+    assert all(p.model is model for p in pipelines)
+    assert all(p.load_voice.call_count == 1 for p in pipelines)
+    assert runtime._synthesize.call_args_list[0].args[1] is runtime._synthesize.call_args_list[2].args[1]
+    for response in responses:
+        with wave.open(io.BytesIO(base64.b64decode(response.output['audio_base64']))) as wav:
+            assert wav.getnframes() == 3
+            assert wav.getframerate() == runtime.cfg.kokoro_sample_rate
+
+
+@pytest.mark.asyncio
+async def test_cancelled_tts_finishes_worker_before_next_synthesis(runtime, monkeypatch):
+    from app.schemas import ExecuteRequest
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr(runtime, '_load', AsyncMock(return_value=object()))
+    monkeypatch.setattr(runtime, '_load_voice', AsyncMock(return_value=object()))
+    started, finish = threading.Event(), threading.Event()
+    calls = []
+
+    def synthesize(*_):
+        calls.append('start')
+        started.set()
+        assert finish.wait(5)
+        calls.append('end')
+        return [1], 1
+
+    monkeypatch.setattr(runtime, '_synthesize', synthesize)
+    request = ExecuteRequest(invocation_id='1', provider='LOCAL_KOKORO', model='kokoro',
+                             input={'text': 'Hello'}, options={})
+    first = asyncio.create_task(runtime.tts(request))
+    second = None
+    try:
+        assert await asyncio.to_thread(started.wait, 5)
+        first.cancel()
+        second = asyncio.create_task(runtime.tts(request))
+        await asyncio.sleep(0.02)
+        assert calls == ['start']
+        assert not first.done()
+        assert not second.done()
+    finally:
+        finish.set()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        if second is not None:
+            await second
+    assert calls == ['start', 'end', 'start', 'end']

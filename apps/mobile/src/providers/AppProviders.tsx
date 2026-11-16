@@ -1,4 +1,5 @@
 import { PortalHost } from '@rn-primitives/portal';
+import { SafeAreaProvider, SafeAreaView, initialWindowMetrics } from 'react-native-safe-area-context';
 import type { PropsWithChildren } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { ApiProvider } from '@/api/api-provider';
@@ -9,17 +10,21 @@ import { LocaleProvider } from './LocaleProvider';
 
 export function AppProviders({ children }: PropsWithChildren) {
   return (
-    <I18nextProvider i18n={mobileI18n}>
-      <LocaleProvider>
-        <AppThemeProvider>
-          <SessionProvider>
-            <ApiProvider>
-              {children}
-              <PortalHost />
-            </ApiProvider>
-          </SessionProvider>
-        </AppThemeProvider>
-      </LocaleProvider>
-    </I18nextProvider>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+      <I18nextProvider i18n={mobileI18n}>
+        <LocaleProvider>
+          <AppThemeProvider>
+            <SafeAreaView style={{ flex: 1 }}>
+              <SessionProvider>
+                <ApiProvider>
+                  {children}
+                  <PortalHost />
+                </ApiProvider>
+              </SessionProvider>
+            </SafeAreaView>
+          </AppThemeProvider>
+        </LocaleProvider>
+      </I18nextProvider>
+    </SafeAreaProvider>
   );
 }

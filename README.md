@@ -12,7 +12,7 @@ Mobile is the primary learner client, Admin Web serves content managers/operator
 | `modules/` | Java business capabilities |
 | `platform/`, `libs/` | Technical building blocks and shared Java contracts |
 | `packages/` | Shared design tokens and translations |
-| `tools/` | Data import and Lesson Prep utilities |
+| `tools/` | Data import utilities and retained research manifests |
 | `infra/` | Local/deploy infrastructure assets |
 | `docs/` | Product intent, requirements, architecture, and development guidance |
 
@@ -35,6 +35,12 @@ make admin
 make mobile
 ```
 
+Local login details: [Development accounts](docs/ACCOUNT.md).
+
+`make core` rebuilds saved Java/resources and requests a DevTools restart, including changes in
+business modules. It follows your editor's save behavior; it does not change autosave settings.
+See [Core development](apps/core-service/README.md#local-run-and-verification) for setup and reload details.
+
 `make mobile` starts Metro; install the Expo development build first using the [Mobile guide](apps/mobile/README.md). Mock AI and local storage are the normal development defaults.
 
 ## Common commands
@@ -43,17 +49,19 @@ make mobile
 |---|---|
 | `make init-env`, `make doctor`, `make deps` | Initialize and inspect local dependencies |
 | `make dev-infra`, `make keycloak-seed` | Run local PostgreSQL/Keycloak and seed the realm |
-| `make db-shell`, `make db-reset` | Inspect or deliberately reset the local app database |
+| `make db-shell`, `make db-reset` | Inspect DB or preview lesson-only reset; [scope and confirmation](docs/DEVELOPMENT.md) |
+| `make db-recreate`, `make down-v` | Guarded destructive DB/volume operations; see the same guide |
+| `make seed-dev` | Add six default categories from `infra/postgres/seed/dev.sql` without overwriting edits |
 | `make data-check`, `make data-fetch` | Verify or acquire the optional clean Grammar/TOEIC release |
-| `make lesson-prep` | Run the local Lesson source workstation |
+| `make setup-media` | Install the Core YouTube downloader; FFmpeg/ffprobe required on the host |
 | `make validate`, `make check` | Offline guards or full verification |
 | `make validate-docs`, `make validate-repo`, `make test-tooling` | Target repository policy checks |
 | `make test-java`, `make verify-java` | Java unit or integration verification |
-| `make test-ai`, `make test-data-import`, `make test-lesson-prep` | Python project tests |
+| `make test-ai`, `make test-data-import` | Python project tests |
 | `make typecheck`, `make test-frontend`, `make build-web` | Frontend verification |
 
 The [development guide](docs/DEVELOPMENT.md) explains the local loop; [testing](docs/TESTING.md) explains evidence and test ownership.
 
 ## Local guides
 
-[Core](apps/core-service/README.md) · [AI Service](apps/ai-service/README.md) · [Admin Web](apps/admin-web/README.md) · [Mobile](apps/mobile/README.md) · [Data Import](tools/data-import/README.md) · [Lesson Prep](tools/lesson-prep/README.md) · [Docker](infra/docker/README.md) · [Keycloak](infra/keycloak/README.md) · [Design System](packages/design-system/README.md) · [i18n](packages/i18n/README.md)
+[Core](apps/core-service/README.md) · [AI Service](apps/ai-service/README.md) · [Admin Web](apps/admin-web/README.md) · [Mobile](apps/mobile/README.md) · [Data Import](tools/data-import/README.md) · [Docker](infra/docker/README.md) · [Keycloak](infra/keycloak/README.md) · [Mobile UI](apps/mobile/README.md#ui-theme-ownership) · [i18n](packages/i18n/README.md)

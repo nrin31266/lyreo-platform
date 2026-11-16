@@ -5,5 +5,5 @@ import { cn } from '../../lib/utils';
 type TextProps = ComponentProps<typeof RNText>;
 
 export function Text({ className, ...props }: TextProps) {
-  return <RNText className={cn('text-base text-foreground', className)} {...props} />;
+  return <RNText className={cn('font-sans text-base text-foreground', className)} {...props} />;
 }
