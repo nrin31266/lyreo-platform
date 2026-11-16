@@ -11,7 +11,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 public final class AuthoringText {
-    private static final Pattern TOKEN = Pattern.compile("[\\p{L}\\p{N}]+(?:['’][\\p{L}\\p{N}]+)*");
+    private static final Pattern TOKEN = Pattern.compile("[\\p{L}\\p{N}\\p{M}]+(?:['’][\\p{L}\\p{N}\\p{M}]+)*");
     private static final Set<String> ABBREVIATIONS = Set.of("mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st", "vs", "etc", "e.g", "i.e");
     private AuthoringText() {}
     public record Token(String text, int start, int end) {}

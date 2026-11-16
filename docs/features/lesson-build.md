@@ -11,7 +11,8 @@ holds prepared audio and raw evidence. Mobile playback is a later phase.
 The source selector offers YouTube (default), Text and Audio. Text saves before inference and uses
 an explicit TTS job with the saved Kokoro voice. FastAPI returns one WAV plus sentence bounds
 measured from concatenated PCM samples; Core validates duration, normalizes media and fences the
-checkpoint. The saved audio checkpoint automatically queues alignment; transcript and listening approval remain explicit and end at a reviewed unpublished draft.
+checkpoint. The saved audio checkpoint automatically queues alignment and then CONTENT. The complete chain
+is explicit at creation and preserves each checkpoint; no review checkbox gates continuation.
 Text/voice edits invalidate audio and approvals. Audio upload is independently retained by source ID;
 explicit range preparation normalizes only the selected range and reuses PREPARE/STT.
 All three types use the same editor/playback clock, with HTML audio for uploaded/generated media.
@@ -48,8 +49,8 @@ transcript/audio checkpoint; retry runs alignment only.
 
 The complete transcript is retained and sent for alignment against the unchanged audio. All draft
 sentences participate in windows, lexical coverage, overlap/order checks and listening playback.
-There is no hide control; exercise selection is outside this workflow. Legacy hidden fields remain
-readable, but flagged draft rows display normally and require full alignment and renewed review.
+There is no hide control; exercise selection is independent of alignment. Legacy hidden fields remain
+readable, but flagged draft rows display normally and require full alignment before publication.
 Explicit save normalizes flags and marks timing stale; successful alignment normalizes flags and
 clears prior listening confirmation (and legacy approval). GET does not write. Published read views
 retain their stored semantics.
@@ -57,53 +58,131 @@ The response exposes nullable `sentences[].previewStartMs`, relative to the sele
 the first observed word or containing segment start. Approximate preview never implies karaoke readiness.
 Review issues come from coverage/timing evidence, never invented ASR confidence. Recognition can return different words/punctuation on repeated runs; Core sentence splitting and review hints are deterministic for the returned transcript, not a stable score for a source URL. Groq word timestamps describe its recognized text, not forced alignment of later editorial changes. The timing reuse policy remains explicit (`LESSON_TIMING_REUSE_DRAFT`); invalid/changed timing requires alignment.
 
-Structurally valid provisional Whisper timing needs explicit karaoke preview confirmation. Dedicated
-alignment is required when timing is absent/stale or preview is inadequate. Until human-referenced
-quality acceptance, deployment policy also requires local alignment for structurally valid draft timing. Coalescing may only
-combine adjacent touching/overlapping observed intervals into multi-token timing groups. Dedicated alignment additionally retains isolated zero-duration tokens with an adjacent positive observed interval in the same sentence, flagged GROUPED_TIMING for human review. All-zero sentences remain invalid. Neither path may
-invent positive per-word duration, stretch silence or hide unresolved lexical coverage. Qwen alignment
-window bounds may reach the next timestamp frame at the audio end; the adapter uses the loaded
-model's frame precision and slices only existing samples, without extending audio samples. A positive final word ending in the single model frame that straddles the actual audio boundary is clipped to the sample boundary in the Qwen adapter; negative, reversed, zero-length and more distant intervals remain invalid. Invalid timing
-blocks review confirmation. Lexical edits require bounded anchored realignment; absent
-anchors or unsafe long windows fail clearly instead of proportional text/audio splitting.
+The timing-reuse policy still controls whether provisional timing can replace dedicated alignment.
+Observed grouping never invents duration or hides missing coverage. Invalid timing blocks publication;
+quality warnings do not require a listening checkbox. Anchored realignment retains the existing
+coverage/order/overlap/window limits. While the transcript exactly matches STT, Core reuses its original
+ordered audio windows directly: a sentence crossing a 115-second seam does not create a 230-second
+alignment request. Edited text falls back to validated observed sentence/word anchors.
 
-The workflow ends when Admin explicitly saves the reviewed transcript/timing revision. It does not
-publish. Content generation, IPA authoring, candidate selection and publication UI/write APIs have
-been removed. Pending SEMANTIC/IPA jobs fail permanently with `AUTHORING_OPERATION_REMOVED`; commit
-fences reject obsolete output. Existing schema, JSON compatibility fields, published content and
-learner history remain intact; no migration or data reset is required.
+## Content generation and review
+
+The accepted behavior, enums, budgets, IPA conventions and cloze rules are owned by
+[FR-LSN-008](../requirements/lesson.md#fr-lsn-008--contextual-generation-and-candidate-review).
+Core batches enabled LLM work as numbered transcript text exactly once, no UUID/timing/token tables.
+Output uses tr:[[n,translation]], v/g:[[n,phrase,explanation,occurrence?]],
+d/s:[[n,exclusion_reason]] and m:[CEFR,type]. The prompt keeps all valid-timing sentences by default.
+A lossless single-object outer-array normalization is accepted; ambiguous roots are rejected.
+No JSON repair/ranking request is made. Truncated output recursively splits only the failed range.
+Translations checkpoint per sentence; invalid notes are warnings, not a failed batch. Missing feature
+arrays/profile are incomplete while valid results remain durable. Fingerprints include text/context,
+locale, budget, activity-selection policy and IPA display version as relevant. Retry targets only
+missing/stale features and never overwrites protected manual values. Explicit reconfirmation makes
+stale manual content current; timing-only edits do not re-run text capabilities.
+
+Every concrete route attempt contributes usage, including failed/truncated/fallback attempts. A
+job-scoped observer records private redacted request/output evidence; diagnostic persistence failure
+must never trigger another provider execution. Artifacts are JSONB records separate from draft
+content, at most 256 KiB each and 8 MiB per job, inaccessible after seven days and purged hourly.
+Credential/auth fields, signed URLs and media payloads are excluded. Only Admin can read a job's
+records scoped to its lesson. Old jobs have no reconstructed output. Diagnostics render as text,
+with copy/download JSON. Failed provider attempts retain original HTTP status and sanitized message
+behind Debug; see the [AI failure contract](../architecture/ai-execution.md#failure-artifacts-and-security).
+History shows saved checkpoint coverage, note/selection counts, grouped
+model calls and separate queue/call duration before Debug is opened. LLM API calls/tokens are
+separate from audio/IPA calls; missing usage stays unknown. New calls carry capability, invocation
+ID, route outcome and an explicit fallback flag. Worker attempts are separate from route calls.
+V015 stores versioned per-job result checkpoints in the same fenced transaction as draft writes;
+partial checkpoints survive failure, and later edits cannot rewrite old results. Old jobs have no
+invented result summary or inferred fallback. The development lesson reset also removes their
+private diagnostic records before deleting jobs.
+
+PREPARE/TTS → ALIGN → CONTENT enqueue happens with checkpoint completion under the same lease,
+cancellation and revision fence. Completed input recovery is idempotent. Initial generation never
+sets human-review revisions. Legacy SEMANTIC/IPA jobs stay retired; explicit writes normalize old
+unsupported options. GET does not persist normalization. The consolidated V015 includes CONTENT/profile metadata, auto-continuation, publisher, expiring diagnostics, metadata versions and job results; published content guards stay intact. See [D-030](../DECISIONS.md#d-030--consolidate-unreleased-authoring-admin-migrations-2026-11-17).
+
+Profile estimates use word-weighted CEFR median and a 60% majority for type; otherwise MIXED or
+UNKNOWN. Admin overrides are protected. IPA uses eSpeak raw/display fields and versions. Cloze
+is deterministic cloze-v2 (including simple modal/function-word exclusions), with nested levels, lesson repetition penalties and manual hash-fenced targets.
+
+### Content smoke — 2026-11-16
+
+Local unpublished fixture `2a4f3073-9a79-4609-89bf-84d83e1d036c` (44 words, four sentences)
+produced all translations/IPA, one vocabulary note, one grammar note and editable profile/activity
+suggestions. The successful CONTENT job used one Gemini request (431 input / 342 output tokens)
+and four local eSpeak calls. Two earlier validation failures consumed another 811 input / 787 output
+tokens; strict invalid-span rejection was retained. Saving a manual IPA review flag and confirming
+content created no further jobs; persisted content/transcript revisions match and status remains
+CONTENT_REVIEW. The 1366×768 browser check exercised the same sentence panel and bottom dock.
+This automated workflow fixture does not establish human language, listening or pedagogical quality.
+
+### Three-source smoke and reported URL regression — 2026-11-17
+
+Tests used the existing local AI service; no additional GPU worker was started. These are local test
+fixtures, not a measured general English success rate or human approval of translations/IPA.
+
+| Source / fixture | Sentences | Duration | Completed chain / content coverage |
+| --- | --- | --- | --- |
+| [BBC Learning English, Weather](https://www.youtube.com/watch?v=V7-ChVK1gYM), first 45s; `2ec9ad66-5e87-4394-80dc-5daf0f94b483` | 7 | 45s | PREPARE → ALIGN → CONTENT; 7 translations + IPA |
+| Text, Weather practice; `0216d31d-0472-4444-bf15-5305756ec5f5` | 6 | 15.550s | TTS → ALIGN → CONTENT; 6 translations + IPA |
+| Uploaded WAV, [Open Speech Repository Harvard sentences](https://www.voiptroubleshooter.com/open_speech/american/OSR_us_000_0010_8k.wav); `e255009b-7ef4-460c-b977-6df3064bc361` | 10 | 33.623s | PREPARE → ALIGN → CONTENT; 10 translations + IPA |
+| Text, 24-sentence one-click fixture; `33a8b887-2ff7-4c38-901c-903672df0ba5` | 24 | 50.275s | One primary create request; TTS → ALIGN → CONTENT; all 24 translations + IPA |
+| [Listening Time, New Year's Resolutions](https://www.youtube.com/watch?v=98pYyFdHw38); `f5280a31-def2-4461-83d0-c03ddc42f580` | 60 | 250s | Existing failed draft recovered through ALIGN → CONTENT; all 60 translations + IPA, no repeated STT |
+
+The reported video exposed two regressions: a sentence crossed the coarse STT-window seam, and a
+provider returned valid JSON as a singleton-object array. Targeted regressions preserve real anchors
+and normalize that unambiguous root without another LLM call. A malformed/multiple-object response
+still fails explicitly. Live cloze editing also exposed a stale in-memory target after per-row content
+reload; batch masks now apply to the final document instance, covered by PostgreSQL integration tests.
+
+Persisted LLM usage (provider attempts, input/output tokens): Text6 Gemini 1, 492/276; Audio10 Gemini 1,
+548/477; YouTube7 Gemini 1 failed attempt with unreported tokens, then Groq 1, 584/851; Text24 Gemini 1
+failed attempt with unreported tokens, then Groq 1, 726/1411. The reported 60-sentence URL initially spent
+928/818 on the rejected wrapper; successful retry used one unreported Gemini attempt, Groq 950/2281 and
+Gemini 822/725 across two batches, plus 60 local IPA calls. Unreported usage is unknown, never counted
+as zero. STT remained one call (14.072s); the successful alignment call took 2.529s. These are individual
+invocation timings, not before/after performance benchmarks.
+
+Live management smoke published the Text24 fixture with 24 sentence/IPA snapshots, duplicated it
+as `3816bf51-2d55-441d-b108-500455fc3166` with zero jobs, then soft-deleted and restored the original
+hidden. The original content/media remained intact. Publication uses the token subject even when the
+principal display name is an email; the real-login regression and preview-local failure message are tested.
+Manual translation and cloze masks survived save/reload. Browser checks at 1366×768 and 1280×720
+observed one main scroll root, no horizontal overflow, a bottom dock and inline karaoke underlining.
+Final `make check` passed, including PostgreSQL integration, frontend tests/typecheck/build and validation.
+
+The original Weather70 draft was already soft-deleted and was not restored for testing. Invalid-note
+regression and complete 100-sentence coverage are tested deterministically, not claimed as live Weather70
+inference. The dated four-sentence smoke above remains historical evidence; its fixture no longer exists.
 
 ## Admin management and workspace
 
-One continuous workspace changes source preparation into a single words-and-timing sentence list,
-without numbered navigation or separate review modes. The saved draft ID is retained in the creation URL for refresh.
-It uses resizable/collapsible player and editor panes. Source metadata, controls and action
-placement are shared across YouTube/Text/Audio. The full source summary can collapse beside the player.
-The sentence list virtualizes long documents; focus, unsaved text and revision fences survive polling.
-The transcript uses direct input fields in a bounded scrolling region. Sentence playback shows karaoke
-in that same row; its edit action pauses playback and restores the input, without a duplicate text list.
-Each row exposes observed time bounds, playback, split/merge and the existing timing dialog. Possible repeated suffixes of
-the previous sentence are review hints; they never delete words or prove that the audio is wrong.
-Grouped timing uses a compact, neutral label with an explanation on hover or focus; it is not a validation failure.
-Word suggestions share the list header. Timing failure messages identify the affected sentence when available, and Admin can jump to it.
-The active timing sentence uses foreground emphasis and a short underline beneath only the currently spoken observed word/group.
-Text retains its selected voice and shows the original source until speech generation succeeds; then alignment runs before authoring controls become available. Saving alone never invokes AI, while the primary Generate speech action
-saves first and enqueues TTS for that exact revision. It never runs STT on generated audio.
-Word timecodes remain in the manual timing dialog. Both players support sentence stop, uninterrupted continuous
-playback, mutually exclusive looping, seek and speed through the shared playback clock. Continuous
-mode only disables sentence-end stopping: it never seeks over gaps or speech, and emphasis
-follows the currently observed sentence/word. Toggling it never starts playback. Preview and active
-word layouts share type metrics; native text underlines fit the active word/group at the text baseline.
-Processing has a prominent operation/status panel above the workspace, real progress or an indeterminate
-indicator, operation-specific retry/cancel controls and durable duration. On laptops the bottom dock stays within the viewport, with playback, history, listening confirmation and
-one contextual primary action. Save and realign appears only for changed words or timing that needs updating;
-restoring the saved text clears the unsaved state. Valid unchanged timing exposes the explicit review/save action.
-Player/source details and the sentence list scroll above the dock without being covered by it. Published lessons keep a separate read view.
+One natural page scroll contains the sentence list, virtualized above 20 rows using the same scroll
+root. The laptop player is sticky; playback/actions use a fixed dock with reserved content space.
+Translation, activities and short notes are directly visible. IPA has a global display toggle.
+Global save/Ctrl+S submits transcript, changed content, options/profile and metadata in one transaction;
+revision conflict/network failure preserves local input. Timing remains a focused dialog. Settings
+are grouped; processing history and diagnostics use bounded sheets. The processing panel shows live
+queue/run/retry/cancellation status, elapsed time and the three real capability stages. Failed stages
+expose the backend reason with one-click targeted retry. Completion requires a nonempty transcript
+and valid preceding checkpoints; a running earlier stage never marks a later stage done. Completed
+chains collapse to one readiness summary. The header's **Jobs for this lesson** action remains visible
+in every state and opens only that lesson's history, including its private diagnostics. Admin can read
+retained job diagnostics after soft deletion of the owning lesson. Only the main status spinner animates during processing; the active stage uses primary text without a second spinner. Inspection/editor skeletons follow their
+loaded layout; pending create/upload disables competing inputs/source changes, and creation keeps
+its primary action at the page bottom. A fallback poll reconciles successor jobs if SSE and checkpoint
+refetch race. Publication/save menus retain their action label while closing. No mandatory approval checkbox
+remains. Creation options are supplied before inference for all three source modes.
 
-Presentation metadata lives outside the immutable content snapshot. It includes display title,
-description, image URL and classification. A missing custom image falls back to source metadata.
-Soft-delete is limited to inactive drafts; unlisting published lessons blocks new practice while
-preserving learner history. Metadata changes do not invoke inference or invalidate approval.
+Preview offers View, Dictation support levels and Shadowing playback/karaoke/rate/loop, with no scoring.
+Readiness comes from server validation. Publish takes an immutable content/activity snapshot atomically
+and records actor/time; retries are idempotent. Metadata is independently editable with version checks.
+Duplicate creates a new editable draft with reused media/results and fresh sentence IDs; no inference
+or replacement of the original. Inactive history-free drafts delete permanently after confirmation;
+published lessons soft-delete and restore hidden. Shared sources/media and learner history are retained.
+Catalog includes Deleted restoration and source/CEFR/activity/AI-failure filters. See
+[FR-LSN-009](../requirements/lesson.md#fr-lsn-009--admin-catalog-and-classification).
 
 YouTube channel metadata sync uses `YOUTUBE_DATA_API_KEY` in Core. Selected channel IDs become one
 durable job; partial/missing responses retain good values and report per-channel errors. Quota waits
@@ -118,14 +197,13 @@ The capability stores external image URLs, not downloaded image objects.
 | YouTube/Audio lexical edits | Prepared audio and observed coarse evidence | Timing and review approval |
 | Punctuation/split/merge | Safely mapped observed timing | Transcript and listening approval |
 | Text/voice edits | Saved text | Generated audio, timing and review approval |
-| Manual timing or realignment | Transcript | Listening confirmation |
+| Manual timing or realignment | Translation, IPA and notes | Revalidate timing/activity readiness |
 | Presentation metadata | Audio, transcript and timing | No review invalidation |
 
 Whole-draft revision prevents lost updates; transcript revision identifies inference dependencies.
 Text/split/merge edits pause karaoke and mark timing for updating. Save and realign saves first and
 explicitly queues alignment without STT; changed Text still requires explicit speech regeneration.
-No edit implicitly invokes inference. Listening confirmation plus Save reviewed draft records approval
-and the reviewed revision; initial preparation/alignment never does.
+No edit implicitly invokes inference. Readiness uses current valid data; no fabricated human-review revision is recorded.
 
 ## Failure, quota and publication safety
 
@@ -251,9 +329,10 @@ reading legacy lessons.
 
 Source metadata inspection does not acquire audio. The source editor preselects up to two minutes
 from the URL offset, positions playback there, and exposes the whole source via one timeline. Admin
-can mark start/end at the YouTube clock, drag/resize or enter timecodes. The desktop grid groups
-video, transport and timeline beside lesson metadata. Short desktop screens allow page scrolling
-with a sticky submission row; longer metadata scrolls inside its own column.
+can mark start/end at the YouTube clock, drag/resize or enter timecodes. The creation grid keeps source input/player/selection together beside an always-visible metadata
+and learning-options panel in all three source modes. Balanced columns and a 520px video width cap
+keep source playback secondary to configuration; below 900px the panels stack without nested scrolling. Short desktop screens allow page scrolling
+with a sticky submission row and one page scroll for the source and settings.
 A pending start appears as a marker; complete selections support drag/resize.
 a labelled time ruler and dot playhead allow seeking without moving the range. Hovering shows pointer time.
 Waveform UI and automatic preview preparation are deferred by owner request; the existing preview API
@@ -309,19 +388,16 @@ selected sentences per activity. This is an automated internal fixture, not huma
 
 ## Authoring review API extensions
 
-Draft responses include generation options, manual field provenance, stale-content markers, timing
-source and optional IPA metadata. Revision-checked Admin operations are `PUT .../{id}/options`,
-`PUT .../{id}/sentences/{sentenceId}/content`, `PUT .../{id}/sentences/{sentenceId}/timing`,
-`POST .../{id}/replace-generated` and `POST .../{id}/ipa`, under `/api/v1/admin/lesson-authoring`.
-The IPA endpoint returns 202 and a durable job location. Content editing never implicitly invokes AI;
-published content rejects all of these mutations. Existing published snapshots remain readable.
+The [HTTP contract](../architecture/http-api-contract.md#lesson-authoring-and-publication) owns content
+endpoints, revision checks and response fields. Existing transcript/timing operations remain;
+content editing never invokes inference implicitly, and published snapshots remain immutable.
 
 
 ## Superseded four-step workspace
 
 The earlier Source → Words & timing → Content → Publish workspace is superseded by the two-step
 workflow above. Historical measured reports in this document describe their dated implementation;
-they are not the current authoring contract. Content generation and publication require a new product decision.
+they are not the current authoring contract. Current content behavior follows the contract above; publication still requires a product decision.
 
 ### Reusable voice previews and metadata creation
 

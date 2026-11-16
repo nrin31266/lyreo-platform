@@ -55,6 +55,20 @@ class JobControllerTest {
     }
 
     @Test
+    void listUsesBoundedFiltersAndNeverExposesWorkerOrConfiguration() throws Exception {
+        var job = new BackgroundJob(UUID.randomUUID(), "LESSON_AUTHORING", "lesson", UUID.randomUUID(),
+            BackgroundJobStatus.FAILED, 10, "ALIGNING", 40, 1, 3, null, "private-worker", Instant.now(), null,
+            "Invalid timing https://host?token=private-key Bearer private-token api_key=private-key", "TIMING_INVALID", Instant.EPOCH, Instant.EPOCH, Instant.now());
+        when(service.list("FAILED", "LESSON_AUTHORING", 1, 10)).thenReturn(new BackgroundJobService.Page(java.util.List.of(job), 11, 1, 10));
+        mockMvc.perform(get("/api/v1/jobs").param("status", "FAILED").param("type", "LESSON_AUTHORING").param("page", "1").param("size", "10"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.total").value(11)).andExpect(jsonPath("$.page").value(1))
+            .andExpect(jsonPath("$.items[0].errorCode").value("TIMING_INVALID"))
+            .andExpect(jsonPath("$.items[0].errorMessage").value("Invalid timing [URL removed] Bearer [redacted] api_key [redacted]"))
+            .andExpect(jsonPath("$.items[0].ownerReferenceId").value(job.ownerReferenceId().toString()))
+            .andExpect(jsonPath("$.items[0].leaseOwner").doesNotExist()).andExpect(jsonPath("$.items[0].configSnapshotJson").doesNotExist());
+    }
+
+    @Test
     void getReturns404WhenJobNotFound() throws Exception {
         UUID id = UUID.randomUUID();
         when(service.findById(id)).thenReturn(Optional.empty());

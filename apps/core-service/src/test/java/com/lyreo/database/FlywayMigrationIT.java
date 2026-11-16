@@ -110,8 +110,8 @@ class FlywayMigrationIT {
         MigrationInfo[] applied = flyway.info().applied();
 
         assertThat(applied)
-            .as("Eleven migrations must be applied")
-            .hasSize(11);
+            .as("Twelve consolidated migrations must be applied")
+            .hasSize(12);
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
@@ -136,8 +136,8 @@ class FlywayMigrationIT {
         assertThat(applied[7].getVersion().getVersion()).isEqualTo("008");
         assertThat(applied[7].getState()).isEqualTo(MigrationState.SUCCESS);
         assertThat(flyway.info().current().getVersion().getVersion())
-            .as("Current Flyway version must be 011")
-            .isEqualTo("011");
+            .as("Current Flyway version must be 015")
+            .isEqualTo("015");
     }
 
     @Test

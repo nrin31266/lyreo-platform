@@ -102,4 +102,28 @@ class FreeOnlyAiInvocationTest {
             .isInstanceOfSatisfying(AiExecutionException.class, e -> assertThat(e.retryAfterSeconds()).isEqualTo(120));
         verify(gateway, times(1)).execute(any());
     }
+    @Test void observesFailedUsageAndFallbackExactlyOnceAndClearsObserver() {
+        when(routes.findEnabledRoutes(AiCapability.GENERAL_LLM)).thenReturn(List.of(
+            new AiRoute(UUID.randomUUID(),"GEMINI","gemini-3.5-flash-lite",AiCapability.GENERAL_LLM,10,false),
+            new AiRoute(UUID.randomUUID(),"GROQ","openai/gpt-oss-120b",AiCapability.GENERAL_LLM,20,true)));
+        var partial=new AiExecutionResult(UUID.randomUUID(),"GEMINI","gemini-3.5-flash-lite",Map.of("partial","truncated"),20,10,8);
+        var complete=new AiExecutionResult(UUID.randomUUID(),"GROQ","openai/gpt-oss-120b",Map.of(),30,15,9);
+        when(gateway.execute(any())).thenThrow(new AiExecutionException("cut",true,"AI_OUTPUT_INCOMPLETE").evidence(partial)
+            .diagnostics(Map.of("provider_status",503,"provider_message","Overloaded"))).thenReturn(complete);
+        var service=new AiInvocationService(new AiRouter(routes),routes,gateway,audit,Set.of("GEMINI","GROQ"));
+        var observed=new ArrayList<AiInvocationService.Attempt>();
+        try(var scope=service.observe(observed::add)) {assertThat(service.execute(AiCapability.GENERAL_LLM,"test",Map.of(),Map.of())).isSameAs(complete);}
+        assertThat(observed).hasSize(2);assertThat(observed.getFirst().inputTokens()).isEqualTo(20);
+        assertThat(observed.getFirst().output()).containsEntry("partial","truncated");
+        assertThat(observed.getFirst().capability()).isEqualTo("GENERAL_LLM");
+        assertThat(observed.getFirst().fallback()).isFalse();
+        assertThat(observed.getFirst().error()).contains("AI_OUTPUT_INCOMPLETE");
+        assertThat(observed.getFirst().diagnostics()).containsEntry("provider_status",503).containsEntry("provider_message","Overloaded");
+        assertThat(observed.getLast().fallback()).isTrue();
+        assertThat(observed.getLast().error()).isEmpty();
+        assertThat(observed.getLast().diagnostics()).isEmpty();
+        assertThat(observed.getLast().outputTokens()).isEqualTo(15);
+        service.execute(AiCapability.GENERAL_LLM,"test",Map.of(),Map.of());assertThat(observed).hasSize(2);
+    }
+
 }

@@ -15,6 +15,53 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class LessonAuthoringControllerTest {
+    @Test void publicationRecordsTheTokenSubjectWhenThePrincipalNameIsAnEmail() throws Exception {
+        var service=mock(LessonAuthoringService.class);
+        var draft=new AuthoringLesson();draft.id=UUID.randomUUID();
+        UUID subject=UUID.randomUUID();
+        var token=org.springframework.security.oauth2.jwt.Jwt.withTokenValue("test").header("alg","none")
+            .subject(subject.toString()).claim("preferred_username","admin@local.test").build();
+        var authentication=new com.lyreo.platform.bootstrap.KeycloakJwtAuthenticationConverter().convert(token);
+        when(service.publish(draft.id,7,subject)).thenReturn(draft);
+        var mvc=MockMvcBuilders.standaloneSetup(new LessonAuthoringController(service,mock(com.lyreo.lesson.application.port.LessonCatalogPort.class))).build();
+        mvc.perform(post("/api/v1/admin/lesson-authoring/"+draft.id+"/publish").principal(authentication)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"revision\":7}"))
+            .andExpect(status().isOk());
+        verify(service).publish(draft.id,7,subject);
+    }
+    @Test void contentEndpointsKeepRevisionChecksAndValidateProfileEnums() throws Exception {
+        var service=mock(LessonAuthoringService.class);
+        var draft=new AuthoringLesson();draft.id=UUID.randomUUID();draft.endMs=1000;
+        when(service.saveProfile(draft.id,7,com.lyreo.lesson.domain.authoring.AuthoringProfile.Cefr.B1,
+            com.lyreo.lesson.domain.authoring.AuthoringProfile.ContentType.STORY)).thenReturn(draft);
+        var mvc=MockMvcBuilders.standaloneSetup(new LessonAuthoringController(service,mock(com.lyreo.lesson.application.port.LessonCatalogPort.class))).build();
+        String base="/api/v1/admin/lesson-authoring/"+draft.id;
+        mvc.perform(put(base+"/content-profile").contentType(MediaType.APPLICATION_JSON).content("{\"revision\":7,\"cefr\":\"B1\",\"contentType\":\"STORY\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.profile.cefr").value("UNKNOWN"));
+        verify(service).saveProfile(draft.id,7,com.lyreo.lesson.domain.authoring.AuthoringProfile.Cefr.B1,com.lyreo.lesson.domain.authoring.AuthoringProfile.ContentType.STORY);
+        mvc.perform(put(base+"/content-profile").contentType(MediaType.APPLICATION_JSON).content("{\"revision\":7,\"cefr\":\"BEGINNER\",\"contentType\":\"CUSTOM\"}"))
+            .andExpect(status().isBadRequest());
+        when(service.generateContent(draft.id,7)).thenReturn(new LessonAuthoringService.Accepted(draft.id,UUID.randomUUID()));
+        mvc.perform(post(base+"/content").contentType(MediaType.APPLICATION_JSON).content("{\"revision\":7}"))
+            .andExpect(status().isAccepted()).andExpect(header().exists("Location"));
+        verify(service).generateContent(draft.id,7);
+    }
+    @Test void textCreationCanEnqueueTheChainBeforeReturningItsCurrentRevision() throws Exception {
+        var service=mock(LessonAuthoringService.class);
+        var media=mock(com.lyreo.lesson.application.port.AuthoringMediaPort.class);
+        var catalog=mock(com.lyreo.lesson.application.port.LessonCatalogPort.class);
+        when(media.voices()).thenReturn(new com.lyreo.lesson.application.port.AuthoringMediaPort.Voices("af_heart",List.of(new com.lyreo.lesson.application.port.AuthoringMediaPort.Voice("af_heart","US","Heart"))));
+        var draft=new AuthoringLesson();draft.id=UUID.randomUUID();
+        when(service.createText(anyString(),anyString(),anyString(),any())).thenReturn(draft);
+        when(service.get(draft.id)).thenReturn(draft);
+        var mvc=MockMvcBuilders.standaloneSetup(new com.lyreo.lesson.api.LessonMediaController(media,service,catalog,mock(com.lyreo.lesson.application.port.VoiceSamplesPort.class))).build();
+        mvc.perform(post("/api/v1/admin/lesson-authoring/text-drafts").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"title\":\"Test\",\"text\":\"We learn.\",\"voice\":\"af_heart\",\"startProcessing\":true}"))
+            .andExpect(status().isCreated());
+        var order=inOrder(service,catalog);order.verify(service).createText("Test","We learn.","af_heart",null);
+        order.verify(catalog).updateMetadata(draft.id,null,"",null,List.of());
+        order.verify(service).synthesize(draft.id,0);order.verify(service).get(draft.id);
+    }
     @Test void repeatedSuffixIsAReadTimeReviewHintAndNeverChangesTranscriptText() throws Exception {
         var service=mock(LessonAuthoringService.class);
         var draft=new AuthoringLesson();draft.id=UUID.randomUUID();draft.endMs=5000;
@@ -36,10 +83,10 @@ class LessonAuthoringControllerTest {
         var service=mock(LessonAuthoringService.class);
         var mvc=MockMvcBuilders.standaloneSetup(new LessonAuthoringController(service,mock(com.lyreo.lesson.application.port.LessonCatalogPort.class))).build();
         String base="/api/v1/admin/lesson-authoring/"+UUID.randomUUID();
-        for(String path:List.of("generate","ipa","replace-generated","publish"))
+        for(String path:List.of("generate","ipa","replace-generated"))
             mvc.perform(post(base+"/"+path).contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isNotFound());
-        for(String path:List.of("options","candidates","sentences/"+UUID.randomUUID()+"/content"))
+        for(String path:List.of("options","candidates"))
             mvc.perform(put(base+"/"+path).contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isNotFound());
         verifyNoInteractions(service);

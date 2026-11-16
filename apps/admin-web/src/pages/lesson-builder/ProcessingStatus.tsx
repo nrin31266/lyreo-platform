@@ -6,8 +6,8 @@ import { activeJob, authoringJobErrorKey, jobRetryLabelKey, jobProblemSentence, 
 import { Badge } from '@/components/ui/badge';
 import type { AuthoringJob } from './lesson-builder.types';
 
-export function ProcessingStatus({ job, label, onRetry, onCancel, onInspectProblem }: {
-  job?: AuthoringJob; label?: string; onRetry?: () => void; onCancel?: () => void; onInspectProblem?: () => void;
+export function ProcessingStatus({ job, label, onRetry, onCancel, onInspectProblem, disabled = false }: {
+  job?: AuthoringJob; label?: string; onRetry?: () => void; onCancel?: () => void; onInspectProblem?: () => void; disabled?: boolean;
 }) {
   const { t, i18n } = useTranslation('admin');
   const describe = useCodeLabel();
@@ -21,15 +21,16 @@ export function ProcessingStatus({ job, label, onRetry, onCancel, onInspectProbl
       {running ? <RiLoader4Line className="animate-spin" aria-hidden="true" /> : failed ? <RiErrorWarningLine aria-hidden="true" /> : job?.status === 'CANCELLED' ? <RiCloseCircleLine aria-hidden="true" /> : <RiCheckLine aria-hidden="true" />}
       <div className="processing-status-copy">
         <div className="processing-status-title" role="status" aria-live="polite"><strong>{title}</strong>{job ? <Badge variant={failed ? 'destructive' : 'secondary'}>{describe(job.status)}</Badge> : <span>{t('twoStep.pleaseWait')}</span>}</div>
-        {failed && <p role="alert">{t(`lessonAuthoring.jobErrors.${job && authoringJobErrorKey(job)}`, { defaultValue: t('twoStep.processingFailed') })}</p>}
+        {failed && <p role="alert">{t(`lessonAuthoring.jobErrors.${job && authoringJobErrorKey(job)}`, { defaultValue: job?.errorMessage || t('twoStep.processingFailed') })}</p>}
+        {failed && job?.errorMessage && <p className="processing-error-detail">{job.errorCode}: {job.errorMessage}</p>}
         {job?.status === 'RETRY_WAIT' && <p>{job.nextRetryAt ? t('lessonAuthoring.retryAt', { time: new Date(job.nextRetryAt).toLocaleString(i18n.language) }) : t('twoStep.waitingRetry')}</p>}
         {job?.status === 'CANCELLED' && <p>{t('twoStep.cancelledHelp')}</p>}
       </div>
       {job && <div className="processing-status-duration"><JobDuration job={job} /></div>}
       {(onInspectProblem || onRetry || (running && onCancel)) && <div className="processing-status-actions">
-        {onInspectProblem && job && <Button variant="outline" size="sm" onClick={onInspectProblem}>{t('twoStep.inspectSentence', {number:jobProblemSentence(job)})}</Button>}
-        {onRetry && job && <Button variant={onInspectProblem ? 'ghost' : 'outline'} size="sm" onClick={onRetry}><RiRefreshLine aria-hidden="true" />{t(jobRetryLabelKey(job))}</Button>}
-        {running && onCancel && <Button variant="ghost" size="sm" disabled={job?.status === 'CANCEL_REQUESTED'} onClick={onCancel}>{t('lessonAuthoring.cancel')}</Button>}
+        {onInspectProblem && job && <Button variant="outline" size="sm" disabled={disabled} onClick={onInspectProblem}>{t('twoStep.inspectSentence', {number:jobProblemSentence(job)})}</Button>}
+        {onRetry && job && <Button variant={onInspectProblem ? 'ghost' : 'outline'} size="sm" disabled={disabled} onClick={onRetry}><RiRefreshLine aria-hidden="true" />{t(jobRetryLabelKey(job))}</Button>}
+        {running && onCancel && <Button variant="ghost" size="sm" disabled={disabled || job?.status === 'CANCEL_REQUESTED'} onClick={onCancel}>{t('lessonAuthoring.cancel')}</Button>}
       </div>}
     </div>
     {running && <Progress value={waiting ? undefined : percent} aria-label={title} className={percent === undefined || waiting ? 'processing-indeterminate' : undefined} />}

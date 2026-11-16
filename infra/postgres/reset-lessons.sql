@@ -55,6 +55,7 @@ DELETE FROM lesson_activity;
 DELETE FROM lesson_sentence;
 DELETE FROM lesson_build_job_step;
 DELETE FROM lesson_build_job;
+DELETE FROM lesson_job_diagnostic WHERE job_id IN (SELECT id FROM reset_job_ids);
 DELETE FROM lesson_authoring_job;
 DELETE FROM lesson_authoring;
 DELETE FROM lesson_category_membership;

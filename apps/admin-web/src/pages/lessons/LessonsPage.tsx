@@ -92,16 +92,17 @@ export function LessonsPage() {
     queryFn: ({ signal }) => catalog.fetchChannels(signal),
   });
   const visibility = useMutation({
-    mutationFn: ({ id, visible }: { id: string; visible: boolean }) => catalog.setVisibility(id, visible),
+    mutationFn: ({ id, visible, version }: { id: string; visible: boolean; version?: number }) => catalog.setVisibility(id, visible, version),
     onSuccess: () => client.invalidateQueries({ queryKey: catalogKeys.all }),
   });
   const deletion = useMutation({
-    mutationFn: catalog.deleteDraft,
+    mutationFn: (item: catalog.LessonItem) => catalog.deleteDraft(item.id,item.version),
     onSuccess: async () => {
       setDeleting(undefined);
       await client.invalidateQueries({ queryKey: catalogKeys.all });
     },
   });
+  const restore = useMutation({mutationFn: (item: catalog.LessonItem) => catalog.restoreLesson(item.id,item.version),onSuccess:()=>client.invalidateQueries({queryKey:catalogKeys.all})});
   function filter(key: string, value: string) {
     const next = new URLSearchParams(params);
     next.delete("page");
@@ -115,7 +116,9 @@ export function LessonsPage() {
     "CONTENT_REVIEW",
     "PUBLISHED",
     "FAILED",
-  ].map((id) => ({ id, name: t(`lessonAuthoring.labels.${id}`) }));
+    "DELETED",
+    "AI_FAILED",
+  ].map((id) => ({ id, name: id === "DELETED" ? t("finish.deleted") : id === "AI_FAILED" ? t("finish.aiFailed") : t(`lessonAuthoring.labels.${id}`) }));
   return (
     <section className="grid gap-4">
       <div className="page-heading">
@@ -164,6 +167,9 @@ export function LessonsPage() {
           options={categories.data ?? []}
           onChange={(v) => filter("category", v)}
         />
+        <Filter label={t('finish.allSources')} value={params.get('source') || ''} options={['YOUTUBE','AUDIO','TEXT'].map(id=>({id,name:id}))} onChange={v=>filter('source',v)} />
+        <Filter label={t('finish.allLevels')} value={params.get('cefr') || ''} options={['A1','A2','B1','B2','C1','C2','UNKNOWN'].map(id=>({id,name:id}))} onChange={v=>filter('cefr',v)} />
+        <Filter label={t('finish.allActivities')} value={params.get('activity') || ''} options={['DICTATION','SHADOWING'].map(id=>({id,name:t(`contentAuthoring.${id}`)}))} onChange={v=>filter('activity',v)} />
         <Filter
           label={t("catalog.allChannels")}
           value={params.get("channel") || ""}
@@ -174,7 +180,7 @@ export function LessonsPage() {
         />
       </form>
       <CatalogError
-        error={visibility.error || lessons.error || categories.error || channels.error}
+        error={restore.error || visibility.error || lessons.error || categories.error || channels.error}
         title={lessons.error ? t("catalog.lessonsLoadFailed") : undefined}
         retrying={lessons.isFetching || categories.isFetching || channels.isFetching}
         retry={() => {
@@ -218,6 +224,9 @@ export function LessonsPage() {
                     </Link>
                   </TableCell>
                   <TableCell>
+                    {item.deleted && <Badge variant="destructive">{t('finish.deleted')}</Badge>}
+                    {item.processing && <Badge variant="secondary">{t('finish.processingBadge')}</Badge>}
+                    {item.aiFailed && <Badge variant="destructive">{t('finish.aiFailed')}</Badge>}
                     <Badge variant={item.status === "FAILED" ? "destructive" : item.status === "PUBLISHED" ? "success" : "secondary"}>
                       {t(`lessonAuthoring.labels.${item.status}`, {
                         defaultValue: item.status,
@@ -243,9 +252,10 @@ export function LessonsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      {item.status === 'PUBLISHED' && <Switch aria-label={t('catalog.lessonVisibility', { title: item.title })} checked={item.visible}
-                        disabled={visibility.isPending} onCheckedChange={visible => visibility.mutate({ id: item.id, visible })} />}
-                      <Button variant="ghost" size="icon" aria-label={t("catalog.editMetadata")} title={t("catalog.editMetadata")} onClick={() => setEditing(item)}>
+                      {item.deleted && <Button size="sm" variant="outline" disabled={restore.isPending} onClick={()=>restore.mutate(item)}>{t('finish.restore')}</Button>}
+                      {item.status === 'PUBLISHED' && !item.deleted && <Switch aria-label={t('catalog.lessonVisibility', { title: item.title })} checked={item.visible}
+                        disabled={visibility.isPending || item.deleted} onCheckedChange={visible => visibility.mutate({ id: item.id, visible,version:item.version })} />}
+                      <Button disabled={item.deleted} variant="ghost" size="icon" aria-label={t("catalog.editMetadata")} title={t("catalog.editMetadata")} onClick={() => setEditing(item)}>
                         <Pencil />
                       </Button>
                       <Button variant="outline" asChild>
@@ -257,13 +267,14 @@ export function LessonsPage() {
                           )}
                         </Link>
                       </Button>
-                      {item.status !== "PUBLISHED" && (
+                      {!item.deleted && (
                         <Button
                           variant="ghost"
                           size="icon"
                           className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          aria-label={t("catalog.deleteDraft")}
-                          title={t("catalog.deleteDraft")}
+                          disabled={item.processing}
+                          aria-label={t("finish.delete")}
+                          title={t("finish.delete")}
                           onClick={() => setDeleting(item)}
                         >
                           <Trash2 />
@@ -347,9 +358,9 @@ export function LessonsPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t("catalog.deleteDraft")}</DialogTitle>
+            <DialogTitle>{t("finish.delete")}</DialogTitle>
             <DialogDescription>
-              {t("catalog.deleteConfirm", { title: deleting?.title })}
+              {t(deleting?.status === 'PUBLISHED' ? 'finish.softDeleteHelp' : 'finish.deleteHelp', { title: deleting?.title })}
             </DialogDescription>
           </DialogHeader>
           <CatalogError error={deletion.error} />
@@ -357,7 +368,7 @@ export function LessonsPage() {
             <Button
               variant="destructive"
               disabled={deletion.isPending}
-              onClick={() => deleting && deletion.mutate(deleting.id)}
+              onClick={() => deleting && deletion.mutate(deleting)}
             >
               {t("catalog.deleteDraft")}
             </Button>

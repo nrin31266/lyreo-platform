@@ -29,6 +29,7 @@ const labelCodes = [
   "TTS",
   "SYNTHESIZING",
   "ALIGN",
+  "CONTENT",
   "SEMANTIC",
   "IPA",
   "GENERATING_IPA",
@@ -86,12 +87,12 @@ export function authoringJobErrorKey(job: AuthoringJob) {
 }
 
 export function jobRetryLabelKey(job: AuthoringJob) {
-  return job.operation === 'ALIGN' ? 'twoStep.retryAlign'
+  return job.operation === 'CONTENT' ? 'contentAuthoring.retry' : job.operation === 'ALIGN' ? 'twoStep.retryAlign'
     : job.operation === 'TTS' ? 'twoStep.retryTts'
     : job.operation === 'PREPARE' ? 'twoStep.retryPrepare' : 'authoringUi.retryStep';
 }
 export function jobProblemSentence(job: AuthoringJob) {
-  if (!job.errorCode?.startsWith('TIMING_')) return null;
+  if (!job.errorCode?.startsWith('TIMING_') && job.operation !== 'CONTENT') return null;
   const value=Number(/^sentence=(\d+),/.exec(job.errorMessage ?? '')?.[1]);
   return Number.isSafeInteger(value) && value>0 ? value : null;
 }

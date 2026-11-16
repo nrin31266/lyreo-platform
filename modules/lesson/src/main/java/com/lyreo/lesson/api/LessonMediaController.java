@@ -45,9 +45,10 @@ public class LessonMediaController {
     @PostMapping("/text-drafts") @Transactional
     public ResponseEntity<LessonAuthoringResponse> text(@Valid @RequestBody TextRequest request) {
         requireVoice(request.voice());
-        var draft=service.createText(request.title(),request.text(),request.voice());
+        var draft=service.createText(request.title(),request.text(),request.voice(),request.options());
         catalog.updateMetadata(draft.id,null,request.description()==null ? "" : request.description(),request.imageUrl(),request.categoryIds()==null ? List.of() : request.categoryIds());
-        return ResponseEntity.created(URI.create("/api/v1/admin/lesson-authoring/"+draft.id)).body(LessonAuthoringResponse.from(draft));
+        if(request.startProcessing()) service.synthesize(draft.id,draft.revision);
+        return ResponseEntity.created(URI.create("/api/v1/admin/lesson-authoring/"+draft.id)).body(LessonAuthoringResponse.from(service.get(draft.id)));
     }
     @PutMapping("/{id}/text") public LessonAuthoringResponse textSource(@PathVariable UUID id,@Valid @RequestBody TextSourceRequest request) {
         return LessonAuthoringResponse.from(service.text(id,request.revision(),request.text()));
@@ -74,7 +75,7 @@ public class LessonMediaController {
     @PostMapping("/audio-drafts") @Transactional
     public ResponseEntity<LessonAuthoringService.Accepted> audioDraft(@Valid @RequestBody AudioRequest request) {
         var source=media.source(request.sourceId());
-        var accepted=service.createAudio(request.title(),source.id(),source.durationMs(),request.startMs(),request.endMs(),source.originalFilename());
+        var accepted=service.createAudio(request.title(),source.id(),source.durationMs(),request.startMs(),request.endMs(),source.originalFilename(),request.options());
         catalog.updateMetadata(accepted.lessonId(),null,request.description()==null ? "" : request.description(),request.imageUrl(),request.categoryIds()==null ? List.of() : request.categoryIds());
         return ResponseEntity.accepted().location(URI.create("/api/v1/jobs/"+accepted.jobId())).body(accepted);
     }
@@ -87,8 +88,8 @@ public class LessonMediaController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.parseMediaType(type))
             .contentLength(bytes.length).body(new ByteArrayResource(bytes));
     }
-    public record TextRequest(@jakarta.validation.constraints.Size(max=500) String title,@NotBlank String text,@NotBlank String voice,List<UUID> categoryIds,String description,String imageUrl) {}
-    public record AudioRequest(@jakarta.validation.constraints.Size(max=500) String title,@NotNull UUID sourceId,long startMs,long endMs,List<UUID> categoryIds,String description,String imageUrl) {}
+    public record TextRequest(@jakarta.validation.constraints.Size(max=500) String title,@NotBlank String text,@NotBlank String voice,List<UUID> categoryIds,String description,String imageUrl,com.lyreo.lesson.domain.authoring.AuthoringOptions options,boolean startProcessing) {}
+    public record AudioRequest(@jakarta.validation.constraints.Size(max=500) String title,@NotNull UUID sourceId,long startMs,long endMs,List<UUID> categoryIds,String description,String imageUrl,com.lyreo.lesson.domain.authoring.AuthoringOptions options) {}
     public record VoiceRequest(long revision,String voice) {}
     public record Revision(long revision) {}
 }

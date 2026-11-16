@@ -44,13 +44,21 @@ public final class LessonAuthoringJobHandler implements JobHandler {
         var lesson=repository.find(input.lessonId(),false).orElseThrow();
         if(!Objects.equals(lesson.activeJobId,job.id()) || lesson.transcriptRevision!=input.transcriptRevision() || lesson.publishedAt!=null)
             throw new PermanentJobException("AUTHORING_STALE","Draft changed before authoring job started");
+        if(Set.of("SEMANTIC","IPA").contains(input.operation())) throw new PermanentJobException("AUTHORING_OPERATION_REMOVED","This authoring operation is no longer supported");
         boolean committed=false;
-        try {
+        try (var observation=ai.observe(attempt->{
+            repository.usage(job.id(),new AuthoringLesson.Invocation(attempt.provider(),attempt.model(),attempt.inputTokens(),attempt.outputTokens(),attempt.latencyMs(),attempt.output().get("audio_seconds") instanceof Number seconds?seconds.doubleValue():null,
+                attempt.invocationId(),attempt.capability(),attempt.error().isEmpty()?"SUCCEEDED":"FAILED",attempt.fallback()));
+            var payload=new java.util.LinkedHashMap<String,Object>();payload.put("provider",attempt.provider());payload.put("model",attempt.model());payload.put("capability",attempt.capability());payload.put("fallback",attempt.fallback());payload.put("prompt",attempt.prompt());payload.put("output",attempt.output());payload.put("error",attempt.error());
+            payload.putAll(attempt.diagnostics());
+            repository.diagnostic(job.id(),attempt.invocationId(),payload);
+        })) {
             context.throwIfCancellationRequested();
             switch(input.operation()) {
                 case "PREPARE" -> prepare(job,context,lesson);
                 case "TTS" -> synthesize(job,context,lesson);
                 case "ALIGN" -> align(job,context,lesson);
+                case "CONTENT" -> new AuthoringContentGenerator(ai,repository,committer).generate(job,input,lesson,context);
                 case "SEMANTIC", "IPA" -> throw new PermanentJobException("AUTHORING_OPERATION_REMOVED","This authoring operation is no longer supported. Continue with transcript and timing review.");
                 default -> throw new PermanentJobException("AUTHORING_OPERATION_INVALID","Unknown authoring operation");
             }
@@ -59,6 +67,7 @@ public final class LessonAuthoringJobHandler implements JobHandler {
             committed=true;
             context.progress("CHECKPOINT_SAVED",100);
         } catch(AiExecutionException failure) {
+            repository.diagnostic(job.id(),null,java.util.Map.of("error",String.valueOf(failure.getMessage()),"code",failure.errorCode()));
             if(Set.of("AI_HTTP_401","AI_HTTP_403","AI_HTTP_404","AI_HTTP_501","AI_ROUTE_NOT_CONFIGURED","AI_FREE_ONLY_ROUTE_BLOCKED").contains(failure.errorCode()))
                 throw new PermanentJobException("AI_CONFIGURATION_REQUIRED",
                     "Configure an enabled provider, supported model and credential in AI Settings, then retry this step. Local runtime cannot execute DEV_MOCK routes.",failure);
@@ -73,6 +82,10 @@ public final class LessonAuthoringJobHandler implements JobHandler {
             throw new PermanentJobException(failure.code(),failure.getMessage(),failure);
         } catch(RequestValidationException failure) {
             throw new PermanentJobException("AUTHORING_VALIDATION_FAILED",failure.getMessage(),failure);
+        } catch(RuntimeException failure) {
+            var causes=new ArrayList<String>();Throwable cause=failure;
+            for(int depth=0;cause!=null && depth<6;depth++,cause=cause.getCause()) causes.add(cause.getClass().getSimpleName()+": "+cause.getMessage());
+            repository.diagnostic(job.id(),null,Map.of("causes",causes,"operation",input.operation()));throw failure;
         } finally {
             if(!committed && "TTS".equals(input.operation()) && lesson.audioObjectKey!=null && lesson.audioObjectKey.endsWith("/"+job.id()+".wav")) {
                 try {storage.delete(lesson.audioObjectKey);} catch(RuntimeException ignored) { /* Keep the original job failure. */ }
@@ -86,7 +99,7 @@ public final class LessonAuthoringJobHandler implements JobHandler {
             Map.of("text",lesson.sentences.stream().map(sentence->sentence.text).collect(java.util.stream.Collectors.joining(" ")),
                 "sentences",lesson.sentences.stream().map(sentence->sentence.text).toList()),
             Map.of("voice",lesson.ttsVoice));
-        repository.usage(job.id(),new AuthoringLesson.Invocation(result.provider(),result.model(),result.inputTokens(),result.outputTokens(),result.latencyMs(),null));
+
         context.throwIfCancellationRequested();
         Object raw=result.output().get("audio_base64");
         LessonAuthoringService.require(raw instanceof String && ((String)raw).length()<=90_000_000,"TTS returned no supported audio");
@@ -175,10 +188,7 @@ public final class LessonAuthoringJobHandler implements JobHandler {
         AuthoringText.groupUnresolvedTiming(unresolved);
     }
     private AiExecutionResult invoke(BackgroundJob job,AiCapability capability,String prompt,Map<String,Object> input,Map<String,Object> options) {
-        var result=ai.execute(capability,prompt,input,options);
-        repository.usage(job.id(),new AuthoringLesson.Invocation(result.provider(),result.model(),result.inputTokens(),result.outputTokens(),result.latencyMs(),
-            result.output().get("audio_seconds") instanceof Number seconds ? seconds.doubleValue() : null));
-        return result;
+        return ai.execute(capability,prompt,input,options);
     }
     private String audioUrl(AuthoringLesson lesson) {
         LessonAuthoringService.require(lesson.audioObjectKey!=null,"Prepared audio is missing");

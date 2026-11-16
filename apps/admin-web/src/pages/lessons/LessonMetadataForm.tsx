@@ -43,7 +43,7 @@ export function LessonMetadataForm({
     },
   });
   const mutation = useMutation({
-    mutationFn: (data: Metadata) => saveMetadata(lesson.id, data),
+    mutationFn: (data: Metadata) => saveMetadata(lesson.id, { ...data, version: lesson.version ?? 0 }),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: catalogKeys.all });
       onSaved();

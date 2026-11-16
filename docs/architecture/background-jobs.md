@@ -30,6 +30,14 @@ event không được dùng làm checkpoint.
 
 ## Progress and consumers
 
+Admin có `GET /api/v1/jobs?status=&type=&page=0&size=20` để xem danh sách mới nhất trước,
+phân trang tối đa 100 dòng và lọc status enum hoặc `ACTIVE`, job type chính xác. DTO list/detail
+chỉ thêm owner module/reference, lịch retry, mã lỗi và safe persisted message; không trả config
+snapshot, lease/worker hoặc credential. Trang `/jobs` giữ filter/page/job đã chọn trong URL, mở
+chi tiết ở panel, giữ dữ liệu khi refresh lỗi và xem diagnostics riêng tư của authoring qua endpoint
+đã scope theo lesson/job. Không có generic retry: mở bài để chạy phần thiếu theo workflow của bài.
+SSE invalidate cả danh sách và job detail; polling dự phòng không tạo hay chạy lại job.
+
 Fallback query là `GET /api/v1/jobs/{id}`. Response và authoring job summary bổ sung `createdAt`,
 `startedAt`, `finishedAt` từ các cột hiện có, không cần migration. UI đo chờ từ `createdAt`, chạy từ
 `startedAt`, và cố định duration bằng `finishedAt` khi kết thúc. Thời gian chạy bao gồm retry wait;

@@ -25,6 +25,11 @@ Core generates OpenAPI from the implemented HTTP boundary. Development/test may 
 
 ## Job observation
 
+`GET /api/v1/jobs` (Admin only) returns `{items,total,page,size}`, ordered by creation descending,
+with optional `status` (state enum or `ACTIVE`) and exact `type` filter. Page is zero-based; size
+is 1–100, default 20. Detail/list add nullable `nextRetryAt`, `errorCode`, safe `errorMessage`,
+`ownerModule` and `ownerReferenceId`. Config snapshots, lease ownership and credentials remain private.
+
 `GET /api/v1/jobs/{id}` and authoring job summaries expose additive `createdAt`, nullable `startedAt`
 and nullable `finishedAt` timestamps from persisted state. Elapsed time semantics and the
 Admin-only SSE event/snapshot boundary are owned by the [jobs protocol](background-jobs.md).
@@ -46,7 +51,7 @@ Under `/api/v1/admin/lesson-authoring`:
   retries reuse valid samples. No credentials or object keys are returned.
 - `GET /voices/{voice}/sample`: stored `audio/wav`, Admin only, no-store; never invokes TTS.
   Missing/damaged samples return 404. The picker can request regeneration and surface job errors.
-- `POST /text-drafts`: `{title?, text, voice, categoryIds, description?, imageUrl?}` → `201` review document, no job.
+- `POST /text-drafts`: `{title?, text, voice, categoryIds, description?, imageUrl?, options?, startProcessing?}` → `201` review document; `startProcessing=true` atomically enqueues TTS and the chain, otherwise saves only.
 - `PUT /{id}/voice`: `{revision, voice}` → updated review document with stale audio invalidated.
 - `POST /{id}/synthesize`: `{revision}` → `202 {lessonId, jobId}` plus job Location.
 - `POST /audio-sources`: multipart `file` → `201 {id, durationMs, contentType}`. Maximum file
@@ -66,37 +71,64 @@ Category responses retain `name` and add `translations: {locale: name}`. Categor
 `{name, translations?}`; omission preserves existing translations for legacy clients. UI falls back
 to `name` when its locale has no translation. Invalid locale/name entries return validation errors.
 
-## Two-step lesson authoring
+## Lesson authoring and publication
 
-The authoring workflow ends at an unpublished reviewed draft. `PUT /{id}/transcript` accepts
-`{revision, sentences: [{id?, text}]}`; legacy `usage` is optional and existing stored flags are
-preserved rather than edited by this workflow. Approval requires a non-empty transcript and current
-Text audio, not a LEARN sentence. `/approve`, `/align`, `/prepare`, `/karaoke-review` and observed
-word `/sentences/{sentenceId}/timing` remain revision checked and Admin only. Alignment accepts a saved,
-unapproved transcript with current audio. PREPARE/TTS commit their checkpoint and enqueue initial
-alignment atomically under the job fence, subject to the existing timing-reuse policy; alignment never
-automatically approves the transcript or listening review.
-`POST /{id}/karaoke-review` is the final save-reviewed action, never publication. Readiness is derived
-from current transcript approval, valid timing and `karaokeReviewedRevision`; no new workflow status is added.
-Transcript `sentences[]` retains optional boolean `hidden` and responses retain the field for legacy
-compatibility. Draft authoring always includes every sentence in alignment, validation and listening.
-Explicit transcript saves normalize `hidden` to false and invalidate review; drafts carrying legacy
-flags require full alignment/review. Successful alignment also normalizes these flags. GET does not
-write, and published snapshots retain their stored semantics. Legacy `usage` remains readable.
-`/align` accepts an unapproved saved transcript; it never implies transcript/listening approval.
-PREPARE and TTS checkpoints atomically enqueue initial alignment inside Core under the existing lease
-and revision fence, unless timing reuse is explicitly permitted. Failure/cancellation of alignment
-retains the preparation checkpoint. No request/response shape, endpoint or schema migration changes.
+Admin endpoints use `/api/v1/admin/lesson-authoring/{id}`. Source creation accepts optional options
+before starting the explicit full chain. POST `/run` selects missing source preparation, alignment
+or CONTENT and enables continuation. PREPARE/TTS/ALIGN checkpoints and successor enqueue share a
+fenced transaction. Cancelled/lost leases/new revisions cannot commit or enqueue; completed inputs
+prevent duplicate successors. Text never runs STT. No AI runs on GET, editing or save.
 
-Sentence `issues` may include `POSSIBLE_REPEAT`, a review hint that preserves the complete transcript.
-For sentence-local timing failures, the job `errorMessage` begins with `sentence=N,` (one-based saved
-transcript order), followed by numeric timing diagnostics. Admin uses this prefix only for `TIMING_*`
-errors to offer a jump to the sentence; old jobs without the prefix retain generic recovery actions.
+| Method/path | Request and result |
+| --- | --- |
+| `PUT /transcript` | `{revision,sentences:[{id?,text}]}` saves full transcript, no AI |
+| `POST /cancel` | `{revision}` stops chain continuation and cancels its active job under the draft lock |
+| `POST /run` | `{revision}` starts/continues affected chain; 202 `{lessonId,jobId}` |
+| `PUT /changes` | `{changes:{revision,voice?,options?,profile?,sentences:[{id?,text,content?,cloze?,clozeManual}]},metadata?}` atomic batch save; returns draft |
+| `PUT /content-options` | `{revision,options}` saves normalized capabilities/budget/accent, no AI |
+| `POST /content` | `{revision}` CONTENT only, valid current timing required; 202 with job Location |
+| `PUT /sentences/{sentenceId}/content` | `{revision,content}` manual translation/IPA/annotations/activity selections |
+| `PUT /content-profile` | `{revision,cefr,contentType}` manual enum-validated profile |
+| `GET /readiness` | `{ready,blockers:[code or sentence-specific detail]}` no writes |
+| `POST /publish` | `{revision}` server-validated atomic immutable snapshot, publisher subject/time; idempotent after publication |
+| `POST /duplicate` | `{revision}` new editable lesson/sentence IDs, shared media/current content, no AI |
+| `GET /jobs/{jobId}/diagnostics` | scoped Admin-only expiring private artifacts and invocation IDs |
 
-The former authoring `generate`, `ipa`, `options`, sentence `content`, `replace-generated`,
-`candidates` and `publish` writes are no longer mapped. Historical response fields and stored
-published content remain readable. Removed operations cannot run or commit results; a pending
-SEMANTIC/IPA job terminates with `AUTHORING_OPERATION_REMOVED` through the job failure protocol.
+Draft job entries additionally expose `attemptCount` and nullable `result` (version 1: checkpoint
+recording time/revision, sentence/word/audio totals, timed sentence count, feature coverage,
+notes, selections and warnings). These are historical saved checkpoints, including reused results,
+not counts of newly generated items. `usage` adds optional `invocationId`, `capability`, `status`
+and `fallback`; absent legacy values remain unknown. Results are durable; raw diagnostics expire.
+
+All mutations reject stale revisions and active conflicts; published learning content is immutable.
+`content` contains translation/IPA/review-warning, vocabulary/grammar spans and independent activity
+booleans. `cloze` contains easy/medium token indexes, version, original text and SHA-256 textHash;
+manual targets are validated and supersede automatic ones until stale. No learner attempt is created.
+Metadata inside `/changes` includes its separate `version`; the whole transaction rolls back on conflict.
+
+Responses expose contentComplete/contentNeeded, budget caps, enum profile/stale markers, read-only
+statistics, sentence raw/display IPA/version, exclusions/reasons, contentWarnings and cloze targets.
+GET computes readiness/staleness without persisting normalization. Legacy hidden draft rows remain
+visible and participate in full alignment. Explicit saves/alignment normalize old hidden flags.
+Generated output never sets human-review revisions. Legacy `/approve`, `/karaoke-review` and
+`/content-review` remain compatibility writes and are not publication prerequisites; content-review
+validates data without pretending to record listening or pronunciation checks.
+
+Missing translations/IPA block readiness at the affected sentence; invalid generated notes are
+excluded with visible warnings, retaining other validated features. Malformed JSON and truncation
+remain distinct failures. Retry only missing/stale data. Retired `generate`, `ipa`, `options`,
+`replace-generated` and `candidates` writes remain unmapped; SEMANTIC/IPA jobs cannot execute/commit.
+Timing errors retain sentence=N prefixes where available and all existing window/coverage checks.
+
+Diagnostics return real recorded job/invocation evidence, sanitized and size/retention bounded.
+Expired/old jobs return an empty list, not fabricated server logs. There is no arbitrary log-file API.
+
+Catalog `/api/v1/admin/lessons` accepts status/source/category/channel/cefr/activity filters.
+`status=DELETED` includes only soft-deleted lessons; AI_FAILED identifies current failed processing.
+Items include metadata version, draft revision, deleted/processing/aiFailed flags and profile/activities.
+Metadata/visibility writes carry version, DELETE uses `?version=N`, and POST `/{id}/restore` takes
+`{version}`. Draft deletion is permanent only without active jobs/history; published deletion is soft
+and restoration is hidden. Shared source/media and learning history are retained.
 
 `PUT /{id}/text` accepts `{revision, text}` for an existing TEXT draft. Core validates the same
 10,000-character/1,000-sentence limits, splits the source consistently and preserves unchanged

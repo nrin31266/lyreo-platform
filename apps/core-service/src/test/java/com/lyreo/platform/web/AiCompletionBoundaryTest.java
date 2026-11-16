@@ -101,4 +101,42 @@ class AiCompletionBoundaryTest {
                 error -> assertThat(error.fallbackAllowed()).isFalse());
         } finally { server.stop(0); }
     }
+
+    @ParameterizedTest
+    @ValueSource(strings={"Authorization: Bearer bearer-secret", "authorization=\"Basic basic-secret\"",
+        "\"password\": \"a secret with spaces\"", "'api_key': 'quoted-secret'"})
+    void retainsOnlyRedactedProviderDiagnosticsAndKeepsPublicErrorsGeneric(String sensitive) throws Exception {
+        String body = new tools.jackson.databind.ObjectMapper().writeValueAsString(Map.of(
+            "provider_status",503,"provider_message","Model overloaded. test-only test-internal https://host/?key=url-secret api_key=other-secret " + sensitive,
+            "detail","private-body","headers",Map.of("Authorization","private-header"),"audio_base64","private-media"));
+        var gateway = new FastApiAiExecutionGateway(WebClient.builder().exchangeFunction(request ->
+            reactor.core.publisher.Mono.just(org.springframework.web.reactive.function.client.ClientResponse
+                .create(org.springframework.http.HttpStatus.BAD_GATEWAY)
+                .header("Content-Type", "application/json")
+                .body(body).build())).build(), Duration.ofSeconds(5), "test-internal");
+        assertThatThrownBy(() -> gateway.execute(command())).isInstanceOfSatisfying(AiExecutionException.class, error -> {
+            assertThat(error.errorCode()).isEqualTo("AI_HTTP_502");
+            assertThat(error.fallbackAllowed()).isTrue();
+            assertThat(error.getMessage()).isEqualTo("AI service/provider rejected request with HTTP 502");
+            assertThat(error.diagnostics()).containsEntry("provider_status",503);
+            assertThat(error.diagnostics().get("provider_message").toString()).contains("Model overloaded.");
+            assertThat(error.diagnostics().toString()).doesNotContain("test-only","test-internal","url-secret",
+                "other-secret","private-body","private-header","private-media","bearer-secret","basic-secret",
+                "a secret with spaces","quoted-secret");
+        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings={"<html>private-body</html>","{broken","{\"provider_status\":\"503\",\"detail\":\"private-body\"}"})
+    void ignoresLegacyOrMalformedErrorsWithoutChangingFallback(String body) {
+        var gateway = new FastApiAiExecutionGateway(WebClient.builder().exchangeFunction(request ->
+            reactor.core.publisher.Mono.just(org.springframework.web.reactive.function.client.ClientResponse
+                .create(org.springframework.http.HttpStatus.BAD_GATEWAY).body(body).build())).build(),
+            Duration.ofSeconds(5), "test-internal");
+        assertThatThrownBy(() -> gateway.execute(command())).isInstanceOfSatisfying(AiExecutionException.class, error -> {
+            assertThat(error.errorCode()).isEqualTo("AI_HTTP_502");
+            assertThat(error.fallbackAllowed()).isTrue();
+            assertThat(error.diagnostics()).isEmpty();
+        });
+    }
 }

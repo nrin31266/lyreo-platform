@@ -58,7 +58,8 @@ chỉ tạo on-demand khi offline/precision need biện minh; không mặc đị
 
 Sentence IPA là optional theo admin policy `DISABLED|ON_DEMAND|PREGENERATE` và
 learner display `OFF|TAP_TO_SHOW|AFTER_ATTEMPT|ALWAYS`; cache key phụ thuộc text hash, accent,
-provider và model/version, và phải invalid khi text đổi.
+provider và model/version, và phải invalid khi text đổi. Trong content authoring hiện tại, bật IPA
+tạo cho toàn bộ câu bằng eSpeak local, lưu accent/version và cờ cần kiểm tra; không chạy STT.
 
 <a id="dictation"></a>
 ## Dictation
@@ -144,42 +145,34 @@ stale output không commit và private recording không lộ.
 
 ### FR-LSN-007 — Transcript and karaoke review
 
-Admin authoring uses one workspace from source preparation through transcript/timing review, with
-no numbered step navigation. All three source modes share metadata and action placement. YouTube/Audio prepare transcripts explicitly; Text saves without AI
-and requests Kokoro speech explicitly from the source action. Source mode changes confirm before discarding input.
-YouTube/Audio preparation saves transcript/audio and automatically queues alignment; explicit Text
-speech generation saves audio and queues alignment without STT. Each preparation checkpoint is fenced and
-atomic with its follow-up enqueue; recovery cannot enqueue duplicate alignment. Initial alignment
-never approves words or listening review. Valid provider timing may be reused only under the existing
-explicit timing-reuse policy. Failed/cancelled alignment retains transcript/audio and retries only alignment.
-One sentence list combines direct text editing, split/merge, observed or explicitly approximate timing,
-karaoke, sentence playback and the existing manual timing dialog. Editing pauses karaoke and marks
-timing for updating. Save and realign explicitly saves the transcript and requests alignment; Text
-lexical changes require explicit audio regeneration. Typing, blur, opening the page and selection changes
-never invoke AI. Save reviewed draft approves the transcript and records listening review only after
-explicit listening confirmation; the lesson stays unpublished. Later edits invalidate approval. Laptop authoring keeps playback and the contextual primary action in a
-bottom dock; unchanged valid drafts do not offer a no-op save/realign. Grouped word timing is shown as
-compact information, while timing validation errors remain visible.
-The complete transcript participates in alignment, validation and draft listening. There is no sentence
-visibility control. Legacy hidden fields remain readable; draft rows with these flags stay visible and
-require complete alignment and renewed review. Explicit saving or successful alignment normalizes
-legacy flags; GET never writes. Published snapshots retain their stored semantics. Exercise sentence
-selection remains outside this workflow.
-Text shows the saved source and selected voice until canonical audio is ready; preliminary sentence
-splitting is not presented as model output. The saved voice remains selected in the source pane.
-Text already supplies the transcript, so it is never sent through STT/Groq again.
-A counted filter shows saved short/long text warnings; interval and coverage errors belong to timing review.
-The sentence list virtualizes above 20 rows, keeps focused editors mounted and preserves local unsaved edits across polls.
-The desktop player can collapse and resize; on laptops the sentence list and expanded source details
-scroll above the reserved bottom dock.
-Primary actions occupy reserved footer space and do not cover metadata. Source trimming stays in step 1.
+Admin uses one workspace for YouTube, Audio and Text, with live processing status rather than
+mandatory Next screens. Source inspection skeletons match the player/timeline and metadata regions.
+Creation and each queued/running/retrying/cancelling step show explicit feedback; completed stages
+remain visible. Duplicate submissions and source switching are disabled while creation/upload is pending. One explicit Create lesson starts STT → alignment → content for media, or
+TTS → alignment → content for Text. Text never runs STT. Every checkpoint and follow-up enqueue
+share a short fenced transaction; recovery cannot create duplicate successors. Cancellation prevents
+continuation, and failed alignment/content preserves valid transcript/audio for targeted retry.
+The timing-reuse policy remains explicit. Legacy hidden draft rows participate in full alignment;
+explicit saves/successful alignment normalize flags, GET never writes, and published data retains its semantics.
 
-Processing feedback is prominent above the workspace, with the operation/stage, durable job status,
-elapsed duration and real progress when supplied. Unknown progress is indeterminate. Queued, running,
-quota/retry wait, cancellation, success and failure remain distinct. Retry invokes the failed supported
-operation; cancellation is explicit. Technical usage/history remains in an expandable bottom sheet.
-Conflicting writes are disabled while processing, but validated previous media remains playable.
-Connection failures do not discard local edits; polling resumes observation when SSE is disconnected.
+One sentence list exposes direct transcript/translation edits, observed time bounds, playback,
+independent activity choices, highlighted notes and an optional global IPA display. Split/merge is
+in the sentence menu; timing uses the existing interval editor. Text/voice changes stale audio;
+other lexical edits stale dependent timing/content. Saving, typing, blur, options changes and opening
+pages never invoke AI. Update affected parts explains the next capabilities before explicit execution.
+Global Save changes and Ctrl/Cmd+S persist the batch atomically. Conflicts/network errors preserve
+local input. Dirty fields survive polling and focused rows survive virtualization above 20 sentences.
+The natural page scroller owns the list; the laptop player is sticky and playback/main actions stay
+in a fixed bottom dock with reserved space. Settings use lesson information, learner support, notes
+and activities groups. Counts/duration/pace are read-only observations, separate from editable metadata.
+
+No listening, pronunciation or content confirmation checkbox is required. Successful AI execution
+creates a ready draft without fabricating human review. Quality warnings do not block publication;
+missing audio, invalid/stale timing and incomplete enabled data do. Conflicting writes are disabled
+during processing; playback remains available. A compact processing table exposes concrete backend
+failures immediately, and an Admin-only diagnostic panel provides invocation IDs, causes, batch,
+usage, retries and safe raw output. Old jobs explicitly report absent records. Diagnostic artifacts
+are private, bounded, redacted and retained for seven days; they do not provide arbitrary server-log access.
 
 Opening a draft never starts playback. Sentence/word actions play immediately; default playback stops
 at the observed sentence end. Continuous playback runs uninterrupted to the selected clip end,
@@ -193,7 +186,7 @@ Detailed per-word timecodes appear only in the timing editor. Missing timing is 
 
 Timing review exposes observed words/groups and permits revision-checked manual interval edits without
 altering lexical coverage or estimating missing word durations. Blocking timing errors and review warnings
-are distinguished; these rules do not claim ASR confidence or pedagogical quality. Dedicated alignment may retain zero-duration tokens in an explicit observed phrase group within the same sentence, including at least one positive observed interval, with GROUPED_TIMING requiring human review. It must preserve all text and token coverage; wholly unresolved sentences, reversed intervals, overlaps and out-of-bounds intervals still fail.
+are distinguished; these rules do not claim ASR confidence or pedagogical quality. Dedicated alignment may retain zero-duration tokens in an explicit observed phrase group within the same sentence, including at least one positive observed interval, with GROUPED_TIMING shown as a quality warning. It must preserve all text and token coverage; wholly unresolved sentences, reversed intervals, overlaps and out-of-bounds intervals still fail.
 Alignment grouping respects approved sentence boundaries. After a partly successful result, Core may
 make one additional alignment call for wholly unresolved sentences using their original, non-overlapping
 observed source anchors. It keeps resolved timing, never estimates durations, and applies the same complete
@@ -202,16 +195,59 @@ An apparent repeated suffix is an Admin review hint, not permission to remove tr
 
 ### FR-LSN-008 — Contextual generation and candidate review
 
-Content/enrichment generation, IPA authoring, Dictation/Shadowing sentence selection and publication
-are deferred. Their authoring UI and write APIs are removed. Existing stored annotations, options,
-published snapshots and learner practice/history remain readable. See
+Admin configures translation, reference IPA, vocabulary, grammar, independent Dictation/Shadowing
+activities and lesson profile; all default on. Create lesson automatically continues into CONTENT;
+subsequent generation requires an explicit Update affected parts. Enabled translation/IPA covers
+all sentences, even unselected ones. Disabled features retain their stored data and make no calls.
+Core combines enabled work in route-budgeted numbered-text batches. Compact JSON carries translations,
+notes with exact phrases/occurrence, profile and activity exclusions. Code maps Unicode, whitespace,
+quotes and boundary punctuation conservatively to exact original token spans; no fuzzy matching.
+Invalid notes become visible warnings and are excluded from learning, while valid features/sentences
+checkpoint independently. Missing translations/failed IPA remain incomplete for targeted retry.
+A single-object JSON array wrapper can be normalized losslessly; multiple root objects are rejected.
+Truncation splits only the failed batch; malformed JSON fails clearly without repair calls or loops.
+Usage includes failed, truncated and fallback attempts. Manual edits are protected; stale manual
+values need explicit reconfirmation or editing. Timing-only edits keep translation/IPA/note results.
+AUTO note budgets use ceil(words/100) and ceil(words/250), with configurable whole-lesson CUSTOM
+maxima (0–100 vocabulary, 0–30 grammar). These are generation caps, not quotas; manual notes do not consume them.
+
+Every sentence with valid timing is selected by default for each enabled activity. LLM exclusions
+are limited to PROMOTION, NON_SPEECH, BROKEN_FRAGMENT and CODE. Length, difficulty, repetition,
+simple statements and transitions do not justify exclusion. Uncertain cases are kept. Admin can
+select/deselect all, restore suggestions, undo before save or change individual choices. Text-only
+inference never claims audio quality. Unselected sentences still appear in the view mode; hidden is not membership.
+
+Dictation preview has fewer blanks (~20%), more blanks (~40%) and full sentence levels, independent
+of CEFR. Deterministic code prioritizes validated notes then suitable content tokens, retains context,
+limits repeated targets and excludes punctuation, URLs, unclear/function tokens. Easy is a subset of
+medium; short/unsuitable sentences fall back to full dictation. Manual token targets override automatic
+ones, store spans/text hash/version and become stale when transcript changes. Answers come from the transcript.
+No learner attempt or score is implemented in this phase.
+
+Local eSpeak stores raw engine IPA separately from learner display, accent, engine and display version.
+Display uses r for ɹ and (ɪ/ə) with a weak-vowel explanation for ᵻ; flap ɾ, stress, vowels and accent
+are preserved. Manual IPA is never silently converted. Names/ambiguous readings are advisory, with
+one reference-pronunciation explanation per list. No mandatory pronunciation confirmation is recorded.
+
+Lesson profile uses fixed enums: CEFR `A1|A2|B1|B2|C1|C2|UNKNOWN` and type
+`CONVERSATION|MONOLOGUE|LECTURE|STORY|NEWS|MIXED|OTHER|UNKNOWN`. Suggestions are editable.
+CEFR describes transcript vocabulary/syntax, not certified listening difficulty. Type labels describe
+the dominant content form; uncertain evidence uses UNKNOWN. Topics remain existing categories and
+description stays manually edited. Code computes word/sentence counts, clip duration, words per
+minute over the clip and practice counts. No multilingual metadata generation is introduced.
+
+This phase ends with Admin preview, publication and management. Learner presentation, scoring/rewards, missions
+and subscription entitlement policies remain separate; see
 [OQ-007](open-questions.md#oq-007--lesson-exercise-selection-and-publication).
 
 ### BR-LSN-006 — Atomic immutable publication
 
-Existing published content and selected candidate membership remain immutable. The two-step authoring
-workflow has no publication action or API. Old APIs/writers must not destroy existing learner
-attempts/progress. Draft revision prevents concurrent overwrites; stale AI/job output cannot commit.
+Publication checks revision, active jobs, current audio/transcript/timing, enabled required data and
+nonempty enabled activities on the server. Warnings/UNKNOWN CEFR do not block. One atomic transaction
+snapshots sentences, timing, content/IPA, options and activity membership, with publisher/time. Retrying
+publication cannot duplicate snapshots. Published learning content and membership remain immutable;
+metadata remains editable. An editable duplicate has a new ID and sentence identities, reuses media
+and valid results without inference, and never replaces the original lesson or learner history.
 
 ### BR-LSN-007 — Free-only and retirement gates
 
@@ -231,9 +267,13 @@ both drafts and published lessons without invalidating learning-content approval
 is separate from the immutable publication snapshot. A source thumbnail is the default image;
 missing or broken images have a fallback.
 
-Admin may soft-delete drafts only after active jobs have stopped. Deleted drafts disappear from
-catalog, authoring lookup and source-range listings; shared media and sources remain intact.
-Published lessons cannot be deleted through this operation. Admin may unlist/relist published
+An inactive draft with no learner history may be permanently deleted after a named consequence
+confirmation. Delete only draft-owned rows; retain shared media/source records. Published lessons
+are soft-deleted, stop accepting new practice and retain learner history. The Deleted list filter
+supports restoration as hidden. Processing lessons cannot be deleted/published. Management writes
+use draft revision or metadata version; stale actions fail without losing local input. Catalog filters
+cover status, source, category, CEFR and activity, distinguishing individual/channel hiding, deletion
+and AI failure. Admin may unlist/relist published
 lessons using availability independent of content/build status. Unlisted lessons cannot accept new
 practice and must be excluded from future learner discovery; existing attempts/progress remain.
 Published transcript, timing, annotations and selected activity membership remain immutable.

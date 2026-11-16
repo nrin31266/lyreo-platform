@@ -9,7 +9,16 @@ public final class AuthoringSentence {
     public java.util.Map<String,String> manualSources = new java.util.HashMap<>();
     public java.util.Map<String,String> manualLocales = new java.util.HashMap<>();
     public boolean contentStale;
+    public java.util.Map<String,String> contentKeys = new java.util.HashMap<>();
+    public AuthoringProfile.Cefr cefrSuggestion;
+    public AuthoringProfile.ContentType contentTypeSuggestion;
     public String timingSource;
+    public String ipaRaw;
+    public String ipaDisplayVersion;
+    public java.util.List<String> contentWarnings = new java.util.ArrayList<>();
+    public java.util.Map<String,String> exclusions = new java.util.HashMap<>();
+    public AuthoringCloze.Targets cloze;
+    public boolean clozeManual;
     public String ipa;
     public String ipaAccent;
     public String ipaVersion;

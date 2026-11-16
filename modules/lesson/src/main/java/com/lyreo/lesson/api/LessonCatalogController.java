@@ -23,12 +23,15 @@ public class LessonCatalogController {
       @RequestParam(required = false) UUID category,
       @RequestParam(defaultValue = "") String channel,
       @RequestParam(defaultValue = "0") int page,
-      @RequestParam(defaultValue = "20") int size) {
-    return catalog.list(query, status, category, channel, page, size);
+      @RequestParam(defaultValue = "20") int size,
+      @RequestParam(defaultValue = "") String source,@RequestParam(defaultValue = "") String cefr,@RequestParam(defaultValue = "") String activity) {
+    return source.isEmpty() && cefr.isEmpty() && activity.isEmpty()?catalog.list(query,status,category,channel,page,size):catalog.list(query,status,category,channel,page,size,source,cefr,activity);
   }
 
+  @org.springframework.transaction.annotation.Transactional
   @PutMapping("/lessons/{id}/metadata")
   public void update(@PathVariable UUID id, @RequestBody Metadata request) {
+    catalog.assertVersion(id,request.version(),false);
     catalog.updateMetadata(
         id,
         request.title(),
@@ -72,13 +75,18 @@ public class LessonCatalogController {
 
   @DeleteMapping("/lessons/{id}")
   @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
-  public void deleteDraft(@PathVariable UUID id) {
-    catalog.deleteDraft(id);
+  @org.springframework.transaction.annotation.Transactional
+  public void deleteDraft(@PathVariable UUID id,@RequestParam(required=false) Long version) {
+    catalog.assertVersion(id,version,false);catalog.deleteDraft(id);
   }
 
+  @PostMapping("/lessons/{id}/restore") @org.springframework.transaction.annotation.Transactional public void restore(@PathVariable UUID id,@RequestBody Version request) {catalog.assertVersion(id,request.version(),true);catalog.restore(id);}
+  public record Version(Long version) {}
+
+  @org.springframework.transaction.annotation.Transactional
   @PutMapping("/lessons/{id}/visibility")
   public void visibility(@PathVariable UUID id, @RequestBody Visibility request) {
-    catalog.visibility(id, request.visible());
+    catalog.assertVersion(id,request.version(),false);catalog.visibility(id, request.visible());
   }
 
   @PutMapping("/lesson-channels/{id}/visibility")
@@ -86,12 +94,13 @@ public class LessonCatalogController {
     catalog.channelVisibility(id, request.visible());
   }
 
-  public record Visibility(boolean visible) {}
+  public record Visibility(boolean visible,Long version) {public Visibility(boolean visible) {this(visible,null);}}
 
   public record Metadata(
-      String title, List<UUID> categoryIds, String description, String imageUrl) {
+      String title, List<UUID> categoryIds, String description, String imageUrl,Long version) {
+    public Metadata(String title,List<UUID> categoryIds,String description,String imageUrl) {this(title,categoryIds,description,imageUrl,null);}
     public Metadata(String title, List<UUID> categoryIds) {
-      this(title, categoryIds, "", null);
+      this(title, categoryIds, "", null,null);
     }
   }
 

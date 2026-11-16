@@ -234,6 +234,88 @@ def test_upstream_rate_limit_preserves_resume_signal_without_provider_body(monke
     assert 'X-Secret' not in response.headers
 
 
+def test_provider_error_keeps_original_status_and_redacted_message(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import main
+
+    def rejected(req):
+        return httpx.Response(503, json={'error': {
+            'message': ('Model is overloaded. test-credential test-internal '
+                        'https://host/private?key=url-secret '
+                        '"api_key": "other-secret" Authorization: Bearer bearer-secret '
+                        'Prompt: private lesson text'),
+            'details': [{'input': 'do-not-forward', 'audio_base64': 'private-media'}],
+        }}, headers={'X-Secret': 'do-not-forward'})
+
+    install_transport(monkeypatch, rejected)
+    monkeypatch.setattr(main.cfg, 'ai_runtime_mode', 'real')
+    monkeypatch.setattr(main.cfg, 'ai_service_internal_token', 'test-internal')
+    response = TestClient(main.app).post('/v1/llm/generate', headers={
+        'X-Lyreo-Internal-Token': 'test-internal', 'X-Lyreo-Provider-Credential': 'test-credential',
+    }, json=ExecuteRequest(invocation_id='failure', provider='GEMINI', model='model',
+                          prompt='private lesson text').model_dump())
+    assert response.status_code == 502
+    assert response.json()['provider_status'] == 503
+    assert 'Model is overloaded.' in response.json()['provider_message']
+    for secret in ('test-credential', 'test-internal', 'url-secret', 'other-secret',
+                   'bearer-secret', 'private lesson text', 'do-not-forward', 'private-media'):
+        assert secret not in response.text
+
+
+@pytest.mark.parametrize('body', [b'<html>private proxy error</html>', b'{broken',
+                                b'{"error":{"message":' + b'"' + b'x' * 66000 + b'"}}'])
+def test_provider_error_ignores_unstructured_or_oversized_bodies(monkeypatch, body):
+    from fastapi.testclient import TestClient
+    from app import main
+
+    install_transport(monkeypatch, lambda _: httpx.Response(503, content=body))
+    monkeypatch.setattr(main.cfg, 'ai_runtime_mode', 'real')
+    monkeypatch.setattr(main.cfg, 'ai_service_internal_token', 'test-token')
+    response = TestClient(main.app).post('/v1/llm/generate', headers={
+        'X-Lyreo-Internal-Token': 'test-token', 'X-Lyreo-Provider-Credential': 'test-credential',
+    }, json=ExecuteRequest(invocation_id='failure', provider='GEMINI', model='model').model_dump())
+    assert response.status_code == 502
+    assert response.json()['provider_status'] == 503
+    assert 'provider_message' not in response.json()
+    assert len(response.content) < 256
+
+
+@pytest.mark.parametrize('sensitive', [
+    'Authorization: Bearer bearer-secret', 'authorization="Basic basic-secret"',
+    '"password": "a secret with spaces"', "'api_key': 'quoted-secret'",
+    'token=token-secret', 'credential: credential-secret',
+])
+def test_provider_error_redacts_labelled_secrets(sensitive):
+    from starlette.requests import Request
+    from app.providers.errors import provider_error_message
+    req = httpx.Request('POST', 'https://example.invalid')
+    response = httpx.Response(503, json={'error': {'message': f'Overloaded. {sensitive}'}}, request=req)
+    error = httpx.HTTPStatusError('upstream', request=req, response=response)
+    message = provider_error_message(error, Request({'type': 'http', 'headers': []}))
+    assert message.startswith('Overloaded.')
+    for secret in ('bearer-secret', 'basic-secret', 'a secret with spaces', 'quoted-secret',
+                   'token-secret', 'credential-secret'):
+        assert secret not in message
+
+
+@pytest.mark.parametrize('style', ['nested', 'string', 'message'])
+def test_provider_message_is_bounded_after_redacting_unicode_input_and_secrets(style):
+    from starlette.requests import Request
+    from app.providers.errors import provider_error_message
+    text = 'Câu riêng tư.'
+    message = f'Model unavailable. {text} {json.dumps(text)[1:-1]} ' + 'x' * 2000 + 'test-credential'
+    body = {'error': {'message': message}} if style == 'nested' else {style if style == 'message' else 'error': message}
+    req = httpx.Request('POST', 'https://example.invalid', json={'messages': [{'role': 'user', 'content': text}]})
+    response = httpx.Response(503, json=body, request=req)
+    error = httpx.HTTPStatusError('upstream', request=req, response=response)
+    incoming = Request({'type': 'http', 'headers': [(b'x-lyreo-provider-credential', b'test-credential')]})
+    result = provider_error_message(error, incoming)
+    assert result.startswith('Model unavailable.')
+    assert len(result) <= 2048
+    assert text not in result and json.dumps(text)[1:-1] not in result
+    assert 'test-credential' not in result
+
+
 def test_mock_authoring_only_returns_requested_targets():
     from app.runtime.mock import MockRuntime
     runtime = MockRuntime()

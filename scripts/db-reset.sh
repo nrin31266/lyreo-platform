@@ -31,6 +31,7 @@ if [[ "$SCOPE" == lessons ]]; then
     [[ -z "$COUNTS" ]] || COUNTS+=' UNION ALL '
     COUNTS+="SELECT '$TABLE' AS affected_table,count(*) AS rows FROM $TABLE"
   done
+  COUNTS+=" UNION ALL SELECT 'lesson_job_diagnostic',count(*) FROM lesson_job_diagnostic WHERE job_id IN (SELECT job_id FROM lesson_authoring_job)"
   COUNTS+=" UNION ALL SELECT 'speech_attempt',count(*) FROM speech_attempt WHERE lesson_id IN (SELECT id FROM lesson) OR sentence_id IN (SELECT id FROM lesson_sentence)"
   COUNTS+=" UNION ALL SELECT 'background_job',count(*) FROM background_job WHERE owner_module='lesson' AND job_type IN ('LESSON_AUTHORING','LESSON_BUILD') AND owner_reference_id IN (SELECT id FROM lesson)"
   "${PSQL[@]}" -c "$COUNTS;"

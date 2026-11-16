@@ -84,6 +84,24 @@ class LessonAuthoringIT {
             "segments",List.of(Map.of("text","We learn. Practice helps.","start_ms",0,"end_ms",1200)))));
 
     }
+    @Test void jobBrowserFiltersAndPaginatesWithoutChangingJobs() {
+        String type="BROWSER_"+UUID.randomUUID().toString().replace("-", "").toUpperCase(java.util.Locale.ROOT);
+        UUID first=jobs.enqueue(type,"lesson",UUID.randomUUID(),1,3,"{}");
+        UUID second=jobs.enqueue(type,"lesson",UUID.randomUUID(),1,3,"{}");
+        UUID third=jobs.enqueue(type,"lesson",UUID.randomUUID(),1,3,"{}");
+        jdbc.update("UPDATE background_job SET created_at=now()-interval '1 hour' WHERE id=?",first);
+        jdbc.update("UPDATE background_job SET status='FAILED',finished_at=now() WHERE id=?",third);
+        var active=jobs.list("ACTIVE",type,0,1);
+        assertThat(active.total()).isEqualTo(2);assertThat(active.items()).extracting(row->row.id()).containsExactly(second);
+        assertThat(jobs.list("ACTIVE",type,1,1).items()).extracting(row->row.id()).containsExactly(first);
+        assertThat(jobs.list("FAILED",type,0,10).items()).extracting(row->row.id()).containsExactly(third);
+        assertThat(jobs.list("",type,99,20).items()).isEmpty();
+        assertThat(jobs.findById(second).orElseThrow().status().name()).isEqualTo("QUEUED");
+        assertThatThrownBy(()->jobs.list("UNKNOWN",type,0,20)).isInstanceOf(com.lyreo.contracts.errors.RequestValidationException.class);
+        assertThatThrownBy(()->jobs.list("","' OR 1=1",0,20)).isInstanceOf(com.lyreo.contracts.errors.RequestValidationException.class);
+        assertThatThrownBy(()->jobs.list("",type,-1,20)).isInstanceOf(com.lyreo.contracts.errors.RequestValidationException.class);
+        assertThatThrownBy(()->jobs.list("",type,0,101)).isInstanceOf(com.lyreo.contracts.errors.RequestValidationException.class);
+    }
     @Test void legacyOperationsFailWithoutWritingAndNoLongerBlockDraftWork() throws Exception {
         for(String operation:List.of("SEMANTIC","IPA")) {
             var draft=prepared();
@@ -101,6 +119,67 @@ class LessonAuthoringIT {
             assertThat(service.align(draft.id,approved.revision).jobId()).isNotEqualTo(id);
         }
     }
+    @Test void contentCheckpointsSurviveIpaFailureAndRetryOnlyMissingFeatures() throws Exception {
+        var draft=prepared();draft=service.approve(draft.id,draft.revision);draft=service.karaoke(draft.id,draft.revision);
+        when(ai.requestTokenBudget(any())).thenReturn(7500);
+        when(ai.execute(eq(AiCapability.GENERAL_LLM),anyString(),anyMap(),anyMap())).thenReturn(result(Map.of("structured",Map.of(
+            "tr",List.of(List.of(1,"Chúng ta học."),List.of(2,"Luyện tập có ích.")),"v",List.of(),"g",List.of(),
+            "d",List.of(1,2),"s",List.of(1),"m",List.of("A1","MONOLOGUE")))));
+        when(ai.executeForProvider(eq(AiCapability.NLP),anyString(),anyString(),anyMap(),anyMap()))
+            .thenThrow(new com.lyreo.ai.application.execution.AiExecutionException("Unavailable",true,"AI_HTTP_503"));
+        var accepted=service.generateContent(draft.id,draft.revision);claim(accepted.jobId());
+        var job=jobs.findById(accepted.jobId()).orElseThrow();
+        assertThatThrownBy(()->handler.execute(job,mock(JobExecutionContext.class))).isInstanceOf(PermanentJobException.class);
+        var saved=service.get(draft.id);
+        assertThat(saved.sentences).extracting(s->s.translation).containsExactly("Chúng ta học.","Luyện tập có ích.");
+        assertThat(saved.profile.cefr).isEqualTo(com.lyreo.lesson.domain.authoring.AuthoringProfile.Cefr.A1);
+        assertThat(saved.semanticRevision).isNull();assertThat(saved.audioObjectKey).isEqualTo(draft.audioObjectKey);
+        assertThat(saved.sentences.getFirst().dictationSelected).isTrue();
+        var partial=saved.jobs.stream().filter(row->row.jobId().equals(job.id())).findFirst().orElseThrow().result();
+        assertThat(partial.completedFeatures()).containsEntry("TRANSLATION",2).containsEntry("IPA",0);
+        when(ai.executeForProvider(eq(AiCapability.NLP),anyString(),anyString(),anyMap(),anyMap()))
+            .thenReturn(result(Map.of("items",List.of(Map.of("i",1,"ipa","wˈi lˈɜːn","needs_review",false)),"version","espeak:test")));
+        handler.execute(job,mock(JobExecutionContext.class));
+        verify(ai,times(1)).execute(eq(AiCapability.GENERAL_LLM),anyString(),anyMap(),anyMap());
+        saved=service.get(draft.id);
+        assertThat(com.lyreo.lesson.domain.authoring.AuthoringContent.complete(saved)).isTrue();
+        var completed=saved.jobs.stream().filter(row->row.jobId().equals(job.id())).findFirst().orElseThrow().result();
+        assertThat(completed.completedFeatures()).containsEntry("TRANSLATION",2).containsEntry("IPA",2);
+        assertThat(saved.semanticRevision).isNull();
+        assertThat(service.reviewContent(saved.id,saved.revision).semanticRevision).isNull();
+        handler.execute(job,mock(JobExecutionContext.class));
+        verify(ai,times(1)).execute(eq(AiCapability.GENERAL_LLM),anyString(),anyMap(),anyMap());
+    }
+    @Test void contentCheckpointFencesLostLeaseCancellationAndChangedTranscript() throws Exception {
+        var draft=prepared();draft=service.approve(draft.id,draft.revision);draft=service.karaoke(draft.id,draft.revision);
+        var accepted=service.generateContent(draft.id,draft.revision);claim(accepted.jobId());
+        var job=jobs.findById(accepted.jobId()).orElseThrow();var input=repository.jobInput(job.id());
+        var output=service.get(draft.id);output.sentences.getFirst().translation="Late output";
+        output.sentences.getFirst().contentKeys.put("TRANSLATION",com.lyreo.lesson.domain.authoring.AuthoringContent.key(output,0,"TRANSLATION"));
+        jdbc.update("UPDATE background_job SET lease_owner='replacement' WHERE id=?",job.id());
+        assertThatThrownBy(()->committer.contentCheckpoint(job,input,output,List.of(0),java.util.Set.of("TRANSLATION")))
+            .isInstanceOf(JobLeaseLostException.class);
+        jdbc.update("UPDATE background_job SET lease_owner='test-worker',status='CANCEL_REQUESTED' WHERE id=?",job.id());
+        assertThatThrownBy(()->committer.contentCheckpoint(job,input,output,List.of(0),java.util.Set.of("TRANSLATION"))).isInstanceOf(JobLeaseLostException.class);
+        jdbc.update("UPDATE background_job SET status='RUNNING' WHERE id=?",job.id());
+        service.transcript(draft.id,output.revision,List.of(new LessonAuthoringService.SentenceInput(output.sentences.getFirst().id,"We teach.",null)));
+        assertThatThrownBy(()->committer.contentCheckpoint(job,input,output,List.of(0),java.util.Set.of("TRANSLATION"))).hasMessageContaining("draft changed");
+        assertThat(service.get(draft.id).sentences.getFirst().translation).isNull();
+        assertThat(service.get(draft.id).jobs.stream().filter(row->row.jobId().equals(job.id())).findFirst().orElseThrow().result()).isNull();
+    }
+    @Test void jobResultsStayHistoricalAndLegacyUsageRemainsReadable() throws Exception {
+        var accepted=service.create("History","https://www.youtube.com/watch?v=abcdefghijk",0,5000);
+        assertThat(service.get(accepted.lessonId()).jobs.getFirst().result()).isNull();
+        jdbc.update("UPDATE lesson_authoring_job SET usage_json='[{\"provider\":\"QWEN\",\"model\":\"legacy\",\"latencyMs\":10}]'::jsonb WHERE job_id=?",accepted.jobId());
+        var legacy=service.get(accepted.lessonId()).jobs.getFirst().usage().getFirst();
+        assertThat(legacy.capability()).isNull();assertThat(legacy.status()).isNull();assertThat(legacy.fallback()).isNull();
+        run(accepted);var draft=service.get(accepted.lessonId());
+        var before=draft.jobs.stream().filter(row->row.jobId().equals(accepted.jobId())).findFirst().orElseThrow().result();
+        assertThat(before.sentences()).isEqualTo(2);assertThat(before.words()).isEqualTo(4);
+        service.transcript(draft.id,draft.revision,List.of(new LessonAuthoringService.SentenceInput(draft.sentences.getFirst().id,"Changed.",null)));
+        var after=service.get(draft.id).jobs.stream().filter(row->row.jobId().equals(accepted.jobId())).findFirst().orElseThrow().result();
+        assertThat(after).isEqualTo(before);
+    }
     @Test void deletionRejectsActiveJobsAndPreservesSharedSources() throws Exception {
         var accepted=service.create("Delete draft","https://www.youtube.com/watch?v=abcdefghijk",0,2000);
         assertThatThrownBy(()->catalog.deleteDraft(accepted.lessonId())).hasMessageContaining("Cancel active jobs");
@@ -111,7 +190,7 @@ class LessonAuthoringIT {
         catalog.deleteCategory(category.id());
         assertThatThrownBy(()->service.get(accepted.lessonId())).hasMessageContaining("not found");
         assertThatThrownBy(()->catalog.get(accepted.lessonId())).hasMessageContaining("not found");
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson WHERE id=?",Long.class,accepted.lessonId())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson WHERE id=?",Long.class,accepted.lessonId())).isZero();
     }
     @Test void catalogFiltersAndCategoryChangesPreserveDraftRevision() throws Exception {
         var draft=prepared();String marker="Catalog "+UUID.randomUUID();
@@ -169,7 +248,7 @@ class LessonAuthoringIT {
         assertThat(service.get(id).revision).isEqualTo(revision);
         catalog.visibility(id,false);
         assertThat(catalog.get(id).visible()).isFalse();
-        assertThatThrownBy(()->catalog.deleteDraft(id)).hasMessageContaining("Unlist");
+        catalog.deleteDraft(id);assertThat(catalog.get(id).deleted()).isTrue();catalog.restore(id);assertThat(catalog.get(id).visible()).isFalse();
         catalog.visibility(id,true);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_activity_sentence m JOIN lesson_activity a ON a.id=m.activity_id WHERE a.lesson_id=? AND a.activity_type='DICTATION'",Integer.class,id)).isEqualTo(1);
         assertThatThrownBy(()->jdbc.update("UPDATE lesson_sentence SET text='changed' WHERE id=?",selected)).hasMessageContaining("immutable");
@@ -296,6 +375,7 @@ class LessonAuthoringIT {
         })).hasMessageContaining("rollback");
         assertThat(repository.jobInput(job.id()).completed()).isFalse();
         assertThat(service.get(output.id).sentences).isEmpty();
+        assertThat(service.get(output.id).jobs.getFirst().result()).isNull();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_authoring_job WHERE lesson_id=?",Long.class,output.id)).isEqualTo(1L);
         var start=new java.util.concurrent.CountDownLatch(1);
         try(var executor=java.util.concurrent.Executors.newFixedThreadPool(2)) {
@@ -306,6 +386,7 @@ class LessonAuthoringIT {
         assertThat(repository.jobInput(job.id()).completed()).isTrue();
         var saved=service.get(output.id);
         assertThat(saved.audioObjectKey).isEqualTo("checkpoint.wav");assertThat(saved.sentences).hasSize(1);
+        assertThat(saved.jobs.stream().filter(row->row.jobId().equals(job.id())).findFirst().orElseThrow().result().sentences()).isEqualTo(1);
         assertThat(saved.approvedRevision).isNull();assertThat(saved.karaokeReviewedRevision).isNull();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_authoring_job WHERE lesson_id=? AND operation='ALIGN'",Long.class,output.id)).isEqualTo(1L);
     }
@@ -397,9 +478,10 @@ class LessonAuthoringIT {
             var prepared=service.get(accepted.lessonId());
             assertThat(prepared.sentences).hasSize(2);
             assertThat(prepared.timingStatus).isEqualTo("DRAFT_VALID");
-            assertThat(prepared.revision).isEqualTo(before.revision+1);
+            assertThat(prepared.revision).isEqualTo(before.revision+2);
             assertThat(prepared.transcriptRevision).isEqualTo(before.transcriptRevision+1);
             assertThat(repository.jobInput(accepted.jobId()).completed()).isTrue();
+            jobs.cancel(prepared.activeJobId);
             assertThat(worker.runOnce()).isZero();
             assertThat(service.get(accepted.lessonId()).revision).isEqualTo(prepared.revision);
             verify(ai,times(2)).execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap());
@@ -624,6 +706,101 @@ class LessonAuthoringIT {
         assertThatThrownBy(()->library.audio("af_heart")).hasMessageContaining("regenerated");
         jdbc.update("UPDATE background_job SET status='SUCCEEDED' WHERE id=?",id);
     }
+    @Test void batchClozeEditsSurviveContentReloadsAndCanReturnToAutomatic() throws Exception {
+        var draft=prepared();
+        var rows=draft.sentences.stream().map(sentence->new LessonAuthoringService.Change(sentence.id,sentence.text,
+            new LessonAuthoringService.ContentInput("Bản sửa",null,false,List.of(),List.of(),true,true),
+            new com.lyreo.lesson.domain.authoring.AuthoringCloze.Targets(List.of(0),List.of(0,1),"cloze-v2",sentence.text),true)).toList();
+        var saved=service.saveChanges(draft.id,new LessonAuthoringService.Changes(draft.revision,null,null,rows,null));
+        assertThat(service.get(draft.id).sentences).allSatisfy(sentence->{
+            assertThat(sentence.clozeManual).isTrue();assertThat(sentence.cloze.easy()).containsExactly(0);
+            assertThat(sentence.cloze.medium()).containsExactly(0,1);
+        });
+        var automatic=saved.sentences.stream().map(sentence->new LessonAuthoringService.Change(sentence.id,sentence.text,null,sentence.cloze,false)).toList();
+        service.saveChanges(draft.id,new LessonAuthoringService.Changes(saved.revision,null,null,automatic,null));
+        assertThat(service.get(draft.id).sentences).allSatisfy(sentence->assertThat(sentence.clozeManual).isFalse());
+    }
+    @Test void explicitRunChainsContentWithoutReviewsAndPublicationIsAtomicIdempotent() throws Exception {
+        var draft=prepared();
+        draft.options=new com.lyreo.lesson.domain.authoring.AuthoringOptions(java.util.Set.of("DICTATION","SHADOWING"),java.util.Set.of(),"vi-VN","AUTO",20,8,"DISABLED","US");repository.save(draft);
+        when(ai.requestTokenBudget(any())).thenReturn(7500);
+        when(ai.execute(eq(AiCapability.GENERAL_LLM),anyString(),anyMap(),anyMap())).thenReturn(result(Map.of("structured",Map.of("d",List.of(),"s",List.of()))));
+        var accepted=service.run(draft.id,draft.revision);assertThatThrownBy(()->service.run(draft.id,draft.revision)).isInstanceOf(com.lyreo.contracts.errors.StateConflictException.class);
+        run(accepted);var ready=service.get(draft.id);
+        assertThat(ready.approvedRevision).isNull();assertThat(ready.karaokeReviewedRevision).isNull();assertThat(service.readiness(ready)).isEmpty();
+        UUID actor=UUID.randomUUID();var published=service.publish(ready.id,ready.revision,actor);
+        assertThat(published.publishedBy).isEqualTo(actor);assertThat(service.publish(ready.id,ready.revision,actor).publishedAt).isCloseTo(published.publishedAt,org.assertj.core.api.Assertions.within(1,java.time.temporal.ChronoUnit.MICROS));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_sentence WHERE lesson_id=?",Integer.class,ready.id)).isEqualTo(2);
+        assertThatThrownBy(()->service.publish(ready.id,published.revision-10,actor)).isInstanceOf(com.lyreo.contracts.errors.StateConflictException.class);
+        var copy=service.duplicate(ready.id,published.revision);assertThat(copy.id).isNotEqualTo(ready.id);assertThat(copy.audioObjectKey).isEqualTo(published.audioObjectKey);assertThat(copy.publishedAt).isNull();
+        assertThat(copy.sentences).extracting(row->row.id).doesNotContainAnyElementsOf(published.sentences.stream().map(row->row.id).toList());
+        catalog.deleteDraft(ready.id);assertThat(catalog.list("","DELETED",null,"",0,100).items()).anyMatch(row->row.id().equals(ready.id));
+        catalog.restore(ready.id);assertThat(catalog.get(ready.id).visible()).isFalse();assertThat(service.get(copy.id).audioObjectKey).isEqualTo(published.audioObjectKey);
+    }
+
+    @Test void cancellationPreventsFencedCheckpointAndNextJob() throws Exception {
+        var draft=prepared();draft.autoContinue=true;repository.save(draft);
+        var accepted=service.align(draft.id,draft.revision);claim(accepted.jobId());
+        var job=jobs.findById(accepted.jobId()).orElseThrow();var input=repository.jobInput(job.id());
+        var cancelled=service.cancelChain(draft.id,service.get(draft.id).revision);
+        assertThat(cancelled.autoContinue).isFalse();
+        assertThatThrownBy(()->committer.commit(job,input,cancelled)).isInstanceOf(RuntimeException.class);
+        assertThat(service.get(draft.id).jobs).noneMatch(row->row.operation().equals("CONTENT"));
+    }
+    @Test void batchSaveKeepsSplitContentAndVoiceInOneTransaction() {
+        var draft=service.createText("Batch","We learn. Practice helps.","af_heart");
+        var first=draft.sentences.getFirst();
+        var content=new LessonAuthoringService.ContentInput("Bản dịch",null,false,List.of(),List.of(),true,true);
+        var request=new LessonAuthoringService.Changes(draft.revision,null,null,List.of(
+            new LessonAuthoringService.Change(first.id,first.text,null,null,false),
+            new LessonAuthoringService.Change(null,"Another sentence.",content,null,false)),"bf_emma");
+        var saved=service.saveChanges(draft.id,request);
+        assertThat(saved.ttsVoice).isEqualTo("bf_emma");assertThat(saved.sentences.getLast().translation).isEqualTo("Bản dịch");
+        var revision=saved.revision;
+        var invalid=new LessonAuthoringService.Changes(revision,null,null,List.of(
+            new LessonAuthoringService.Change(saved.sentences.getFirst().id,"Changed.",null,null,false)),"invalid");
+        assertThatThrownBy(()->service.saveChanges(draft.id,invalid)).isInstanceOf(com.lyreo.contracts.errors.RequestValidationException.class);
+        assertThat(service.get(draft.id).revision).isEqualTo(revision);
+        assertThat(service.get(draft.id).sentences).hasSize(2);
+    }
+    @Test void diagnosticsArePrivateBoundedRedactedAndExpiredRecordsArePurged() throws Exception {
+        var draft=prepared();var job=draft.jobs.getFirst().jobId();UUID invocation=UUID.randomUUID();
+        repository.diagnostic(job,invocation,Map.of("authorization","Bearer secret","audio_base64","media","output","https://host/path?token=secret api_key=secret <script>x</script>"));
+        var entries=repository.diagnostics(draft.id,job);assertThat(entries).hasSize(1);assertThat(entries.toString()).doesNotContain("Bearer secret","token=secret","api_key=secret","media");
+        jdbc.update("UPDATE lesson_metadata SET deleted_at=now() WHERE lesson_id=?",draft.id);
+        assertThat(service.diagnostics(draft.id,job)).hasSize(1);
+        assertThat(repository.diagnostics(UUID.randomUUID(),job)).isEmpty();
+        jdbc.update("UPDATE lesson_job_diagnostic SET expires_at=now()-interval '1 second' WHERE job_id=?",job);
+        assertThat(repository.diagnostics(draft.id,job)).isEmpty();
+    }
+    @Test void failedProviderDetailIsSavedByInvocationEvenWhenFallbackSucceeds() throws Exception {
+        UUID failed=UUID.randomUUID(),fallback=UUID.randomUUID();
+        doAnswer(call->{
+            java.util.function.Consumer<AiInvocationService.Attempt> observer=call.getArgument(0);
+            observer.accept(new AiInvocationService.Attempt(failed,"GEMINI","test-model","",Map.of(),null,null,10,
+                "AI_HTTP_502: AI service/provider rejected request with HTTP 502","STT",false,
+                Map.of("provider_status",503,"provider_message","Model is overloaded.")));
+            observer.accept(new AiInvocationService.Attempt(fallback,"GROQ","fallback-model","",Map.of(),1,2,10,
+                "","STT",true,Map.of()));
+            return (AiInvocationService.Observation)()->{};
+        }).when(ai).observe(any());
+        var draft=prepared();var entries=repository.diagnostics(draft.id,draft.jobs.getFirst().jobId());
+        assertThat(entries).hasSize(2);
+        var error=entries.stream().filter(row->row.get("invocationId").equals(failed.toString())).findFirst().orElseThrow();
+        var payload=(Map<?,?>)error.get("payload");
+        assertThat(payload.get("provider_status")).isEqualTo(503);
+        assertThat(payload.get("provider_message")).isEqualTo("Model is overloaded.");
+        var success=entries.stream().filter(row->row.get("invocationId").equals(fallback.toString())).findFirst().orElseThrow();
+        assertThat(((Map<?,?>)success.get("payload")).containsKey("provider_status")).isFalse();
+    }
+    @Test void failedPublicationRollsBackSnapshotAndMetadataVersionFencesManagement() throws Exception {
+        var draft=prepared();UUID id=draft.id;
+        assertThatThrownBy(()->service.publish(id,draft.revision,UUID.randomUUID())).isInstanceOf(com.lyreo.contracts.errors.RequestValidationException.class);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_sentence WHERE lesson_id=?",Integer.class,id)).isZero();
+        var item=catalog.get(id);new TransactionTemplate(transactions).executeWithoutResult(status->catalog.assertVersion(id,item.version(),false));
+        catalog.updateMetadata(id,null,"Edited",null,List.of());
+        assertThatThrownBy(()->new TransactionTemplate(transactions).executeWithoutResult(status->catalog.assertVersion(id,item.version(),false))).isInstanceOf(com.lyreo.contracts.errors.StateConflictException.class);
+    }
     private AuthoringLesson legacyPublished(AuthoringLesson lesson) {
         return new TransactionTemplate(transactions).execute(status->{
             lesson.sentences.getFirst().dictationSelected=true;
@@ -675,6 +852,7 @@ class LessonAuthoringIT {
     }
     private AuthoringLesson prepared() throws Exception {
         var accepted=service.create("Authoring","https://www.youtube.com/watch?v=abcdefghijk",0,5000);
+        jdbc.update("UPDATE lesson_authoring SET auto_continue=FALSE WHERE lesson_id=?",accepted.lessonId());
         run(accepted);return service.get(accepted.lessonId());
     }
     private void claim(UUID job) {jdbc.update("UPDATE background_job SET status='RUNNING',lease_owner='test-worker',lease_until=now()+interval '5 minutes' WHERE id=?",job);}

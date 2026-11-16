@@ -30,3 +30,17 @@ async def test_real_local_ipa_preserves_identity_flags_hard_cases_and_caches():
     await IpaRuntime().analyze(request(["Hello there."]))
     assert _transcribe.cache_info().hits > before
     assert result.metadata["reference_only"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("accent", ["US", "UK"])
+async def test_display_preserves_raw_stress_flap_accent_and_weak_vowels(monkeypatch, accent):
+    monkeypatch.setattr("app.runtime.ipa._version", lambda: "espeak:test")
+    raw = "ɹˈoʊzᵻz bˈjuːɾɪfəl"
+    monkeypatch.setattr("app.runtime.ipa._transcribe", lambda text, voice, version: raw)
+    result = await IpaRuntime().analyze(request(["Roses are beautiful."], accent))
+    item = result.output["items"][0]
+    assert item["ipa_raw"] == raw
+    assert item["ipa"] == "rˈoʊz(ɪ/ə)z bˈjuːɾɪfəl"
+    assert result.output["accent"] == accent
+    assert item["display_version"] == "learner-ipa-v1"

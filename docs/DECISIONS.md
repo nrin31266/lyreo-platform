@@ -247,3 +247,18 @@ preferences unchanged. Locale metadata and translations remain shared through `p
 Repository guardrails allow color definitions only in the designated platform token owners and
 continue to reject raw colors or direct primitive access in feature code. This completes the physical
 separation of the visual foundations described in D-025/D-028; their other policies remain in effect.
+
+
+## D-030 — Consolidate unreleased authoring Admin migrations (2026-11-17)
+
+Status: Accepted by the owner.
+
+V012–V015 belong to one uncommitted/unreleased Admin authoring phase. Consolidate their SQL in
+original order into V015, retaining the highest version so future migrations start at V016 and
+never reuse a removed version. V001–V011 remain unchanged. Fresh databases apply twelve files.
+
+The local development database already applied all four original scripts. After checking that
+exact history and the completed schema, back up its history and use Flyway repair once to align
+the consolidated V015 and mark V012–V014 deleted; preserve all application data. Validate history
+and check for pending migrations before restarting Core. This narrow owner-authorized development
+exception does not apply to deployed databases, partial histories or later migration changes.

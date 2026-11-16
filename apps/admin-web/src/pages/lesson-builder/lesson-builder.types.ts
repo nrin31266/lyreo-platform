@@ -8,6 +8,7 @@ export type SourceInspection = {
   thumbnailUrl?:string|null;
   usedRanges: { lessonId: string; title: string; startMs: number; endMs: number; status: string }[];
 };
+export type ClozeTargets = { easy: number[]; medium: number[]; version: string; text: string; textHash?: string };
 export type AuthoringWord = {
   text: string;
   startMs: number;
@@ -20,6 +21,12 @@ export type AuthoringWord = {
 export type AuthoringAnnotation = { tokenStart: number; tokenEnd: number; surface: string; label: string; explanation: string; importance: string; canonicalForm?: string | null; headwordId?: string | null };
 export type AuthoringNote = { tokenStart: number; tokenEnd: number; text: string; kind?: string };
 export type AuthoringSentence = {
+  ipaRaw?: string | null;
+  ipaDisplayVersion?: string | null;
+  contentWarnings?: string[];
+  exclusions?: Record<string,string>;
+  cloze?: ClozeTargets;
+  clozeManual?: boolean;
   hidden?: boolean;
   previewStartMs?: number | null;
   manualFields?: string[];
@@ -48,6 +55,13 @@ export type AuthoringSentence = {
   thoughtGroups: { tokenStart: number; tokenEnd: number }[];
 };
 export type AuthoringJob = {
+  attemptCount?: number;
+  result?: {
+    version: number; recordedAt: string; transcriptRevision: number;
+    sentences: number; words: number; audioDurationMs: number; timedSentences: number;
+    completedFeatures: Record<string, number>; vocabularyNotes: number; grammarNotes: number;
+    dictationSentences: number; shadowingSentences: number; warnings: number;
+  } | null;
   createdAt?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
@@ -59,9 +73,12 @@ export type AuthoringJob = {
   errorMessage?: string | null;
   errorCode?: string | null;
   nextRetryAt?: string | null;
-  usage: { provider: string; model: string; inputTokens?: number | null; outputTokens?: number | null; latencyMs: number; audioSeconds?: number | null }[];
+  usage: { provider: string; model: string; inputTokens?: number | null; outputTokens?: number | null; latencyMs: number; audioSeconds?: number | null;
+    invocationId?: string | null; capability?: string | null; status?: string | null; fallback?: boolean | null }[];
 };
 export type LessonDraft = {
+  profile?: { cefr: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2' | 'UNKNOWN'; contentType: 'CONVERSATION' | 'MONOLOGUE' | 'LECTURE' | 'STORY' | 'NEWS' | 'MIXED' | 'OTHER' | 'UNKNOWN'; manual: boolean; stale: boolean };
+  statistics?: { wordCount: number; sentenceCount: number; durationMs: number; wordsPerMinute: number | null; dictationCount: number; shadowingCount: number };
   sourceType?: "YOUTUBE" | "TEXT" | "AUDIO";
   audioSourceId?: string | null;
   ttsVoice?: string | null;
@@ -82,6 +99,10 @@ export type LessonDraft = {
   approvedRevision: number | null;
   karaokeReviewedRevision: number | null;
   semanticRevision: number | null;
+  contentComplete?: boolean;
+  contentNeeded?: boolean;
+  vocabularyBudget?: number;
+  grammarBudget?: number;
   sentences: AuthoringSentence[];
   jobs: AuthoringJob[];
 };

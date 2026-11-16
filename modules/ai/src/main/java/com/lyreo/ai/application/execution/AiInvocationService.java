@@ -20,6 +20,15 @@ import org.springframework.modulith.NamedInterface;
 /** Resolves provider/model routes and audits every concrete AI attempt. */
 @NamedInterface(value = "application", propagate = false)
 public final class AiInvocationService {
+    private final ThreadLocal<java.util.function.Consumer<Attempt>> observer=new ThreadLocal<>();
+    @NamedInterface(value = "application", propagate = false)
+    public record Attempt(UUID invocationId,String provider,String model,String prompt,Map<String,Object> output,Integer inputTokens,Integer outputTokens,long latencyMs,String error,String capability,boolean fallback,Map<String,Object> diagnostics) {}
+    @NamedInterface(value = "application", propagate = false)
+    public interface Observation extends AutoCloseable { @Override void close(); }
+    public Observation observe(java.util.function.Consumer<Attempt> consumer) {
+        var previous=observer.get();observer.set(consumer);return ()->{if(previous==null) observer.remove();else observer.set(previous);};
+    }
+    private void observed(Attempt attempt) {var consumer=observer.get();if(consumer!=null) { try { consumer.accept(attempt); } catch(RuntimeException failure) { org.slf4j.LoggerFactory.getLogger(AiInvocationService.class).warn("Could not persist AI diagnostic for {}",attempt.invocationId()); } }}
     private final AiRouter router;
     private final AiRouteRepository routes;
     private final AiExecutionGateway gateway;
@@ -58,6 +67,13 @@ public final class AiInvocationService {
         return executeForProvider(capability,null,businessPrompt,input,options);
     }
 
+    /** Conservative envelope shared with callers that batch work across configured fallbacks. */
+    public int requestTokenBudget(AiCapability capability) {
+        return router.candidates(capability).stream().filter(this::permittedFreeRoute)
+            .mapToInt(route -> route.providerCode().equalsIgnoreCase("GROQ") ? 7_500 : 16_000)
+            .min().orElse(7_500);
+    }
+
     public AiExecutionResult executeForProvider(AiCapability capability,String provider,String businessPrompt,
         Map<String,Object> input,Map<String,Object> options) {
         List<AiRoute> candidates;
@@ -78,6 +94,7 @@ public final class AiInvocationService {
             if(candidates.isEmpty()) throw new AiExecutionException("No enabled route for selected provider",false,"AI_ROUTE_NOT_CONFIGURED");
         }
         AiExecutionException last = null;
+        int attemptedRoutes=0;
         for (AiRoute route : candidates) {
             if (!permittedFreeRoute(route)) {
                 if (last == null) last = new AiExecutionException("Route is not approved for free-only execution", false,
@@ -92,6 +109,7 @@ public final class AiInvocationService {
                 continue;
             }
             UUID invocationId = UUID.randomUUID();
+            boolean fallback=attemptedRoutes++>0;
             Instant started = Instant.now();
             audit.started(
                 invocationId,
@@ -120,6 +138,7 @@ public final class AiInvocationService {
                     result.inputTokens(),
                     result.outputTokens()
                 );
+                observed(new Attempt(invocationId,route.providerCode(),route.model(),businessPrompt,result.output(),result.inputTokens(),result.outputTokens(),result.latencyMs(),"",capability.name(),fallback,Map.of()));
                 return result;
             } catch (AiExecutionException failure) {
                 audit.failed(
@@ -128,6 +147,8 @@ public final class AiInvocationService {
                     Duration.between(started, Instant.now()).toMillis(),
                     failure.errorCode()
                 );
+                var evidence=failure.evidence();
+                observed(new Attempt(invocationId,route.providerCode(),route.model(),businessPrompt,evidence==null?Map.of():evidence.output(),evidence==null?null:evidence.inputTokens(),evidence==null?null:evidence.outputTokens(),Duration.between(started,Instant.now()).toMillis(),failure.errorCode()+": "+failure.getMessage(),capability.name(),fallback,failure.diagnostics()));
                 last = failure;
                 if (!failure.fallbackAllowed()) {
                     throw failure;
@@ -139,6 +160,7 @@ public final class AiInvocationService {
                     Duration.between(started, Instant.now()).toMillis(),
                     failure.getClass().getSimpleName()
                 );
+                observed(new Attempt(invocationId,route.providerCode(),route.model(),businessPrompt,Map.of(),null,null,Duration.between(started,Instant.now()).toMillis(),failure.getClass().getSimpleName(),capability.name(),fallback,Map.of()));
                 last = new AiExecutionException(
                     "Unexpected AI route failure",
                     true,

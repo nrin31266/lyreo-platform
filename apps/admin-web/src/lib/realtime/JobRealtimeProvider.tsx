@@ -19,6 +19,7 @@ export function JobRealtimeProvider({ children }: { children: ReactNode }) {
       for (const [key, draft] of client.getQueriesData<LessonDraft>({ queryKey: ['authoring'] })) {
         if (draft?.jobs.some(job => ids.has(job.jobId))) void client.invalidateQueries({ queryKey: key, exact: true });
       }
+      if (ids.size) void client.invalidateQueries({ queryKey: ['jobs'] });
       for (const id of ids) void client.invalidateQueries({ queryKey: ['job', id] });
     }
     const logout = () => abort.abort();
@@ -29,6 +30,7 @@ export function JobRealtimeProvider({ children }: { children: ReactNode }) {
     }, () => {
       void client.invalidateQueries({ queryKey: ['authoring'] });
       void client.invalidateQueries({ queryKey: ['job'] });
+      void client.invalidateQueries({ queryKey: ['jobs'] });
     });
     return () => { abort.abort(); clearTimeout(pending); userManager.events.removeUserUnloaded(logout); };
   }, [client]);

@@ -30,9 +30,29 @@ public class BackgroundJobService {
         );
     }
 
+    public java.util.List<UUID> matchingIds(String type,String ownerModule,java.util.Set<com.lyreo.platform.jobs.domain.BackgroundJobStatus> statuses) {return repository.matchingIds(type,ownerModule,statuses);}
+
     /** Reads a job by ID. Returns empty if the job does not exist. */
     public Optional<BackgroundJob> findById(UUID jobId) {
         return repository.findById(jobId);
+    }
+
+    public record Page(java.util.List<BackgroundJob> items, long total, int page, int size) {}
+
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public Page list(String status, String type, int page, int size) {
+        if (page < 0 || page > 1_000_000 || size < 1 || size > 100 || !type.matches("(?:[A-Z][A-Z0-9_]{0,63})?"))
+            throw new com.lyreo.contracts.errors.RequestValidationException("Invalid job filters or pagination");
+        java.util.Set<com.lyreo.platform.jobs.domain.BackgroundJobStatus> statuses;
+        try {
+            statuses = status.isEmpty() ? java.util.Set.of() : status.equals("ACTIVE")
+                ? java.util.Set.of(com.lyreo.platform.jobs.domain.BackgroundJobStatus.QUEUED, com.lyreo.platform.jobs.domain.BackgroundJobStatus.RUNNING,
+                    com.lyreo.platform.jobs.domain.BackgroundJobStatus.RETRY_WAIT, com.lyreo.platform.jobs.domain.BackgroundJobStatus.CANCEL_REQUESTED)
+                : java.util.Set.of(com.lyreo.platform.jobs.domain.BackgroundJobStatus.valueOf(status));
+        } catch (IllegalArgumentException invalid) {
+            throw new com.lyreo.contracts.errors.RequestValidationException("Unknown job status");
+        }
+        return repository.list(statuses, type, page, size);
     }
 
     public Optional<BackgroundJob> latest(String type, String ownerModule, UUID ownerReferenceId) {

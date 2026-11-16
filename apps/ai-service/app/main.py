@@ -8,6 +8,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from .config import settings
+from .providers.errors import provider_error_message
 from .providers.gemini import GeminiProvider
 from .providers.groq import GroqProvider
 from .providers.openai_compatible import OpenAICompatibleProvider
@@ -61,17 +62,21 @@ async def value_error_handler(_: Request, error: ValueError):
 
 
 @app.exception_handler(httpx.HTTPStatusError)
-async def provider_http_error_handler(_: Request, error: httpx.HTTPStatusError):
+async def provider_http_error_handler(request: Request, error: httpx.HTTPStatusError):
     # Do not proxy full provider bodies/headers: they can contain sensitive operational detail.
+    content = {
+        'detail': 'upstream AI provider request failed',
+        'provider_status': error.response.status_code,
+    }
+    message = provider_error_message(error, request)
+    if message:
+        content['provider_message'] = message
     return JSONResponse(
         status_code=error.response.status_code
         if error.response.status_code in {400, 401, 403, 404, 413, 422, 429} else 502,
         headers={'Retry-After': error.response.headers['Retry-After']}
         if error.response.status_code == 429 and 'Retry-After' in error.response.headers else None,
-        content={
-            'detail': 'upstream AI provider request failed',
-            'provider_status': error.response.status_code,
-        },
+        content=content,
     )
 
 

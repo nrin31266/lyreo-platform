@@ -23,7 +23,7 @@ import {
   FieldLabel,
   FieldError,
 } from "@/components/ui/field";
-import { Skeleton } from "@/components/ui/skeleton";
+import { SourceInspectionSkeleton } from "./AuthoringSkeleton";
 import {
   Accordion,
   AccordionItem,
@@ -36,6 +36,7 @@ import { SourceRangeEditor } from "./SourceRangeEditor";
 import { defaultRange, sourceOffset, timecode } from "./timecode";
 import { validSelection } from "./timeline-view";
 import * as authoring from "./lesson-builder.api";
+import { ContentOptionsPanel, defaultContentOptions } from "./ContentEditor";
 import type { SourceInspection } from "./lesson-builder.types";
 import { createMetadataSchema as metadataSchema } from "@/pages/lessons/catalog.api";
 import { useCategories, catalogKeys } from "@/pages/lessons/catalog.queries";
@@ -43,11 +44,12 @@ import { CatalogError } from "@/pages/lessons/CatalogFeedback";
 const sourceSchema = z.object({
   sourceReference: z.string().trim().pipe(z.url()),
 });
-function CreateYouTubePage({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
+function CreateYouTubePage({ onDirtyChange, onBusyChange }: { onDirtyChange: (dirty: boolean) => void; onBusyChange: (busy: boolean) => void }) {
   const { t } = useTranslation(["admin", "common"]);
   const navigate = useNavigate();
   const client = useQueryClient();
   const categories = useCategories();
+  const [options,setOptions]=useState(defaultContentOptions);
   const sourceForm = useForm<z.infer<typeof sourceSchema>>({
     resolver: zodResolver(sourceSchema),
     defaultValues: { sourceReference: "" },
@@ -62,7 +64,7 @@ function CreateYouTubePage({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
     },
   });
   const sourceReference = sourceForm.watch("sourceReference");
-  useEffect(() => { onDirtyChange(!!sourceReference.trim() || metadata.formState.isDirty); }, [sourceReference, metadata.formState.isDirty, onDirtyChange]);
+  useEffect(() => { onDirtyChange(!!sourceReference.trim() || metadata.formState.isDirty || JSON.stringify(options) !== JSON.stringify(defaultContentOptions)); }, [sourceReference, metadata.formState.isDirty, options, onDirtyChange]);
   const inspectionVersion = useRef(0);
   const inspectionInFlight = useRef(false);
   const lastInspectedReference = useRef<string | null>(null);
@@ -79,6 +81,8 @@ function CreateYouTubePage({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
     mutationFn: authoring.inspectSource,
   });
   const createMutation = useMutation({ mutationFn: authoring.createDraft });
+  const creating = useRef(false);
+  useEffect(() => { onBusyChange(createMutation.isPending); return () => onBusyChange(false); }, [createMutation.isPending, onBusyChange]);
   async function inspectReference(reference: string) {
     if (inspectionInFlight.current) return;
     inspectionInFlight.current = true;
@@ -129,7 +133,7 @@ function CreateYouTubePage({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
   useEffect(() => () => { inspectionVersion.current += 1; }, []);
   async function create(event: FormEvent) {
     event.preventDefault();
-    if (inspectionInFlight.current) return;
+    if (inspectionInFlight.current || creating.current) return;
     const version = inspectionVersion.current;
     setError("");
     if (!(await metadata.trigger())) return;
@@ -144,7 +148,10 @@ function CreateYouTubePage({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
       return;
     }
     try {
+      if (creating.current) return;
+      creating.current = true;
       const result = await createMutation.mutateAsync({
+        options,
         ...metadata.getValues(),
         sourceReference: sourceReference.trim(),
         startMs,
@@ -154,15 +161,18 @@ function CreateYouTubePage({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
       navigate(`/lessons/new?draft=${result.lessonId}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
-    }
+    } finally { creating.current = false; }
   }
   const overlap = startMs !== null && endMs !== null && inspection?.usedRanges.some(
     (range) => startMs < range.endMs && endMs > range.startMs,
   );
   return (
-    <section className="authoring-page source-page">
-      {inspectionMutation.isPending && <ProcessingStatus label={t("twoStep.inspecting")} />}
-      {createMutation.isPending && <ProcessingStatus label={t("twoStep.preparing")} />}
+    <section className="authoring-page source-page" aria-busy={createMutation.isPending}>
+      {createMutation.isPending && <ProcessingStatus label={t("finish.starting")} />}
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      <fieldset disabled={createMutation.isPending} className="source-workspace">
+        <div className="source-media-pane">
+          <h2 className="source-section-title">{t("sourceWorkspace.sourceHeading")}</h2>
       <form
         className="source-url-form"
         onSubmit={(event) => {
@@ -181,6 +191,7 @@ function CreateYouTubePage({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
           <InputGroup>
           <InputGroupInput
             id="youtube-source"
+            disabled={createMutation.isPending}
             type="url"
             required
             value={sourceReference}
@@ -197,7 +208,7 @@ function CreateYouTubePage({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
             placeholder="https://www.youtube.com/watch?v=…"
           />
           <InputGroupAddon align="inline-end">
-            <InputGroupButton type="submit" variant="secondary" disabled={inspectionMutation.isPending || !sourceReference.trim()}>
+            <InputGroupButton type="submit" variant="secondary" disabled={inspectionMutation.isPending || createMutation.isPending || !sourceReference.trim()}>
               {inspectionMutation.isPending ? <LoaderCircle className="animate-spin" /> : <Search />}
               {t("lessonAuthoring.inspect")}
             </InputGroupButton>
@@ -210,9 +221,7 @@ function CreateYouTubePage({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
           </FieldError>
         </Field>
       </form>
-      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-      <div className={`source-workspace ${!inspection && !inspectionMutation.isPending ? "source-workspace-empty" : ""}`}>
-        <div className="source-media-pane">
+
           {inspection?.embedAllowed ? (
             <SourceRangeEditor
               key={`${inspection.videoId}:${selectionVersion}`}
@@ -235,10 +244,7 @@ function CreateYouTubePage({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
               </AlertDescription>
             </Alert>
           ) : inspectionMutation.isPending ? (
-            <div role="status" aria-label={t("loading")} className="grid gap-3">
-              <Skeleton className="aspect-video max-h-64" />
-              <Skeleton className="h-20" />
-            </div>
+            <SourceInspectionSkeleton />
           ) : (
             <Empty className="source-empty" role={inspectError ? "alert" : undefined}>
               <EmptyHeader>
@@ -249,11 +255,11 @@ function CreateYouTubePage({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
             </Empty>
           )}
         </div>
-        {(inspection || inspectionMutation.isPending) && <aside className="source-metadata-pane">
+        <aside className="source-metadata-pane">
           <h2 className="source-section-title">{t("reviewWorkspace.lessonInformation")}</h2>
-          {inspectionMutation.isPending && !inspection ? <div role="status" aria-label={t("loading")} className="grid gap-5"><Skeleton className="h-5 w-1/2" /><Skeleton className="h-10" /><Skeleton className="aspect-video" /><Skeleton className="h-20" /></div> : <form id="lesson-create-form" onSubmit={create} noValidate>
+          <form id="lesson-create-form" onSubmit={create} noValidate>
             <FieldGroup>
-              <CreateMetadataFields form={metadata} titleHint={inspection?.title} imageHint={inspection?.thumbnailUrl || undefined} />
+              <CreateMetadataFields form={metadata} titleHint={inspection?.title} imageHint={inspection?.thumbnailUrl || undefined} /><ContentOptionsPanel draft={{options}} disabled={createMutation.isPending} onChange={setOptions} />
               {overlap && <p role="status" className="text-sm text-muted-foreground">{t("lessonAuthoring.overlap")}</p>}
               {inspection && <>
                   <Accordion type="single" collapsible className="source-used-ranges"><AccordionItem value="used-ranges">
@@ -272,9 +278,9 @@ function CreateYouTubePage({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
                   </AccordionContent></AccordionItem></Accordion>
                 </>}
             </FieldGroup>
-          </form>}
-        </aside>}
-      </div>
+          </form>
+        </aside>
+      </fieldset>
       <footer className="authoring-actionbar">
         <span className="text-xs text-muted-foreground">
           {inspection
@@ -288,18 +294,14 @@ function CreateYouTubePage({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
             type="submit"
             form="lesson-create-form"
             disabled={
-              !inspection?.embedAllowed ||
+              !inspection?.embedAllowed || categories.isPending || categories.isError ||
               inspectionMutation.isPending ||
               !rangeInputValid ||
               startMs === null || endMs === null ||
               createMutation.isPending
             }
           >
-            {t(
-              createMutation.isPending
-                ? "common:status.loading"
-                : "lessonAuthoring.prepare",
-            )}
+            {createMutation.isPending && <LoaderCircle className="animate-spin" aria-hidden="true" />}{t(createMutation.isPending ? "finish.starting" : "finish.create")}
           </Button>
         </div>
       </footer>
@@ -311,15 +313,16 @@ export function CreateLessonPage() {
   const { t } = useTranslation('admin');
   const [params, setParams] = useSearchParams();
   const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
   const type = params.get('type') === 'text' ? 'text' : params.get('type') === 'audio' ? 'audio' : 'youtube';
   return <section className="create-lesson-page grid gap-4">
     <header className="authoring-heading"><h1>{t("navigation.createLesson")}</h1></header>
     <Tabs value={type} onValueChange={value => { if (value !== type && (!dirty || window.confirm(t("catalog.unsaved")))) { setDirty(false); setParams({ type: value }); } }}>
     <div className="flex flex-wrap items-center justify-between gap-3"><TabsList aria-label={t('media.sourceType')}>
-      <TabsTrigger value="youtube">YouTube</TabsTrigger><TabsTrigger value="text">{t('media.textType')}</TabsTrigger><TabsTrigger value="audio">Audio</TabsTrigger>
+      <TabsTrigger disabled={busy} value="youtube">YouTube</TabsTrigger><TabsTrigger disabled={busy} value="text">{t('media.textType')}</TabsTrigger><TabsTrigger disabled={busy} value="audio">Audio</TabsTrigger>
     </TabsList><AuthoringPrompt type={type} /></div>
-    <TabsContent value="youtube"><CreateYouTubePage onDirtyChange={setDirty} /></TabsContent>
-    <TabsContent value="text"><CreateMediaLessonPage type="text" onDirtyChange={setDirty} /></TabsContent>
-    <TabsContent value="audio"><CreateMediaLessonPage type="audio" onDirtyChange={setDirty} /></TabsContent>
+    <TabsContent value="youtube"><CreateYouTubePage onDirtyChange={setDirty} onBusyChange={setBusy} /></TabsContent>
+    <TabsContent value="text"><CreateMediaLessonPage type="text" onDirtyChange={setDirty} onBusyChange={setBusy} /></TabsContent>
+    <TabsContent value="audio"><CreateMediaLessonPage type="audio" onDirtyChange={setDirty} onBusyChange={setBusy} /></TabsContent>
   </Tabs></section>;
 }

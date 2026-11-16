@@ -24,10 +24,10 @@ it('coalesces notifications for matching drafts and resynchronizes authoritative
   expect(screen.getByText('connected')).toBeInTheDocument();
   act(() => { notify({jobId:'job-a',status:'RUNNING'}); notify({jobId:'job-a',status:'SUCCEEDED'}); });
   await act(async () => { await vi.advanceTimersByTimeAsync(100); });
-  expect(invalidate.mock.calls.map(([args])=>args?.queryKey)).toEqual([['authoring','a'],['job','job-a']]);
+  expect(invalidate.mock.calls.map(([args])=>args?.queryKey)).toEqual([['authoring','a'],['jobs'],['job','job-a']]);
   invalidate.mockClear();
   act(() => resync());
-  expect(invalidate.mock.calls.map(([args])=>args?.queryKey)).toEqual([['authoring'],['job']]);
+  expect(invalidate.mock.calls.map(([args])=>args?.queryKey)).toEqual([['authoring'],['job'],['jobs']]);
 });
 
 it('aborts on logout and cancels queued refreshes when the layout unmounts', async () => {

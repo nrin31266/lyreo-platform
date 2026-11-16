@@ -58,5 +58,5 @@ class IpaRuntime:
             ipa = await asyncio.to_thread(_transcribe, text, accent, version)
             # Names and context-sensitive forms are visible review candidates, not silent guesses.
             names = any(token[0].isupper() for token in re.findall(r"\b[A-Za-z]+\b", text)[1:])
-            items.append({"i": index + 1, "ipa": ipa, "needs_review": bool(AMBIGUOUS.search(text) or SPECIAL.search(text) or names)})
+            items.append({"i": index + 1, "ipa_raw": ipa, "display_version": "learner-ipa-v1", "ipa": ipa.replace("ɹ", "r").replace("ᵻ", "(ɪ/ə)"), "needs_review": bool(AMBIGUOUS.search(text) or SPECIAL.search(text) or names)})
         return ExecuteResponse(output={"items": items, "accent": accent, "version": version}, metadata={"runtime": "local-espeak-ng", "reference_only": True})

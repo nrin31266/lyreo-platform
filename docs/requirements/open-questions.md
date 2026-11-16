@@ -53,10 +53,14 @@ The [PRD](../product/prd.md) and [non-functional requirements](non-functional.md
 
 ## OQ-007 — Lesson exercise selection and publication
 
-**Status:** Open; deferred beyond transcript/timing review.
+**Status:** Admin authoring/publication resolved; learner experience remains open.
 
-Decide how Admin selects independent Dictation and Shadowing sentence sets, what contextual
-annotations are needed, and how reviewed drafts become published lessons. Step 2 currently
-retains the full transcript in one words-and-timing panel, without visibility controls. All
-sentences participate in alignment and listening; exercise membership is a separate future choice. Do not recreate Learn/Watch only/Skip, exercise selection or a generation/publish
-scaffold before this decision is accepted.
+Accepted Admin behavior includes optional full-transcript support, budgeted notes, enum profile,
+keep-by-default independent practice selection, deterministic Dictation support preview and atomic
+immutable publication. No checkbox fabricates listening or pronunciation review. Editable copies
+preserve originals; published deletion is recoverable and retains learner history. See
+[FR-LSN-008](lesson.md#fr-lsn-008--contextual-generation-and-candidate-review).
+
+Still decide learner presentation and dictation/shadowing feedback, missions/achievements and reward
+abuse controls. This phase creates no learner attempts or per-sentence coins. Self-service subscription
+entitlements/default policies are deferred.

@@ -27,8 +27,10 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
 
   @Override
   public Page list(String query, String status, UUID category, String channel, int page, int size) {
-    return query(query, status, category, channel, page, size, null);
+    return query(query, status, category, channel, page, size, null,"","","");
   }
+
+  @Override public Page list(String query,String status,UUID category,String channel,int page,int size,String source,String cefr,String activity) {return query(query,status,category,channel,page,size,null,source,cefr,activity);}
 
   private Page query(
       String query,
@@ -37,7 +39,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
       String channel,
       int page,
       int size,
-      UUID lessonId) {
+      UUID lessonId,String source,String cefr,String activity) {
     if (page < 0 || size < 1 || size > 100 || query.length() > 200)
       throw new RequestValidationException("Invalid catalog query");
     var args =
@@ -50,9 +52,12 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
             .addValue("channel", channel)
             .addValue("limit", size)
             .addValue("offset", (long) page * size);
+    var active=jobs.matchingIds(com.lyreo.lesson.application.authoring.LessonAuthoringService.JOB_TYPE,"lesson",java.util.Set.of(com.lyreo.platform.jobs.domain.BackgroundJobStatus.QUEUED,com.lyreo.platform.jobs.domain.BackgroundJobStatus.RUNNING,com.lyreo.platform.jobs.domain.BackgroundJobStatus.RETRY_WAIT,com.lyreo.platform.jobs.domain.BackgroundJobStatus.CANCEL_REQUESTED));
+    var failed=jobs.matchingIds(com.lyreo.lesson.application.authoring.LessonAuthoringService.JOB_TYPE,"lesson",java.util.Set.of(com.lyreo.platform.jobs.domain.BackgroundJobStatus.FAILED));
+    args.addValue("activeJobs",active.isEmpty()?List.of(new UUID(0,0)):active).addValue("failedJobs",failed.isEmpty()?List.of(new UUID(0,0)):failed);
     String from =
         """
-         FROM lesson l JOIN lesson_metadata m ON m.lesson_id=l.id AND m.deleted_at IS NULL LEFT JOIN lesson_authoring a ON a.lesson_id=l.id
+         FROM lesson l JOIN lesson_metadata m ON m.lesson_id=l.id LEFT JOIN lesson_authoring a ON a.lesson_id=l.id
          LEFT JOIN lesson_youtube_source s ON s.video_id=a.video_id
          LEFT JOIN lesson_youtube_channel ch ON ch.channel_id=s.channel_id
          WHERE m.title ILIKE :query
@@ -61,19 +66,25 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
       from += " AND l.id=:lessonId";
       args.addValue("lessonId", lessonId);
     }
-    if (!status.isEmpty()) from += " AND l.status=:status";
+    if(status.equals("ANY")) {}
+    else if (status.equals("DELETED")) from += " AND m.deleted_at IS NOT NULL";
+    else {from += " AND m.deleted_at IS NULL";if(status.equals("AI_FAILED")) from+=" AND a.active_job_id IN (:failedJobs)";else if (!status.isEmpty()) from += " AND l.status=:status";}
     if (category != null)
       from +=
           " AND EXISTS(SELECT 1 FROM lesson_category_membership m WHERE m.lesson_id=l.id AND"
               + " m.category_id=:category)";
     if (!channel.isEmpty()) from += " AND s.channel_id=:channel";
+    if(!source.isEmpty()) {from+=" AND l.source_type=:source";args.addValue("source",source);}
+    if(!cefr.isEmpty()) {from+=" AND a.content_profile->>'cefr'=:cefr";args.addValue("cefr",cefr);}
+    if(!activity.isEmpty()) {from+=" AND jsonb_exists(a.generation_options->'activities', :activity)";args.addValue("activity",activity);}
+
     long total = jdbc.queryForObject("SELECT count(*)" + from, args, Long.class);
     var items =
         jdbc.query(
             "SELECT l.*,m.title AS"
                 + " display_title,m.description,m.image_url,m.visible,COALESCE(ch.visible,TRUE) AS channel_visible,GREATEST(m.updated_at,l.updated_at)"
                 + " AS metadata_updated_at,s.thumbnail_url,a.source_start_ms,a.source_end_ms,a.lesson_id,s.channel_id,COALESCE(ch.title,s.channel_title)"
-                + " AS channel_title"
+                + " AS channel_title,m.version AS metadata_version,m.deleted_at,a.revision AS authoring_revision,a.content_profile->>'cefr' AS cefr,a.generation_options->'activities' AS activities,                     a.active_job_id IN (:activeJobs) AS processing,                     a.active_job_id IN (:failedJobs) AS ai_failed"
                 + from
                 + " ORDER BY GREATEST(m.updated_at,l.updated_at) DESC,l.id LIMIT :limit OFFSET"
                 + " :offset",
@@ -96,7 +107,9 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
                         ? rs.getString("thumbnail_url")
                         : rs.getString("image_url"),
                     rs.getBoolean("visible"),rs.getBoolean("channel_visible"),
-                    "PUBLISHED".equals(rs.getString("status")) && rs.getBoolean("visible") && rs.getBoolean("channel_visible")));
+                    "PUBLISHED".equals(rs.getString("status")) && rs.getBoolean("visible") && rs.getBoolean("channel_visible") && rs.getTimestamp("deleted_at")==null,
+                    rs.getLong("metadata_version"),rs.getLong("authoring_revision"),rs.getTimestamp("deleted_at")!=null,
+                    rs.getString("cefr")==null?"UNKNOWN":rs.getString("cefr"),rs.getString("activities")==null?List.of():mapper.readValue(rs.getString("activities"),mapper.getTypeFactory().constructCollectionType(List.class,String.class)),rs.getBoolean("processing"),rs.getBoolean("ai_failed")));
     if (items.isEmpty()) return new Page(items, total, page, size);
     var memberships =
         jdbc.query(
@@ -134,7 +147,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
                         byLesson.getOrDefault(item.id(), List.of()),
                         item.description(),
                         item.imageUrl(),
-                        item.visible(),item.channelVisible(),item.effectiveVisible()))
+                        item.visible(),item.channelVisible(),item.effectiveVisible(),item.version(),item.revision(),item.deleted(),item.cefr(),item.activities(),item.processing(),item.aiFailed()))
             .toList(),
         total,
         page,
@@ -238,7 +251,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
 
   @Override
   public Item get(UUID lesson) {
-    return query("", "", null, "", 0, 1, lesson).items().stream()
+    return query("", "ANY", null, "", 0, 1, lesson,"","","").items().stream()
         .findFirst()
         .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
   }
@@ -250,6 +263,11 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
     updateMetadata(lesson, title, current.description(), current.imageUrl(), categories);
   }
 
+  @Override public void assertVersion(UUID id,Long version,boolean deleted) {
+    var current=jdbc.query("SELECT m.version FROM lesson_metadata m JOIN lesson l ON l.id=m.lesson_id WHERE m.lesson_id=:id AND (m.deleted_at IS NOT NULL)=:deleted FOR UPDATE OF m,l",java.util.Map.of("id",id,"deleted",deleted),(rs,n)->rs.getLong(1));
+    if(current.isEmpty()) throw new ResourceNotFoundException("Lesson not found");
+    if(version==null || !version.equals(current.getFirst())) throw new StateConflictException("Lesson metadata changed; refresh before saving");
+  }
   private String lock(UUID lesson) {
     var rows =
         jdbc.query(
@@ -302,7 +320,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
     jdbc.update(
         "UPDATE lesson_metadata SET"
             + " title_automatic=CASE WHEN CAST(:title AS text) IS NOT NULL AND :title<>title THEN FALSE ELSE title_automatic END,"
-            + " title=COALESCE(:title,title),description=:description,image_url=:image,updated_at=now()"
+            + " title=COALESCE(:title,title),description=:description,image_url=:image,version=version+1,updated_at=now()"
             + " WHERE lesson_id=:id",
         args.addValue("title", title == null ? null : title.strip())
             .addValue("description", description)
@@ -317,8 +335,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
   @Override
   @Transactional
   public void deleteDraft(UUID lesson) {
-    if ("PUBLISHED".equals(lock(lesson)))
-      throw new StateConflictException("Unlist published lessons instead of deleting them");
+    boolean published="PUBLISHED".equals(lock(lesson));
     var linked =
         jdbc.query(
             """
@@ -335,12 +352,24 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
                 java.util.Set.of("QUEUED", "RUNNING", "RETRY_WAIT", "CANCEL_REQUESTED")
                     .contains(job.status().name())))
       throw new StateConflictException("Cancel active jobs before deleting this draft");
-    jdbc.update(
-        "DELETE FROM lesson_category_membership WHERE lesson_id=:id",
-        java.util.Map.of("id", lesson));
-    jdbc.update(
-        "UPDATE lesson_metadata SET deleted_at=now(),updated_at=now() WHERE lesson_id=:id",
-        java.util.Map.of("id", lesson));
+    if(published) {
+      jdbc.update("UPDATE lesson_metadata SET deleted_at=now(),visible=FALSE,version=version+1,updated_at=now() WHERE lesson_id=:id",java.util.Map.of("id",lesson));return;
+    }
+    var args=java.util.Map.of("id",lesson);
+    long history=jdbc.queryForObject("SELECT (SELECT count(*) FROM lesson_practice_attempt WHERE lesson_id=:id)+(SELECT count(*) FROM lesson_activity_progress WHERE activity_id IN (SELECT id FROM lesson_activity WHERE lesson_id=:id))",args,Long.class);
+    if(history>0) throw new StateConflictException("A lesson with learner history cannot be permanently deleted");
+    jdbc.update("DELETE FROM lesson_activity_sentence WHERE activity_id IN (SELECT id FROM lesson_activity WHERE lesson_id=:id)",args);
+    jdbc.update("DELETE FROM lesson_job_diagnostic WHERE job_id IN (SELECT job_id FROM lesson_authoring_job WHERE lesson_id=:id)",args);
+    jdbc.update("DELETE FROM lesson_authoring_job WHERE lesson_id=:id",args);
+    jdbc.update("DELETE FROM lesson_category_membership WHERE lesson_id=:id",args);
+    jdbc.update("DELETE FROM lesson_build_job WHERE lesson_id=:id",args);
+    jdbc.update("DELETE FROM lesson_authoring WHERE lesson_id=:id",args);
+    jdbc.update("DELETE FROM lesson_metadata WHERE lesson_id=:id",args);
+    jdbc.update("DELETE FROM lesson WHERE id=:id",args);
+  }
+  @Override @Transactional public void restore(UUID id) {
+    int rows=jdbc.update("UPDATE lesson_metadata SET deleted_at=NULL,visible=FALSE,version=version+1,updated_at=now() WHERE lesson_id=:id AND deleted_at IS NOT NULL",java.util.Map.of("id",id));
+    if(rows!=1) throw new ResourceNotFoundException("Deleted lesson not found");
   }
 
   @Override
@@ -349,7 +378,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
     if (!"PUBLISHED".equals(lock(lesson)))
       throw new StateConflictException("Only published lessons have visibility controls");
     jdbc.update(
-        "UPDATE lesson_metadata SET visible=:visible,updated_at=now() WHERE lesson_id=:id",
+        "UPDATE lesson_metadata SET visible=:visible,version=version+1,updated_at=now() WHERE lesson_id=:id",
         java.util.Map.of("id", lesson, "visible", visible));
   }
 }

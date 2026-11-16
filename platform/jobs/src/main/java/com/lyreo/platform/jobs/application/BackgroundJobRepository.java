@@ -11,7 +11,9 @@ public interface BackgroundJobRepository {
     UUID enqueue(String jobType, String ownerModule, UUID ownerReferenceId, int priority, int maxAttempts, String configSnapshotJson);
     List<BackgroundJob> claim(String workerId, int limit, Duration lease);
     Optional<BackgroundJob> findById(UUID id);
+    BackgroundJobService.Page list(java.util.Set<com.lyreo.platform.jobs.domain.BackgroundJobStatus> statuses, String type, int page, int size);
     Optional<BackgroundJob> latest(String type, String ownerModule, UUID ownerReferenceId);
+    default List<UUID> matchingIds(String type,String ownerModule,java.util.Set<com.lyreo.platform.jobs.domain.BackgroundJobStatus> statuses) {return List.of();}
     CancellationResult requestCancellation(UUID id);
     boolean isCancellationRequested(UUID id);
 

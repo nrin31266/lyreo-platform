@@ -39,6 +39,8 @@ class LessonResetIT {
                       VALUES('10000000-0000-0000-0000-000000000001',0,'10000000-0000-0000-0000-000000000003');
                     INSERT INTO lesson_authoring_job(job_id,lesson_id,operation,transcript_revision)
                       VALUES('10000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','PREPARE',0);
+                    INSERT INTO lesson_job_diagnostic(id,job_id,payload)
+                      VALUES(gen_random_uuid(),'10000000-0000-0000-0000-000000000003','{"output":"private diagnostic"}');
                     INSERT INTO lesson_sentence(id,lesson_id,position,text,audio_start_ms,audio_end_ms)
                       VALUES('10000000-0000-0000-0000-000000000009','10000000-0000-0000-0000-000000000001',0,'We learn.',0,1000);
                     INSERT INTO lesson_word_timestamp(id,sentence_id,position,surface_text,start_ms,end_ms)
@@ -79,6 +81,7 @@ class LessonResetIT {
                 String reset=Files.readString(Path.of("../../infra/postgres/reset-lessons.sql"));
                 assertThatThrownBy(()->sql.execute(reset)).hasMessageContaining("active lesson jobs");sql.execute("ROLLBACK");
                 assertThat(count(sql,"lesson")).isEqualTo(1);
+                assertThat(count(sql,"lesson_job_diagnostic")).isEqualTo(1);
                 sql.execute("UPDATE background_job SET status='CANCELLED' WHERE job_type='LESSON_AUTHORING'");
                 sql.execute("UPDATE vocabulary_card SET source_context_id='10000000-0000-0000-0000-000000000001',source_context_type='LESSON'");
                 assertThatThrownBy(()->sql.execute(reset)).hasMessageContaining("Detach curriculum or vocabulary");sql.execute("ROLLBACK");
@@ -88,6 +91,7 @@ class LessonResetIT {
                 sql.execute(reset);
                 for(String table:kept) assertThat(count(sql,table)).as(table).isEqualTo(before.get(table));
                 assertThat(count(sql,"lesson")).isZero();assertThat(count(sql,"lesson_metadata")).isZero();assertThat(count(sql,"lesson_authoring_job")).isZero();
+                assertThat(count(sql,"lesson_job_diagnostic")).isZero();
                 assertThat(count(sql,"lesson_sentence")).isZero();assertThat(count(sql,"lesson_activity")).isZero();assertThat(count(sql,"lesson_progress")).isZero();
                 assertThat(count(sql,"speech_attempt")).isEqualTo(1);assertThat(count(sql,"background_job")).isEqualTo(1);
                 try(var result=sql.executeQuery("SELECT count(*) FROM pg_trigger WHERE tgname LIKE 'lesson%published_guard' AND tgenabled='D'")) {result.next();assertThat(result.getLong(1)).isZero();}

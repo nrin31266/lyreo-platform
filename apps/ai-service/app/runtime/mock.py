@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import re
 
 from ..schemas import ExecuteRequest, ExecuteResponse
 
@@ -121,7 +122,11 @@ class MockRuntime:
         schema = request.options.get("response_schema")
         sentences = request.input.get("sentences") or []
 
-        if schema == "lesson_authoring_v2":
+        if schema == "lesson_content_v1":
+            rows = [(int(i), text) for i, text in re.findall(r"^(\d+)\|(.*)$", request.prompt or "", re.M)]
+            structured = {"tr": [[i, f"[mock] {text}"] for i, text in rows],
+                          "v": [], "g": [], "d": [], "s": [], "m": ["UNKNOWN", "UNKNOWN"]}
+        elif schema == "lesson_authoring_v2":
             properties = request.options.get("json_schema", {}).get("properties", {})
             structured = {key: [] for key in properties}
             structured["s"] = []

@@ -39,4 +39,14 @@ Calls need timeout/resilience and cancellation check before business commit. Cor
 errors; raw provider details live only in protected logs/artifacts. Credentials are encrypted in
 Core DB, forwarded only for the selected internal call, never persisted/logged by FastAPI.
 
+On upstream HTTP errors, FastAPI retains `provider_status` (the original HTTP status, even when
+the internal response is normalized to 502) and an optional `provider_message` extracted only from
+the standard JSON `error.message`/`error`/`message` string. Bodies over 64 KiB, malformed JSON and HTML are
+omitted. Messages are redacted before truncation to 2,048 characters: actual forwarded credentials,
+labelled secrets, URLs and identifiable request/prompt echoes are removed; arbitrary error fields
+and headers are never forwarded. Core allowlists and redacts these fields again, carries them
+through each invocation observer and stores them only in the existing Admin-only diagnostic
+artifact, including failed attempts followed by successful fallback. Public errors and retry/fallback
+classification stay generic. Historical jobs cannot recover details that were not recorded.
+
 Raw result is audit/debug; PostgreSQL normalized state is query/workflow truth. Mock execution does not certify live model quality, latency, cost, or provider compatibility.

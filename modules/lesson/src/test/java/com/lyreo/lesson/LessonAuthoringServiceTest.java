@@ -17,6 +17,44 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class LessonAuthoringServiceTest {
+    @Test void manualNotesDoNotConsumeTheAutomaticGenerationBudget() {
+        lesson.options=new com.lyreo.lesson.domain.authoring.AuthoringOptions(java.util.Set.of(),java.util.Set.of("LEXICAL","GRAMMAR"),"vi-VN","CUSTOM",0,0,"DISABLED","US");
+        var sentence=lesson.sentences.getFirst();
+        var note=com.lyreo.lesson.domain.authoring.AuthoringContent.annotation(sentence,"learn","Học",1,"LEXICAL");
+        service.saveContent(lesson.id,5,sentence.id,new LessonAuthoringService.ContentInput(null,null,false,List.of(note),List.of(),false,false));
+        assertThat(sentence.vocabulary).containsExactly(note);
+        assertThat(sentence.manualFields).contains("LEXICAL");
+        verifyNoInteractions(jobs);
+    }
+    @Test void partialManualEditLeavesOtherMissingFeaturesAvailableForGeneration() {
+        var sentence=lesson.sentences.getFirst();
+        service.saveContent(lesson.id,5,sentence.id,new LessonAuthoringService.ContentInput("Bản sửa",null,false,List.of(),List.of(),false,false));
+        assertThat(sentence.manualFields).containsExactly("TRANSLATION");
+        assertThat(com.lyreo.lesson.domain.authoring.AuthoringContent.needed(lesson)).isTrue();
+    }
+    @Test void manualIpaSurvivesTextEditsButNeedsExplicitReviewAgain() {
+        var sentence=lesson.sentences.getFirst();
+        sentence.ipa="reference";sentence.manualFields.add("IPA");
+        service.transcript(lesson.id,5,List.of(new LessonAuthoringService.SentenceInput(sentence.id,"We teach.",null)));
+        assertThat(lesson.sentences.getFirst().ipa).isEqualTo("reference");
+        assertThat(com.lyreo.lesson.domain.authoring.AuthoringContent.current(lesson,0,"IPA")).isFalse();
+        verifyNoInteractions(jobs);
+    }
+    private AuthoringSentence lessonSentence() {return lesson.sentences.getFirst();}
+    @Test void disabledContentCanBeReviewedWithoutAiAndOptionsDoNotEnqueue() {
+        service.contentOptions(lesson.id,5,new com.lyreo.lesson.domain.authoring.AuthoringOptions(java.util.Set.of(),java.util.Set.of(),"vi-VN","AUTO",20,8,"DISABLED","US","LOCAL"));
+        assertThat(service.reviewContent(lesson.id,5).semanticRevision).isNull();
+        verifyNoInteractions(jobs);
+    }
+    @Test void contentReviewDoesNotPretendThatWarningsWereChecked() {
+        var sentence=lesson.sentences.getFirst();
+        for(String feature:com.lyreo.lesson.domain.authoring.AuthoringContent.features(lesson.options))
+            sentence.contentKeys.put(feature,com.lyreo.lesson.domain.authoring.AuthoringContent.key(lesson,0,feature));
+        sentence.translation="Chúng ta học.";sentence.ipa="reference";sentence.ipaNeedsReview=true;
+        assertThat(service.reviewContent(lesson.id,5).semanticRevision).isNull();
+        sentence.ipaNeedsReview=false;
+        assertThat(service.reviewContent(lesson.id,5).semanticRevision).isNull();
+    }
     private final AuthoringRepository repository=mock(AuthoringRepository.class);
     private final BackgroundJobService jobs=mock(BackgroundJobService.class);
     private final LessonAuthoringService service=new LessonAuthoringService(repository,mock(AuthoringSourcePort.class),jobs);
@@ -115,6 +153,18 @@ class LessonAuthoringServiceTest {
         service.transcript(lesson.id,5,List.of(new LessonAuthoringService.SentenceInput(first.id,"We teach. Practice helps.","LEARN")));
         assertThat(LessonAuthoringService.alignmentSegments(lesson)).containsExactly(
             java.util.Map.of("text","We teach. Practice helps.","start_ms",0L,"end_ms",900L));
+    }
+    @Test void sttWindowSeamInsideSentenceUsesOriginalCompleteWindows() {
+        lesson.endMs=230_000;
+        lesson.sentences=AuthoringText.split("We learn every day. Practice helps.");
+        List<java.util.Map<String,Object>> segments=List.of(java.util.Map.of("text","We learn every","start_ms",0L,"end_ms",115_000L),
+            java.util.Map.of("text","day. Practice helps.","start_ms",115_000L,"end_ms",230_000L));
+        lesson.timingEvidence=java.util.Map.of("segments",segments);
+        AuthoringText.seedCoarse(lesson.sentences,lesson.timingEvidence);
+        assertThat(lesson.sentences.getFirst().coarseEndMs).isEqualTo(230_000L);
+        assertThat(LessonAuthoringService.alignmentSegments(lesson)).containsExactlyElementsOf(segments);
+        lesson.sentences.getFirst().text="We teach every day.";
+        assertThatThrownBy(()->LessonAuthoringService.alignmentSegments(lesson)).hasMessageContaining("safe alignment window");
     }
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(booleans={true,false})

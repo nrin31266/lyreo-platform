@@ -20,6 +20,7 @@ export type Channel = {
   visible: boolean;
 };
 export type LessonItem = {
+  version?: number; revision?: number; deleted?: boolean; cefr?: string; activities?: string[]; processing?: boolean; aiFailed?: boolean;
   id: string;
   title: string;
   sourceType: string;
@@ -76,7 +77,7 @@ export const fetchCategories = (signal?: AbortSignal) =>
   api<Category[]>(`${base}/lesson-categories`, { signal });
 export const fetchChannels = (signal?: AbortSignal) =>
   api<Channel[]>(`${base}/lesson-channels`, { signal });
-export const saveMetadata = (id: string, payload: Metadata) =>
+export const saveMetadata = (id: string, payload: Metadata & {version?: number}) =>
   api<void>(`${base}/lessons/${id}/metadata`, {
     method: "PUT",
     body: JSON.stringify(payload),
@@ -88,12 +89,12 @@ export const saveCategory = (name: string, id?: string, translations?: Record<st
   });
 export const deleteCategory = (id: string) =>
   api<void>(`${base}/lesson-categories/${id}`, { method: "DELETE" });
-export const deleteDraft = (id: string) =>
-  api<void>(`${base}/lessons/${id}`, { method: "DELETE" });
-export const setVisibility = (id: string, visible: boolean) =>
+export const deleteDraft = (id: string, version?: number) =>
+  api<void>(`${base}/lessons/${id}?version=${version ?? 0}`, { method: "DELETE" });
+export const setVisibility = (id: string, visible: boolean, version?: number) =>
   api<void>(`${base}/lessons/${id}/visibility`, {
     method: "PUT",
-    body: JSON.stringify({ visible }),
+    body: JSON.stringify({ visible, version: version ?? 0 }),
   });
 export const syncChannels = (channelIds: string[]) =>
   api<{ jobId: string }>(`${base}/lesson-channels/sync`, {
@@ -103,3 +104,5 @@ export const syncChannels = (channelIds: string[]) =>
 
 export const fetchSyncConfiguration = (signal?: AbortSignal) => api<{ configured: boolean }>(`${base}/lesson-channels/sync-configuration`, { signal });
 export const setChannelVisibility = (id: string, visible: boolean) => api<void>(`${base}/lesson-channels/${encodeURIComponent(id)}/visibility`, { method: 'PUT', body: JSON.stringify({ visible }) });
+
+export const restoreLesson = (id: string, version?: number) => api<void>(`${base}/lessons/${id}/restore`, {method: "POST",body: JSON.stringify({version: version ?? 0})});

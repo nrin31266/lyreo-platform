@@ -43,7 +43,8 @@ export function LessonDetailPage() {
         retry={() => void metadata.refetch()}
       />
     );
-  if (metadata.data.authoring && metadata.data.status !== "PUBLISHED")
+  if (metadata.data.deleted) return <DeletedLesson id={lessonId!} title={metadata.data.title} version={metadata.data.version} />;
+  if (metadata.data.authoring && !metadata.data.deleted)
     return <LessonBuilderPage />;
   return <PublishedLesson id={lessonId!} />;
 }
@@ -71,7 +72,7 @@ function PublishedLesson({ id }: { id: string }) {
     enabled: !lesson.authoring,
   });
   const visibility = useMutation({
-    mutationFn: () => setVisibility(id, !lesson.visible),
+    mutationFn: () => setVisibility(id, !lesson.visible,lesson.version),
     onSuccess: async () => {
       setConfirm(false);
       await client.invalidateQueries({ queryKey: catalogKeys.all });
@@ -180,4 +181,9 @@ function PublishedLesson({ id }: { id: string }) {
       </Dialog>
     </section>
   );
+}
+
+function DeletedLesson({id,title,version}:{id:string;title:string;version?:number}) {
+ const {t}=useTranslation('admin'),client=useQueryClient();const [error,setError]=useState<unknown>();
+ return <section className="grid gap-4"><Link to="/lessons?status=DELETED">{t('catalog.lessons')}</Link><h1>{title}</h1><Badge variant="destructive">{t('finish.deleted')}</Badge><CatalogError error={error}/><Button onClick={()=>{void import('./catalog.api').then(api=>api.restoreLesson(id,version)).then(()=>client.invalidateQueries({queryKey:catalogKeys.all})).catch(setError);}}>{t('finish.restore')}</Button></section>;
 }
