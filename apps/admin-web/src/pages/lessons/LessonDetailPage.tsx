@@ -150,7 +150,7 @@ function PublishedLesson({ id }: { id: string }) {
         </Tabs>
       </div>
       <Sheet open={editing} onOpenChange={setEditing}>
-        <SheetContent className="overflow-auto p-4">
+        <SheetContent className="min-h-0 overflow-hidden p-4">
           <SheetHeader>
             <SheetTitle>{t("catalog.editMetadata")}</SheetTitle>
             <SheetDescription>{t("catalog.metadataHelp")}</SheetDescription>

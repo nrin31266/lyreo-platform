@@ -48,10 +48,18 @@ groups the current step’s submissions. Loading states use skeletons.
 `/lessons/:lessonId` resumes drafts or opens the separate published view. Categories and source
 channels share `/lessons/organization` with URL-addressable tabs and independent queries. Old
 category/channel routes redirect to the corresponding tab. Filters remain in the URL.
+Category creation/editing opens in a dialog, keeping the list position on close. Category pickers in
+source creation, draft settings and lesson metadata share a searchable, bounded scrolling list;
+filtering preserves selections. Metadata dialogs keep Save/Cancel visible while their fields scroll.
+Catalog tables align row actions at the right: text buttons open/continue lessons, icons edit,
+synchronize, inspect jobs or delete with confirmation. Lifecycle badges distinguish drafts (warning),
+published/synchronized (success), processing (neutral) and failures/deletion (destructive); visibility
+is a separate labeled switch. Lesson rows show CEFR, duration and activities when available.
 
 Metadata (display title, description, image URL and categories) can change independently of published
-learning content. Draft deletion is soft and requires stopped jobs. Published lessons can be unlisted
-and relisted; learning history is preserved. Source thumbnails and channel avatars have fallbacks.
+learning content. Inactive history-free drafts delete permanently; published lessons soft-delete
+and restore hidden. Published lessons can be unlisted and relisted; learning history is preserved.
+Source thumbnails and channel avatars have fallbacks.
 Explicit channel metadata sync supports up to 50 selected IDs through Core jobs; configure the
 server-only `YOUTUBE_DATA_API_KEY` to enable it. No automatic video import is performed.
 
