@@ -26,6 +26,7 @@ vi.mock("./catalog.api", async (original) => ({
   syncChannels: vi.fn(),
   fetchSyncConfiguration: vi.fn(),
   setChannelVisibility: vi.fn(),
+  deleteChannel: vi.fn(),
 }));
 let client: QueryClient;
 beforeEach(async () => {
@@ -113,6 +114,7 @@ it("selects channels for one explicit synchronization request", async () => {
       id: "UCabcdefghijklmnopqrstuv",
       title: "Channel",
       lessonCount: 2,
+      linkedLessonCount: 2,
       avatarUrl: null,
       syncedAt: null,
       syncError: null,
@@ -150,7 +152,7 @@ it("explains missing synchronization configuration and disables sync", async () 
   expect(api.syncChannels).not.toHaveBeenCalled();
 });
 it("retries the same synchronization instead of just reloading the list", async () => {
-  vi.mocked(api.fetchChannels).mockResolvedValue([{id:'UCabcdefghijklmnopqrstuv',title:'Channel',lessonCount:1,avatarUrl:null,syncedAt:null,syncError:null,syncJobId:null,syncStatus:null,visible:true}]);
+  vi.mocked(api.fetchChannels).mockResolvedValue([{id:'UCabcdefghijklmnopqrstuv',title:'Channel',lessonCount:1,linkedLessonCount:1,avatarUrl:null,syncedAt:null,syncError:null,syncJobId:null,syncStatus:null,visible:true}]);
   vi.mocked(api.syncChannels).mockRejectedValueOnce(new Error('Sync failed')).mockResolvedValueOnce({jobId:'retry-job'});
   show(<ChannelsPage />);
   fireEvent.click(await screen.findByRole('button', {name: 'Sync metadata'}));
@@ -169,4 +171,33 @@ it("localizes one category ID and edits Vietnamese without dropping other transl
   await userEvent.click(screen.getByRole('button',{name:i18n.t('admin:catalog.save')}));
   await waitFor(()=>expect(api.saveCategory).toHaveBeenCalledWith('Travel','travel',{vi:'Đi du lịch',fr:'Voyage'}));
   expect(api.categoryName({id:'travel',name:'Travel',lessonCount:0},'vi')).toBe('Travel');
+});
+
+it("confirms empty channel deletion, keeps failures open and clears its selection on success", async () => {
+  vi.mocked(api.fetchChannels).mockResolvedValue([{id:'empty',title:'Unused channel',lessonCount:0,linkedLessonCount:0,avatarUrl:null,syncedAt:null,syncError:null,syncJobId:null,syncStatus:null,visible:true}]);
+  vi.mocked(api.deleteChannel).mockRejectedValueOnce(new Error('Network failed')).mockResolvedValueOnce();
+  show(<ChannelsPage />);
+  await userEvent.click(await screen.findByRole('checkbox',{name:'Select Unused channel'}));
+  await userEvent.click(screen.getByRole('button',{name:'Delete Unused channel'}));
+  expect(api.deleteChannel).not.toHaveBeenCalled();
+  expect(screen.getByRole('dialog')).toHaveTextContent('Unused channel');
+  await userEvent.click(screen.getByRole('button',{name:'Delete channel'}));
+  await screen.findByRole('alert');
+  expect(screen.getByRole('dialog')).toBeVisible();
+  await userEvent.click(screen.getByRole('button',{name:'Delete channel'}));
+  await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(api.deleteChannel).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole('button',{name:'Sync selected (0)'})).toBeDisabled();
+});
+it("prevents deleting channels with even deleted lessons or active synchronization", async () => {
+  const channel={avatarUrl:null,syncedAt:null,syncError:null,syncJobId:null,syncStatus:null,visible:true,lessonCount:0};
+  vi.mocked(api.fetchChannels).mockResolvedValue([
+    {...channel,id:'used',title:'Used',linkedLessonCount:1},
+    {...channel,id:'busy',title:'Busy',linkedLessonCount:0,syncStatus:'RUNNING'},
+  ]);
+  show(<ChannelsPage />);
+  expect(await screen.findByRole('button',{name:'Delete Used'})).toBeDisabled();
+  expect(screen.getByRole('button',{name:'Delete Busy'})).toBeDisabled();
+  expect(screen.getByRole('button',{name:'Delete Used'})).toHaveAttribute('title',expect.stringContaining('Hide'));
+  expect(api.deleteChannel).not.toHaveBeenCalled();
 });

@@ -448,6 +448,13 @@
     "hiddenIndividually": "Ẩn riêng",
     "syncNotConfigured": "Máy chủ chưa bật đồng bộ kênh. Cần quản trị viên cấu hình đồng bộ metadata YouTube.",
     "channelVisibilityHelp": "Ẩn kênh sẽ ẩn mọi bài thuộc kênh. Bật lại vẫn giữ những bài đã ẩn riêng.",
+    "deleteChannel": "Xoá kênh",
+    "deleteChannelNamed": "Xoá {{title}}",
+    "deleting": "Đang xoá…",
+    "channelDeleteHelp": "Chỉ xoá được kênh trống. Kênh có bài, kể cả bài đã xoá, có thể dùng Ẩn.",
+    "channelDeleteInUse": "Kênh còn bài học, kể cả bài đã xoá. Hãy dùng Ẩn.",
+    "channelDeleteSyncing": "Đợi đồng bộ hoàn tất trước khi xoá.",
+    "channelDeleteConfirm": "Xoá “{{title}}” khỏi danh sách kênh nguồn? Cache audio/video vẫn được giữ. Tạo bài mới từ kênh này sẽ thêm lại kênh.",
     "categoryDefaultName": "Tên mặc định (tiếng Anh)",
     "categoryVietnameseName": "Tên tiếng Việt (tuỳ chọn)"
   },

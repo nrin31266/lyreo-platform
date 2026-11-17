@@ -92,7 +92,7 @@ History shows saved checkpoint coverage, note/selection counts, grouped
 model calls and separate queue/call duration before Debug is opened. LLM API calls/tokens are
 separate from audio/IPA calls; missing usage stays unknown. New calls carry capability, invocation
 ID, route outcome and an explicit fallback flag. Worker attempts are separate from route calls.
-V015 stores versioned per-job result checkpoints in the same fenced transaction as draft writes;
+V012 stores versioned per-job result checkpoints in the same fenced transaction as draft writes;
 partial checkpoints survive failure, and later edits cannot rewrite old results. Old jobs have no
 invented result summary or inferred fallback. The development lesson reset also removes their
 private diagnostic records before deleting jobs.
@@ -100,7 +100,7 @@ private diagnostic records before deleting jobs.
 PREPARE/TTS → ALIGN → CONTENT enqueue happens with checkpoint completion under the same lease,
 cancellation and revision fence. Completed input recovery is idempotent. Initial generation never
 sets human-review revisions. Legacy SEMANTIC/IPA jobs stay retired; explicit writes normalize old
-unsupported options. GET does not persist normalization. The consolidated V015 includes CONTENT/profile metadata, auto-continuation, publisher, expiring diagnostics, metadata versions and job results; published content guards stay intact. See [D-030](../DECISIONS.md#d-030--consolidate-unreleased-authoring-admin-migrations-2026-11-17).
+unsupported options. GET does not persist normalization. The consolidated V012 includes CONTENT/profile metadata, auto-continuation, publisher, expiring diagnostics, metadata versions and job results; published content guards stay intact. See [D-031](../DECISIONS.md#d-031--number-the-consolidated-admin-migration-contiguously-2026-11-17).
 
 Profile estimates use word-weighted CEFR median and a 60% majority for type; otherwise MIXED or
 UNKNOWN. Admin overrides are protected. IPA uses eSpeak raw/display fields and versions. Cloze
@@ -187,7 +187,10 @@ Catalog includes Deleted restoration and source/CEFR/activity/AI-failure filters
 YouTube channel metadata sync uses `YOUTUBE_DATA_API_KEY` in Core. Selected channel IDs become one
 durable job; partial/missing responses retain good values and report per-channel errors. Quota waits
 durably, recovery skips completed channel checkpoints, and cancellation/lease fencing protects writes.
-The capability stores external image URLs, not downloaded image objects.
+The capability stores external image URLs, not downloaded image objects. Empty channels also have a
+named delete confirmation; backend guards include deleted lessons, active synchronization and
+concurrent draft creation. Shared sources/media remain reusable; see the channel deletion policy in
+[FR-LSN-009](../requirements/lesson.md#fr-lsn-009--admin-catalog-and-classification).
 
 ## Dependency and invalidation matrix
 

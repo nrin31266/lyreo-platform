@@ -448,6 +448,13 @@
     "hiddenIndividually": "Hidden individually",
     "syncNotConfigured": "Channel synchronization is not enabled on this server. Ask the operator to configure YouTube metadata synchronization.",
     "channelVisibilityHelp": "Hiding a channel hides all its lessons. Showing it again keeps individually hidden lessons hidden.",
+    "deleteChannel": "Delete channel",
+    "deleteChannelNamed": "Delete {{title}}",
+    "deleting": "Deleting…",
+    "channelDeleteHelp": "Only empty channels can be deleted. Channels with lessons, including deleted lessons, can be hidden instead.",
+    "channelDeleteInUse": "This channel has lessons, including deleted lessons. Hide it instead.",
+    "channelDeleteSyncing": "Wait for synchronization to finish before deleting.",
+    "channelDeleteConfirm": "Delete “{{title}}” from source channels? Cached source audio/video will be kept. Creating another lesson from this channel will add it again.",
     "categoryDefaultName": "Default name (English)",
     "categoryVietnameseName": "Vietnamese name (optional)"
   },

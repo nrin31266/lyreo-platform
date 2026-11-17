@@ -251,7 +251,7 @@ separation of the visual foundations described in D-025/D-028; their other polic
 
 ## D-030 — Consolidate unreleased authoring Admin migrations (2026-11-17)
 
-Status: Accepted by the owner.
+Status: Superseded in numbering/history handling by D-031; consolidation scope remains accepted.
 
 V012–V015 belong to one uncommitted/unreleased Admin authoring phase. Consolidate their SQL in
 original order into V015, retaining the highest version so future migrations start at V016 and
@@ -262,3 +262,18 @@ exact history and the completed schema, back up its history and use Flyway repai
 the consolidated V015 and mark V012–V014 deleted; preserve all application data. Validate history
 and check for pending migrations before restarting Core. This narrow owner-authorized development
 exception does not apply to deployed databases, partial histories or later migration changes.
+
+
+## D-031 — Number the consolidated Admin migration contiguously (2026-11-17)
+
+Status: Accepted by the owner; supersedes D-030 numbering/history handling.
+
+The owner requests contiguous numbering after V011 for this unreleased, local-only Admin phase.
+Rename the consolidated V015 to V012 without changing its SQL; fresh databases apply V001–V012
+and future migrations append from V013. V001–V011 remain unchanged.
+
+For the one verified local development database already repaired under D-030, back up Flyway
+history, verify the consolidated checksum and complete schema, and replace only that phase's
+original/deleted history entries with one successful V012 entry. Validate Flyway and Hibernate
+before resuming development. Preserve all application data. This one-time exception does not
+authorize automatic repair, rewriting deployed databases or changing partially applied histories.

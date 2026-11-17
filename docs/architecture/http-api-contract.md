@@ -37,7 +37,10 @@ Admin-only SSE event/snapshot boundary are owned by the [jobs protocol](backgrou
 ## Admin classification and source media
 
 All endpoints below require ADMIN. `/api/v1/admin/lesson-channels/sync-configuration` returns
-`{configured: boolean}` only; no credential is exposed. Channel listing includes `visible`.
+`{configured: boolean}` only; no credential is exposed. Channel listing includes `visible`, `lessonCount` (excluding deleted lessons) and
+`linkedLessonCount` (including them). `DELETE /api/v1/admin/lesson-channels/{id}` returns 204 after
+removing an empty channel, 404 if absent, or 409 if lessons or active synchronization prevent deletion.
+It preserves source/media caches and job history; see [FR-LSN-009](../requirements/lesson.md#fr-lsn-009--admin-catalog-and-classification).
 `PUT /api/v1/admin/lesson-channels/{id}/visibility` accepts `{visible: boolean}` independently of
 lesson visibility. Catalog items retain `visible` for the individual setting and add `channelVisible`
 and `effectiveVisible`; the latter also requires publication. Categories remain CRUD only.

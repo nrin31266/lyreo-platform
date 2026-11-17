@@ -94,6 +94,12 @@ public class LessonCatalogController {
     catalog.channelVisibility(id, request.visible());
   }
 
+  @DeleteMapping("/lesson-channels/{id}")
+  @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+  public void deleteChannel(@PathVariable String id) {
+    catalog.deleteChannel(id);
+  }
+
   public record Visibility(boolean visible,Long version) {public Visibility(boolean visible) {this(visible,null);}}
 
   public record Metadata(
