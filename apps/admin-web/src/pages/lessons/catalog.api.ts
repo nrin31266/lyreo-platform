@@ -12,6 +12,7 @@ export type Channel = {
   id: string;
   title: string;
   lessonCount: number;
+  linkedLessonCount: number;
   avatarUrl: string | null;
   syncedAt: string | null;
   syncError: string | null;
@@ -104,5 +105,6 @@ export const syncChannels = (channelIds: string[]) =>
 
 export const fetchSyncConfiguration = (signal?: AbortSignal) => api<{ configured: boolean }>(`${base}/lesson-channels/sync-configuration`, { signal });
 export const setChannelVisibility = (id: string, visible: boolean) => api<void>(`${base}/lesson-channels/${encodeURIComponent(id)}/visibility`, { method: 'PUT', body: JSON.stringify({ visible }) });
+export const deleteChannel = (id: string) => api<void>(`${base}/lesson-channels/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 export const restoreLesson = (id: string, version?: number) => api<void>(`${base}/lessons/${id}/restore`, {method: "POST",body: JSON.stringify({version: version ?? 0})});

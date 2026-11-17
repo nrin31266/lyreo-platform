@@ -283,6 +283,11 @@ be synchronized explicitly for one channel or a selected batch of at most 50 via
 Missing metadata or provider errors must preserve previously valid metadata. Credentials stay in
 Core configuration; unconfigured synchronization reports a safe actionable conflict. This does not
 import videos or create lessons automatically.
+Admin may delete a source channel only when it has no linked lessons, including soft-deleted lessons,
+and no active synchronization job. A named confirmation explains that deletion removes channel
+metadata only; cached sources/media and job history remain. Channels with lessons use Hide instead.
+The backend serializes deletion with synchronization and new lesson creation. Explicitly creating a
+lesson from a cached source may recreate its missing channel metadata.
 
 ### FR-LSN-011 — Text and uploaded Audio authoring
 

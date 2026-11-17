@@ -71,6 +71,13 @@ public final class JdbcAuthoringRepository implements AuthoringRepository {
     }
     @Override public void create(AuthoringLesson lesson) {
         var params=params(lesson);
+        // Recreate cached channel metadata and serialize lesson creation with channel deletion.
+        if (lesson.videoId != null) jdbc.update("""
+            INSERT INTO lesson_youtube_channel(channel_id,title)
+            SELECT channel_id,COALESCE(NULLIF(channel_title,''),channel_id)
+            FROM lesson_youtube_source WHERE video_id=:video AND channel_id IS NOT NULL AND channel_id<>''
+            ON CONFLICT(channel_id) DO UPDATE SET channel_id=excluded.channel_id
+            """,params);
         jdbc.update("""
             INSERT INTO lesson(id,title,source_type,source_reference,status)
             VALUES(:id,:title,:sourceType,:reference,'TRANSCRIPT_REVIEW')

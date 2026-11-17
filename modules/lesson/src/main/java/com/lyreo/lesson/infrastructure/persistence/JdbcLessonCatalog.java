@@ -218,7 +218,10 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
         SELECT c.*,(SELECT count(*) FROM lesson_authoring a
           JOIN lesson_youtube_source s ON s.video_id=a.video_id
           JOIN lesson_metadata m ON m.lesson_id=a.lesson_id AND m.deleted_at IS NULL
-          WHERE s.channel_id=c.channel_id) AS lesson_count
+          WHERE s.channel_id=c.channel_id) AS lesson_count,
+          (SELECT count(*) FROM lesson_authoring a
+          JOIN lesson_youtube_source s ON s.video_id=a.video_id
+          WHERE s.channel_id=c.channel_id) AS linked_lesson_count
         FROM lesson_youtube_channel c ORDER BY lower(c.title)
         """,
         new MapSqlParameterSource(),
@@ -229,6 +232,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
               rs.getString("channel_id"),
               rs.getString("title"),
               rs.getLong("lesson_count"),
+              rs.getLong("linked_lesson_count"),
               rs.getString("avatar_url"),
               rs.getTimestamp("synced_at") == null
                   ? null
@@ -247,6 +251,27 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
     if (jdbc.update("UPDATE lesson_youtube_channel SET visible=:visible WHERE channel_id=:id",
         java.util.Map.of("id",channelId,"visible",visible)) == 0)
       throw new ResourceNotFoundException("Channel not found");
+  }
+
+  @Override
+  @Transactional
+  public void deleteChannel(String channelId) {
+    var args = java.util.Map.of("id", channelId);
+    var channels = jdbc.query(
+        "SELECT sync_job_id FROM lesson_youtube_channel WHERE channel_id=:id FOR UPDATE",
+        args, (rs, n) -> rs.getObject("sync_job_id", UUID.class));
+    if (channels.isEmpty()) throw new ResourceNotFoundException("Channel not found");
+    UUID syncJob = channels.getFirst();
+    if (syncJob != null && jobs.findById(syncJob).filter(job ->
+        java.util.Set.of("QUEUED", "RUNNING", "RETRY_WAIT", "CANCEL_REQUESTED")
+            .contains(job.status().name())).isPresent())
+      throw new StateConflictException("Wait for channel synchronization to finish before deleting");
+    if (jdbc.queryForObject("""
+        SELECT count(*) FROM lesson_authoring a
+        JOIN lesson_youtube_source s ON s.video_id=a.video_id WHERE s.channel_id=:id
+        """, args, Long.class) > 0)
+      throw new StateConflictException("Channel has lessons, including deleted lessons; hide it instead");
+    jdbc.update("DELETE FROM lesson_youtube_channel WHERE channel_id=:id", args);
   }
 
   @Override

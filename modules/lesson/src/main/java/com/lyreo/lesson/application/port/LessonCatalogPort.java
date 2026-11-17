@@ -33,12 +33,15 @@ public interface LessonCatalogPort {
 
   void channelVisibility(String channelId, boolean visible);
 
+  void deleteChannel(String channelId);
+
   record Category(UUID id, String name, long lessonCount, java.util.Map<String,String> translations) {}
 
   record Channel(
       String id,
       String title,
       long lessonCount,
+      long linkedLessonCount,
       String avatarUrl,
       Instant syncedAt,
       String syncError,

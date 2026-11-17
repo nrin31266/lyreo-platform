@@ -30,12 +30,12 @@ SRS/unrelated speech history, accounts, AI settings, categories, channels and al
 it requires the same `APPLY=1 CONFIRM=<actual_db>` and no application connections to execute.
 `make down-v` refuses volume deletion until `CONFIRM=lyreo-volumes`; that command also deletes Keycloak.
 Neither destructive command is needed for ordinary schema upgrades. Core applies appended migrations;
-V011 adds authoring titles/category translations; V015 consolidates this unreleased Admin authoring phase (content/profile metadata, continuation, diagnostics, metadata versions and job results).
+V011 adds authoring titles/category translations; V012 consolidates this unreleased Admin authoring phase (content/profile metadata, continuation, diagnostics, metadata versions and job results).
 
-The one-time V012–V015 development consolidation is recorded in [D-030](DECISIONS.md#d-030--consolidate-unreleased-authoring-admin-migrations-2026-11-17). Fresh databases apply the consolidated V015 after V011. Only the verified local development database that already applied all four original files was repaired; future migrations append from V016. This does not permit repairing deployed databases or partially applied old histories.
+The one-time development consolidation and contiguous renumbering are recorded in [D-030](DECISIONS.md#d-030--consolidate-unreleased-authoring-admin-migrations-2026-11-17) and [D-031](DECISIONS.md#d-031--number-the-consolidated-admin-migration-contiguously-2026-11-17). Fresh databases apply the consolidated V012 after V011; future migrations append from V013. Only the verified local development history was aligned, preserving application data. This exception does not permit rewriting deployed migrations or partially applied old histories.
 
 Development defaults live in [`infra/postgres/seed/dev.sql`](../infra/postgres/seed/dev.sql).
-After Core applies migrations, run `make seed-dev` once. It adds six stable categories with English
+After Core applies migrations, run `make seed-dev` once. It adds 24 stable categories with English
 names and Vietnamese translations. Rerunning skips existing IDs/names and preserves Admin edits.
 No automatic reseeding runs at startup. Large banks stay under the [import tools](DATA_PIPELINES.md).
 

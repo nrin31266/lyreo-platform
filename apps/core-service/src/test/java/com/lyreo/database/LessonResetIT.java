@@ -21,7 +21,7 @@ class LessonResetIT {
                 assertThat(count(sql,"lesson")).isEqualTo(1);
                 String seed=Files.readString(Path.of("../../infra/postgres/seed/dev.sql"));sql.execute(seed);
                 sql.execute("UPDATE lesson_category SET name='Custom travel',translations='{\"vi\":\"Tự sửa\"}' WHERE id='20000000-0000-0000-0000-000000000002'");
-                sql.execute(seed);assertThat(count(sql,"lesson_category")).isEqualTo(6);
+                sql.execute(seed);assertThat(count(sql,"lesson_category")).isEqualTo(24);
                 try(var result=sql.executeQuery("SELECT name,translations->>'vi' FROM lesson_category WHERE id='20000000-0000-0000-0000-000000000002'")) {
                     result.next();assertThat(result.getString(1)).isEqualTo("Custom travel");assertThat(result.getString(2)).isEqualTo("Tự sửa");
                 }

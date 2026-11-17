@@ -17,7 +17,8 @@ import { CatalogError, CatalogSkeleton, CatalogImage } from "./CatalogFeedback";
 import { catalogKeys } from "./catalog.queries";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
-import { fetchChannels, syncChannels, fetchSyncConfiguration, setChannelVisibility } from "./catalog.api";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { fetchChannels, syncChannels, fetchSyncConfiguration, setChannelVisibility, deleteChannel, type Channel } from "./catalog.api";
 const active = (status: string | null) =>
   !!status &&
   ["QUEUED", "RUNNING", "RETRY_WAIT", "CANCEL_REQUESTED"].includes(status);
@@ -25,6 +26,7 @@ export function ChannelsPage({ embedded = false }: { embedded?: boolean }) {
   const { t, i18n } = useTranslation("admin");
   const client = useQueryClient();
   const [selected, setSelected] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState<Channel>();
   const query = useQuery({
     queryKey: catalogKeys.channels,
     queryFn: ({ signal }) => fetchChannels(signal),
@@ -43,6 +45,15 @@ export function ChannelsPage({ embedded = false }: { embedded?: boolean }) {
       await client.invalidateQueries({ queryKey: catalogKeys.channels });
     },
   });
+  const deletion = useMutation({
+    mutationFn: deleteChannel,
+    onSuccess: async (_, id) => {
+      setDeleting(undefined);
+      setSelected((ids) => ids.filter((selectedId) => selectedId !== id));
+      await client.invalidateQueries({ queryKey: catalogKeys.all });
+    },
+  });
+  const mutating = mutation.isPending || deletion.isPending || visibility.isPending;
   return (
     <section className="grid gap-4">
       <div className="page-heading">
@@ -50,10 +61,11 @@ export function ChannelsPage({ embedded = false }: { embedded?: boolean }) {
           {!embedded && <h1>{t("catalog.channels")}</h1>}
           <p className="lead">{t("catalog.channelSyncHelp")}</p>
           <p className="text-sm text-muted-foreground">{t("catalog.channelVisibilityHelp")}</p>
+          <p className="text-sm text-muted-foreground">{t("catalog.channelDeleteHelp")}</p>
         </div>
         <Button
           disabled={
-            !configuration.data?.configured || !selected.length || selected.length > 50 || mutation.isPending
+            !configuration.data?.configured || !selected.length || selected.length > 50 || mutating || query.data?.some((c) => selected.includes(c.id) && active(c.syncStatus))
           }
           onClick={() => mutation.mutate(selected)}
         >
@@ -86,7 +98,7 @@ export function ChannelsPage({ embedded = false }: { embedded?: boolean }) {
                 <TableCell>
                   <Checkbox
                     aria-label={t("catalog.selectChannel", { title: c.title })}
-                    disabled={active(c.syncStatus)}
+                    disabled={mutating || active(c.syncStatus)}
                     checked={selected.includes(c.id)}
                     onCheckedChange={(checked) =>
                       setSelected((old) =>
@@ -124,12 +136,12 @@ export function ChannelsPage({ embedded = false }: { embedded?: boolean }) {
                 </TableCell>
                 <TableCell>
                   <Switch aria-label={t('catalog.channelVisibility', { title: c.title })} checked={c.visible}
-                    disabled={visibility.isPending} onCheckedChange={visible => visibility.mutate({ id: c.id, visible })} />
+                    disabled={mutating} onCheckedChange={visible => visibility.mutate({ id: c.id, visible })} />
                 </TableCell>
                 <TableCell>
                   <Button
                     variant="outline"
-                    disabled={!configuration.data?.configured || mutation.isPending || active(c.syncStatus)}
+                    disabled={!configuration.data?.configured || mutating || active(c.syncStatus)}
                     onClick={() => mutation.mutate([c.id])}
                   >
                     {t(
@@ -143,6 +155,15 @@ export function ChannelsPage({ embedded = false }: { embedded?: boolean }) {
                       </Link>
                     </Button>
                   )}
+                  <Button
+                    variant="ghost"
+                    aria-label={t("catalog.deleteChannelNamed", { title: c.title })}
+                    disabled={mutating || c.linkedLessonCount > 0 || active(c.syncStatus)}
+                    title={c.linkedLessonCount > 0 ? t("catalog.channelDeleteInUse") : active(c.syncStatus) ? t("catalog.channelDeleteSyncing") : undefined}
+                    onClick={() => { deletion.reset(); setDeleting(c); }}
+                  >
+                    {t("catalog.deleteChannel")}
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -153,6 +174,21 @@ export function ChannelsPage({ embedded = false }: { embedded?: boolean }) {
           <EmptyDescription>{t("catalog.empty")}</EmptyDescription>
         </Empty>
       )}
+      <Dialog open={!!deleting} onOpenChange={(open) => { if (!open && !deletion.isPending) setDeleting(undefined); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("catalog.deleteChannel")}</DialogTitle>
+            <DialogDescription>{t("catalog.channelDeleteConfirm", { title: deleting?.title })}</DialogDescription>
+          </DialogHeader>
+          <CatalogError error={deletion.error} />
+          <DialogFooter>
+            <Button variant="outline" disabled={deletion.isPending} onClick={() => setDeleting(undefined)}>{t("catalog.cancel")}</Button>
+            <Button variant="destructive" disabled={deletion.isPending} onClick={() => deleting && deletion.mutate(deleting.id)}>
+              {t(deletion.isPending ? "catalog.deleting" : "catalog.deleteChannel")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

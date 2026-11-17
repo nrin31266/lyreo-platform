@@ -47,8 +47,19 @@ class LessonCatalogAndPreviewControllerTest {
             assertThatThrownBy(()->context.getBean(com.lyreo.lesson.api.LessonMediaController.class).lessonAudio(UUID.randomUUID())).isInstanceOf(AccessDeniedException.class);
             assertThatThrownBy(()->context.getBean(com.lyreo.lesson.api.LessonMediaController.class).voices()).isInstanceOf(AccessDeniedException.class);
             assertThatThrownBy(()->context.getBean(com.lyreo.lesson.api.LessonMediaController.class).sample("af_heart")).isInstanceOf(AccessDeniedException.class);
+            assertThatThrownBy(()->context.getBean(LessonCatalogController.class).deleteChannel("channel")).isInstanceOf(AccessDeniedException.class);
             verifyNoInteractions(catalog,previews,context.getBean(com.lyreo.lesson.application.port.AuthoringMediaPort.class));
         } finally {SecurityContextHolder.clearContext();}
+    }
+    @Test void channelDeletionUsesAdminEndpointAndReportsConflicts() throws Exception {
+        var catalog=mock(LessonCatalogPort.class);
+        var mvc=MockMvcBuilders.standaloneSetup(new LessonCatalogController(catalog)).setControllerAdvice(new ApiExceptionHandler()).build();
+        mvc.perform(delete("/api/v1/admin/lesson-channels/empty")).andExpect(status().isNoContent());
+        verify(catalog).deleteChannel("empty");
+        doThrow(new com.lyreo.contracts.errors.StateConflictException("Channel has lessons; hide it instead")).when(catalog).deleteChannel("used");
+        mvc.perform(delete("/api/v1/admin/lesson-channels/used")).andExpect(status().isConflict());
+        doThrow(new com.lyreo.contracts.errors.ResourceNotFoundException("Channel not found")).when(catalog).deleteChannel("missing");
+        mvc.perform(delete("/api/v1/admin/lesson-channels/missing")).andExpect(status().isNotFound());
     }
     @Test void previewMediaSupportsByteRangesWithoutExposingStorageUrls() throws Exception {
         var previews=mock(SourcePreviewPort.class);UUID id=UUID.randomUUID();

@@ -643,6 +643,63 @@ class LessonAuthoringIT {
         catalog.visibility(first.id,true);assertThat(catalog.get(first.id).effectiveVisible()).isTrue();
         assertThat(practice.findDictationTarget(first.id,activity,first.sentences.getFirst().id)).isPresent();
     }
+    private String cachedChannel(String video) {
+        String channel="UC"+UUID.randomUUID().toString().replace("-", "").substring(0,22);
+        jdbc.update("INSERT INTO lesson_youtube_channel(channel_id,title) VALUES(?,'Delete channel')",channel);
+        jdbc.update("INSERT INTO lesson_youtube_source(video_id,title,duration_ms,embed_allowed,channel_id,channel_title) VALUES(?,'Source',10000,true,?,'Delete channel')",video,channel);
+        return channel;
+    }
+    @Test void deletingEmptyChannelKeepsCachedSourceAndNewDraftRecreatesMetadata() {
+        String video="deleteempty",channel=cachedChannel(video);
+        catalog.deleteChannel(channel);
+        assertThat(catalog.channels()).noneMatch(c->c.id().equals(channel));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_youtube_source WHERE video_id=?",Long.class,video)).isEqualTo(1);
+        assertThatThrownBy(()->catalog.deleteChannel(channel)).isInstanceOf(com.lyreo.contracts.errors.ResourceNotFoundException.class);
+        when(source.inspect(anyString())).thenReturn(new AuthoringSourcePort.SourceInfo(video,"Source",10000,true));
+        var created=service.create("Recreated","https://www.youtube.com/watch?v="+video,0,5000);
+        assertThat(catalog.get(created.lessonId()).channelId()).isEqualTo(channel);
+        assertThat(catalog.channels()).anyMatch(c->c.id().equals(channel) && c.linkedLessonCount()==1);
+        assertThatThrownBy(()->catalog.deleteChannel(channel)).isInstanceOf(com.lyreo.contracts.errors.StateConflictException.class);
+        jdbc.update("UPDATE lesson_metadata SET deleted_at=now() WHERE lesson_id=?",created.lessonId());
+        var row=catalog.channels().stream().filter(c->c.id().equals(channel)).findFirst().orElseThrow();
+        assertThat(row.lessonCount()).isZero();assertThat(row.linkedLessonCount()).isEqualTo(1);
+        assertThatThrownBy(()->catalog.deleteChannel(channel)).isInstanceOf(com.lyreo.contracts.errors.StateConflictException.class);
+    }
+    @Test void channelCannotBeDeletedDuringAnyActiveSyncState() {
+        String channel=cachedChannel("deletesync1");
+        UUID job=jobs.enqueue("YOUTUBE_CHANNEL_SYNC","lesson",UUID.randomUUID(),25,3,"{}");
+        jdbc.update("UPDATE lesson_youtube_channel SET sync_job_id=? WHERE channel_id=?",job,channel);
+        for(String status:List.of("QUEUED","RUNNING","RETRY_WAIT","CANCEL_REQUESTED")) {
+            jdbc.update("UPDATE background_job SET status=? WHERE id=?",status,job);
+            assertThatThrownBy(()->catalog.deleteChannel(channel)).isInstanceOf(com.lyreo.contracts.errors.StateConflictException.class);
+        }
+        jdbc.update("UPDATE background_job SET status='FAILED' WHERE id=?",job);
+        catalog.deleteChannel(channel);
+        assertThat(jobs.findById(job)).isPresent();
+    }
+    @Test void channelDeletionWaitsForConcurrentDraftCreationThenRejects() throws Exception {
+        String video="deleterace1",channel=cachedChannel(video);
+        when(source.inspect(anyString())).thenReturn(new AuthoringSourcePort.SourceInfo(video,"Source",10000,true));
+        var inserted=new java.util.concurrent.CountDownLatch(1);
+        var release=new java.util.concurrent.CountDownLatch(1);
+        try(var pool=java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var creation=pool.submit(()->new TransactionTemplate(transactions).execute(tx->{
+                var created=service.create("Concurrent","https://www.youtube.com/watch?v="+video,0,5000);
+                inserted.countDown();
+                try {if(!release.await(10,java.util.concurrent.TimeUnit.SECONDS)) throw new IllegalStateException("Creation timed out");}
+                catch(InterruptedException interrupted) {Thread.currentThread().interrupt();throw new IllegalStateException(interrupted);}
+                return created;
+            }));
+            try {
+                assertThat(inserted.await(10,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+                var deletion=pool.submit(()->catalog.deleteChannel(channel));
+                assertThatThrownBy(()->deletion.get(200,java.util.concurrent.TimeUnit.MILLISECONDS)).isInstanceOf(java.util.concurrent.TimeoutException.class);
+                release.countDown();
+                assertThat(creation.get(10,java.util.concurrent.TimeUnit.SECONDS)).isNotNull();
+                assertThatThrownBy(()->deletion.get(10,java.util.concurrent.TimeUnit.SECONDS)).hasCauseInstanceOf(com.lyreo.contracts.errors.StateConflictException.class);
+            } finally {release.countDown();}
+        }
+    }
     @Test void automaticAudioTitleIsSetOnceAndManualRenameWinsDuringStt() throws Exception {
         byte[] bytes=wav(2);
         when(storage.get(anyString())).thenAnswer(call->new java.io.ByteArrayInputStream(bytes));

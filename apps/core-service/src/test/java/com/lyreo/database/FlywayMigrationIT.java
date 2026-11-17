@@ -136,8 +136,8 @@ class FlywayMigrationIT {
         assertThat(applied[7].getVersion().getVersion()).isEqualTo("008");
         assertThat(applied[7].getState()).isEqualTo(MigrationState.SUCCESS);
         assertThat(flyway.info().current().getVersion().getVersion())
-            .as("Current Flyway version must be 015")
-            .isEqualTo("015");
+            .as("Current Flyway version must be 012")
+            .isEqualTo("012");
     }
 
     @Test
