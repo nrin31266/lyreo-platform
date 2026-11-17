@@ -1,4 +1,4 @@
-import { categoryName } from "./catalog.api";
+import { CategoryPicker } from "./CategoryPicker";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Field,
   FieldGroup,
@@ -30,7 +30,7 @@ export function LessonMetadataForm({
   onSaved: () => void;
   onCancel: () => void;
 }) {
-  const { t, i18n } = useTranslation("admin");
+  const { t } = useTranslation("admin");
   const client = useQueryClient();
   const categories = useCategories();
   const form = useForm<Metadata>({
@@ -42,6 +42,7 @@ export function LessonMetadataForm({
       categoryIds: lesson.categories.map((c) => c.id),
     },
   });
+  const { isDirty } = form.formState;
   const mutation = useMutation({
     mutationFn: (data: Metadata) => saveMetadata(lesson.id, { ...data, version: lesson.version ?? 0 }),
     onSuccess: async () => {
@@ -53,10 +54,11 @@ export function LessonMetadataForm({
     <form
       noValidate
       onSubmit={form.handleSubmit((data) => mutation.mutate(data))}
-      className="grid gap-4"
+      className="flex min-h-0 flex-1 flex-col gap-4"
     >
-      <CatalogError error={mutation.error || categories.error} />
-      <FieldGroup>
+      <div className="min-h-0 overflow-y-auto pr-1">
+      <CatalogError error={mutation.error || categories.error} retry={categories.isError ? () => void categories.refetch() : undefined} />
+      <fieldset disabled={mutation.isPending}><FieldGroup className="gap-4">
         {(["title", "description", "imageUrl"] as const).map((name) => (
           <Field key={name} data-invalid={!!form.formState.errors[name]}>
             <FieldLabel htmlFor={`metadata-${name}`}>
@@ -89,42 +91,13 @@ export function LessonMetadataForm({
         <Controller
           name="categoryIds"
           control={form.control}
-          render={({ field }) => (
-            <Field>
-              <FieldLabel>{t("catalog.categories")}</FieldLabel>
-              <div className="flex flex-wrap gap-3">
-                {categories.data?.map((c) => (
-                  <label key={c.id} className="flex items-center gap-2">
-                    <Checkbox
-                      checked={field.value.includes(c.id)}
-                      onCheckedChange={(checked) =>
-                        field.onChange(
-                          checked
-                            ? [...field.value, c.id]
-                            : field.value.filter((id) => id !== c.id),
-                        )
-                      }
-                    />
-                    {categoryName(c, i18n.language)}
-                  </label>
-                ))}
-              </div>
-            </Field>
-          )}
+          render={({ field }) => categories.isPending ? <Skeleton className="h-48" /> : categories.isError ? <></> : <CategoryPicker categories={categories.data ?? []} value={field.value} onChange={field.onChange} disabled={mutation.isPending} />}
         />
-      </FieldGroup>
-      <div className="flex gap-2">
-        <Button
-          type="submit"
-          disabled={
-            mutation.isPending || categories.isPending || categories.isError
-          }
-        >
-          {t(mutation.isPending ? "catalog.saving" : "catalog.save")}
-        </Button>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          {t("catalog.cancel")}
-        </Button>
+      </FieldGroup></fieldset>
+      </div>
+      <div className="flex shrink-0 justify-end gap-2 border-t pt-4">
+        <Button type="button" variant="outline" disabled={mutation.isPending} onClick={onCancel}>{t("catalog.cancel")}</Button>
+        <Button type="submit" disabled={mutation.isPending || categories.isPending || categories.isError || !isDirty}>{t(mutation.isPending ? "catalog.saving" : "catalog.save")}</Button>
       </div>
     </form>
   );

@@ -40,6 +40,23 @@ it('saves text with the discovered default voice without invoking synthesis', as
   expect(authoring.createTextDraft).toHaveBeenCalledWith(expect.objectContaining({title:'Text lesson',text:'We learn.',voice:'bf_emma',categoryIds:[],description:'',imageUrl:''}));
   expect(authoring.synthesizeText).not.toHaveBeenCalled();
 });
+it('keeps selections across category searches when creating a lesson', async () => {
+  vi.mocked(catalog.fetchCategories).mockResolvedValue(Array.from({length:24},(_,index)=>({id:`category-${index}`,name:`Category ${index}`,lessonCount:0})));
+  vi.mocked(authoring.createTextDraft).mockResolvedValue({id:'categorized'} as LessonDraft);
+  show('text');
+  await userEvent.click(await screen.findByRole('checkbox',{name:'Category 0'}));
+  await userEvent.type(screen.getByRole('textbox',{name:'Search categories'}),'Category 23');
+  expect(screen.queryByRole('checkbox',{name:'Category 0'})).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('checkbox',{name:'Category 23'}));
+  await userEvent.clear(screen.getByRole('textbox',{name:'Search categories'}));
+  expect(screen.getByRole('checkbox',{name:'Category 0'})).toBeChecked();
+  expect(screen.getByRole('checkbox',{name:'Category 23'})).toBeChecked();
+  await userEvent.type(screen.getByLabelText('English text'),'Keep both categories.');
+  await userEvent.click(screen.getByRole('button',{name:'Save text draft'}));
+  await screen.findByRole('heading',{name:'Editor'});
+  expect(authoring.createTextDraft).toHaveBeenCalledWith(expect.objectContaining({categoryIds:['category-0','category-23']}));
+  expect(authoring.synthesizeText).not.toHaveBeenCalled();
+});
 it('restores the uploaded source from the URL and submits the selected range', async () => {
   vi.mocked(authoring.fetchAudioSource).mockResolvedValue({id:'source-1',durationMs:300000,contentType:'audio/mpeg'});
   vi.mocked(authoring.createAudioDraft).mockResolvedValue({lessonId:'audio-1',jobId:'job-1'});
