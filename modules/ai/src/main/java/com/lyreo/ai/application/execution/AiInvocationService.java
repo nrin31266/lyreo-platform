@@ -11,6 +11,7 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -181,13 +182,23 @@ public final class AiInvocationService {
 
     /** Explicit server maintenance only; callers reserve a durable budget before each call. */
     public AiExecutionResult executeMaintenance(String prompt,Map<String,Object> input,int outputBudget,String credential) {
+        return executeMaintenance(prompt,input,outputBudget,credential,"DEEPSEEK","deepseek-flash");
+    }
+
+    public AiExecutionResult executeMaintenance(String prompt,Map<String,Object> input,int outputBudget,String credential,String provider,String model) {
         if(credential==null || credential.isBlank() || outputBudget<1 || outputBudget>8192)
             throw new IllegalArgumentException("Maintenance requires a server credential and bounded output");
-        UUID id=UUID.randomUUID();Instant started=Instant.now();String model="deepseek-flash";
-        audit.started(id,AiCapability.GENERAL_LLM,"DEEPSEEK",model,started,hashRequest(prompt,input));
+        var options=new LinkedHashMap<String,Object>(Map.of("max_output_tokens",outputBudget,"response_schema","library_maintenance_v2"));
+        switch(provider) {
+            case "DEEPSEEK" -> { options.put("thinking","enabled"); options.put("provider_options",Map.of("reasoning_effort","high")); }
+            case "GEMINI" -> { options.put("thinking_level","low"); options.put("include_reasoning_usage",true); }
+            case "GROQ" -> options.put("provider_options",Map.of("reasoning_effort","medium"));
+            default -> throw new IllegalArgumentException("Unsupported maintenance provider");
+        }
+        UUID id=UUID.randomUUID();Instant started=Instant.now();
+        audit.started(id,AiCapability.GENERAL_LLM,provider,model,started,hashRequest(prompt,input));
         try {
-            var result=gateway.execute(new AiExecutionCommand(id,AiCapability.GENERAL_LLM,"DEEPSEEK",model,credential,prompt,input,
-                Map.of("max_output_tokens",outputBudget,"response_schema","library_maintenance_v2","thinking","enabled","provider_options",Map.of("reasoning_effort","high"))));
+            var result=gateway.execute(new AiExecutionCommand(id,AiCapability.GENERAL_LLM,provider,model,credential,prompt,input,options));
             audit.succeeded(id,Instant.now(),result.latencyMs(),result.inputTokens(),result.outputTokens());return result;
         } catch(RuntimeException failure) {
             audit.failed(id,Instant.now(),Duration.between(started,Instant.now()).toMillis(),failure instanceof AiExecutionException known?known.errorCode():"MAINTENANCE_FAILURE");

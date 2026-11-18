@@ -159,6 +159,15 @@ def test_gemini_real_usage_and_generation_contract():
     assert result.metadata['finish_reason'] == 'stop'
     assert result.usage == {}
 
+    provider._interaction.return_value['usage'] = {
+        'total_input_tokens': 12, 'total_output_tokens': 5, 'total_thought_tokens': 11,
+    }
+    maintenance = asyncio.run(provider.complete(request(options={
+        'include_reasoning_usage': True,
+    }), 'test-credential'))
+    assert maintenance.output['reasoning_tokens'] == 11
+    assert maintenance.usage == {'input_tokens': 12, 'output_tokens': 16}
+
 
 def install_transport(monkeypatch, handler):
     real_client = httpx.AsyncClient

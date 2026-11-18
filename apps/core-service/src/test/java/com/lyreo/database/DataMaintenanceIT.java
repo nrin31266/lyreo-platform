@@ -27,7 +27,11 @@ class DataMaintenanceIT {
     @Autowired DataMaintenance maintenance; @Autowired AiInvocationService ai; @Autowired JdbcTemplate jdbc;
     @TempDir Path directory;
 
-    @BeforeEach void resetProvider() { reset(ai); }
+    @BeforeEach void resetProvider() {
+        reset(ai);
+        jdbc.update("DELETE FROM data_maintenance_work");
+        jdbc.update("DELETE FROM data_maintenance_run");
+    }
 
     @Test void cachesSuccessKeepsFailedReservationsAndEnforcesDurableBudgetBeforeCalling() throws Exception {
         Path input=directory.resolve("work.jsonl"),output=directory.resolve("results.json");
@@ -67,6 +71,22 @@ class DataMaintenanceIT {
         assertThat(Files.readString(output)).contains("SUCCEEDED").doesNotContain("AI_HTTP_429");
         assertThat(jdbc.queryForObject("SELECT reserved_usd FROM data_maintenance_run WHERE id='library-final'",java.math.BigDecimal.class)).isEqualByComparingTo(reservation);
         verify(ai,times(2)).executeMaintenance(anyString(),anyMap(),anyInt(),anyString());
+    }
+
+    @Test void geminiOnlyProcessesWorkMissingFromTheDeepSeekCheckpoint() throws Exception {
+        Path input=directory.resolve("fallback.jsonl"),output=directory.resolve("fallback-results.json");
+        var proposal=Map.<String,Object>of("structured",Map.of("changes",List.of(),"issues",List.of()));
+        when(ai.executeMaintenance(anyString(),anyMap(),anyInt(),anyString()))
+            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"DEEPSEEK","deepseek-flash",proposal,100,20,10));
+        when(ai.executeMaintenance(anyString(),anyMap(),anyInt(),anyString(),eq("GEMINI"),eq("gemini-3.5-flash-lite")))
+            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"GEMINI","gemini-3.5-flash-lite",proposal,100,20,10));
+        Files.writeString(input,work("before-fallback"));
+        maintenance.run(input,output,true,LocalDate.now(),"test-only-key",true,false);
+        Files.writeString(input,work("before-fallback")+work("after-fallback"));
+        maintenance.run(input,output,true,LocalDate.now(),"test-only-key",true,false,
+            "GEMINI_FLASH_LITE",new java.math.BigDecimal("0.10"));
+        assertThat(Files.readString(output)).contains("after-fallback").doesNotContain("before-fallback");
+        verify(ai,times(1)).executeMaintenance(anyString(),anyMap(),eq(4096),anyString(),eq("GEMINI"),eq("gemini-3.5-flash-lite"));
     }
     private String work(String id) {
         return """

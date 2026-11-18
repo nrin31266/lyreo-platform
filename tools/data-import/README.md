@@ -178,6 +178,14 @@ after review. Both execute modes require the pricing confirmation date. A rate l
 requests and exports completed results. A subsequent batch command reuses the saved results and
 the existing reservations for requests rejected with HTTP 429.
 
+For a provider fallback, set `DATA_MAINTENANCE_MODEL` to `GEMINI_FLASH_LITE`,
+`GEMINI_31_FLASH_LITE`, or `GROQ_GPT_OSS`. The script loads `GEMINI_API_KEY` or `GROQ_API_KEY`
+from `tools/research/.env`. Set `DATA_MAINTENANCE_PRICING_CONFIRMED_ON` and
+`DATA_MAINTENANCE_BUDGET_USD` explicitly. Reservations assume paid token prices because model
+listing does not identify the account's billing tier. Run one model at a time with the same
+input queue and a separate output file. The next model skips unchanged work already completed
+under the same prompt version, while its own ledger records that model and its usage.
+
 After checking complete source context, record explicit decisions in an ignored JSON file:
 
 ```json

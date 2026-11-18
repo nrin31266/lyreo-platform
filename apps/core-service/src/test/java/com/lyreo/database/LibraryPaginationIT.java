@@ -72,12 +72,17 @@ class LibraryPaginationIT {
             jdbc.update("INSERT INTO lexicon_headword(id,language,identity_form) VALUES(?,'en',?)",headword,title);
             jdbc.update("INSERT INTO lexicon_entry(id,release_id,headword_id,package_entry_id,display_form,lookup_form,entry_type) VALUES(?,?,?,?,?,?,'WORD')",entry,release,headword,UUID.randomUUID(),title,title.toLowerCase(Locale.ROOT));
             jdbc.update("INSERT INTO lexicon_item(id,release_id,entry_id,package_item_id,part_of_speech,pos_title,order_index) VALUES(?,?,?,?,?,'',0)",item,release,entry,UUID.randomUUID(),i==3?"verb":"noun");
+            if(i==0) {
+                jdbc.update("INSERT INTO lexicon_sense(id,release_id,entry_id,item_id,package_sense_id,position,definition_en,translation_status) VALUES(?,?,?,?,?,0,'Printed pages','MISSING')",UUID.randomUUID(),release,entry,item,UUID.randomUUID());
+                jdbc.update("INSERT INTO lexicon_sense(id,release_id,entry_id,item_id,package_sense_id,position,translation_vi,translation_status) VALUES(?,?,?,?,?,1,'sach','VERIFIED')",UUID.randomUUID(),release,entry,item,UUID.randomUUID());
+            }
             if(i==2) jdbc.update("INSERT INTO lexicon_form(id,release_id,entry_id,item_id,package_form_id,form,normalized_form) VALUES(?,?,?,?,?,'books','books')",UUID.randomUUID(),release,entry,item,UUID.randomUUID());
         }
         jdbc.update("INSERT INTO dataset_import_run(id,release_id,run_type,status,completed_at) VALUES(?,?,'APPLY','SUCCEEDED',now())",UUID.randomUUID(),release);
         jdbc.update("INSERT INTO dataset_active_release(domain,release_id,activated_by) VALUES('lexicon',?,'test')",release);
         var first=lexicon.list("Book","WORD","","","noun",null,2);
         assertThat(first).extracting(row->row.title()).containsExactly("Book","bookish");
+        assertThat(first.getFirst().translationVi()).isEqualTo("sach");
         assertThat(lexicon.count("Book","WORD","","","noun")).isEqualTo(3);
         assertThat(lexicon.browse("Book","WORD","","","noun",null,null,true,0,1)).extracting(row->row.title()).containsExactly("volume");
         assertThat(lexicon.browse("Book","WORD","","","noun",null,null,true,1,1)).extracting(row->row.title()).containsExactly("bookish");
@@ -89,9 +94,11 @@ class LibraryPaginationIT {
     }
     @Test void adminFindsNewAndEditedDraftFormsBeforePublication() {
         UUID id=UUID.randomUUID();
-        documents.save("lexicon",id,0,Map.of("title","go","type","WORD","forms",List.of(Map.of("form","went")),"items",List.of(),"senses",List.of()),"admin",Map.class);
+        var senses=List.of(Map.of("translationVi","di"),Map.of("definitionEn","Move from one place to another"));
+        documents.save("lexicon",id,0,Map.of("title","go","type","WORD","forms",List.of(Map.of("form","went")),"items",List.of(),"senses",senses),"admin",Map.class);
         assertThat(lexicon.count("went","","","","" )).isEqualTo(1);
         assertThat(lexicon.list("went","","","","",null,30)).extracting(row->row.id()).containsExactly(id);
+        assertThat(lexicon.list("went","","","","",null,30).getFirst().definition()).isEqualTo("Move from one place to another");
         assertThat(lexicon.list("wen","","","","",null,30)).extracting(row->row.title()).containsExactly("go");
     }
 

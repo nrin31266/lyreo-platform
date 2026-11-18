@@ -135,13 +135,13 @@ AND (:unbounded OR (rank,id) %s (:rank,CAST(:anchor AS uuid))) ORDER BY rank %s,
                 CASE WHEN p.edited THEN jsonb_array_length(d.draft->'senses') ELSE stats.sense_count END AS sense_count,
                 CASE WHEN p.edited THEN (SELECT count(*) FROM jsonb_array_elements(d.draft->'senses') s WHERE nullif(trim(s->>'translationVi'),'') IS NOT NULL) ELSE stats.translated_count END AS translated_count,
                 CASE WHEN p.edited THEN (SELECT count(*) FROM jsonb_array_elements(d.draft->'senses') s WHERE s->>'translationStatus'='VERIFIED') ELSE stats.verified_count END AS verified_count,
-                CASE WHEN p.edited THEN d.draft->'senses'->0->>'definitionEn' ELSE stats.definition END AS definition,
-                CASE WHEN p.edited THEN d.draft->'senses'->0->>'translationVi' ELSE stats.translation_vi END AS translation_vi
+                CASE WHEN p.edited THEN (SELECT s->>'definitionEn' FROM jsonb_array_elements(d.draft->'senses') s WHERE nullif(trim(s->>'definitionEn'),'') IS NOT NULL LIMIT 1) ELSE stats.definition END AS definition,
+                CASE WHEN p.edited THEN (SELECT s->>'translationVi' FROM jsonb_array_elements(d.draft->'senses') s WHERE nullif(trim(s->>'translationVi'),'') IS NOT NULL LIMIT 1) ELSE stats.translation_vi END AS translation_vi
             FROM selected p LEFT JOIN content_document d ON d.namespace='lexicon' AND d.id=p.id AND p.edited
             LEFT JOIN LATERAL (SELECT count(*) AS sense_count,count(*) FILTER(WHERE nullif(trim(s.translation_vi),'') IS NOT NULL) AS translated_count,
                 count(*) FILTER(WHERE s.translation_status='VERIFIED') AS verified_count,
-                (array_agg(s.definition_en ORDER BY s.position,s.id))[1] AS definition,
-                (array_agg(s.translation_vi ORDER BY s.position,s.id))[1] AS translation_vi FROM lexicon_sense s WHERE s.entry_id=p.id) stats ON NOT p.edited
+                (array_agg(s.definition_en ORDER BY s.position,s.id) FILTER(WHERE nullif(trim(s.definition_en),'') IS NOT NULL))[1] AS definition,
+                (array_agg(s.translation_vi ORDER BY s.position,s.id) FILTER(WHERE nullif(trim(s.translation_vi),'') IS NOT NULL))[1] AS translation_vi FROM lexicon_sense s WHERE s.entry_id=p.id) stats ON NOT p.edited
             ORDER BY p.rank %s,p.id %s
             """.formatted(reverse?"<":">",order,order,order,order),params,
                 (rs,n)->new Summary(rs.getObject("id",UUID.class),rs.getString("title"),rs.getString("type"),rs.getString("status"),rs.getBoolean("edited"),new Cursor(rs.getInt("rank"),rs.getObject("id",UUID.class)).encode(),rs.getString("part_of_speech"),rs.getInt("sense_count"),rs.getInt("translated_count"),rs.getInt("verified_count"),rs.getString("definition"),rs.getString("translation_vi")));

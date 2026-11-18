@@ -6,6 +6,9 @@ cd "$ROOT"
 set -a
 source apps/core-service/.env
 if [[ -f .env ]]; then source .env; fi
+if [[ -f tools/research/.env && ${DATA_MAINTENANCE_MODEL:-DEEPSEEK} != DEEPSEEK ]]; then
+  source tools/research/.env
+fi
 set +a
 export DATA_MAINTENANCE_INPUT="${DATA_MAINTENANCE_INPUT:-$ROOT/.data/maintenance/pilot.jsonl}"
 export DATA_MAINTENANCE_OUTPUT="${DATA_MAINTENANCE_OUTPUT:-$ROOT/.data/maintenance/pilot-results.json}"
