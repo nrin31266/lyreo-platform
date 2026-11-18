@@ -5,6 +5,7 @@ import { RiPlayLine, RiPauseLine, RiRepeat2Line, RiPlayList2Line } from '@remixi
 import { useQuery } from '@tanstack/react-query';
 import { http } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { AudioPlayer } from '@/components/AudioPlayer';
 import { CatalogError } from '@/pages/lessons/CatalogFeedback';
 import { YouTubePreview } from './YouTubePreview';
 import { sentencePlaybackAction, sentencePlaybackRange } from './authoring-editor';
@@ -36,7 +37,6 @@ export function AudioPreview({ src, startMs, endMs, sentences, seek, transport, 
   latest.current = { onTimeChange, onPlayingChange, onAvailabilityChange, review, sentences, loopRange };
   const [playing, setPlaying] = useState(false);
   const [ready, setReady] = useState(false);
-  const [failed, setFailed] = useState(false);
   const [rate, setRate] = useState(1);
   const [loop, setLoop] = useState(false);
   const loopRef = useRef(false); loopRef.current = loop;
@@ -79,7 +79,7 @@ export function AudioPreview({ src, startMs, endMs, sentences, seek, transport, 
     setPlaying(false); setLoop(false); setContinuous(false);
   }, [review?.context]);
   const controls = <div className="player-transport" role="group" aria-label={t('sourceSelection.playback')}>
-    <Button type="button" size="icon" variant="outline" disabled={!ready} aria-label={t(playing ? 'waveform.pause' : 'waveform.play')} onClick={() => {
+    <Button type="button" size="icon" variant="outline" disabled={!ready} tooltip={t(playing ? 'audioPlayer.pauseHelp' : 'audioPlayer.playHelp')} aria-label={t(playing ? 'waveform.pause' : 'waveform.play')} onClick={() => {
       if (playing) { audio.current?.pause(); return; }
       const selected = sentences.find(row => row.id === review?.sentenceId);
       const range = selected && sentencePlaybackRange(selected, sentences, endMs - startMs);
@@ -88,21 +88,20 @@ export function AudioPreview({ src, startMs, endMs, sentences, seek, transport, 
       if (range && !continuous && player && (player.currentTime * 1000 - startMs < range.startMs || player.currentTime * 1000 - startMs >= range.endMs)) player.currentTime = (startMs + range.startMs) / 1000;
       void play();
     }}>{playing ? <RiPauseLine /> : <RiPlayLine />}</Button>
-    {[0.75, 1, 1.25].map(value => <Button key={value} type="button" size="sm" variant={rate === value ? 'secondary' : 'ghost'} disabled={!ready} aria-pressed={rate === value} onClick={() => { setRate(value); if (audio.current) audio.current.playbackRate = value; }}>{value}×</Button>)}
-    {review && <Button type="button" size="icon" variant={continuous ? 'secondary' : 'ghost'} disabled={!ready} aria-pressed={continuous} aria-label={t('reviewWorkspace.continuousPlayback')} title={t('reviewWorkspace.continuousPlaybackHelp')} onClick={() => { setContinuous(value => !value); setLoop(false); }}><RiPlayList2Line /></Button>}
-    <Button type="button" size="icon" variant={loop ? 'secondary' : 'ghost'} disabled={!ready} aria-pressed={loop} aria-label={t('waveform.loop')} onClick={() => { setLoop(value => !value); setContinuous(false); }}><RiRepeat2Line /></Button>
+    {[0.75, 1, 1.25].map(value => <Button key={value} type="button" size="sm" variant={rate === value ? 'secondary' : 'ghost'} disabled={!ready} tooltip={`${t('audioPlayer.speed')}: ${value}×`} aria-pressed={rate === value} onClick={() => { setRate(value); if (audio.current) audio.current.playbackRate = value; }}>{value}×</Button>)}
+    {review && <Button type="button" size="icon" variant={continuous ? 'secondary' : 'ghost'} disabled={!ready} aria-pressed={continuous} aria-label={t('reviewWorkspace.continuousPlayback')} tooltip={t('reviewWorkspace.continuousPlaybackHelp')} onClick={() => { setContinuous(value => !value); setLoop(false); }}><RiPlayList2Line /></Button>}
+    <Button type="button" size="icon" variant={loop ? 'secondary' : 'ghost'} disabled={!ready} aria-pressed={loop} aria-label={t('waveform.loop')} tooltip={t('waveform.loop')} onClick={() => { setLoop(value => !value); setContinuous(false); }}><RiRepeat2Line /></Button>
   </div>;
   return <div className="flex flex-col gap-3">
-    <audio ref={audio} src={src} controls onEnded={() => {
+    <AudioPlayer ref={audio} src={src} startTime={startMs / 1000} endTime={endMs / 1000} playbackControls={transport || controlsHost ? null : controls} onEnded={() => {
       if (!loopRef.current && !latest.current.loopRange) return;
       const selected = latest.current.sentences.find(row => row.id === latest.current.review?.sentenceId);
       const range = latest.current.loopRange ?? (selected && sentencePlaybackRange(selected, latest.current.sentences, endMs - startMs));
       if (audio.current) { audio.current.currentTime = (startMs + (range?.startMs ?? 0)) / 1000; void play(); }
     }} preload="metadata" aria-label={t('catalog.player')} className="w-full"
       onLoadedMetadata={() => { setReady(true); latest.current.onAvailabilityChange?.(true); }}
-      onError={() => { setFailed(true); setReady(false); latest.current.onAvailabilityChange?.(false); }}
+      onError={() => { setReady(false); latest.current.onAvailabilityChange?.(false); }}
       onPlay={() => { setPlaying(true); onPlayingChange?.(true); }} onPause={() => { setPlaying(false); onPlayingChange?.(false); }} />
-    {failed && <p role="alert" className="text-destructive">{t("media.playbackFailed")}</p>}
-    {!transport && (controlsHost ? createPortal(controls, controlsHost) : controls)}
+    {!transport && controlsHost && createPortal(controls, controlsHost)}
   </div>;
 }

@@ -66,6 +66,14 @@ function show() {
 }
 
 describe('shared Admin navigation', () => {
+  it('opens groups with submenus by default and still allows collapsing them', async () => {
+    desktop=true;show();
+    expect(screen.getByRole('button',{name:'Lessons'})).toHaveAttribute('aria-expanded','true');
+    expect(screen.getByRole('button',{name:'Language library'})).toHaveAttribute('aria-expanded','true');
+    expect(screen.getByRole('link',{name:'TOEIC L&R'})).toBeVisible();
+    await userEvent.click(screen.getByRole('button',{name:'Language library'}));
+    expect(screen.getByRole('button',{name:'Language library'})).toHaveAttribute('aria-expanded','false');
+  });
   it.each([true, false])('opens logout from the avatar menu (desktop=%s)', async (isDesktop) => {
     desktop = isDesktop;
     const user = userEvent.setup();

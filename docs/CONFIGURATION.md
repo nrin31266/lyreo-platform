@@ -14,7 +14,7 @@ Deployment capability and secrets
 
 A lower layer cannot exceed a higher layer's capability or safety limit. For example, an Admin-disabled pronunciation feature cannot be enabled by a learner preference. A temporary playback-speed change stays in session state until explicitly saved as a cross-device preference.
 
-Deployment configuration supplies endpoints, credentials, storage mode, runtime resources, and service limits. Every executable has its own `.env.example`; there is no root `.env`. `scripts/init-dev-env.sh` creates local files and synchronizes values that genuinely cross process boundaries. `VITE_*` and `EXPO_PUBLIC_*` values are public build data and must never contain server secrets.
+Deployment configuration supplies endpoints, credentials, storage mode, runtime resources, and service limits. Every executable has its own `.env.example`. The optional root `.env` is operator-only input for bounded data maintenance (`DEEPSEEK_KEY`), never an app/client configuration source. `scripts/init-dev-env.sh` creates local files and synchronizes values that genuinely cross process boundaries. `VITE_*` and `EXPO_PUBLIC_*` values are public build data and must never contain server secrets.
 
 Admin policy controls provider/model routing, enabled capabilities, allowable Lesson processing, rate/cost envelopes, and controlled reward policy. Model identifiers are runtime strings, not Java enums. Provider API keys are encrypted in Core with an environment-held master key; Admin reads masked metadata only.
 
@@ -27,6 +27,9 @@ Learner preferences are persistent, cross-device study choices within the Admin 
 Development defaults to local filesystem storage. Full Grammar/TOEIC import integration uses
 each developer's local PostgreSQL database and the team's shared `lyreo-dev` Cloudflare R2
 bucket; production also uses R2. Each developer keeps R2 credentials in ignored local env files.
+Core and the importer must select the same storage mode and target. Local importer storage is
+available for isolated development/tests; selecting it does not migrate existing R2 objects.
+`make data-storage-check` verifies configuration alignment without reading or writing cloud data.
 PostgreSQL stores object keys, never expiring access URLs. Storage mode changes where bytes live,
 not the authority of normalized state or AI cost accounting. See [Data Import](../tools/data-import/README.md)
 for the import workflow.

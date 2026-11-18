@@ -56,8 +56,20 @@ public class LexiconController {
         List<LexiconEntry.LexiconItem> items,
         List<FormResponse> forms, List<SenseResponse> senses,
         List<PronunciationResponse> pronunciations,
-        List<TranslationResponse> translations
-    ) {}
+        List<TranslationResponse> translations, List<PronunciationVariantResponse> pronunciationVariants
+    ) {
+        @com.fasterxml.jackson.annotation.JsonProperty("readingModes")
+        public List<String> readingModes() {
+            var modes = new java.util.ArrayList<String>(2);
+            if (senses.stream().anyMatch(sense -> hasText(sense.translationVi()))) modes.add("en-vi");
+            if (senses.stream().anyMatch(sense -> hasText(sense.definitionEn()))) modes.add("en-en");
+            return List.copyOf(modes);
+        }
+
+        private static boolean hasText(String text) {
+            return text != null && !text.isBlank();
+        }
+    }
 
     public record FormResponse(UUID id, UUID itemId, String form, String normalizedForm,
                                List<String> tags) {}
@@ -65,12 +77,13 @@ public class LexiconController {
     public record SenseResponse(UUID id, UUID itemId, int position, String partOfSpeech,
                                 String definitionEn, String translationVi, String translationStatus,
                                 List<String> rawGlosses, List<Map<String, Object>> examples,
-                                List<String> tags, String matchedQualifier) {}
+                                List<String> tags, String matchedQualifier,Map<String,String> definitions,Map<String,Object> sourceContext) {}
 
     public record PronunciationResponse(UUID id, UUID itemId, String accent, String ipa,
                                         String audioFile, String audioUrl, String sourceUrl,
-                                        List<String> tags) {}
+                                        List<String> tags, UUID assetId,Map<String,Object> pronunciationContext) {}
 
+    public record PronunciationVariantResponse(UUID id,String form,String notation,String notationSystem,String usage,String scopeStatus,List<String> regions,List<PronunciationResponse> recordings) {}
     public record TranslationResponse(UUID id, UUID itemId, UUID senseId, String wordVi,
                                       String source, String sourceScope, String sourceSenseQualifier,
                                       String linkStatus, String unlinkedReason, List<String> tags, String sourcePos) {}

@@ -41,6 +41,9 @@ When business work needs inference, Core selects capability, route, prompt, and 
 
 Public clients authenticate with Keycloak and call Core. Core enforces resource authorization, scoring, and rewards. The [HTTP contract](architecture/http-api-contract.md) owns versioning, successful responses, Problem Details, and correlation IDs.
 
+Library drafts, shared questions, source conflict handling and learner snapshots follow the
+[editorial architecture](architecture/library-editorial.md).
+
 ## Cross-cutting constraints and risks
 
 PostgreSQL is workflow truth; UI events and raw AI artifacts are not checkpoints. Store object keys rather than expiring URLs. Configuration precedence belongs in [configuration](CONFIGURATION.md), import semantics in [data pipelines](DATA_PIPELINES.md), and architecture rationale in [decisions](DECISIONS.md). Unresolved product or deployment choices are tracked in [open questions](requirements/open-questions.md).

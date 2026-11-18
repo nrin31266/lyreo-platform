@@ -179,6 +179,22 @@ public final class AiInvocationService {
         );
     }
 
+    /** Explicit server maintenance only; callers reserve a durable budget before each call. */
+    public AiExecutionResult executeMaintenance(String prompt,Map<String,Object> input,int outputBudget,String credential) {
+        if(credential==null || credential.isBlank() || outputBudget<1 || outputBudget>8192)
+            throw new IllegalArgumentException("Maintenance requires a server credential and bounded output");
+        UUID id=UUID.randomUUID();Instant started=Instant.now();String model="deepseek-flash";
+        audit.started(id,AiCapability.GENERAL_LLM,"DEEPSEEK",model,started,hashRequest(prompt,input));
+        try {
+            var result=gateway.execute(new AiExecutionCommand(id,AiCapability.GENERAL_LLM,"DEEPSEEK",model,credential,prompt,input,
+                Map.of("max_output_tokens",outputBudget,"response_schema","library_maintenance_v2","thinking","enabled","provider_options",Map.of("reasoning_effort","high"))));
+            audit.succeeded(id,Instant.now(),result.latencyMs(),result.inputTokens(),result.outputTokens());return result;
+        } catch(RuntimeException failure) {
+            audit.failed(id,Instant.now(),Duration.between(started,Instant.now()).toMillis(),failure instanceof AiExecutionException known?known.errorCode():"MAINTENANCE_FAILURE");
+            throw failure;
+        }
+    }
+
     private boolean permittedFreeRoute(AiRoute route) {
         String provider = route.providerCode().toUpperCase(java.util.Locale.ROOT);
         String model = route.model();

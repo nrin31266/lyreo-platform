@@ -96,6 +96,8 @@ def sense_row(package: ReleasePackage, row: dict[str, Any]) -> tuple[Any, ...]:
         row.get("translation_vi"),
         row.get("matched_qualifier"),
         row["translation_status"],
+        pg_json(row.get("definitions") or ({"en":row["definition_en"]} if row.get("definition_en") else {})),
+        pg_json(row.get("source_context") or {}),
     )
 
 
@@ -126,6 +128,7 @@ def pronunciation_row(package: ReleasePackage, row: dict[str, Any]) -> tuple[Any
         row.get("source_url"),
         None,
         pg_json(_json_array(row, "tags")),
+        pg_json(row.get("pronunciation_context") or {}),
     )
 
 
@@ -134,8 +137,8 @@ def translation_row(package: ReleasePackage, row: dict[str, Any]) -> tuple[Any, 
         raise ValueError(f"Unsupported Lexicon schema: {package.schema_version}")
     item_id = row.get("item_id")
     sense_id = row.get("sense_id")
-    source_pos = row.get("source_pos") if package.schema_version == "1.1.0" else None
-    context = row.get("source_context") if package.schema_version == "1.1.0" else None
+    source_pos = row.get("source_pos") if package.schema_version in ("1.1.0", "2.0.0") else None
+    context = row.get("source_context") if package.schema_version in ("1.1.0", "2.0.0") else None
     return (
         scoped_id(package.release_id, "lexicon-translation", row["id"]),
         package.release_id,
@@ -250,8 +253,8 @@ def reconcile_translation_provenance(conn, package: ReleasePackage, batch_size: 
     for batch in chunks(jsonl_rows(package.root / "translations.jsonl"), batch_size):
         expected = {
             package_uuid(row["id"], field="translation.id"): (
-                row.get("source_pos") if package.schema_version == "1.1.0" else None,
-                row.get("source_context") if package.schema_version == "1.1.0" else None,
+                row.get("source_pos") if package.schema_version in ("1.1.0", "2.0.0") else None,
+                row.get("source_context") if package.schema_version in ("1.1.0", "2.0.0") else None,
             ) for row in batch
         }
         actual = {
@@ -270,6 +273,31 @@ def reconcile_translation_provenance(conn, package: ReleasePackage, batch_size: 
     if checked != package.counts["translations.jsonl"]:
         raise ValueError("Translation provenance row count differs from manifest")
     return {"rows_checked": checked, "mismatch_count": 0}
+
+
+def reconcile_v2_content(conn, package: ReleasePackage, batch_size: int) -> dict[str, int]:
+    """Verify language content and pronunciation evidence, not only collection counts."""
+    checked = {}
+    if package.schema_version != "2.0.0":
+        return checked
+    for filename, table, identity, fields in (
+        ("senses.jsonl", "lexicon_sense", "package_sense_id", ("definitions", "source_context", "examples", "raw_glosses")),
+        ("pronunciations.jsonl", "lexicon_pronunciation", "package_pronunciation_id", ("pronunciation_context", "accent", "ipa")),
+    ):
+        total = 0
+        for batch in chunks(jsonl_rows(package.root / filename), batch_size):
+            expected = {package_uuid(row["id"], field=filename): tuple(row.get(field) for field in fields) for row in batch}
+            actual = {row[0]: tuple(row[1:]) for row in conn.execute(
+                f"SELECT {identity},{','.join(fields)} FROM {table} WHERE release_id=%s AND {identity}=ANY(%s)",
+                (package.release_id, list(expected)),
+            )}
+            if actual != expected:
+                raise ValueError(f"Source content reconciliation mismatch in {filename}")
+            total += len(batch)
+        if total != package.counts[filename]:
+            raise ValueError(f"Source content row count differs in {filename}")
+        checked[filename] = total
+    return checked
 
 
 def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
@@ -305,6 +333,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
             expected = {table: package.counts[filename] for filename, table in COLLECTIONS}
             reconciled = reconcile_counts(conn, package.release_id, expected)
             provenance = reconcile_translation_provenance(conn, package, batch_size)
+            content_evidence = reconcile_v2_content(conn, package, batch_size)
             orphan_counts = lexicon_orphans(conn, package.release_id)
             orphan_total = sum(orphan_counts.values())
             if orphan_total:
@@ -327,6 +356,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
                 "reused_complete_snapshot": True,
                 "reconciliation": {
                     "translation_provenance": provenance,
+                    "source_content": content_evidence,
                     "rows_read": records_read,
                     "rows_inserted_this_run": 0,
                     "mismatch_count": 0,
@@ -335,6 +365,8 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
                 },
             })
             run_succeeded = True
+            from editorial_reconciliation import reconcile_editorial
+            reconcile_editorial(conn, package.domain, package.release_id)
             if activate or rollback:
                 from clean_import_common import activate_release
                 activate_release(conn, package, activated_by=activated_by or "",
@@ -382,9 +414,9 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
                 }
                 columns = {
                     "items.jsonl": ("id", "release_id", "entry_id", "package_item_id", "part_of_speech", "pos_title", "etymology_number", "etymology_text", "order_index"),
-                    "senses.jsonl": ("id", "release_id", "entry_id", "item_id", "package_sense_id", "position", "definition_en", "raw_glosses", "tags", "examples", "translation_vi", "matched_qualifier", "translation_status"),
+                    "senses.jsonl": ("id", "release_id", "entry_id", "item_id", "package_sense_id", "position", "definition_en", "raw_glosses", "tags", "examples", "translation_vi", "matched_qualifier", "translation_status", "definitions", "source_context"),
                     "forms.jsonl": ("id", "release_id", "entry_id", "item_id", "package_form_id", "form", "normalized_form", "tags"),
-                    "pronunciations.jsonl": ("id", "release_id", "entry_id", "item_id", "package_pronunciation_id", "accent", "ipa", "audio_file", "audio_url", "source_url", "cached_audio_object_key", "tags"),
+                    "pronunciations.jsonl": ("id", "release_id", "entry_id", "item_id", "package_pronunciation_id", "accent", "ipa", "audio_file", "audio_url", "source_url", "cached_audio_object_key", "tags", "pronunciation_context"),
                     "translations.jsonl": ("id", "release_id", "entry_id", "item_id", "sense_id", "package_translation_id", "word_vi", "source", "source_scope", "source_sense_qualifier", "link_status", "unlinked_reason", "tags", "source_pos", "source_context"),
                 }[filename]
                 converter = converters[filename]
@@ -405,6 +437,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
         with conn.transaction():
             reconciled = reconcile_counts(conn, package.release_id, expected)
             provenance = reconcile_translation_provenance(conn, package, batch_size)
+            content_evidence = reconcile_v2_content(conn, package, batch_size)
             orphan_counts = lexicon_orphans(conn, package.release_id)
             orphan_total = sum(orphan_counts.values())
             if orphan_total:
@@ -429,6 +462,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
                 "baseline_release": baseline,
                 "reconciliation": {
                     "translation_provenance": provenance,
+                    "source_content": content_evidence,
                     "rows_read": records_read,
                     "rows_inserted_this_run": records_inserted,
                     "mismatch_count": sum(v["expected"] != v["actual"] for v in reconciled.values()),
@@ -438,6 +472,8 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
             }
             finish_run(conn, run_id, records_read, records_inserted, details)
         run_succeeded = True
+        from editorial_reconciliation import reconcile_editorial
+        reconcile_editorial(conn, package.domain, package.release_id)
 
         if activate or rollback:
             from clean_import_common import activate_release

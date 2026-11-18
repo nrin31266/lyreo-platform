@@ -210,15 +210,6 @@ def begin_run(conn, package: ReleasePackage, run_type: str) -> uuid.UUID:
     return run_id
 
 
-def update_run_progress(conn, run_id: uuid.UUID, records_read: int, records_inserted: int) -> None:
-    with conn.transaction():
-        conn.execute(
-            """UPDATE dataset_import_run
-               SET records_read=%s,records_inserted=%s WHERE id=%s""",
-            (records_read, records_inserted, run_id),
-        )
-
-
 def finish_run(conn, run_id: uuid.UUID, records_read: int, records_inserted: int, details: dict) -> None:
     with conn.transaction():
         conn.execute(
@@ -294,7 +285,10 @@ def activate_release(
 ) -> None:
     if not activated_by.strip():
         raise ValueError("activated_by must not be empty")
+    from editorial_reconciliation import reconcile_editorial, assert_reconciled
+    reconcile_editorial(conn, package.domain, package.release_id)
     with conn.transaction():
+        assert_reconciled(conn, package.domain, package.release_id)
         current = conn.execute(
             "SELECT release_id FROM dataset_active_release WHERE domain=%s FOR UPDATE",
             (package.domain,),
@@ -332,6 +326,7 @@ def connect(url: str):
     connection = psycopg.connect(url)
     connection.autocommit = True
     return connection
+
 
 
 def lock_import_domain(conn, domain: str) -> None:

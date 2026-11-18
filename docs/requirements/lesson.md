@@ -361,3 +361,6 @@ uses a guided conversation by default to clarify topic, level, length and quanti
 configuration fields in Lyreo. Optional discovery is a short note at the end of the prompt and of
 the AI's first reply, rather than an initial Custom/Random choice. Explained titles, idea discovery and source verification remain in
 the base prompts. Switching prompt type never changes the editor's source or its draft fields.
+
+Admin của bài học đã công bố chỉ hiển thị thao tác xem nội dung, không có nút công bố lại hoặc
+nhãn “xem trước và công bố”. Metadata và ẩn/hiện tiếp tục theo luồng quản trị hiện có.

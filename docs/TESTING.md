@@ -163,3 +163,18 @@ burden.
 
 When the time comes, E2E scope and tooling will be decided as an architecture decision and
 documented in [`DECISIONS.md`](DECISIONS.md).
+
+## Library cutover verification
+
+Library integration tests use PostgreSQL/Testcontainers for immutable publication, draft isolation,
+source-choice re-edit, restore/deletion guards and concurrent/idempotent learner submit. Editorial
+file tests cover CSV quoting/Unicode/formula protection/version/size/row limits. AI tests reject
+answer edits, malformed output and stale acceptance; the deterministic FastAPI mock emits a valid
+WAV. Import reconciliation integration uses `IMPORT_TEST_DATABASE_URL` and owns a generated schema
+only; CI supplies a dedicated PostgreSQL service for that test. Source fingerprint tests include
+reassigned question-position links.
+
+`make check` runs validation, Java verification, Python suites, frontend component tests/typecheck
+and production builds. A real local Admin browser smoke complements these tests. A dedicated
+Playwright auth/CI stack is deferred under the owner's E2E allowance; neither mock AI nor local
+storage verifies paid-provider output quality or live R2. Cloud reuse must be reported separately.

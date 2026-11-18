@@ -33,14 +33,15 @@ final class LexiconDetailMapper {
                 s.position(), s.partOfSpeech(), s.definitionEn(), s.translationVi(),
                 s.translationStatus().name(), strings(s.rawGlossesJson(), "sense.rawGlosses"),
                 examples(s.examplesJson()), strings(s.tagsJson(), "sense.tags"),
-                s.matchedQualifier())).toList(),
+                s.matchedQualifier(),s.definitions(),s.sourceContext() != null && s.sourceContext().get("source") instanceof String source ? Map.of("source", source) : Map.of())).toList(),
             entry.pronunciations().stream().map(p -> new LexiconController.PronunciationResponse(
                 p.id(), p.itemId(), p.accent(), p.ipa(), p.audioFile(), p.audioUrl(), p.sourceUrl(),
-                strings(p.tagsJson(), "pronunciation.tags"))).toList(),
+                strings(p.tagsJson(), "pronunciation.tags"),p.assetId(),p.pronunciationContext())).toList(),
             entry.translations().stream().map(t -> new LexiconController.TranslationResponse(
                 t.id(), t.itemId(), t.senseId(), t.wordVi(), t.source(), t.sourceScope(),
                 t.sourceSenseQualifier(), t.linkStatus(), t.unlinkedReason(),
-                strings(t.tagsJson(), "translation.tags"), t.sourcePos())).toList());
+                strings(t.tagsJson(), "translation.tags"), t.sourcePos())).toList(),
+            com.lyreo.lexicon.domain.PronunciationGroups.from(entry.canonicalForm(),entry.pronunciations()).stream().map(v->new LexiconController.PronunciationVariantResponse(v.id(),v.form(),v.notation(),v.notationSystem(),v.usage(),v.scopeStatus(),v.regions(),v.recordings().stream().map(p->new LexiconController.PronunciationResponse(p.id(),p.itemId(),p.accent(),p.ipa(),p.audioFile(),p.audioUrl(),p.sourceUrl(),strings(p.tagsJson(),"pronunciation.tags"),p.assetId(),p.pronunciationContext())).toList())).toList());
     }
 
     private List<String> strings(String value, String field) {

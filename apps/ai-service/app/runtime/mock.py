@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import re
+import wave
 
 from ..schemas import ExecuteRequest, ExecuteResponse
 
@@ -53,15 +55,22 @@ class MockRuntime:
 
     async def tts(self, request: ExecuteRequest) -> ExecuteResponse:
         digest = hashlib.sha256(str(request.input.get("text", "")).encode()).hexdigest()[:12]
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as audio:
+            audio.setnchannels(1)
+            audio.setsampwidth(2)
+            audio.setframerate(8000)
+            audio.writeframes(b"\0\0" * 8000)
         return ExecuteResponse(
             output={
-                "audio_base64": base64.b64encode(b"ID3LYREO-MOCK-AUDIO").decode(),
-                "mime_type": "audio/mpeg",
-                "suggested_artifact_key": f"mock/tts/{digest}.mp3",
+                "audio_base64": base64.b64encode(buffer.getvalue()).decode(),
+                "mime_type": "audio/wav",
+                "suggested_artifact_key": f"mock/tts/{digest}.wav",
+                "duration_ms": 1000,
             },
             metadata={
                 "runtime": "mock",
-                "binary_generated": False,
+                "binary_generated": True,
                 "voice": request.options.get("voice"),
                 "accent": request.options.get("accent"),
                 "speed": request.options.get("speed"),
@@ -122,7 +131,28 @@ class MockRuntime:
         schema = request.options.get("response_schema")
         sentences = request.input.get("sentences") or []
 
-        if schema == "lesson_content_v1":
+        if schema in {"library_lexicon_v1", "library_lexicon_v2"}:
+            operation = request.input.get("operation", "TRANSLATE")
+            suggestions = []
+            for sense in request.input.get("senses", [])[:20]:
+                candidate = next((row for row in request.input.get("candidates", [])
+                                  if (row.get("origin") or row).get("itemId") in {None, sense["itemId"]}
+                                  and row.get("senseId") in {None, sense["id"]}), None)
+                if operation == "MATCH" and candidate is None:
+                    continue
+                suggestions.append({"senseId": sense["id"], "field": "example" if operation == "EXAMPLE" else "translationVi",
+                                    "value": candidate["wordVi"] if operation == "MATCH" else f"[mock] {sense['definitionEn']}",
+                                    "candidateId": candidate["id"] if operation == "MATCH" else None,
+                                    "reason": "Mock suggestion for the selected meaning; human review required."})
+            structured = {"suggestions": suggestions, "warnings": ["Mock suggestion; human review required."], "audioAssetId": None}
+        elif schema == "library_question_v1":
+            question = request.input.get("question") or {}
+            count = min(10, max(1, int(request.input.get("count", 1))))
+            variants = "Operation: VARIANTS" in (request.prompt or "")
+            structured = {"suggestions": [] if variants else [{"field": "explanationVi", "value": f"[mock] Answer {question.get('correctOption')}"}],
+                          "candidates": [{**question, "title": f"[mock {index + 1}] {question.get('title') or 'Choose the answer'}", "media": []} for index in range(count)] if variants else [],
+                          "warnings": ["Mock suggestion; human review required."]}
+        elif schema == "lesson_content_v1":
             rows = [(int(i), text) for i, text in re.findall(r"^(\d+)\|(.*)$", request.prompt or "", re.M)]
             structured = {"tr": [[i, f"[mock] {text}"] for i, text in rows],
                           "v": [], "g": [], "d": [], "s": [], "m": ["UNKNOWN", "UNKNOWN"]}

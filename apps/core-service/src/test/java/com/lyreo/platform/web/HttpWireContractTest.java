@@ -18,9 +18,9 @@ import com.lyreo.ai.api.AiAdminController;
 import com.lyreo.ai.application.admin.AiAdminService;
 import com.lyreo.ai.application.admin.ProviderSummary;
 import com.lyreo.ai.application.admin.RouteSummary;
-import com.lyreo.grammar.api.GrammarPracticeController;
-import com.lyreo.grammar.application.GrammarPracticeService;
-import com.lyreo.grammar.domain.GrammarQuestion;
+import com.lyreo.grammar.api.GrammarCatalogController;
+import com.lyreo.grammar.application.PublishedGrammarCatalogs;
+import com.lyreo.assessment.api.AssessmentSessions;
 import com.lyreo.identity.application.AppUserProvisioningService;
 import com.lyreo.identity.application.ProvisionedUser;
 import com.lyreo.learner.api.LearnerController;
@@ -45,10 +45,8 @@ import com.lyreo.platform.jobs.application.BackgroundJobService;
 import com.lyreo.platform.jobs.domain.BackgroundJob;
 import com.lyreo.platform.jobs.domain.BackgroundJobStatus;
 import com.lyreo.platform.observability.CorrelationIdFilter;
-import com.lyreo.toeic.api.ToeicAttemptController;
-import com.lyreo.toeic.application.ToeicAttemptService;
-import com.lyreo.toeic.application.ToeicTestQueryService;
-import com.lyreo.toeic.domain.ToeicTestContent;
+import com.lyreo.toeic.api.ToeicCatalogController;
+import com.lyreo.toeic.application.PublishedToeicTests;
 import com.lyreo.vocabulary.api.VocabularyController;
 import com.lyreo.vocabulary.application.port.SpacedRepetitionScheduler;
 import com.lyreo.vocabulary.application.VocabularyCommandService;
@@ -78,9 +76,8 @@ class HttpWireContractTest {
     private BackgroundJobService backgroundJobService;
     private LessonPreviewService lessonPreviewService;
     private LessonPracticeService lessonPracticeService;
-    private GrammarPracticeService grammarPracticeService;
-    private ToeicAttemptService toeicAttemptService;
-    private ToeicTestQueryService toeicTestQueryService;
+    private PublishedGrammarCatalogs grammarCatalogs;
+    private PublishedToeicTests toeicTests;
     private VocabularyCommandService vocabularyCommandService;
     private AiAdminService aiAdminService;
     private AppUserProvisioningService provisioningService;
@@ -146,18 +143,17 @@ class HttpWireContractTest {
             .addFilters(new CorrelationIdFilter())
             .build();
 
-        // Grammar practice
-        grammarPracticeService = mock(GrammarPracticeService.class);
-        grammarMvc = MockMvcBuilders.standaloneSetup(new GrammarPracticeController(grammarPracticeService, provisioningService))
+        // Published Grammar catalogs and pinned sessions
+        grammarCatalogs = mock(PublishedGrammarCatalogs.class);
+        grammarMvc = MockMvcBuilders.standaloneSetup(new GrammarCatalogController(grammarCatalogs, provisioningService))
             .setCustomArgumentResolvers(jwtResolver)
             .setControllerAdvice(new ApiExceptionHandler())
             .addFilters(new CorrelationIdFilter())
             .build();
 
         // TOEIC
-        toeicAttemptService = mock(ToeicAttemptService.class);
-        toeicTestQueryService = mock(ToeicTestQueryService.class);
-        toeicMvc = MockMvcBuilders.standaloneSetup(new ToeicAttemptController(toeicAttemptService, toeicTestQueryService, provisioningService))
+        toeicTests = mock(PublishedToeicTests.class);
+        toeicMvc = MockMvcBuilders.standaloneSetup(new ToeicCatalogController(toeicTests, provisioningService))
             .setCustomArgumentResolvers(jwtResolver)
             .setControllerAdvice(new ApiExceptionHandler())
             .addFilters(new CorrelationIdFilter())
@@ -352,125 +348,38 @@ class HttpWireContractTest {
     }
 
     @Test
-    void grammarQuestionsReturnsExactPublicFields() throws Exception {
-        UUID qId = UUID.randomUUID();
-        UUID topicId = UUID.randomUUID();
-        UUID subtopicId = UUID.randomUUID();
-        when(grammarPracticeService.practice(any(), any(), any()))
-            .thenReturn(List.of(new GrammarPracticeService.QuestionView(
-                qId,
-                "Choose the correct modal verb",
-                List.of(new GrammarQuestion.Option("A", "must"), new GrammarQuestion.Option("B", "ought")),
-                2,
-                topicId,
-                subtopicId
-            )));
-
-        grammarMvc.perform(get("/api/v1/grammar/questions"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].itemId").value(qId.toString()))
-            .andExpect(jsonPath("$[0].questionText").value("Choose the correct modal verb"))
-            .andExpect(jsonPath("$[0].options[0].key").value("A"))
-            .andExpect(jsonPath("$[0].options[0].text").value("must"))
-            .andExpect(jsonPath("$[0].options[1].key").value("B"))
-            .andExpect(jsonPath("$[0].options[1].text").value("ought"))
-            .andExpect(jsonPath("$[0].difficultyLevel").value(2))
-            .andExpect(jsonPath("$[0].topicCatalogId").value(topicId.toString()))
-            .andExpect(jsonPath("$[0].subtopicCatalogId").value(subtopicId.toString()));
-    }
-
-    @Test
-    void grammarAttemptReturnsExactPublicFields() throws Exception {
-        UUID attemptId = UUID.randomUUID();
-        UUID qId = UUID.randomUUID();
-        when(grammarPracticeService.submit(any(), eq(qId), eq("A")))
-            .thenReturn(new GrammarPracticeService.SubmitResult(
-                attemptId, qId, true, "A",
-                "Giai thich chi tiet", "Dich cau", "Dich dap an", "Tu vung note",
-                GrammarQuestion.ExplanationPolicy.SOURCE
-            ));
-
-        grammarMvc.perform(post("/api/v1/grammar/questions/%s/attempts".formatted(qId))
-                .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(MOCK_JWT))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"answer\": \"A\"}"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.attemptId").value(attemptId.toString()))
-            .andExpect(jsonPath("$.itemId").value(qId.toString()))
-            .andExpect(jsonPath("$.correct").value(true))
-            .andExpect(jsonPath("$.correctAnswer").value("A"))
-            .andExpect(jsonPath("$.explanationVi").value("Giai thich chi tiet"))
-            .andExpect(jsonPath("$.translationVi").value("Dich cau"))
-            .andExpect(jsonPath("$.answerTranslationVi").value("Dich dap an"))
-            .andExpect(jsonPath("$.vocabularyNote").value("Tu vung note"))
-            .andExpect(jsonPath("$.explanationPolicy").value("SOURCE"));
-    }
-
-    @Test
-    void toeicGetReturnsActiveHierarchyAndObjectKeysWithoutAnswerKey() throws Exception {
+    void publishedCatalogsStartPinnedSessionsWithLocationAndNoAnswerKey() throws Exception {
         UUID catalogId = UUID.randomUUID();
-        UUID versionId = UUID.randomUUID();
-        UUID groupId = UUID.randomUUID();
-        UUID placementId = UUID.randomUUID();
-        UUID itemId = UUID.randomUUID();
-        ToeicTestContent.MediaAsset audio = new ToeicTestContent.MediaAsset(
-            "a".repeat(64), "audio", 1, "media/sha256/aa/" + "a".repeat(64), "audio/mpeg", 256L
-        );
-        ToeicTestContent content = new ToeicTestContent(
-            catalogId, versionId,
-            new ToeicTestContent.TestMetadata("Test 1", 2025, 1, UUID.randomUUID(), 1,
-                "Source test", 2700, 4500, 200, 3, 1),
-            List.of(new ToeicTestContent.StimulusGroup(
-                groupId, 3, "AUDIO", "Conversation", 1, 3, List.of(32),
-                null, "PARSED", 1,
-                List.of(new ToeicTestContent.Document(UUID.randomUUID(), 1, "TEXT", "<p>Document</p>", "PARSED")),
-                List.of(audio)
-            )),
-            List.of(new ToeicTestContent.Placement(
-                placementId, groupId, "listening", 3, 32, null, 1,
-                new ToeicTestContent.Item(itemId, "MULTIPLE_CHOICE", "Question",
-                    List.of(new ToeicTestContent.Option("A", "Option A")), 3, List.of())
-            ))
-        );
-        when(toeicTestQueryService.getActiveTest(any(), eq(catalogId))).thenReturn(content);
+        UUID grammarSessionId = UUID.randomUUID();
+        UUID toeicSessionId = UUID.randomUUID();
+        Instant created = Instant.parse("2026-11-18T00:00:00Z");
+        var grammarSession = new AssessmentSessions.View(grammarSessionId, "grammar", catalogId,
+            "PRACTICE", 1, "OPEN", created, created.plusSeconds(86400), "Grammar bank",
+            List.of(), List.of(), java.util.Map.of(), null);
+        var toeicSession = new AssessmentSessions.View(toeicSessionId, "toeic", catalogId,
+            "FULL_TEST", 1, "OPEN", created, created.plusSeconds(86400), "TOEIC L&R",
+            List.of(), List.of(), java.util.Map.of(), null);
+        when(grammarCatalogs.start(any(), eq("bank"), eq(catalogId), eq(10), org.mockito.ArgumentMatchers.isNull()))
+            .thenReturn(grammarSession);
+        when(toeicTests.start(any(), eq(catalogId), eq("FULL_TEST"), org.mockito.ArgumentMatchers.isNull()))
+            .thenReturn(toeicSession);
 
-        toeicMvc.perform(get("/api/v1/toeic/tests/" + catalogId))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.catalogId").value(catalogId.toString()))
-            .andExpect(jsonPath("$.testVersionId").value(versionId.toString()))
-            .andExpect(jsonPath("$.groups[0].documents[0].html").value("<p>Document</p>"))
-            .andExpect(jsonPath("$.groups[0].media[0].storageObjectKey").value(audio.storageObjectKey()))
-            .andExpect(jsonPath("$.placements[0].item.options[0].text").value("Option A"))
-            .andExpect(jsonPath("$..correctOption").doesNotExist())
-            .andExpect(jsonPath("$..transcriptEn").doesNotExist())
-            .andExpect(jsonPath("$..contentTranslationVi").doesNotExist())
-            .andExpect(jsonPath("$..vocabularyNoteVi").doesNotExist())
-            .andExpect(jsonPath("$..sourceReference").doesNotExist());
-    }
-
-    @Test
-    void toeicSubmitReturnsAttemptIdAndScoreWithoutRedundantCompletedField() throws Exception {
-        UUID attemptId = UUID.randomUUID();
-        UUID testId = UUID.randomUUID();
-        when(toeicAttemptService.submit(any(), eq(testId), any(), any()))
-            .thenReturn(new ToeicAttemptService.SubmitResult(
-                attemptId,
-                new com.lyreo.toeic.application.port.ToeicAttemptRepository.ScoreSummary(80, 100, 75, 100, 420, 390)
-            ));
-
-        toeicMvc.perform(post("/api/v1/toeic/tests/%s/attempts".formatted(testId))
-                .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(MOCK_JWT))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"mode\": \"FULL_TEST\", \"answers\": {}}"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.attemptId").value(attemptId.toString()))
-            .andExpect(jsonPath("$.score.listeningCorrect").value(80))
-            .andExpect(jsonPath("$.score.listeningTotal").value(100))
-            .andExpect(jsonPath("$.score.readingCorrect").value(75))
-            .andExpect(jsonPath("$.score.readingTotal").value(100))
-            .andExpect(jsonPath("$.score.listeningScaledScore").value(420))
-            .andExpect(jsonPath("$.score.readingScaledScore").value(390))
-            .andExpect(jsonPath("$.completed").doesNotExist());
+        grammarMvc.perform(post("/api/v1/grammar/catalogs/bank/" + catalogId + "/sessions")
+                .contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isCreated())
+            .andExpect(header().string("Location", "/api/v1/assessment-sessions/" + grammarSessionId))
+            .andExpect(jsonPath("$.id").value(grammarSessionId.toString()))
+            .andExpect(jsonPath("$.domain").value("grammar"))
+            .andExpect(jsonPath("$.revision").value(1))
+            .andExpect(jsonPath("$.correctAnswer").doesNotExist());
+        toeicMvc.perform(post("/api/v1/toeic/catalog/" + catalogId + "/sessions")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"FULL_TEST\"}"))
+            .andExpect(status().isCreated())
+            .andExpect(header().string("Location", "/api/v1/assessment-sessions/" + toeicSessionId))
+            .andExpect(jsonPath("$.id").value(toeicSessionId.toString()))
+            .andExpect(jsonPath("$.domain").value("toeic"))
+            .andExpect(jsonPath("$.mode").value("FULL_TEST"))
+            .andExpect(jsonPath("$.correctAnswer").doesNotExist());
     }
 
     @Test

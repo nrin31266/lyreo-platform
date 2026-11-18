@@ -10,6 +10,7 @@ import {
   keepPreviousData,
 } from "@tanstack/react-query";
 import { RiAddLine as Plus, RiSearchLine as Search, RiDeleteBinLine as Trash2, RiPencilLine as Pencil, RiArrowRightLine as ArrowRight } from "@remixicon/react";
+import { AdminPagination } from "@/components/AdminPagination";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
@@ -300,36 +301,11 @@ export function LessonsPage() {
       {lessons.data && (
         <footer className="flex flex-wrap items-center justify-between gap-3">
           <span>{t("catalog.total", { count: lessons.data.total })}</span>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              disabled={lessons.isFetching || lessons.data.page === 0}
-              onClick={() =>
-                setParams((p) => {
-                  p.set("page", String(lessons.data!.page - 1));
-                  return p;
-                })
-              }
-            >
-              {t("catalog.previous")}
-            </Button>
-            <Button
-              variant="outline"
-              disabled={
-                lessons.isFetching ||
-                (lessons.data.page + 1) * lessons.data.size >=
-                  lessons.data.total
-              }
-              onClick={() =>
-                setParams((p) => {
-                  p.set("page", String(lessons.data!.page + 1));
-                  return p;
-                })
-              }
-            >
-              {t("catalog.next")}
-            </Button>
-          </div>
+          <AdminPagination page={lessons.data.page} pageCount={Math.ceil(lessons.data.total / lessons.data.size)} disabled={lessons.isFetching || lessons.isError} onPageChange={page => setParams(previous => {
+            const next = new URLSearchParams(previous);
+            if (page) next.set("page", String(page)); else next.delete("page");
+            return next;
+          })} />
         </footer>
       )}
       <Dialog

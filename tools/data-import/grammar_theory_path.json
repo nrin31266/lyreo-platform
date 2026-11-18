@@ -1,0 +1,176 @@
+{
+  "format": "lyreo.grammar-theory.v1",
+  "author": "Lyreo editorial",
+  "lessons": [
+    {
+      "subtopic_id": "36d54ffd-a035-4789-9013-a8174279d484",
+      "source_sha256": "175b40205c1a4fa733aa8b9a209cb58eb3fcf454f5a9375f29120bbc01c93600",
+      "theory": {
+        "order": 1,
+        "objectiveVi": "Nhận ra chức năng của từ trong câu.",
+        "objectiveEn": "Identify how a word functions in a sentence.",
+        "ruleVi": "Xác định chủ ngữ và động từ trước. Danh từ có thể làm chủ ngữ hoặc tân ngữ. Tính từ bổ nghĩa cho danh từ, còn trạng từ có thể bổ nghĩa cho động từ, tính từ hoặc trạng từ khác.",
+        "ruleEn": "Locate the subject and verb first. Nouns can act as subjects or objects. Adjectives modify nouns, and adverbs can modify verbs, adjectives or other adverbs.",
+        "examples": [
+          {
+            "en": "The efficient team completed the work quickly.",
+            "vi": "Đội ngũ làm việc hiệu quả đã hoàn thành công việc nhanh chóng."
+          }
+        ]
+      }
+    },
+    {
+      "subtopic_id": "a39ed60d-390c-4e6d-b2d6-7a9b2eb822b4",
+      "source_sha256": "636e93a4d98ce825c60904238aa1a0b8f2be5ec64a14711e15991296caa96127",
+      "theory": {
+        "order": 2,
+        "objectiveVi": "Dùng từ hạn định phù hợp với danh từ.",
+        "objectiveEn": "Choose determiners that agree with their nouns.",
+        "ruleVi": "This và that đi với danh từ số ít hoặc không đếm được. These và those đi với danh từ số nhiều. A/an đi với danh từ đếm được số ít và phụ thuộc vào âm đầu của từ ngay sau nó.",
+        "ruleEn": "This and that take a singular or uncountable noun. These and those take a plural noun. A/an precedes a singular countable noun, and the choice depends on the following sound.",
+        "examples": [
+          {
+            "en": "These reports include an updated schedule.",
+            "vi": "Các báo cáo này có kèm lịch trình đã cập nhật."
+          }
+        ]
+      }
+    },
+    {
+      "subtopic_id": "00119d3d-cca3-494f-87ba-1216eaa2339c",
+      "source_sha256": "da348410ecbc44bad20d2d4d61e398bca4aa40631e3550137dd00d3cf88575f0",
+      "theory": {
+        "order": 3,
+        "objectiveVi": "Chọn đúng đại từ chủ ngữ và tân ngữ.",
+        "objectiveEn": "Use the correct subject and object pronoun forms.",
+        "ruleVi": "Dùng I, you, he, she, it, we, they ở vị trí chủ ngữ. Dùng me, you, him, her, it, us, them sau động từ hoặc giới từ khi đại từ là tân ngữ.",
+        "ruleEn": "Use I, you, he, she, it, we and they as subjects. Use me, you, him, her, it, us and them as objects of a verb or preposition.",
+        "examples": [
+          {
+            "en": "They sent us the invoice.",
+            "vi": "Họ đã gửi hóa đơn cho chúng tôi."
+          }
+        ]
+      }
+    },
+    {
+      "subtopic_id": "f0c5222d-9cbd-4d4f-92c0-6d6ea4f87003",
+      "source_sha256": "fc61e1ba3d71aec40c87f70efebefda578428e93b18e6da498f0c89efa6f9ec2",
+      "theory": {
+        "order": 4,
+        "objectiveVi": "Cho động từ hòa hợp với chủ ngữ.",
+        "objectiveEn": "Make verbs agree with their subjects.",
+        "ruleVi": "Tìm danh từ chính của chủ ngữ. Trong hiện tại đơn, động từ thường thêm -s với chủ ngữ ngôi ba số ít. Cụm giới từ theo sau chủ ngữ thường không đổi sự hòa hợp.",
+        "ruleEn": "Find the head noun of the subject. In the simple present, most verbs take -s with a third-person singular subject. A following prepositional phrase usually does not change agreement.",
+        "examples": [
+          {
+            "en": "The list of participants is on the desk.",
+            "vi": "Danh sách người tham gia nằm trên bàn."
+          }
+        ]
+      }
+    },
+    {
+      "subtopic_id": "f274f5a8-c809-4bb7-be05-a2ce760b4f24",
+      "source_sha256": "36ef7426c3d681f07c6ab689a3a6b1aa91db60e841b56bb629d307ff66d69fa1",
+      "theory": {
+        "order": 5,
+        "objectiveVi": "Dùng tính từ để mô tả chủ ngữ sau động từ nối.",
+        "objectiveEn": "Use adjectives to describe the subject after a linking verb.",
+        "ruleVi": "Sau be, seem, become và các động từ được dùng với chức năng nối như look, feel, tính từ có thể làm bổ ngữ cho chủ ngữ. Nếu động từ chỉ hành động, trạng từ có thể mô tả cách thực hiện hành động.",
+        "ruleEn": "After linking verbs such as be, seem and become, or linking uses of look and feel, an adjective can describe the subject. An adverb can describe how an action is performed.",
+        "examples": [
+          {
+            "en": "The instructions seem clear.",
+            "vi": "Các hướng dẫn có vẻ rõ ràng."
+          }
+        ]
+      }
+    },
+    {
+      "subtopic_id": "33e74da3-97eb-420a-ba5c-ef9fd0d051ce",
+      "source_sha256": "133f3d831eaf6e23285f41a508769c00b6915373cad8da67ca42d7aa838c9b3e",
+      "theory": {
+        "order": 6,
+        "objectiveVi": "Chọn thì dựa trên thời điểm và ý nghĩa.",
+        "objectiveEn": "Choose tense based on time and meaning.",
+        "ruleVi": "Hiện tại đơn diễn tả thói quen hoặc sự thật. Quá khứ đơn thường dùng cho việc đã kết thúc ở một thời điểm quá khứ. Hiện tại hoàn thành liên hệ việc trước hiện tại với hiện tại, chẳng hạn trải nghiệm hoặc kết quả hiện còn liên quan.",
+        "ruleEn": "The simple present describes habits or facts. The simple past usually places a finished event at a past time. The present perfect connects an earlier event or state with the present.",
+        "examples": [
+          {
+            "en": "She sent the report yesterday and has already received a reply.",
+            "vi": "Cô ấy gửi báo cáo hôm qua và đã nhận được phản hồi."
+          }
+        ]
+      }
+    },
+    {
+      "subtopic_id": "e0babc48-5c1a-4c4d-b428-abb1c2cd8b2e",
+      "source_sha256": "e2f076be2e823f02ea672878ea3923a55b1f5bcf4388a145b102aed55f382504",
+      "theory": {
+        "order": 7,
+        "objectiveVi": "Nhận ra và dùng cấu trúc bị động.",
+        "objectiveEn": "Recognize and form the passive voice.",
+        "ruleVi": "Câu bị động đưa đối tượng chịu tác động lên làm chủ ngữ. Giữ thì ở động từ be và dùng quá khứ phân từ cho động từ chính. Nêu tác nhân với by khi cần.",
+        "ruleEn": "In the passive voice, the affected entity becomes the subject. Carry tense on be and use the past participle of the main verb. Add a by-phrase if the agent matters.",
+        "examples": [
+          {
+            "en": "The application was approved on Monday.",
+            "vi": "Đơn đã được phê duyệt vào thứ Hai."
+          }
+        ]
+      }
+    },
+    {
+      "subtopic_id": "4d5b90dc-8b95-4d02-bdd3-4ecd851c6395",
+      "source_sha256": "f330799fb21fa313dacffb21a698c2ef7d6e191b4a62bc54758dac99b1f3a097",
+      "theory": {
+        "order": 8,
+        "objectiveVi": "So sánh hai đối tượng.",
+        "objectiveEn": "Compare two things with a comparative.",
+        "ruleVi": "Dùng -er với nhiều tính từ ngắn và more với nhiều tính từ dài. Dùng than để nêu đối tượng so sánh. Một số dạng bất quy tắc như good → better.",
+        "ruleEn": "Use -er with many short adjectives and more with many longer adjectives. Use than to introduce the comparison. Some forms are irregular, such as good → better.",
+        "examples": [
+          {
+            "en": "The new route is faster than the old one.",
+            "vi": "Tuyến mới nhanh hơn tuyến cũ."
+          }
+        ]
+      }
+    },
+    {
+      "subtopic_id": "26131708-259a-4249-8721-baece5ac4063",
+      "source_sha256": "275734500cee0a3f21d218ae8f332cc4ce8f51378efe0751a6310cd480c7ccbe",
+      "theory": {
+        "order": 9,
+        "objectiveVi": "Dùng đại từ quan hệ để bổ nghĩa cho danh từ.",
+        "objectiveEn": "Use relative pronouns to modify nouns.",
+        "ruleVi": "Who thường chỉ người, which thường chỉ vật, that có thể chỉ người hoặc vật trong mệnh đề xác định. Trong mệnh đề xác định, có thể lược đại từ làm tân ngữ, nhưng không lược đại từ làm chủ ngữ.",
+        "ruleEn": "Who usually refers to people and which to things. That can refer to either in defining clauses. An object relative pronoun can often be omitted in a defining clause, but a subject relative pronoun cannot.",
+        "examples": [
+          {
+            "en": "The engineer who installed the system is here.",
+            "vi": "Kỹ sư đã lắp đặt hệ thống đang ở đây."
+          }
+        ]
+      }
+    },
+    {
+      "subtopic_id": "8945b578-e112-4f88-8e29-5efabe312a6d",
+      "source_sha256": "ceacb81cc8b8a18c103845d2f6adec1211508fbab8b70ee5f1dcc2842c6963b0",
+      "theory": {
+        "order": 10,
+        "objectiveVi": "Dùng cấu trúc song song trong phép liệt kê.",
+        "objectiveEn": "Use parallel forms in coordinated lists.",
+        "ruleVi": "Khi and nối các thành phần cùng chức năng, đặt chúng ở dạng song song nếu có thể. Chẳng hạn, một danh sách hoạt động có thể dùng các cụm động từ nguyên mẫu cùng dạng.",
+        "ruleEn": "When and joins items with the same function, keep their grammatical forms parallel where possible. A list of tasks, for example, can use matching base verb phrases.",
+        "examples": [
+          {
+            "en": "Please review the contract, sign the form, and return both documents.",
+            "vi": "Vui lòng xem hợp đồng, ký biểu mẫu và gửi lại cả hai tài liệu."
+          }
+        ]
+      }
+    }
+  ]
+}

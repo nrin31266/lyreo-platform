@@ -9,6 +9,7 @@ import mimetypes
 import os
 import sys
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
@@ -130,6 +131,7 @@ def group_row(package: ReleasePackage, row: dict[str, Any]) -> tuple[Any, ...]:
         row.get("source_html_sha256"),
         row.get("document_parse_status"),
         row["document_count"],
+        pg_json(row.get("source_issues", [])),
     )
 
 
@@ -198,6 +200,7 @@ def subtopic_version_row(package: ReleasePackage, row: dict[str, Any], catalog_i
         row["order_index"],
         row["access_level"],
         row["is_hidden"],
+        pg_json(row["theory"]) if row.get("theory") is not None else None,
     )
 
 
@@ -570,6 +573,15 @@ def verify_or_upload_media(client, bucket: str, path: Path, *, sha256: str,
 
 
 def _media_configuration() -> tuple[Any, str]:
+    mode = os.getenv("STORAGE_MODE", "r2")
+    if mode == "local":
+        from local_media import LocalMediaClient
+        root = os.getenv("LOCAL_STORAGE_ROOT")
+        if not root:
+            raise ValueError("LOCAL_STORAGE_ROOT is required for local media import")
+        return LocalMediaClient(Path(root)), "local"
+    if mode != "r2":
+        raise ValueError("STORAGE_MODE must be local or r2")
     bucket = os.getenv("R2_BUCKET")
     client = s3_client()
     if client is None or not bucket:
@@ -581,49 +593,48 @@ def _upload_and_insert_assets(conn, package: ReleasePackage, run_id: uuid.UUID, 
                               client, bucket: str, progress: dict[str, int]) -> tuple[int, int]:
     uploads = 0
     release_rows_inserted = 0
-    for batch in chunks(jsonl_rows(package.root / "shared/assets.jsonl"), batch_size):
-        for row in batch:
-            path = (package.root / row["path"]).resolve(strict=True)
-            if not path.is_relative_to(package.root.resolve()):
-                raise ValueError(f"Media path escapes release root: {row['path']}")
-            key = media_object_key(row["id"])
-            if verify_or_upload_media(
-                client,
-                bucket,
-                path,
-                sha256=row["id"],
-                size_bytes=row["size_bytes"],
-                mime_type=row["mime_type"],
-                object_key=key,
-            ):
-                uploads += 1
-        blob_rows = [
-            (row["id"], row["mime_type"], row["size_bytes"], media_object_key(row["id"]))
-            for row in batch
-        ]
-        asset_rows = [asset_row(package, row) for row in batch]
-        with conn.transaction():
-            insert_values(conn, "media_blob", ("sha256", "mime_type", "size_bytes", "storage_object_key"), blob_rows)
-            for digest, mime_type, size_bytes, object_key in blob_rows:
-                existing = conn.execute(
-                    "SELECT mime_type,size_bytes,storage_object_key FROM media_blob WHERE sha256=%s",
-                    (digest,),
-                ).fetchone()
-                if existing != (mime_type, size_bytes, object_key):
-                    raise ValueError(f"Conflicting media blob metadata for SHA-256 {digest}")
-            release_rows_inserted += insert_values(
-                conn,
-                "release_media_asset",
-                ("id", "release_id", "package_asset_id", "blob_sha256", "package_path", "source_paths"),
-                asset_rows,
-            )
-            progress["active_rows_read"] += len(batch)
-            progress["records_inserted"] += release_rows_inserted - progress.get("asset_inserted_before", 0)
-            progress["asset_inserted_before"] = release_rows_inserted
-            conn.execute(
-                "UPDATE dataset_import_run SET records_read=%s,records_inserted=%s WHERE id=%s",
-                (progress["records_read"], progress["records_inserted"], run_id),
-            )
+    def verify(row):
+        path = (package.root / row["path"]).resolve(strict=True)
+        if not path.is_relative_to(package.root.resolve()):
+            raise ValueError(f"Media path escapes release root: {row['path']}")
+        return verify_or_upload_media(client, bucket, path, sha256=row["id"],
+                                      size_bytes=row["size_bytes"], mime_type=row["mime_type"],
+                                      object_key=media_object_key(row["id"]))
+
+    with ThreadPoolExecutor(max_workers=8) as workers:
+        for batch in chunks(jsonl_rows(package.root / "shared/assets.jsonl"), min(batch_size, 100)):
+            uploads += sum(workers.map(verify, batch))
+            blob_rows = [
+                (row["id"], row["mime_type"], row["size_bytes"], media_object_key(row["id"]))
+                for row in batch
+            ]
+            asset_rows = [asset_row(package, row) for row in batch]
+            with conn.transaction():
+                insert_values(conn, "media_blob", ("sha256", "mime_type", "size_bytes", "storage_object_key"), blob_rows)
+                for digest, mime_type, size_bytes, object_key in blob_rows:
+                    existing = conn.execute(
+                        "SELECT mime_type,size_bytes,storage_object_key FROM media_blob WHERE sha256=%s",
+                        (digest,),
+                    ).fetchone()
+                    if existing != (mime_type, size_bytes, object_key):
+                        raise ValueError(f"Conflicting media blob metadata for SHA-256 {digest}")
+                release_rows_inserted += insert_values(
+                    conn,
+                    "release_media_asset",
+                    ("id", "release_id", "package_asset_id", "blob_sha256", "package_path", "source_paths"),
+                    asset_rows,
+                )
+                insert_values(conn, "content_asset",
+                    ("id", "sha256", "storage_key", "mime_type", "size_bytes", "filename", "created_by"),
+                    [(_sid(package, "release-media-asset", row["id"]), row["id"], media_object_key(row["id"]),
+                      row["mime_type"], row["size_bytes"], row["path"], "dataset-import") for row in batch])
+                progress["active_rows_read"] += len(batch)
+                progress["records_inserted"] += release_rows_inserted - progress.get("asset_inserted_before", 0)
+                progress["asset_inserted_before"] = release_rows_inserted
+                conn.execute(
+                    "UPDATE dataset_import_run SET records_read=%s,records_inserted=%s WHERE id=%s",
+                    (progress["records_read"], progress["records_inserted"], run_id),
+                )
     return uploads, release_rows_inserted
 
 
@@ -737,7 +748,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
         _process(
             conn, package, run_id, batch_size=batch_size,
             filename="toeic/groups", table="toeic_stimulus_group",
-            columns=("id", "release_id", "test_version_id", "package_group_id", "part", "kind", "title", "order_index", "difficulty_level", "question_numbers", "transcript_en", "content_translation_vi", "vocabulary_note_vi", "render_html", "source_html", "source_html_sha256", "document_parse_status", "document_count"),
+            columns=("id", "release_id", "test_version_id", "package_group_id", "part", "kind", "title", "order_index", "difficulty_level", "question_numbers", "transcript_en", "content_translation_vi", "vocabulary_note_vi", "render_html", "source_html", "source_html_sha256", "document_parse_status", "document_count", "source_issues"),
             mapper=group_row, progress=progress,
         )
         _process(
@@ -768,7 +779,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
         _process(
             conn, package, run_id, batch_size=batch_size,
             filename="grammar/subtopics", table="grammar_subtopic_version",
-            columns=("id", "release_id", "catalog_id", "topic_catalog_id", "package_subtopic_id", "package_topic_id", "topic_version_id", "title_en", "title_vi", "description_en", "description_vi", "difficulty_level", "order_index", "source_access_level", "source_is_hidden"),
+            columns=("id", "release_id", "catalog_id", "topic_catalog_id", "package_subtopic_id", "package_topic_id", "topic_version_id", "title_en", "title_vi", "description_en", "description_vi", "difficulty_level", "order_index", "source_access_level", "source_is_hidden", "theory"),
             mapper=subtopic_version_row, progress=progress,
             map_context=lambda row: (subtopic_catalog_id(row["id"]), topic_catalog_id(row["topic_id"])),
         )
@@ -816,8 +827,10 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
                 "catalog_reconciliation": catalog_counts,
                 "baseline_catalogs_confirmed": confirm_first_baseline_catalogs(conn, package.release_id) if baseline else {},
                 "media": {
+                    "storage_mode": os.getenv("STORAGE_MODE", "r2"),
                     "assets": package.counts["shared/assets"],
                     "uploads_this_run": uploads,
+                    "reused_this_run": package.counts["shared/assets"] - uploads,
                     "object_key_scheme": "media/sha256/{prefix}/{sha256}",
                 },
                 "reconciliation": {
@@ -830,6 +843,8 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
             }
             finish_run(conn, run_id, package_record_count(package), progress["records_inserted"], details)
         run_succeeded = True
+        from editorial_reconciliation import reconcile_editorial
+        reconcile_editorial(conn, package.domain, package.release_id)
 
         if activate or rollback:
             activate_release(conn, package, activated_by=activated_by or "",
@@ -846,6 +861,8 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
                 if name.startswith("quarantine/") or name.startswith("source_only/")
             },
             "media_uploads_this_run": uploads,
+            "media_reused_this_run": package.counts["shared/assets"] - uploads,
+            "media_storage_mode": details["media"]["storage_mode"],
             "activated": bool(activate or rollback),
             "activation_action": "ROLLBACK" if rollback else "ACTIVATE" if activate else None,
         }

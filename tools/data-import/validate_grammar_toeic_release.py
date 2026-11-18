@@ -10,8 +10,12 @@ import re
 import tarfile
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse
+from bs4 import BeautifulSoup
 
-from build_grammar_toeic_release import GRAPHIC_RE, clean_html, sha256, visible_tokens
+from build_grammar_toeic_release import GRAPHIC_RE, REVIEWED_STALE_IMAGE, canonical_json, clean_html, sha256, visible_tokens, repaired_source, item_from_grammar, item_from_toeic, clean, VI_RE
+from maintenance_overrides import verify_effective
+import source_repairs
+import grammar_theory
 
 
 def require(condition: bool, message: str) -> None:
@@ -28,6 +32,19 @@ def index(data: list[dict], name: str) -> dict[str, dict]:
     result = {row["id"]: row for row in data}
     require(len(result) == len(data), f"Duplicate {name} ID")
     return result
+
+
+def table_layout(html: str) -> list:
+    """Preserve table boundaries, row order and merged cells as well as their text."""
+    soup = BeautifulSoup(html, "html.parser")
+    return [
+        [
+            [(cell.name, cell.get("rowspan", "1"), cell.get("colspan", "1"), visible_tokens(str(cell)))
+             for cell in row.find_all(["td", "th"], recursive=False)]
+            for row in table.find_all("tr") if row.find_parent("table") is table
+        ]
+        for table in soup.find_all("table")
+    ]
 
 
 def validate_membership_hierarchy(membership: dict, subtopics: dict[str, dict]) -> None:
@@ -61,9 +78,27 @@ def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
     asset_uses = index(rows(root, "shared/asset_uses.jsonl"), "asset use")
     item_list = rows(root, "shared/items.jsonl")
     items = index(item_list, "item")
-    tests = index(rows(root, "toeic/tests.jsonl"), "test")
     group_list = rows(root, "toeic/groups.jsonl")
     groups = index(group_list, "group")
+    repair_meta = manifest["source"].get("source_repairs")
+    reviewed_repairs = None
+    baseline_items, baseline_groups = items, groups
+    if repair_meta:
+        require(repair_meta["path"] == source_repairs.PATH, "Unexpected source repair path")
+        reviewed_repairs = source_repairs.validate(json.loads((root / source_repairs.PATH).read_text()), "grammar-toeic")
+        require(repair_meta["count"] == len(reviewed_repairs["repairs"]), "Source repair count differs")
+        source_repairs.require_targets(reviewed_repairs, {"shared/items.jsonl": items, "toeic/groups.jsonl": groups})
+        baseline_items = {key: source_repairs.record("shared/items.jsonl", value, reviewed_repairs, reverse=True) for key, value in items.items()}
+        baseline_groups = {key: source_repairs.record("toeic/groups.jsonl", value, reviewed_repairs, reverse=True) for key, value in groups.items()}
+    override_meta = manifest["source"].get("language_overrides")
+    originals = baseline_items
+    language_overrides = None
+    if override_meta:
+        require(override_meta["path"] == "editorial/language_overrides.json", "Unexpected language override path")
+        language_overrides = json.loads((root / override_meta["path"]).read_text())
+        require(language_overrides["base_manifest_sha256"] == override_meta["base_manifest_sha256"], "Override base manifest differs")
+        originals = verify_effective(baseline_items, language_overrides)
+    tests = index(rows(root, "toeic/tests.jsonl"), "test")
     documents = index(rows(root, "toeic/documents.jsonl"), "document")
     placements = index(rows(root, "toeic/placements.jsonl"), "TOEIC placement")
     topics = index(rows(root, "grammar/topics.jsonl"), "topic")
@@ -75,6 +110,18 @@ def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
     quarantined_subtopics = index(rows(root, "quarantine/grammar_subtopics.jsonl"), "quarantined subtopic")
     stats = rows(root, "source_only/difficulty_observations.jsonl")
     issue_report = json.loads((root / "validation_report.json").read_text(encoding="utf-8"))
+    theory_projection = {key: row["theory"] for key, row in subtopics.items() if "theory" in row}
+    if theory_projection or manifest["source"].get("grammar_theory"):
+        require(manifest["source"].get("grammar_theory") == grammar_theory.PATH, "Unexpected grammar theory provenance")
+        authored = json.loads((root / grammar_theory.PATH).read_text())
+        basis = [{k: v for k, v in row.items() if k != "theory"} for row in subtopics.values()]
+        expected = grammar_theory.apply(authored, basis, list(memberships.values()))
+        require(theory_projection == expected and issue_report.get("grammar_theory_lessons") == len(expected),
+                "Grammar theory projection differs from authored content")
+    if language_overrides:
+        require(issue_report.get("accepted_language_changes") == len(language_overrides["changes"]), "Accepted language change count differs")
+    if reviewed_repairs:
+        require(issue_report.get("accepted_source_repairs") == len(reviewed_repairs["repairs"]), "Source repair report count differs")
     require(issue_report["counts"] == manifest["counts"], "Count summary mismatch")
     require(issue_report["status"] == manifest["validation"]["status"] == "PASS_WITH_ISSUES", "Issue report status mismatch")
     issue_counts = [{"code": code, "status": status, "count": count} for (code, status), count in sorted(collections.Counter((row["code"], row["status"]) for row in issue_report["issues"]).items())]
@@ -134,15 +181,20 @@ def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
         require(sorted(doc["ordinal"] for doc in docs) == list(range(1, len(docs) + 1)), f"Document order invalid: {group['id']}")
         if group["source_html"]:
             require(group["source_html_sha256"] == hashlib.sha256(group["source_html"].encode()).hexdigest(), f"Original HTML hash changed: {group['id']}")
-            require(group["render_html"] and visible_tokens(group["source_html"]) == visible_tokens(group["render_html"]), f"HTML text changed: {group['id']}")
+            require(group["render_html"] and visible_tokens(repaired_source(group["source_html"])) == visible_tokens(group["render_html"]), f"HTML text changed: {group['id']}")
+            if group["part"] == 7:
+                require(table_layout(repaired_source(group["source_html"])) == table_layout(group["render_html"]), f"Part 7 HTML table changed: {group['id']}")
             require(clean_html(group["render_html"]) == group["render_html"], f"Unsafe render HTML: {group['id']}")
             status = group["document_parse_status"]
             require(status in ("SINGLE", "STRUCTURAL", "UNSPLIT"), f"Invalid document status: {group['id']}")
             require((status == "UNSPLIT" and not docs) or (status == "SINGLE" and len(docs) == 1) or (status == "STRUCTURAL" and len(docs) in (2, 3)), f"Document status/count mismatch: {group['id']}")
             if docs:
                 require(all(doc["parse_status"] == status for doc in docs), f"Document status differs: {group['id']}")
-                projection = [token for doc in sorted(docs, key=lambda row: row["ordinal"]) for token in visible_tokens(doc["html"])]
+                ordered = sorted(docs, key=lambda row: row["ordinal"])
+                projection = [token for doc in ordered for token in visible_tokens(doc["html"])]
                 require(projection == visible_tokens(group["render_html"]), f"Document projection loses content: {group['id']}")
+                require([table for doc in ordered for table in table_layout(doc["html"])] == table_layout(group["render_html"]),
+                        f"Document projection changes tables: {group['id']}")
         else:
             require(group["render_html"] is None and group["source_html_sha256"] is None and not docs and group["document_parse_status"] == "NOT_APPLICABLE", f"Unexpected HTML projection: {group['id']}")
         if group["part"] == 6:
@@ -168,14 +220,15 @@ def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
     require(shared == sum(item["id"] in placements for item in item_list if "grammar" in item["source_domains"]), "Shared item mismatch")
     require(issue_ids["MULTI_DOCUMENT_UNSPLIT"] == {group["id"] for group in group_list if group["document_parse_status"] == "UNSPLIT"}, "Unresolved document issue set differs")
     require(all(group["part"] == 7 and len(grouped[group["id"]]) == 5 and group["render_html"] and visible_tokens(group["render_html"]) for group in group_list if group["id"] in issue_ids["MULTI_DOCUMENT_UNSPLIT"]), "Incomplete unresolved document fallback")
-    for group_id in issue_ids["UNRESOLVED_IMAGE_REFERENCE"]:
+    image_fallbacks = issue_ids["UNRESOLVED_IMAGE_REFERENCE"] | issue_ids["STALE_IMAGE_REFERENCE"]
+    for group_id in image_fallbacks:
         group = groups.get(group_id)
         require(group is not None and group["part"] in (3, 4) and group["transcript_en"], f"Missing image lacks transcript fallback: {group_id}")
         members = grouped[group_id]
         require(members and all(items[row["item_id"]]["stem_en"] and not GRAPHIC_RE.search(items[row["item_id"]]["stem_en"]) for row in members), f"Missing image is required by a question: {group_id}")
         uses = [use for use in asset_uses.values() if use["owner_type"] == "group" and use["owner_id"] == group_id]
         require(any(use["role"] == "audio" for use in uses) and not any(use["role"] == "image" for use in uses), f"Missing image lacks playable audio fallback: {group_id}")
-    require({issue["code"] for issue in issue_report["issues"] if issue["status"] == "UNRESOLVED"} == {"MULTI_DOCUMENT_UNSPLIT", "UNRESOLVED_IMAGE_REFERENCE"}, "Unknown unresolved issue lacks fallback validation")
+    require({issue["code"] for issue in issue_report["issues"] if issue["status"] == "UNRESOLVED"} <= {"MULTI_DOCUMENT_UNSPLIT", "UNRESOLVED_IMAGE_REFERENCE"}, "Unknown unresolved issue lacks fallback validation")
     require(issue_ids["EMPTY_UNREFERENCED_PASSAGE"] == set(quarantined_passages), "Quarantined passage issue set differs")
     for passage in quarantined_passages.values():
         source = passage["source_row"]
@@ -197,22 +250,62 @@ def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
             path = raw / source["path"]
             require(path.is_file() and path.stat().st_size == source["size_bytes"] and sha256(path) == source["sha256"], f"Raw source changed: {path}")
         raw_passages = index(json.loads((raw / "mock_test_data/all_passages.json").read_text(encoding="utf-8")), "raw passage")
+        raw_questions = index(json.loads((raw / "mock_test_data/all_questions.json").read_text()), "raw TOEIC question")
+        for placement in placements.values():
+            if placement["part"] != 7:
+                continue
+            item_id = placement["item_id"]
+            source = raw_questions.get(item_id)
+            actual = items[item_id]
+            require(source is not None and source["question_number"] == placement["question_number"]
+                    and source["passage_id"] == placement["group_id"],
+                    f"Part 7 placement differs from source: {item_id}")
+            expected = item_from_toeic(source)
+            require(all(actual[field] == expected[field] for field in ("stem_en", "options", "correct_option")),
+                    f"Part 7 stem, choices or answer differs from source: {item_id}")
         raw_subtopics = index(json.loads((raw / "grammar_data/grammar_subtopics.json").read_text(encoding="utf-8")), "raw subtopic")
         raw_memberships = index(json.loads((raw / "grammar_data/grammar_question_memberships.json").read_text(encoding="utf-8")), "raw Grammar membership")
         raw_stats = json.loads((raw / "mock_test_data/all_difficulty_stats.json").read_text(encoding="utf-8"))
+        if language_overrides or reviewed_repairs:
+            raw_grammar = index(json.loads((raw / "grammar_data/grammar_questions.json").read_text()), "raw Grammar question")
+            repaired_items = {repair["id"] for repair in reviewed_repairs["repairs"] if repair["collection"] == "shared/items.jsonl"} if reviewed_repairs else set()
+            overridden_items = {change["item_id"] for change in language_overrides["changes"]} if language_overrides else set()
+            for target in repaired_items | overridden_items:
+                source = raw_questions.get(target)
+                expected = item_from_toeic(source) if source else item_from_grammar(raw_grammar[target])
+                if source and target in raw_grammar:
+                    expected["source_domains"].append("grammar")
+                    expected["provenance"].extend(item_from_grammar(raw_grammar[target])["provenance"])
+                retained = originals[target].get("source_only_fields", {})
+                if retained:
+                    require(source is not None, f"Unexpected Grammar source-only fields: {target}")
+                    for field,value in retained.items():
+                        require(field in {"unclassified_explanation_en","part6_question_text"}, "Unknown override source field")
+                        require(value == (clean(source.get("explanation_en")) if field == "unclassified_explanation_en" else source.get("question_text")), f"Override raw source differs: {target}")
+                    expected["source_only_fields"] = retained
+                require(expected == originals[target], f"Reviewed override baseline differs from immutable raw item: {target}")
+            if reviewed_repairs:
+                for repair in reviewed_repairs["repairs"]:
+                    if repair["collection"] == "toeic/groups.jsonl":
+                        values = {clean(q.get("dich_nghia")) for q in raw_questions.values() if q.get("passage_id") == repair["id"]}
+                        require(len(values) == 1 and baseline_groups[repair["id"]]["content_translation_vi"] in values, "Reviewed group translation differs from immutable raw source")
         require(set(raw_passages) == set(groups) | set(quarantined_passages), "Raw passage partition differs")
         require(set(raw_subtopics) == set(subtopics) | set(quarantined_subtopics), "Raw subtopic partition differs")
         require(set(raw_memberships) == set(memberships), "Raw Grammar memberships differ")
         require(len(raw_stats) == len(stats) and {f"{row['item_type']}:{row['item_id']}" for row in raw_stats} == {row["id"] for row in stats}, "Raw difficulty stats differ")
         require(all(raw_passages.get(row_id) == row["source_row"] for row_id, row in quarantined_passages.items()), "Quarantined passage source row differs")
         require(all(raw_subtopics.get(row_id) == row["source_row"] for row_id, row in quarantined_subtopics.items()), "Quarantined subtopic source row differs")
-        for group_id in issue_ids["UNRESOLVED_IMAGE_REFERENCE"]:
+        for group_id in image_fallbacks:
             source = raw_passages[group_id]
             test = tests[groups[group_id]["test_id"]]
             require(source.get("image_url"), f"Unresolved image has no source reference: {group_id}")
             basename = Path(unquote(urlparse(source["image_url"]).path)).name
             expected_image = raw / "mock_test_data/downloads" / str(test["year"]) / test["name"] / "images" / basename
             require(not expected_image.exists(), f"Unresolved image has a local source file: {group_id}")
+            if group_id in issue_ids["STALE_IMAGE_REFERENCE"]:
+                require(hashlib.sha256(canonical_json(source).encode()).hexdigest() in REVIEWED_STALE_IMAGE
+                        and sorted(row["question_number"] for row in grouped[group_id]) == [62, 63, 64],
+                        f"Stale image lacks matching reviewed source: {group_id}")
         for path_text, digest in source_media:
             path = raw / path_text
             require(path.is_file() and sha256(path) == digest, f"Raw media changed: {path}")

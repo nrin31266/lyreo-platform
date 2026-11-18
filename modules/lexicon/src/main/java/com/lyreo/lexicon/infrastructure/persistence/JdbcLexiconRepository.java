@@ -5,6 +5,9 @@ import com.lyreo.lexicon.domain.LexiconEntry;
 import com.lyreo.lexicon.domain.LexiconEntry.*;
 import com.lyreo.lexicon.domain.LexiconSearchResult;
 import com.lyreo.lexicon.domain.LexiconSearchResult.MatchType;
+import com.lyreo.lexicon.domain.LexiconDraft;
+import com.lyreo.platform.content.DocumentStore;
+import tools.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -36,14 +39,43 @@ public final class JdbcLexiconRepository implements LexiconRepository {
         """;
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final DocumentStore documents;
+    private final LexiconDraftMapper drafts;
+    private final ObjectMapper json;
 
-    public JdbcLexiconRepository(NamedParameterJdbcTemplate jdbc) { this.jdbc = jdbc; }
+    public JdbcLexiconRepository(NamedParameterJdbcTemplate jdbc) {this(jdbc,null,null);}
+    public JdbcLexiconRepository(NamedParameterJdbcTemplate jdbc,DocumentStore documents,ObjectMapper json) {this.jdbc=jdbc;this.documents=documents;this.json=json==null?new ObjectMapper():json;this.drafts=documents==null?null:new LexiconDraftMapper(this.json);}
 
     @Override
     public Optional<LexiconEntry> findById(UUID id) {
+        if(documents!=null) {
+            var document=documents.find("lexicon",id,LexiconDraft.class);
+            if(document.isPresent() && !documents.sourceSelected("lexicon",document.get().id())) {
+                if(List.of("HIDDEN","ARCHIVED").contains(document.get().status())) return Optional.empty();
+                var published=documents.published("lexicon",id,LexiconDraft.class);
+                if(published.isPresent()) return Optional.of(drafts.entry(id,published.get().content()));
+            }
+        }
         List<LexiconHeader> headers = jdbc.query(BASE + " AND e.id = :id", Map.of("id", id), this::mapHeader);
+        if(documents!=null && !headers.isEmpty()) {
+            var header=headers.getFirst();
+            var overrides=jdbc.query("""
+                SELECT d.id,d.status,p.content FROM content_document d
+                LEFT JOIN content_publication p ON p.id=d.publication_id
+                WHERE d.namespace='lexicon' AND NOT EXISTS(SELECT 1 FROM content_source_binding b WHERE b.namespace=d.namespace AND b.document_id=d.id AND NOT b.enabled) AND (d.publication_id IS NOT NULL OR d.status IN ('HIDDEN','ARCHIVED'))
+                  AND COALESCE(p.content,d.draft)->>'headwordId'=:headword
+                  AND COALESCE(p.content,d.draft)->>'type'=:type LIMIT 1
+                """,Map.of("headword",header.headwordId().toString(),"type",header.entryType().name()),
+                (rs,n)->new EditorialOverride(rs.getObject(1,UUID.class),rs.getString(2),rs.getString(3)));
+            if(!overrides.isEmpty()) {var override=overrides.getFirst();return override.content()==null || !override.status().equals("PUBLISHED")?Optional.empty():Optional.of(drafts.entry(override.id(),documents.read(override.content(),LexiconDraft.class)));}
+        }
         return hydrate(headers).stream().findFirst();
     }
+    private <V> Map<String,V> jsonMap(String value) {
+        return json.readValue(value,new tools.jackson.core.type.TypeReference<Map<String,V>>(){});
+    }
+
+    private record EditorialOverride(UUID id,String status,String content) {}
 
     @Override
     public LexiconSearchResult search(String displayQuery, String lookupQuery, int limit) {
@@ -55,7 +87,8 @@ public final class JdbcLexiconRepository implements LexiconRepository {
             """, Map.of(), (rs, row) -> new ActiveRelease(
                 rs.getObject("release_id", UUID.class), rs.getString("source_metadata"),
                 rs.getString("license_text")));
-        if (active.isEmpty()) return LexiconSearchResult.empty();
+        var edited=documents==null?List.<LexiconSearchResult.Hit>of():editedHits(displayQuery,lookupQuery,limit+1);
+        if (active.isEmpty()) return new LexiconSearchResult(edited.stream().limit(limit).toList(),edited.size()>limit,null,null);
 
         ActiveRelease release = active.getFirst();
         int target = limit + 1;
@@ -75,6 +108,12 @@ public final class JdbcLexiconRepository implements LexiconRepository {
                 // makes every nonempty form batch advance without rescanning growing offsets.
                 String sql = phase.sql.replace("/* exclude selected entries */", unique.isEmpty()
                     ? "" : "AND f.entry_id NOT IN (:excluded)");
+                sql=sql.replace("/* editorial visibility */",documents==null?"":"""
+                    AND NOT EXISTS(SELECT 1 FROM content_document d LEFT JOIN content_publication p ON p.id=d.publication_id
+                    WHERE d.namespace='lexicon' AND NOT EXISTS(SELECT 1 FROM content_source_binding b WHERE b.namespace=d.namespace AND b.document_id=d.id AND NOT b.enabled) AND (d.publication_id IS NOT NULL OR d.status IN ('HIDDEN','ARCHIVED'))
+                    AND COALESCE(p.content,d.draft)->>'headwordId'=e.headword_id::text
+                    AND COALESCE(p.content,d.draft)->>'type'=e.entry_type)
+                    """);
                 parameters.addValue("excluded", unique.keySet());
                 List<SearchCandidate> page = jdbc.query(sql, parameters,
                     (rs, row) -> new SearchCandidate(rs.getObject("id", UUID.class),
@@ -97,8 +136,32 @@ public final class JdbcLexiconRepository implements LexiconRepository {
             new LexiconSearchResult.Hit(candidate.id(), candidate.displayForm(), candidate.entryType(),
                 partsOfSpeech.getOrDefault(candidate.id(), List.of()), candidate.matchType(),
                 candidate.matchedText())).toList();
+        if(documents!=null) {
+            var merged=new ArrayList<>(hits);merged.addAll(edited);
+            merged.sort(java.util.Comparator.comparingInt(hit->phaseRank(hit,displayQuery)));
+            return new LexiconSearchResult(merged.stream().limit(limit).toList(),merged.size()>limit || unique.size()>limit,release.sourceMetadata(),release.licenseText());
+        }
         return new LexiconSearchResult(hits, unique.size() > limit,
             release.sourceMetadata(), release.licenseText());
+    }
+
+    private static int phaseRank(LexiconSearchResult.Hit hit,String display) {
+        return switch(hit.matchType()) {case EXACT_HEADWORD->hit.headword().equals(display)?0:2;case EXACT_FORM->hit.matchedText().equals(display)?1:3;case PREFIX_HEADWORD->4;case PREFIX_FORM->5;};
+    }
+    private List<LexiconSearchResult.Hit> editedHits(String display,String lookup,int limit) {
+        return jdbc.query("""
+            SELECT * FROM (
+              SELECT DISTINCT ON (t.document_id) t.document_id,t.kind,t.display_form,t.term,p.content,
+                CASE WHEN t.term=:q AND t.display_form=:display THEN CASE t.kind WHEN 'HEADWORD' THEN 0 ELSE 1 END
+                     WHEN t.term=:q THEN CASE t.kind WHEN 'HEADWORD' THEN 2 ELSE 3 END
+                     ELSE CASE t.kind WHEN 'HEADWORD' THEN 4 ELSE 5 END END AS rank
+              FROM content_search_term t JOIN content_document d ON d.namespace=t.namespace AND d.id=t.document_id
+              JOIN content_publication p ON p.id=d.publication_id WHERE t.namespace='lexicon' AND d.status='PUBLISHED' AND NOT EXISTS(SELECT 1 FROM content_source_binding b WHERE b.namespace=d.namespace AND b.document_id=d.id AND NOT b.enabled)
+                AND t.term LIKE :prefix ESCAPE '!' ORDER BY t.document_id,rank,t.display_form
+            ) matches ORDER BY rank,length(content->>'title'),content->>'title',document_id LIMIT :limit
+            """,Map.of("q",lookup,"display",display,"prefix",escapedPrefix(lookup),"limit",limit),
+            (rs,n)->{var content=documents.read(rs.getString("content"),LexiconDraft.class);String kind=rs.getString("kind");boolean exact=rs.getString("term").equals(lookup);
+                return new LexiconSearchResult.Hit(rs.getObject("document_id",UUID.class),content.title(),EntryType.valueOf(content.type()),content.items().stream().map(LexiconDraft.Item::partOfSpeech).distinct().toList(),kind.equals("HEADWORD")?(exact?MatchType.EXACT_HEADWORD:MatchType.PREFIX_HEADWORD):(exact?MatchType.EXACT_FORM:MatchType.PREFIX_FORM),rs.getString("display_form"));});
     }
 
     private Map<UUID, List<String>> loadPartsOfSpeech(UUID releaseId, List<UUID> entryIds) {
@@ -126,6 +189,7 @@ public final class JdbcLexiconRepository implements LexiconRepository {
 
     @Override
     public List<UUID> exactHeadwordIds(String normalizedForm) {
+        if(documents!=null) return search(normalizedForm,normalizedForm,50).results().stream().filter(hit->hit.matchType()==MatchType.EXACT_HEADWORD || hit.matchType()==MatchType.EXACT_FORM).map(hit->findById(hit.entryId()).map(LexiconEntry::headwordId).orElse(null)).filter(java.util.Objects::nonNull).distinct().limit(2).toList();
         return jdbc.query("""
             SELECT DISTINCT e.headword_id
               FROM dataset_active_release ar
@@ -140,6 +204,7 @@ public final class JdbcLexiconRepository implements LexiconRepository {
 
     @Override
     public Optional<LexiconEntry> findByNormalizedForm(String normalizedForm) {
+        if(documents!=null) return search(normalizedForm,normalizedForm,50).results().stream().filter(hit->hit.matchType()==MatchType.EXACT_HEADWORD).sorted(java.util.Comparator.comparing(hit->hit.entryType()==EntryType.WORD?0:1)).map(hit->findById(hit.entryId())).flatMap(Optional::stream).findFirst();
         List<LexiconHeader> headers = jdbc.query(BASE + """
             AND e.lookup_form = :form
             ORDER BY CASE e.entry_type WHEN 'WORD' THEN 0 ELSE 1 END
@@ -174,7 +239,7 @@ public final class JdbcLexiconRepository implements LexiconRepository {
         Map<UUID, List<LexiconSense>> senses = loadChildren(releaseId, entryIds, """
             SELECT s.entry_id, s.id, s.item_id, s.position, i.part_of_speech, s.definition_en,
                    s.translation_vi, s.translation_status, s.raw_glosses::text AS raw_glosses,
-                   s.examples::text AS examples, s.tags::text AS tags, s.matched_qualifier
+                   s.examples::text AS examples, s.tags::text AS tags, s.matched_qualifier, s.definitions::text, s.source_context::text
               FROM lexicon_sense s
               JOIN lexicon_item i ON i.id = s.item_id
                                   AND i.release_id = s.release_id
@@ -185,17 +250,17 @@ public final class JdbcLexiconRepository implements LexiconRepository {
                 r.getObject("item_id", UUID.class), r.getInt("position"), r.getString("part_of_speech"),
                 r.getString("definition_en"), r.getString("translation_vi"),
                 TranslationStatus.valueOf(r.getString("translation_status")), r.getString("raw_glosses"),
-                r.getString("examples"), r.getString("tags"), r.getString("matched_qualifier")));
+                r.getString("examples"), r.getString("tags"), r.getString("matched_qualifier"), jsonMap(r.getString("definitions")), jsonMap(r.getString("source_context"))));
         Map<UUID, List<Pronunciation>> pronunciations = loadChildren(releaseId, entryIds, """
             SELECT entry_id, id, item_id, accent, ipa, audio_file, audio_url, source_url,
-                   cached_audio_object_key, tags::text AS tags
+                   cached_audio_object_key, tags::text AS tags, pronunciation_context::text
               FROM lexicon_pronunciation
              WHERE release_id = :release AND entry_id IN (:entries)
              ORDER BY entry_id, accent NULLS LAST, id
             """, (r, n) -> new Pronunciation(r.getObject("id", UUID.class),
                 r.getObject("item_id", UUID.class), r.getString("accent"), r.getString("ipa"),
                 r.getString("audio_file"), r.getString("audio_url"), r.getString("source_url"),
-                r.getString("cached_audio_object_key"), r.getString("tags")));
+                r.getString("cached_audio_object_key"), r.getString("tags"),null,jsonMap(r.getString("pronunciation_context"))));
         Map<UUID, List<LexiconTranslation>> translations = loadChildren(releaseId, entryIds, """
             SELECT entry_id, id, item_id, sense_id, word_vi, source, source_scope, source_sense_qualifier,
                    link_status, unlinked_reason, tags::text AS tags, source_pos
@@ -273,6 +338,7 @@ public final class JdbcLexiconRepository implements LexiconRepository {
               FROM lexicon_entry e
              WHERE e.release_id = :release AND e.lookup_form = :query
                AND e.display_form = :display
+               /* editorial visibility */
              ORDER BY e.display_form, e.id
              LIMIT :batch OFFSET :offset
             """),
@@ -282,6 +348,7 @@ public final class JdbcLexiconRepository implements LexiconRepository {
               JOIN lexicon_entry e ON e.id = f.entry_id AND e.release_id = f.release_id
              WHERE f.release_id = :release AND f.normalized_form = :query
                AND f.form = :display
+               /* editorial visibility */
                /* exclude selected entries */
              ORDER BY CASE WHEN jsonb_exists_any(f.tags,
                           ARRAY['archaic','obsolete','dialectal','nonstandard','misspelling','dated'])
@@ -303,6 +370,7 @@ public final class JdbcLexiconRepository implements LexiconRepository {
               FROM lexicon_entry e
              WHERE e.release_id = :release AND e.lookup_form = :query
                AND e.display_form <> :display
+               /* editorial visibility */
              ORDER BY char_length(e.display_form), e.display_form, e.id
              LIMIT :batch OFFSET :offset
             """),
@@ -312,6 +380,7 @@ public final class JdbcLexiconRepository implements LexiconRepository {
               JOIN lexicon_entry e ON e.id = f.entry_id AND e.release_id = f.release_id
              WHERE f.release_id = :release AND f.normalized_form = :query
                AND f.form <> :display
+               /* editorial visibility */
                /* exclude selected entries */
              ORDER BY CASE WHEN jsonb_exists_any(f.tags,
                           ARRAY['archaic','obsolete','dialectal','nonstandard','misspelling','dated'])
@@ -333,6 +402,7 @@ public final class JdbcLexiconRepository implements LexiconRepository {
               FROM lexicon_entry e
              WHERE e.release_id = :release AND e.lookup_form LIKE :prefix ESCAPE '!'
                AND e.lookup_form <> :query
+               /* editorial visibility */
              ORDER BY e.lookup_form USING ~<~, e.display_form, e.id
              LIMIT :batch OFFSET :offset
             """),
@@ -340,8 +410,10 @@ public final class JdbcLexiconRepository implements LexiconRepository {
             WITH page AS MATERIALIZED (
                 SELECT f.id AS form_id, f.entry_id, f.normalized_form, f.form
                   FROM lexicon_form f
+                  JOIN lexicon_entry e ON e.id=f.entry_id AND e.release_id=f.release_id
                  WHERE f.release_id = :release AND f.normalized_form LIKE :prefix ESCAPE '!'
                    AND f.normalized_form <> :query
+                   /* editorial visibility */
                    /* exclude selected entries */
                  ORDER BY f.normalized_form USING ~<~, f.form, f.id
                  LIMIT :batch OFFSET :offset

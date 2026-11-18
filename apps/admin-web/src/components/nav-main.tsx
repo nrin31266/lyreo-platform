@@ -34,13 +34,13 @@ function NavItem({ item }: { item: AdminNavItem }) {
     !!path &&
     (path.includes("#")
       ? location.pathname + location.hash === path
-      : location.pathname === path);
+      : location.pathname === path || (["/lexicon", "/grammar", "/toeic"].includes(path) && location.pathname.startsWith(path + "/")));
   const childActive =
     item.children?.some((c) => active(c.path)) ||
     (item.key === "lessons" &&
       /^\/lessons\/[^/]+$/.test(location.pathname) &&
       location.pathname !== "/lessons/channels");
-  const [open, setOpen] = useState(Boolean(childActive));
+  const [open, setOpen] = useState(true);
   useEffect(() => {
     if (childActive) setOpen(true);
   }, [location.pathname, location.hash, childActive]);

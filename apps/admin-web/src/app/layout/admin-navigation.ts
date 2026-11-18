@@ -1,4 +1,4 @@
-import { RiBookOpenLine as BookOpen, RiBroadcastLine as Radio, RiBookShelfLine as Library, RiStackLine as Layers, RiGroupLine as Users, RiLineChartLine as ChartNoAxesCombined, RiTrophyLine as Trophy, RiNotification3Line as Bell, RiDiscussLine as MessagesSquare, RiListCheck3 as ListChecks, RiDatabase2Line as Database, RiImage2Line as Images, RiEqualizerLine as Settings2, RiDashboardLine as LayoutDashboard } from "@remixicon/react";
+import { RiBookOpenLine as BookOpen, RiBroadcastLine as Radio, RiBookShelfLine as Library, RiStackLine as Layers, RiGroupLine as Users, RiLineChartLine as ChartNoAxesCombined, RiTrophyLine as Trophy, RiNotification3Line as Bell, RiDiscussLine as MessagesSquare, RiListCheck3 as ListChecks, RiImage2Line as Images, RiEqualizerLine as Settings2, RiDashboardLine as LayoutDashboard } from "@remixicon/react";
 import type { RemixiconComponentType } from "@remixicon/react";
 export type AdminNavItem = {
   key: string;
@@ -26,7 +26,7 @@ export const adminNavGroups: { key: string; items: AdminNavItem[] }[] = [
       {
         key: "languageLibrary",
         icon: Library,
-        children: [{ key: "lexicon" }, { key: "grammar" }, { key: "toeic" }],
+        children: [{ key: "lexicon", path: "/lexicon" }, { key: "grammar", path: "/grammar" }, { key: "toeic", path: "/toeic" }],
       },
     ],
   },
@@ -56,7 +56,6 @@ export const adminNavGroups: { key: string; items: AdminNavItem[] }[] = [
     key: "operations",
     items: [
       { key: "jobs", icon: ListChecks, path: "/jobs" },
-      { key: "imports", icon: Database },
       { key: "media", icon: Images },
     ],
   },
@@ -76,6 +75,9 @@ export function getNavTitleKey(pathname: string, hash = ""): string {
   if (exact) return exact.labelKey;
   if (["/lessons/categories", "/lessons/channels"].includes(pathname)) return "admin:navigation.organization";
   if (/^\/lessons\/[^/]+$/.test(pathname)) return 'admin:authoringFlow.editorTitle';
+  for (const library of ["lexicon", "grammar", "toeic"]) {
+    if (pathname.startsWith(`/${library}/`)) return `admin:navigation.${library}`;
+  }
   const matched = [...adminNavItems]
     .sort((a, b) => b.path.length - a.path.length)
     .find(

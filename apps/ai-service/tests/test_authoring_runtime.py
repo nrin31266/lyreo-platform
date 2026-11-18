@@ -379,3 +379,40 @@ def test_stt_can_defer_forced_alignment_until_the_caller_confirms_text(monkeypat
     runtime._align_words.assert_not_awaited()
     assert result.output['timestamps'] == []
     assert max(s['end_ms']-s['start_ms'] for s in result.output['segments']) <= 115000
+
+
+@pytest.mark.parametrize('thinking', ['enabled', 'disabled'])
+def test_deepseek_maintenance_uses_a_fixed_budget_including_reasoning(monkeypatch, thinking):
+    captured = {}
+    async def post(self, url, **kwargs):
+        captured.update(kwargs['json'])
+        return httpx.Response(200, request=httpx.Request('POST', url), json={
+            'choices': [{'message': {'content': '{"changes": [], "issues": []}', 'reasoning_content': 'internal provider reasoning'}, 'finish_reason': 'stop'}],
+            'usage': {'prompt_tokens': 10, 'completion_tokens': 20},
+        })
+    monkeypatch.setattr(httpx.AsyncClient, 'post', post)
+    req = request(options={'thinking': thinking, 'max_output_tokens': 8192, 'response_schema': 'maintenance', 'provider_options': {'reasoning_effort': 'high'}})
+    req.provider = 'DEEPSEEK'
+    result = asyncio.run(OpenAICompatibleProvider('https://api.deepseek.com').complete(req, 'test-only'))
+    assert captured['thinking'] == {'type': thinking}
+    assert captured['reasoning_effort'] == 'high'
+    assert captured['max_tokens'] == 8192
+    assert 'max_completion_tokens' not in captured
+    assert result.output == {'content': '{"changes": [], "issues": []}', 'structured': {'changes': [], 'issues': []}}
+    assert result.usage == {'input_tokens': 10, 'output_tokens': 20}
+
+
+def test_deepseek_truncation_without_text_keeps_billable_usage(monkeypatch):
+    async def post(self, url, **kwargs):
+        return httpx.Response(200, request=httpx.Request('POST', url), json={
+            'choices': [{'message': {'content': None}, 'finish_reason': 'length'}],
+            'usage': {'prompt_tokens': 10, 'completion_tokens': 8192,
+                      'completion_tokens_details': {'reasoning_tokens': 8192}},
+        })
+    monkeypatch.setattr(httpx.AsyncClient, 'post', post)
+    req = request(options={'thinking': 'enabled', 'max_output_tokens': 8192})
+    req.provider = 'DEEPSEEK'
+    result = asyncio.run(OpenAICompatibleProvider('https://api.deepseek.com').complete(req, 'test-only'))
+    assert result.metadata['finish_reason'] == 'length'
+    assert result.output == {'content': '', 'reasoning_tokens': 8192}
+    assert result.usage == {'input_tokens': 10, 'output_tokens': 8192}
