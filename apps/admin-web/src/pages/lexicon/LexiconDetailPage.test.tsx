@@ -73,3 +73,16 @@ it('allows adding a Vietnamese definition to the selected English meaning withou
   expect(saved.senses[0]).toMatchObject({id:'one',definitionEn:'Printed pages',translationVi:'sách',translationStatus:'NEEDS_REVIEW'});
   cache.clear();
 });
+it('opens the editor for the exact meaning selected in lookup',async()=>{
+  await i18n.changeLanguage('vi');
+  const cache=new QueryClient({defaultOptions:{queries:{retry:false}}});
+  const meanings=['ngân hàng','bờ sông'].map((meaning,index)=>({id:`s${index}`,itemId:'noun',definitionEn:null,translationVi:meaning,translationStatus:'NEEDS_REVIEW',examples:[],tags:[],rawGlosses:[]}));
+  const draft={title:'bank',type:'WORD',items:[{id:'noun',partOfSpeech:'noun'}],senses:meanings,translations:[],pronunciations:[],forms:[]};
+  vi.mocked(api).mockImplementation(async(url)=>url.endsWith('/ai')?[]:({id:'word',revision:1,status:'PUBLISHED',publicationId:null,hasUnpublishedChanges:false,draft}));
+  render(<QueryClientProvider client={cache}><I18nextProvider i18n={i18n}><MemoryRouter initialEntries={['/lexicon/word']}><Routes><Route path="/lexicon/:id" element={<LexiconDetailPage />} /></Routes></MemoryRouter></I18nextProvider></QueryClientProvider>);
+  expect(await screen.findByText('bờ sông')).toBeVisible();
+  expect(screen.queryByRole('textbox',{name:'Mục từ'})).not.toBeInTheDocument();
+  await userEvent.click(screen.getAllByRole('button',{name:'Sửa nghĩa này'})[1]);
+  expect(await screen.findByRole('textbox',{name:'Lời giải tiếng Việt'})).toHaveValue('bờ sông');
+  cache.clear();
+});

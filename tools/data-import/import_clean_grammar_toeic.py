@@ -16,12 +16,12 @@ from typing import Any, Callable, Iterable, Sequence
 from clean_import_common import (
     ReleasePackage,
     audit_orphans,
-    activate_existing_release,
-    activate_release,
     begin_run,
     chunks,
     connect,
     db_url_from_args,
+    ensure_single_install,
+    finalize_install,
     fail_run,
     finish_run,
     insert_values,
@@ -200,7 +200,6 @@ def subtopic_version_row(package: ReleasePackage, row: dict[str, Any], catalog_i
         row["order_index"],
         row["access_level"],
         row["is_hidden"],
-        pg_json(row["theory"]) if row.get("theory") is not None else None,
     )
 
 
@@ -700,15 +699,10 @@ def dry_run_report(package: ReleasePackage, batch_size: int) -> dict[str, Any]:
 
 
 def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
-                 activate: bool = False, rollback: bool = False,
-                 activated_by: str | None = None, storage_client=None,
+                 storage_client=None,
                  bucket: str | None = None) -> dict[str, Any]:
     if batch_size < 1:
         raise ValueError("--batch-size must be positive")
-    if activate and rollback:
-        raise ValueError("--activate and --rollback are mutually exclusive")
-    if (activate or rollback) and not activated_by:
-        raise ValueError("--activated-by is required with --activate or --rollback")
     if storage_client is None or bucket is None:
         storage_client, bucket = _media_configuration()
 
@@ -718,6 +712,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
     progress = {"records_read": package_record_count(package), "active_rows_read": 0, "records_inserted": 0}
     try:
         lock_import_domain(conn, package.domain)
+        ensure_single_install(conn, package)
         register_release(conn, package)
         baseline = not prior_release_exists(conn, package)
         run_id = begin_run(conn, package, "APPLY")
@@ -779,7 +774,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
         _process(
             conn, package, run_id, batch_size=batch_size,
             filename="grammar/subtopics", table="grammar_subtopic_version",
-            columns=("id", "release_id", "catalog_id", "topic_catalog_id", "package_subtopic_id", "package_topic_id", "topic_version_id", "title_en", "title_vi", "description_en", "description_vi", "difficulty_level", "order_index", "source_access_level", "source_is_hidden", "theory"),
+            columns=("id", "release_id", "catalog_id", "topic_catalog_id", "package_subtopic_id", "package_topic_id", "topic_version_id", "title_en", "title_vi", "description_en", "description_vi", "difficulty_level", "order_index", "source_access_level", "source_is_hidden"),
             mapper=subtopic_version_row, progress=progress,
             map_context=lambda row: (subtopic_catalog_id(row["id"]), topic_catalog_id(row["topic_id"])),
         )
@@ -843,12 +838,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
             }
             finish_run(conn, run_id, package_record_count(package), progress["records_inserted"], details)
         run_succeeded = True
-        from editorial_reconciliation import reconcile_editorial
-        reconcile_editorial(conn, package.domain, package.release_id)
-
-        if activate or rollback:
-            activate_release(conn, package, activated_by=activated_by or "",
-                             action="ROLLBACK" if rollback else "ACTIVATE")
+        finalize_install(conn, package)
         return {
             "mode": "APPLY",
             "run_id": str(run_id),
@@ -863,8 +853,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
             "media_uploads_this_run": uploads,
             "media_reused_this_run": package.counts["shared/assets"] - uploads,
             "media_storage_mode": details["media"]["storage_mode"],
-            "activated": bool(activate or rollback),
-            "activation_action": "ROLLBACK" if rollback else "ACTIVATE" if activate else None,
+            "installed": True,
         }
     except Exception as exc:
         if run_id is not None and not run_succeeded:
@@ -881,40 +870,12 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
         conn.close()
 
 
-def activate_only(package: ReleasePackage, *, database_url: str, activated_by: str,
-                  rollback: bool = False) -> dict[str, Any]:
-    conn = connect(database_url)
-    try:
-        lock_import_domain(conn, package.domain)
-        counts = activate_existing_release(
-            conn,
-            package,
-            activated_by=activated_by,
-            action="ROLLBACK" if rollback else "ACTIVATE",
-            expected_by_table={table: package.counts[name] for name, table in COLLECTION_TABLES.items()},
-        )
-        return {"mode": "ACTIVATE_ONLY", "release_id": str(package.release_id),
-                "activation_action": "ROLLBACK" if rollback else "ACTIVATE", "database_counts": counts}
-    finally:
-        try:
-            unlock_import_domain(conn, package.domain)
-        except Exception:
-            pass
-        conn.close()
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", type=Path, default=os.getenv("GRAMMAR_TOEIC_RELEASE_DIR"))
     parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"))
     parser.add_argument("--batch-size", type=int, default=500)
     parser.add_argument("--apply", action="store_true", help="Write to PostgreSQL/storage; default is a full dry run")
-    activation = parser.add_mutually_exclusive_group()
-    activation.add_argument("--activate", action="store_true", help="Set this imported release active")
-    activation.add_argument("--rollback", action="store_true", help="Activate this older release and record a rollback")
-    activation.add_argument("--activate-only", action="store_true", help="Activate an already imported release")
-    activation.add_argument("--rollback-only", action="store_true", help="Roll back to an already imported release")
-    parser.add_argument("--activated-by", help="Operator label recorded in activation history")
     return parser.parse_args()
 
 
@@ -922,33 +883,17 @@ def main() -> None:
     args = parse_args()
     if not args.release:
         raise SystemExit("--release or GRAMMAR_TOEIC_RELEASE_DIR is required")
-    if (args.activate or args.rollback) and not args.apply:
-        raise SystemExit("--activate/--rollback requires --apply")
-    if (args.activate_only or args.rollback_only) and args.apply:
-        raise SystemExit("--activate-only/--rollback-only cannot be combined with --apply")
-    if (args.activate or args.rollback or args.activate_only or args.rollback_only) and not args.activated_by:
-        raise SystemExit("--activated-by is required for activation")
     package = validate_clean_release(
         args.release,
         domain="grammar-toeic",
         validator_name="validate_grammar_toeic_release.py",
     )
-    if args.activate_only or args.rollback_only:
-        report = activate_only(
-            package,
-            database_url=db_url_from_args(args.database_url),
-            activated_by=args.activated_by,
-            rollback=args.rollback_only,
-        )
-    elif args.apply:
+    if args.apply:
         client, bucket = _media_configuration()
         report = apply_import(
             package,
             database_url=db_url_from_args(args.database_url),
             batch_size=args.batch_size,
-            activate=args.activate,
-            rollback=args.rollback,
-            activated_by=args.activated_by,
             storage_client=client,
             bucket=bucket,
         )

@@ -33,8 +33,8 @@ help:
 	  '  make data-check                  Verify the installed Grammar+TOEIC clean release' \
 	  '  make lexicon-fetch               Download/verify the versioned Lexicon clean release' \
 	  '  make lexicon-check               Verify the installed Lexicon clean release' \
-	  '  make import-clean-lexicon        Validate/dry-run the Lexicon release (ARGS="--apply --activate --activated-by operator" to write)' \
-	  '  make import-clean-grammar-toeic  Validate/dry-run the Grammar+TOEIC release (ARGS="--apply --activate --activated-by operator" to write)' \
+	  '  make import-clean-lexicon        Validate/dry-run the pinned Lexicon release (ARGS="--apply" to install once)' \
+	  '  make import-clean-grammar-toeic  Validate/dry-run the pinned Grammar+TOEIC release (ARGS="--apply" to install once)' \
 	  '' \
 	  'Infrastructure' \
 	  '  make dev-infra                   Start PostgreSQL + Keycloak only' \

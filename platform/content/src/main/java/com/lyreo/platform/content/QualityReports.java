@@ -16,7 +16,7 @@ import tools.jackson.core.type.TypeReference;
 /** Durable reports; domain handlers own every rule and issue. */
 @Service
 public class QualityReports {
-    public static final String RULES_VERSION="2.1.1";
+    public static final String RULES_VERSION="2.1.2";
     private final NamedParameterJdbcTemplate jdbc; private final ObjectMapper json; private final BackgroundJobService jobs;
     public QualityReports(NamedParameterJdbcTemplate jdbc,ObjectMapper json,BackgroundJobService jobs) {this.jdbc=jdbc;this.json=json;this.jobs=jobs;}
     public record Issue(String code,String severity,String location,String message,String href) {}

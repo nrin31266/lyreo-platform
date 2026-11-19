@@ -24,17 +24,12 @@ Catalog publications pin question publication IDs. A null question publication I
 immutable imported question ID, including after release changes. New question publications do not
 silently change an existing catalog. Admin explicitly adopts an update and republishes the catalog.
 
-## Import reconciliation
+## Initial data installation
 
-`content_source_binding` records the original identity and release for sparse edits.
-`content_source_alias` maps later release IDs to that editorial identity. Compare normalized source
-fingerprints, including question-position links and media, before activation. Changed or missing
-source requires KEEP_EDIT, TAKE_SOURCE or EDITED with a reason and current draft revision.
-
-TAKE_SOURCE disables the override only in the activation transaction. Saving after that choice
-starts a draft with no publication pointer; old publications remain historical. Activation and
-rollback retain locks through the switch and refuse stale/unresolved decisions. Admin-created
-content has no source binding and survives release changes.
+The CLI installs a single pinned source package per domain. It verifies counts before publishing the
+installed pointer and reuses it on rerun. Stable source IDs remain available for drafts, publications,
+and learner sessions. Existing editorial bindings and aliases still resolve previously imported
+content. Content changes after installation use the editorial workflow.
 
 ## Learner sessions and preproduction cutover
 

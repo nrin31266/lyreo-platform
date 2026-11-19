@@ -11,3 +11,8 @@ it('distinguishes read and lead variants and deduplicates only proven recordings
  expect(pronunciationGroups('read',records).map(group=>group.length)).toEqual([1,1]);
  expect(pronunciationGroups('lead',[sound('metal',{ipa:'/lɛd/'}),sound('guide',{ipa:'/liːd/'})])).toHaveLength(2);
 });
+it('keeps distinct audio URLs from the same source record',()=>{
+ const context={scope_status:'EXPLICIT',notation_system:'IPA',source_record_key:'one-record'};
+ const records=[sound('a',{ipa:'/riːd/',audioUrl:'https://example.test/a.ogg',pronunciationContext:context}),sound('b',{ipa:'/riːd/',audioUrl:'https://example.test/b.ogg',pronunciationContext:context})];
+ expect(pronunciationGroups('read',records)[0]).toHaveLength(2);
+});

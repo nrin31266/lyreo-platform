@@ -23,7 +23,7 @@ class DatabaseSetupIT {
             DatabaseSetup.apply(datasource, seed);
             assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_category", Integer.class)).isEqualTo(24);
             assertThat(jdbc.queryForObject("SELECT name FROM lesson_category WHERE id='20000000-0000-0000-0000-000000000001'", String.class)).isEqualTo("Edited category");
-            assertThat(jdbc.queryForObject("SELECT max(version::integer) FROM flyway_schema_history WHERE success", Integer.class)).isEqualTo(28);
+            assertThat(jdbc.queryForObject("SELECT max(version::integer) FROM flyway_schema_history WHERE success", Integer.class)).isEqualTo(31);
         }
     }
 }

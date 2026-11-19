@@ -12,7 +12,7 @@ An importer validates shape, provenance, license, checksum/version, and referent
 
 Fetch/check acquires or verifies a clean release on disk. An importer dry-run validates and plans
 without database or storage writes. APPLY imports into PostgreSQL and, for Grammar/TOEIC, verifies/reuses existing
-media in the configured local storage or R2 bucket, uploading only missing keys; activation is a separate explicit option after successful reconciliation. See
+media in the configured local storage or R2 bucket, uploading only missing keys. Each domain is installed once after successful verification. See
 [Data Import](../tools/data-import/README.md) for the supported commands.
 
 ## Lexicon
@@ -23,7 +23,7 @@ Global dictionary entries belong to Lexicon. Vocabulary SRS references Lexicon a
 
 Grammar datasets provide taxonomy, bank sets, questions, answers, and explanations where available. TOEIC datasets provide tests, passages, questions, answer keys, and media references. Importers normalize queryable structure in PostgreSQL and put large media in object storage. Missing or unapproved scaled-score conversion data must not be invented by the importer; see [OQ-004](requirements/open-questions.md#oq-004--toeic-scaled-score-conversion).
 
-The offline builders prepare validated, versioned clean Lexicon and Grammar/TOEIC releases from immutable raw source before any production import. Their package envelopes (manifest, checksums, provenance, issue report) follow the [dataset release convention](../tools/data-import/RELEASE_FORMAT.md). Normal developer setup fetches pinned clean archives into `.data/releases/<domain>/<package-version>/` and verifies archive and package checksums. The production importers read those clean releases, record import runs and exact collection counts, and can explicitly activate a successfully imported release per domain. Catalog publication and access policy remain runtime state across later releases. Raw source under `.data/datasets/` is maintainer input for rebuilding, not a team setup dependency. The legacy raw-source import scripts are not production importers; possessing a clean release alone does not mean Core has loaded it.
+The offline builders prepare clean Lexicon and Grammar/TOEIC packages from immutable raw sources. Each package carries a manifest, checksums, provenance, and an issue report under the [dataset release convention](../tools/data-import/RELEASE_FORMAT.md). Optional developer setup downloads the pinned archive into `.data/releases/<domain>/<package-version>/` and verifies its checksums. The importer installs the first verified package per domain and records exact collection counts. Application changes use the catalog draft and publication workflow. Maintainers use raw sources under `.data/datasets/` to rebuild packages.
 
 ### Reviewed language maintenance, 2026-11-18
 
@@ -63,7 +63,7 @@ authorized by the pilot ceiling. Operational review/export commands live in
 
 ### Part 7 source review, 2026-11-19
 
-The pinned Grammar/TOEIC 2.0.11 package preserves 75 complete tests and 15,000 placements.
+The Grammar/TOEIC source review covers 75 complete tests and 15,000 placements.
 The full validator compares it with the original corpus and verifies all 4,875 media. AI produced
 schema-valid review results for 1,123 of 1,125 Part 7 groups. The remaining two groups were checked
 directly against the source, with their passages, seven questions and answer keys confirmed.
@@ -77,29 +77,34 @@ remains B. Uncertain answer-key suggestions stayed in the review ledger. The pac
 before/after values and evidence. [Book transcription](https://pdfcoffee.com/ets-toeic-2019-rc-key-pdf-free.html)
 [Independent reproduction](https://anhnguantoan.com/kiem-tra/bo-de-8-test-4/)
 
-Review coverage describes which groups were screened. The package retains 9,937 combined source
-translations, with 1,228 item translations and 2,697 Vietnamese rationales still missing. A literal
-marker comparison finds 40 translated Part 7 groups with a different marker set from the English
-passage. These discrepancies and unaccepted AI suggestions remain open for curator review.
+The follow-up review for 2.0.12 corrected 20 of 40 remaining translated Part 7 groups with
+mismatched sentence-placement markers and reviewed 10 English Grammar titles. DeepSeek usage for
+that pass was USD 0.26261460 at the recorded rates, including incomplete results. The other 20 marker
+discrepancies remain in the source evidence. The quality check flags affected translations and new
+learner snapshots omit them. Vietnamese question translations and explanations are optional.
 
-An empty download directory and a fresh PostgreSQL database verified the public Drive roundtrip.
-`make setup-data` checked and activated Lexicon 2.0.1 and Grammar/TOEIC 2.0.11. All 4,875 R2
-objects were reused. The repository pins the canonical archive hashes in the
-[importer environment template](../tools/data-import/.env.example).
+ETS 2026 Test 1, questions 191–195, keeps both emails intact and the order form separate. The
+repair preserves the English text and tables. A structural scan of 375 multi-document groups
+found no other instance of the same split between email headers and bodies.
+
+The [importer environment template](../tools/data-import/.env.example) pins Lexicon 2.0.1 and
+Grammar/TOEIC 2.0.12. Both packages passed an uncached public Drive download and checksum check.
+Fresh imports loaded 1,408,646 dictionary entries and 75 TOEIC tests. Reruns inserted zero rows.
+Grammar/TOEIC verified and reused all 4,875 R2 objects.
 
 ## Curriculum and artifacts
 
 Curriculum content references existing owners rather than copying their durable records. Stable small defaults may use Flyway; large paths and learning content use versioned imports. PostgreSQL owns normalized/queryable records, object storage holds immutable media and raw debug artifacts, and databases persist keys rather than signed URLs.
 
-## Operator setup and editorial conflicts
+## Operator setup
 
 Package installation runs through the CLI. Each developer selects the content needed after
 `make setup` prepares the application. Package validation and import reports remain available
 through the importer, and content quality checks show actionable errors in the affected catalog.
 
-Source fingerprints preserve sparse edits when unchanged. Changed or missing source fails
-activation until the editor's decision is recorded against the current draft. Admin-created
-content and immutable learner sessions survive imports.
+Each domain accepts a single immutable source installation. Subsequent content changes go through
+the existing draft and publication workflow. Previously imported source rows remain available to
+their immutable learner sessions and editorial overlays.
 See [editorial architecture](architecture/library-editorial.md).
 
 `make setup-data` verifies and installs the selected packages after migration and seed. Use

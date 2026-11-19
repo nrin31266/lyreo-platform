@@ -1,19 +1,11 @@
 export type CatalogPage<T> = { items: T[]; total: number; page: number; size: number };
 export type Document<T> = { id: string; revision: number; hasUnpublishedChanges: boolean; status: string; publicationId: string | null; draft: T; updatedAt: string | null; updatedBy: string | null };
 export type Publication<T> = { id: string; revision: number; content: T; reason: string; publishedAt: string; publishedBy: string };
-export type Summary = { qualityStatus?: string; parentId?: string | null; requiresContext?: boolean; partOfSpeech?: string; senseCount?: number; translatedCount?: number; verifiedCount?: number; definition?: string; translationVi?: string; difficultyLevel?: number | null; year?: number | null; id: string; title: string; status: string; type?: string; questionCount?: number; accessMode?: string; edited?: boolean; cursor?: string };
+export type Summary = { qualityStatus?: string; parentId?: string | null; requiresContext?: boolean; partOfSpeech?: string; senseCount?: number; translatedCount?: number; verifiedCount?: number; definition?: string; translationVi?: string; difficultyLevel?: number | null; year?: number | null; id: string; title: string; titleEn?: string | null; status: string; type?: string; questionCount?: number; accessMode?: string; edited?: boolean; cursor?: string };
 export type Media = { assetId: string; role: "audio" | "image" };
 export type Question = { combinedTranslationVi?: string | null; title: string; kind: string; options: { key: string; text: string }[]; correctOption: string | null; difficultyLevel: number | null; explanationVi: string | null; translationVi: string | null; answerTranslationVi: string | null; vocabularyNote: string | null; transcriptEn: string | null; media: Media[] };
 export type QuestionRef = { itemId: string; publicationId: string | null };
-export type GrammarTheory = {
-  order: number;
-  objectiveVi: string;
-  objectiveEn: string;
-  ruleVi: string;
-  ruleEn: string;
-  examples: { en: string; vi: string }[];
-};
-export type GrammarCatalog = { title: string; titleEn: string; description: string; descriptionEn: string; parentId: string | null; orderIndex: number; accessMode: "PUBLIC" | "FEATURE"; requiredFeatureKey: string | null; questions: QuestionRef[]; theory?: GrammarTheory | null };
+export type GrammarCatalog = { title: string; titleEn: string; description: string; descriptionEn: string; parentId: string | null; orderIndex: number; accessMode: "PUBLIC" | "FEATURE"; requiredFeatureKey: string | null; questions: QuestionRef[] };
 export type PassageDocument = { id: string; ordinal: number; type: string; html: string };
 export type Group = { id: string; part: number; kind: string; title: string | null; transcriptEn: string | null; translationVi: string | null; vocabularyNote: string | null; documents: PassageDocument[]; media: Media[]; reviewed: boolean; sourceIssues?: {code:string;message:string}[] };
 export type Placement = QuestionRef & { id: string; groupId: string | null; part: number; questionNumber: number; gapNumber: number | null };

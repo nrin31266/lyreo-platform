@@ -1461,6 +1461,7 @@
     "verifyTranslation": "Xác minh bản dịch",
     "unverifyTranslation": "Bỏ xác minh",
     "qualityCodes": {
+      "TRANSLATION_MARKERS": "Vị trí chèn câu trong bản dịch tiếng Việt không khớp nhóm đọc gốc",
       "DOCUMENT_REVIEW": "Cần rà soát cách tách tài liệu và liên kết câu",
       "MISSING_EXPLANATION": "Chưa có giải thích",
       "MISSING_AUDIO": "Thiếu audio bắt buộc",
@@ -1630,21 +1631,10 @@
   "files": {
     "none": "Chưa chọn tệp"
   },
-  "grammarTheory": {
-    "title": "Lý thuyết",
-    "empty": "Thêm bài ngắn để người học đọc trước khi luyện câu hỏi của chủ đề con này.",
-    "add": "Thêm bài lý thuyết",
-    "order": "Thứ tự trong lộ trình",
-    "remove": "Bỏ bài lý thuyết",
-    "objectiveVi": "Mục tiêu (VI)",
-    "objectiveEn": "Mục tiêu (EN)",
-    "ruleVi": "Quy tắc ngữ pháp (VI)",
-    "ruleEn": "Quy tắc ngữ pháp (EN)",
-    "exampleEn": "Ví dụ tiếng Anh",
-    "exampleVi": "Bản dịch ví dụ",
-    "practiceHelp": "Liên kết luyện tập mở các câu hỏi đã công bố của chủ đề con này."
-  },
   "dictionary": {
+    "editThisMeaning": "Sửa nghĩa này",
+    "morePronunciations": "Xem thêm {{count}} cách phát âm",
+    "moreMeanings": "Xem thêm {{count}} nghĩa",
     "lookupPreview": "Tra thử",
     "editMeanings": "Biên tập nghĩa",
     "readingMode": "Ngôn ngữ giải nghĩa",

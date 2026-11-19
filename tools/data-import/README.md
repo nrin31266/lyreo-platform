@@ -1,7 +1,7 @@
 # Lyreo Data Import
 
 Large/reference datasets stay outside Git. Flyway owns schema and small reference defaults;
-importers own versioned content, reconciliation and activation. See the
+importers verify and install the pinned content packages. See the
 [release format](RELEASE_FORMAT.md) and [data pipeline contract](../../docs/DATA_PIPELINES.md).
 
 ## First clone
@@ -16,11 +16,10 @@ make setup-data
 ```
 
 Each command checks the target database, verifies or fetches the selected package from the pins
-in [`.env.example`](.env.example), then imports and activates it. Grammar/TOEIC also checks
+in [`.env.example`](.env.example), then installs it once. Grammar/TOEIC also checks
 media storage alignment with Core. Keep the target credentials and any local archive overrides
-in the ignored importer env. Reruns preserve existing rows, and unresolved editorial conflicts
-stop activation. Use the reports from the CLI or the affected content's quality checks to inspect
-issues. The runtime does not start or schedule dataset imports.
+in the ignored importer env. Reruns preserve existing rows and reject a different package for an
+installed domain. Use the CLI reports and catalog quality checks to inspect issues.
 
 ### Drive access
 
@@ -61,29 +60,23 @@ mismatching objects fail without overwrite. ETag is not a SHA-256. A fresh devel
 needs migration/import even when all 4,875 media already exist in R2. Lexicon recordings remain
 attributed external references; import does not download or synthesize the dictionary audio.
 
-## Import and activation
+## CLI import
 
 ```bash
 # Validation/dry-run: no database or storage writes.
 make import-clean-lexicon
 make import-clean-grammar-toeic
 
-# Apply/reconcile inactive first.
+# Install once.
 make import-clean-lexicon ARGS="--apply --batch-size 1000"
 make import-clean-grammar-toeic ARGS="--apply --batch-size 500"
-
-# Explicit switch after all conflicts are resolved.
-make import-clean-lexicon ARGS="--activate-only --activated-by operator"
-make import-clean-grammar-toeic ARGS="--activate-only --activated-by operator"
-# For a previously imported old release, select its directory with --release and --rollback-only.
 ```
 
 Importers require PostgreSQL `DATABASE_URL` for APPLY, with bounded transactions and advisory locks.
-Partial retries reuse stable package/release IDs; completed reruns validate and reconcile without
-bulk duplication. Reports include exact counts/hierarchy and media uploads/reuse. Source snapshot
-triggers reject mutation after a successful APPLY. Activation/rollback recheck successful import,
-counts and current editorial decisions in the switch transaction. Source catalog policy and sparse
-Admin edits retain their own ownership. Old publication/session evidence remains immutable.
+Partial retries reuse stable package IDs. Completed reruns check the existing snapshot and
+counts without inserting duplicates. Reports include collection counts and media uploads/reuse.
+Source snapshot triggers protect installed rows. Catalog policy, drafts and publication stay in
+the Admin editorial workflow, and past learner sessions retain their snapshots.
 
 ## Maintainer rebuilds
 
@@ -244,5 +237,5 @@ needs neither repair tooling nor raw corpus.
 
 ## Legacy raw scripts
 
-`import_lexicon.py`, `import_grammar.py` and `import_toeic.py` remain maintainer diagnostics. They are
-not the clean release setup path and do not replace validation, reconciliation or activation.
+`import_lexicon.py`, `import_grammar.py` and `import_toeic.py` remain maintainer diagnostics.
+Team setup uses the clean package importers.

@@ -78,7 +78,7 @@ public class JdbcLexiconEditorSource implements LexiconEditorSource {
                   WHERE d.namespace='lexicon' AND :q<>'' AND EXISTS(SELECT 1 FROM jsonb_array_elements(d.draft->'forms') f WHERE lower(f->>'form') LIKE :prefix ESCAPE '!')
             ), candidates AS (
                 SELECT COALESCE(d.id,e.id) AS id,e.display_form AS title,COALESCE(d.draft->>'type',e.entry_type) AS type,
-                    COALESCE(NULLIF(d.status,'DRAFT'),'PUBLISHED') AS status,d.id IS NOT NULL AS edited,
+                    COALESCE(NULLIF(d.status,'DRAFT'),'PUBLISHED') AS status,d.id IS NOT NULL AS edited,e.release_id,
                     CASE WHEN :q='' THEN 5 WHEN e.display_form=:display THEN 0 WHEN e.lookup_form=:q THEN 1
                       WHEN EXISTS(SELECT 1 FROM lexicon_form f WHERE f.release_id=e.release_id AND f.entry_id=e.id AND f.normalized_form=:q) OR EXISTS(SELECT 1 FROM jsonb_array_elements(d.draft->'forms') f WHERE lower(f->>'form')=:q) THEN 2
                       WHEN e.lookup_form LIKE :prefix ESCAPE '!' THEN 3 ELSE 4 END AS rank
@@ -88,11 +88,11 @@ public class JdbcLexiconEditorSource implements LexiconEditorSource {
                 LEFT JOIN content_document d ON d.namespace='lexicon' AND d.id=COALESCE(binding.document_id,e.id)
                   AND NOT EXISTS(SELECT 1 FROM content_source_binding off WHERE off.namespace=d.namespace AND off.document_id=d.id AND NOT off.enabled)
                 WHERE true
-                AND (:pos='' OR CASE WHEN d.id IS NULL THEN EXISTS(SELECT 1 FROM lexicon_item i WHERE i.entry_id=e.id AND i.part_of_speech=:pos) ELSE EXISTS(SELECT 1 FROM jsonb_array_elements(d.draft->'items') i WHERE i->>'partOfSpeech'=:pos) END)
-                AND (:translation='' OR CASE WHEN d.id IS NULL THEN EXISTS(SELECT 1 FROM lexicon_sense s WHERE s.entry_id=e.id AND s.translation_status=:translation)
+                AND (:pos='' OR CASE WHEN d.id IS NULL THEN EXISTS(SELECT 1 FROM lexicon_item i WHERE i.entry_id=e.id AND i.release_id=e.release_id AND i.part_of_speech=:pos) ELSE EXISTS(SELECT 1 FROM jsonb_array_elements(d.draft->'items') i WHERE i->>'partOfSpeech'=:pos) END)
+                AND (:translation='' OR CASE WHEN d.id IS NULL THEN EXISTS(SELECT 1 FROM lexicon_sense s WHERE s.entry_id=e.id AND s.release_id=e.release_id AND s.translation_status=:translation)
                   ELSE EXISTS(SELECT 1 FROM jsonb_array_elements(d.draft->'senses') s WHERE s->>'translationStatus'=:translation) END)
                 UNION ALL
-                SELECT d.id,d.draft->>'title',d.draft->>'type',d.status,true,
+                SELECT d.id,d.draft->>'title',d.draft->>'type',d.status,true,NULL::uuid,
                     CASE WHEN :q='' THEN 5 WHEN d.draft->>'title'=:display THEN 0 WHEN lower(d.draft->>'title')=:q THEN 1 WHEN EXISTS(SELECT 1 FROM jsonb_array_elements(d.draft->'forms') f WHERE lower(f->>'form')=:q) THEN 2 WHEN lower(d.draft->>'title') LIKE :prefix ESCAPE '!' THEN 3 ELSE 4 END
                 FROM content_document d WHERE d.namespace='lexicon' AND NOT EXISTS(SELECT 1 FROM content_source_binding off WHERE off.namespace=d.namespace AND off.document_id=d.id AND NOT off.enabled)
                 AND NOT EXISTS(SELECT 1 FROM lexicon_entry e JOIN active a ON a.release_id=e.release_id WHERE e.id=d.id)
@@ -102,15 +102,55 @@ public class JdbcLexiconEditorSource implements LexiconEditorSource {
                 AND (:translation='' OR EXISTS(SELECT 1 FROM jsonb_array_elements(d.draft->'senses') s WHERE s->>'translationStatus'=:translation))
             )
             """;
+    private static final String BROWSE_SOURCE = """
+            WITH active AS (SELECT release_id FROM dataset_active_release WHERE domain='lexicon'),
+            edits AS MATERIALIZED (
+                SELECT d.id,d.draft,d.status,COALESCE(alias.source_id,d.id) AS source_id
+                FROM content_document d
+                LEFT JOIN LATERAL (
+                    SELECT alias.source_id FROM content_source_alias alias JOIN lexicon_entry e ON e.id=alias.source_id
+                    WHERE alias.namespace=d.namespace AND alias.document_id=d.id AND e.release_id=(SELECT release_id FROM active)
+                    LIMIT 1
+                ) alias ON true
+                WHERE d.namespace='lexicon' AND NOT EXISTS(SELECT 1 FROM content_source_binding off
+                  WHERE off.namespace=d.namespace AND off.document_id=d.id AND NOT off.enabled)
+            ), source AS (
+                SELECT e.id,e.display_form AS title,e.entry_type AS type,'PUBLISHED' AS status,false AS edited,
+                    e.release_id,5 AS rank
+                FROM lexicon_entry e
+                WHERE e.release_id=(SELECT release_id FROM active) AND (:state='' OR :state='PUBLISHED')
+                  AND (:type='' OR e.entry_type=:type)
+                  AND NOT EXISTS(SELECT 1 FROM edits d WHERE d.source_id=e.id)
+                  %s
+                  %s
+            ), edited AS (
+                SELECT d.id,COALESCE(e.display_form,d.draft->>'title') AS title,
+                    COALESCE(d.draft->>'type',e.entry_type) AS type,
+                    CASE WHEN e.id IS NOT NULL AND d.status='DRAFT' THEN 'PUBLISHED' ELSE d.status END AS status,
+                    true AS edited,e.release_id,5 AS rank
+                FROM edits d LEFT JOIN lexicon_entry e ON e.id=d.source_id AND e.release_id=(SELECT release_id FROM active)
+                WHERE (:pos='' OR EXISTS(SELECT 1 FROM jsonb_array_elements(d.draft->'items') i WHERE i->>'partOfSpeech'=:pos))
+                  AND (:translation='' OR EXISTS(SELECT 1 FROM jsonb_array_elements(d.draft->'senses') s WHERE s->>'translationStatus'=:translation))
+            )
+            """;
+    private static String browseSource(String pos, String translation) {
+        return BROWSE_SOURCE.formatted(
+            pos.isEmpty() ? "" : """
+                AND EXISTS(SELECT 1 FROM lexicon_item i WHERE i.release_id=(SELECT release_id FROM active)
+                    AND i.entry_id=e.id AND i.part_of_speech=:pos)
+                """,
+            translation.isEmpty() ? "" : """
+                AND EXISTS(SELECT 1 FROM lexicon_sense s WHERE s.release_id=(SELECT release_id FROM active)
+                    AND s.entry_id=e.id AND s.translation_status=:translation)
+                """);
+    }
+
     private static final String FILTERS = """
 SELECT %s FROM candidates WHERE (:type='' OR type=:type)
                 AND (:state='' OR status=:state OR (:state='EDITED' AND edited))
                             """;
     public List<Summary> list(String query,String type,String translation,String state,String pos,String after,int size) {
         return browse(query,type,translation,state,pos,after,null,false,0,size);
-    }
-    private String candidates(String query) {
-        return query.isBlank() ? CANDIDATES.replace("FROM matched hit JOIN lexicon_entry e ON e.id=hit.id", "FROM active a JOIN lexicon_entry e ON e.release_id=a.release_id") : CANDIDATES;
     }
     private org.springframework.jdbc.core.namedparam.MapSqlParameterSource parameters(String query,String type,String translation,String state,String pos) {
         String display=com.lyreo.lexicon.application.LexiconLookupNormalizer.displayQuery(query);
@@ -120,7 +160,10 @@ SELECT %s FROM candidates WHERE (:type='' OR type=:type)
             .addValue("pos",pos).addValue("translation",translation).addValue("type",type).addValue("state",state);
     }
     public long count(String query,String type,String translation,String state,String pos) {
-        return jdbc.queryForObject(candidates(query)+FILTERS.formatted("count(*)"),parameters(query,type,translation,state,pos),Long.class);
+        String sql = query.isBlank()
+            ? browseSource(pos,translation) + ", candidates AS (SELECT * FROM source UNION ALL SELECT * FROM edited)"
+            : CANDIDATES;
+        return jdbc.queryForObject(sql+FILTERS.formatted("count(*)"),parameters(query,type,translation,state,pos),Long.class);
     }
     public List<Summary> browse(String query,String type,String translation,String state,String pos,String after,String before,boolean tail,int skip,int size) {
         boolean reverse=before!=null || tail;
@@ -128,8 +171,24 @@ SELECT %s FROM candidates WHERE (:type='' OR type=:type)
         String order=reverse?"DESC":"ASC";
         var params=parameters(query,type,translation,state,pos).addValue("rank",cursor.rank()).addValue("anchor",cursor.id())
             .addValue("unbounded",tail || (after==null && before==null)).addValue("skip",skip).addValue("size",size);
-        var rows=jdbc.query(candidates(query)+", selected AS ("+FILTERS.formatted("*")+"""
-AND (:unbounded OR (rank,id) %s (:rank,CAST(:anchor AS uuid))) ORDER BY rank %s,id %s LIMIT :size OFFSET :skip)
+        String sql;
+        String comparison=reverse?"<":">";
+        if (query.isBlank()) {
+            sql = browseSource(pos,translation) + """
+                , candidates AS (
+                    (SELECT * FROM source WHERE (:unbounded OR id %s CAST(:anchor AS uuid))
+                        ORDER BY id %s LIMIT (:size + :skip))
+                    UNION ALL SELECT * FROM edited WHERE (:unbounded OR id %s CAST(:anchor AS uuid))
+                ), selected AS (
+                """.formatted(comparison,order,comparison) + FILTERS.formatted("*")
+                + " ORDER BY id "+order+" LIMIT :size OFFSET :skip) ";
+        } else {
+            sql = CANDIDATES+", selected AS ("+FILTERS.formatted("*")+"""
+                AND (:unbounded OR (rank,id) %s (:rank,CAST(:anchor AS uuid)))
+                ORDER BY rank %s,id %s LIMIT :size OFFSET :skip)
+                """.formatted(comparison,order,order);
+        }
+        var rows=jdbc.query(sql+"""
             SELECT p.*, CASE WHEN p.edited THEN (SELECT string_agg(DISTINCT i->>'partOfSpeech',', ') FROM jsonb_array_elements(d.draft->'items') i)
                 ELSE (SELECT string_agg(DISTINCT i.part_of_speech,', ') FROM lexicon_item i WHERE i.entry_id=p.id) END AS part_of_speech,
                 CASE WHEN p.edited THEN jsonb_array_length(d.draft->'senses') ELSE stats.sense_count END AS sense_count,
@@ -141,9 +200,9 @@ AND (:unbounded OR (rank,id) %s (:rank,CAST(:anchor AS uuid))) ORDER BY rank %s,
             LEFT JOIN LATERAL (SELECT count(*) AS sense_count,count(*) FILTER(WHERE nullif(trim(s.translation_vi),'') IS NOT NULL) AS translated_count,
                 count(*) FILTER(WHERE s.translation_status='VERIFIED') AS verified_count,
                 (array_agg(s.definition_en ORDER BY s.position,s.id) FILTER(WHERE nullif(trim(s.definition_en),'') IS NOT NULL))[1] AS definition,
-                (array_agg(s.translation_vi ORDER BY s.position,s.id) FILTER(WHERE nullif(trim(s.translation_vi),'') IS NOT NULL))[1] AS translation_vi FROM lexicon_sense s WHERE s.entry_id=p.id) stats ON NOT p.edited
+                (array_agg(s.translation_vi ORDER BY s.position,s.id) FILTER(WHERE nullif(trim(s.translation_vi),'') IS NOT NULL))[1] AS translation_vi FROM lexicon_sense s WHERE s.entry_id=p.id AND s.release_id=p.release_id) stats ON NOT p.edited
             ORDER BY p.rank %s,p.id %s
-            """.formatted(reverse?"<":">",order,order,order,order),params,
+            """.formatted(order,order),params,
                 (rs,n)->new Summary(rs.getObject("id",UUID.class),rs.getString("title"),rs.getString("type"),rs.getString("status"),rs.getBoolean("edited"),new Cursor(rs.getInt("rank"),rs.getObject("id",UUID.class)).encode(),rs.getString("part_of_speech"),rs.getInt("sense_count"),rs.getInt("translated_count"),rs.getInt("verified_count"),rs.getString("definition"),rs.getString("translation_vi")));
         if(reverse) Collections.reverse(rows);
         return rows;

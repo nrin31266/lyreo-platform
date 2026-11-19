@@ -21,13 +21,4 @@ public class GrammarCatalogController {
     @GetMapping("/catalogs/{kind}/{id}") public PublishedGrammarCatalogs.Catalog detail(@AuthenticationPrincipal Jwt jwt,@PathVariable String kind,@PathVariable UUID id) {return catalogs.detail(learner(jwt),kind,id);}
     @PostMapping("/catalogs/{kind}/{id}/sessions") public ResponseEntity<AssessmentSessions.View> start(@AuthenticationPrincipal Jwt jwt,@PathVariable String kind,@PathVariable UUID id,@RequestBody Start input) {var session=catalogs.start(learner(jwt),kind,id,input.limit()==null?10:input.limit(),input.itemIds());return ResponseEntity.created(URI.create("/api/v1/assessment-sessions/"+session.id())).body(session);}
 
-    @GetMapping("/theory")
-    public List<PublishedGrammarCatalogs.TheorySummary> theoryPath(@AuthenticationPrincipal Jwt jwt) {
-        return catalogs.theoryPath(learner(jwt));
-    }
-
-    @GetMapping("/theory/{id}")
-    public PublishedGrammarCatalogs.TheoryLesson theory(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
-        return catalogs.theory(learner(jwt), id);
-    }
 }

@@ -13,6 +13,8 @@ QUESTION_FIELDS = ('stem_en', 'options', 'annotations.question_options_translati
 FIELDS = {
     'shared/items.jsonl': {'annotations.rationale_vi', 'annotations.content_translation_vi', 'options', QUESTION_TRANSCRIPTION},
     'toeic/groups.jsonl': {'content_translation_vi'},
+    'grammar/topics.jsonl': {'title_en'},
+    'grammar/subtopics.jsonl': {'title_en'},
     'senses.jsonl': {'examples'},
 }
 

@@ -2,7 +2,7 @@
 
 This document defines the small envelope shared by independently versioned data packages. It does not define a universal content schema or a generic ingestion framework. Each domain owns its builder, records, validation rules, and release lifecycle.
 
-Archive filenames use the domain and full package version, for example `grammar-toeic-1.0.1.tar.gz` and `lexicon-1.0.0.tar.gz`. Install each version beside earlier versions under `.data/releases/<domain>/<package-version>/` so rollback does not depend on overwriting a mutable path.
+Archive filenames use the domain and full package version, for example `grammar-toeic-1.0.1.tar.gz` and `lexicon-1.0.0.tar.gz`. Install the pinned package once under `.data/releases/<domain>/<package-version>/`; later packages are rejected by normal setup.
 
 ## Package envelope
 
@@ -59,7 +59,7 @@ The domain-specific importer later needs only the clean package contract. Downlo
 ## Lexicon clean schema 1.1.0
 
 Lexicon package `1.0.1` uses canonical schema `1.1.0` and builder `1.0.1`; import and
-validation also support immutable schema `1.0.0` for old snapshots and rollback.
+validation also supports immutable schema `1.0.0` for old snapshots.
 Entry/item/sense/form/pronunciation records and English-native translation semantics
 are unchanged. `QUALIFIER_MATCH` remains a deterministic heuristic, not verified meaning.
 

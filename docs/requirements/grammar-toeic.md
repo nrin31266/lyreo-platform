@@ -10,12 +10,8 @@ Import semantics: [Data Pipelines](../DATA_PIPELINES.md).
 Grammar có topic/subtopic/difficulty, bank sets/questions/memberships và
 learner attempts/history; question có answer/explanation/translation/vocabulary metadata khi nguồn có.
 
-### FR-GRAM — Lộ trình lý thuyết
-
-Chủ đề con có thể có một bài lý thuyết với thứ tự, mục tiêu, quy tắc và ví dụ Anh–Việt.
-Liên kết luyện tập dùng bộ câu hỏi của chủ đề con. Admin lưu nháp và công bố bài cùng chủ đề con.
-Learner chỉ đọc nội dung đã công bố và phải có quyền ở cả chủ đề cha lẫn chủ đề con.
-
+Tiêu đề có bản tiếng Anh và tiếng Việt. Admin chọn tiêu đề theo ngôn ngữ giao diện,
+với bản còn lại làm dự phòng. Bản dịch và lời giải tiếng Việt là nội dung bổ sung tùy chọn.
 
 ### BR-GRM-001 — Dataset-first practice
 

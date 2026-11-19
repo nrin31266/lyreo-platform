@@ -91,6 +91,18 @@ class LibraryPaginationIT {
         assertThat(next).extracting(row->row.title()).containsExactly("volume");
         assertThat(lexicon.list("Book","WORD","","","noun",next.getLast().cursor(),2)).isEmpty();
         assertThat(lexicon.list("Book","WORD","","","verb",null,30)).extracting(row->row.title()).containsExactly("booking");
+        assertThat(lexicon.count("", "WORD", "VERIFIED", "PUBLISHED", "noun")).isEqualTo(1);
+        assertThat(lexicon.browse("", "WORD", "VERIFIED", "PUBLISHED", "noun", null, null, true, 0, 1))
+            .extracting(row -> row.title()).containsExactly("Book");
+
+        var sourceEntry = first.getFirst().id();
+        documents.save("lexicon",sourceEntry,0,Map.of(
+            "title","Book","type","WORD","items",List.of(Map.of("partOfSpeech","verb")),
+            "senses",List.of(Map.of("translationStatus","VERIFIED","translationVi","dat truoc"))),"admin",Map.class);
+        assertThat(lexicon.count("", "", "VERIFIED", "", "noun")).isZero();
+        assertThat(lexicon.count("", "", "VERIFIED", "EDITED", "verb")).isEqualTo(1);
+        assertThat(lexicon.list("", "", "VERIFIED", "EDITED", "verb", null, 30))
+            .extracting(row -> row.translationVi()).containsExactly("dat truoc");
     }
     @Test void adminFindsNewAndEditedDraftFormsBeforePublication() {
         UUID id=UUID.randomUUID();

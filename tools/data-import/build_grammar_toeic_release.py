@@ -25,7 +25,6 @@ from bleach.css_sanitizer import CSSSanitizer
 from bs4 import BeautifulSoup, Tag, Comment
 from maintenance_overrides import apply as apply_language_overrides
 import source_repairs
-import grammar_theory
 
 
 BUILDER_VERSION = "2.0.2"
@@ -384,7 +383,7 @@ def package_release(release: Path, archive: Path, root_name: str | None = None) 
     return sha256(archive)
 
 
-def build(raw: Path, release: Path, archive: Path, generated_at: str, overrides: Path | None = None, version: str = "2.0.0", repairs: Path | None = None, theory: Path | None = None) -> dict:
+def build(raw: Path, release: Path, archive: Path, generated_at: str, overrides: Path | None = None, version: str = "2.0.0", repairs: Path | None = None) -> dict:
     if not re.fullmatch(r"\d+\.\d+\.\d+", version) or (overrides or repairs) and tuple(map(int,version.split('.'))) <= (2,0,0):
         fail("Reviewed changes require a new package version after 2.0.0")
     if release.exists() or archive.exists():
@@ -574,13 +573,6 @@ def build(raw: Path, release: Path, archive: Path, generated_at: str, overrides:
             stats.append({"id": f"{row['item_type']}:{row['item_id']}", "source_item_id": row["item_id"], "item_type": row["item_type"], "matched": matched, "difficulty_level": row["difficulty_level"], "total_attempts": row["total_attempts"], "wrong_count": row["wrong_count"], "error_rate": row["error_rate"], "usage_status": "SOURCE_ONLY"})
         clean_topics = [{"id": row["id"], "title_en": clean(row.get("title_en")), "title_vi": clean(row.get("title_vi")), "description_en": clean(row.get("description_en")), "description_vi": clean(row.get("description_vi")), "order_index": row.get("order_index"), "access_level": row.get("access_level"), "is_hidden": row.get("is_hidden"), "icon": row.get("icon")} for row in topics]
         clean_subtopics = [{"id": row["id"], "topic_id": row["topic_id"], "title_en": clean(row.get("title_en")), "title_vi": clean(row.get("title_vi")), "description_en": clean(row.get("description_en")), "description_vi": clean(row.get("description_vi")), "level": row.get("level"), "order_index": row.get("order_index"), "access_level": row.get("access_level"), "is_hidden": row.get("is_hidden")} for row in active_subtopics]
-        theory_bundle = json.loads(theory.read_text()) if theory else None
-        if theory_bundle:
-            lessons = grammar_theory.apply(theory_bundle, clean_subtopics, memberships)
-            for subtopic in clean_subtopics:
-                if subtopic["id"] in lessons:
-                    subtopic["theory"] = lessons[subtopic["id"]]
-            write_json(release / grammar_theory.PATH, theory_bundle)
         clean_banks = [{"id": row["set_id"], "name": row["set_name"], "year": row.get("year"), "order_index": row.get("order_index"), "access_level": row.get("access_level"), "source_counts": {key: row.get(key) for key in ("grammar_count", "test_count", "total_count")}} for row in banks]
         clean_levels = [{"id": str(row["level"]), "level": row["level"], "name_vi": row.get("name_vi"), "description_vi": row.get("description_vi")} for row in levels]
         language_overrides = json.loads(overrides.read_text()) if overrides else None
@@ -589,9 +581,11 @@ def build(raw: Path, release: Path, archive: Path, generated_at: str, overrides:
             write_json(release / "editorial/language_overrides.json", language_overrides)
         reviewed_repairs = source_repairs.validate(json.loads(repairs.read_text()), "grammar-toeic") if repairs else None
         if reviewed_repairs:
-            source_repairs.require_targets(reviewed_repairs, {"shared/items.jsonl": items, "toeic/groups.jsonl": {g["id"]: g for g in groups}})
+            source_repairs.require_targets(reviewed_repairs, {"shared/items.jsonl": items, "toeic/groups.jsonl": {g["id"]: g for g in groups}, "grammar/topics.jsonl": {row["id"]: row for row in clean_topics}, "grammar/subtopics.jsonl": {row["id"]: row for row in clean_subtopics}})
             items = {key: source_repairs.record("shared/items.jsonl", value, reviewed_repairs) for key, value in items.items()}
             groups = [source_repairs.record("toeic/groups.jsonl", value, reviewed_repairs) for value in groups]
+            clean_topics = [source_repairs.record("grammar/topics.jsonl", value, reviewed_repairs) for value in clean_topics]
+            clean_subtopics = [source_repairs.record("grammar/subtopics.jsonl", value, reviewed_repairs) for value in clean_subtopics]
             write_json(release / source_repairs.PATH, reviewed_repairs)
         collections_out = {
             "shared/items.jsonl": list(items.values()),
@@ -615,7 +609,6 @@ def build(raw: Path, release: Path, archive: Path, generated_at: str, overrides:
         report = {"status": "PASS_WITH_ISSUES", "counts": {name.removesuffix(".jsonl"): len(rows) for name, rows in collections_out.items()}, "part_counts_per_test": part_profile, "issues": sorted(issues, key=lambda row: (row["code"], row["source_id"])), "validation": {"identity_unique": True, "relations_integral": True, "test_reconstruction": True, "answers_valid": True, "html_preserved": True, "media_resolved_or_reported": True, "shared_item_equal": True}}
         # JSON object keys cannot be tuples, so expose issue summaries as rows.
         report["issue_counts"] = [{"code": code, "status": status, "count": count} for (code, status), count in sorted(collections.Counter((row["code"], row["status"]) for row in issues).items())]
-        if theory_bundle: report["grammar_theory_lessons"] = len(lessons)
         if language_overrides: report["accepted_language_changes"] = len(language_overrides["changes"])
         if reviewed_repairs: report["accepted_source_repairs"] = len(reviewed_repairs["repairs"])
         write_json(release / "validation_report.json", report)
@@ -625,7 +618,6 @@ def build(raw: Path, release: Path, archive: Path, generated_at: str, overrides:
                 rel = path.relative_to(release).as_posix()
                 inventory.append({"path": rel, "size_bytes": path.stat().st_size, "sha256": sha256(path), "records": len(collections_out[rel]) if rel in collections_out else None})
         manifest = {"format": "lyreo.dataset-release", "manifest_schema_version": 1, "package": {"domain": "grammar-toeic", "version": version, "schema_version": SCHEMA_VERSION, "generated_at": generated_at}, "builder": {"name": "build_grammar_toeic_release.py", "version": BUILDER_VERSION}, "source": {"root_kind": "dautoeic-archive", "files": source_inventory, "media_files": len(media_sources), "media_sha256_manifest": hashlib.sha256("\n".join(f"{source['path']} {source['sha256']}" for source in sorted(media_sources, key=lambda value: value["path"])).encode()).hexdigest()}, "files": inventory, "counts": report["counts"], "validation": {"status": report["status"], "report_path": "validation_report.json", "issue_counts": report["issue_counts"]}}
-        if theory_bundle: manifest["source"]["grammar_theory"] = grammar_theory.PATH
         if language_overrides: manifest["source"]["language_overrides"] = {"path":"editorial/language_overrides.json","base_manifest_sha256":language_overrides["base_manifest_sha256"]}
         if reviewed_repairs: manifest["source"]["source_repairs"] = {"path": source_repairs.PATH, "count": len(reviewed_repairs["repairs"])}
         write_json(release / "manifest.json", manifest)
@@ -646,9 +638,8 @@ def main() -> None:
     parser.add_argument("--version", default="2.0.0")
     parser.add_argument("--overrides", type=Path, help="Explicitly reviewed, source-hash-pinned language changes")
     parser.add_argument("--source-repairs", type=Path, help="Reviewed source corrections with exact before/after and record hashes")
-    parser.add_argument("--theory", type=Path, help="Authored bilingual grammar path with source subtopic hashes")
     args = parser.parse_args()
-    result = build(args.raw.resolve(), args.output.resolve(), args.archive.resolve(), args.generated_at, args.overrides, args.version, args.source_repairs, args.theory)
+    result = build(args.raw.resolve(), args.output.resolve(), args.archive.resolve(), args.generated_at, args.overrides, args.version, args.source_repairs)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

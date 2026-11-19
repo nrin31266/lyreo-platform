@@ -127,12 +127,24 @@ class ToeicEditorReadinessTest {
         assertThat(editor.readiness(invalid)).extracting(ToeicEditor.Issue::code).contains("MISSING_PASSAGE","QUESTION_KIND");
     }
 
-    @Test void combinedSourceTranslationCountsAsAvailableButActuallyMissingTranslationWarns() {
+    @Test void optionalVietnameseTranslationAndExplanationDoNotGenerateIssues() {
         var full=fullTest();var first=full.placements().getFirst();var q=content.get(first.itemId());
-        content.put(first.itemId(),new QuestionContent(q.title(),q.kind(),q.options(),q.correctOption(),1,q.explanationVi(),null,null,null,q.transcriptEn(),q.media(),"Bản dịch câu hỏi và các lựa chọn"));
-        assertThat(editor.readiness(full)).extracting(ToeicEditor.Issue::code).doesNotContain("MISSING_TRANSLATION");
-        content.put(first.itemId(),new QuestionContent(q.title(),q.kind(),q.options(),q.correctOption(),1,q.explanationVi(),null,null,null,q.transcriptEn(),q.media()));
-        assertThat(editor.readiness(full)).filteredOn(issue->issue.code().equals("MISSING_TRANSLATION")).extracting(ToeicEditor.Issue::location).containsExactly("Question 1");
+        content.put(first.itemId(),new QuestionContent(q.title(),q.kind(),q.options(),q.correctOption(),1,null,null,null,null,q.transcriptEn(),q.media()));
+        assertThat(editor.readiness(full)).extracting(ToeicEditor.Issue::code).doesNotContain("MISSING_TRANSLATION","MISSING_EXPLANATION");
+    }
+
+    @Test void flagsOnlyPresentPartSevenTranslationsWithDifferentMarkerOrder() {
+        var full=fullTest();
+        var groups=new ArrayList<>(full.groups());
+        var original=groups.stream().filter(group->group.part()==7).findFirst().orElseThrow();
+        var documents=List.of(new ToeicDraft.Document(UUID.randomUUID(),1,"PASSAGE","<p>One [1]. Two [2].</p>"));
+        int index=groups.indexOf(original);
+        groups.set(index,new ToeicDraft.Group(original.id(),7,"TEXT",original.title(),null,"Two [2]. One [1].",null,documents,List.of(),true));
+        var test=new ToeicDraft(full.title(),full.code(),full.type(),full.year(),full.testNumber(),2700,4500,"PUBLIC",null,groups,full.placements());
+        assertThat(editor.readiness(test)).anyMatch(issue->issue.code().equals("TRANSLATION_MARKERS") &&
+            issue.location().equals(original.id().toString()) && issue.severity().equals("WARNING"));
+        groups.set(index,new ToeicDraft.Group(original.id(),7,"TEXT",original.title(),null,"One [1]. Two [2].",null,documents,List.of(),true));
+        assertThat(editor.readiness(test)).extracting(ToeicEditor.Issue::code).doesNotContain("TRANSLATION_MARKERS");
     }
 
     @Test void invalidGroupMediaIsRejectedInsteadOfCrashingTheQualityWorker() {

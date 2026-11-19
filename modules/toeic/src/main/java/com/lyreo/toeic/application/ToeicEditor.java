@@ -87,6 +87,7 @@ public class ToeicEditor {
             if(g.part()<=4 && g.media().stream().noneMatch(m->"audio".equals(m.role()))) error(issues,"MISSING_AUDIO",g.id().toString(),"Listening group needs audio");
             if(g.part()>=6 && (g.documents().isEmpty() || g.documents().stream().anyMatch(doc->!html.hasContent(doc.html())))) error(issues,"MISSING_PASSAGE",g.id().toString(),"Every reading document needs visible passage text");
             if(g.part()>=6 && g.media().stream().anyMatch(m->"audio".equals(m.role()))) error(issues,"READING_AUDIO",g.id().toString(),"Reading documents cannot contain listening audio");
+            if(ReadingTranslation.hasMisalignedMarkers(g)) issues.add(new Issue("TRANSLATION_MARKERS","WARNING",g.id().toString(),"The Vietnamese passage has different sentence insertion markers. Check their positions against the English passage."));
             var ordinals=new HashSet<Integer>();var documentIds=new HashSet<UUID>();
             for(var doc:g.documents()) if(!ordinals.add(doc.ordinal()) || !documentIds.add(doc.id()) || doc.ordinal()>g.documents().size()) error(issues,"DOCUMENT_ORDER",g.id().toString(),"Documents need unique IDs and consecutive ordinals");
             for(var issue:g.sourceIssues()==null?List.<ToeicDraft.SourceIssue>of():g.sourceIssues()) {
@@ -115,8 +116,6 @@ public class ToeicEditor {
                 if(p.part()==1 && q.media().stream().noneMatch(m->"image".equals(m.role()))) error(issues,"MISSING_IMAGE",location,"Part 1 question needs an image");
                 if(p.part()>=5 && q.media().stream().anyMatch(m->"audio".equals(m.role()))) error(issues,"READING_AUDIO",location,"Reading questions cannot contain listening audio");
                 mediaChecks.put(location,q.media());
-                if(q.explanationVi()==null || q.explanationVi().isBlank()) issues.add(new Issue("MISSING_EXPLANATION","WARNING",location,"Explanation is missing"));
-                if((q.translationVi()==null || q.translationVi().isBlank()) && (q.combinedTranslationVi()==null || q.combinedTranslationVi().isBlank())) issues.add(new Issue("MISSING_TRANSLATION","WARNING",location,"Vietnamese translation is missing"));
             } catch(ResourceNotFoundException|RequestValidationException invalid) {error(issues,"QUESTION_INVALID",location,invalid.getMessage());}
         }
         if(d.placements().isEmpty()) error(issues,"EMPTY_TEST","Test","Add at least one question");

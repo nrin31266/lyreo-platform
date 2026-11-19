@@ -18,5 +18,5 @@ fi
 make "${fetch[@]}"
 make seed-dev
 for target in "${imports[@]}"; do
-  make "$target" ARGS='--apply --activate --activated-by local-setup'
+  make "$target" ARGS='--apply'
 done

@@ -32,7 +32,7 @@ public class GrammarCatalogEditor {
         for(var ref:data.questions()) items.validateStandalone(ref.itemId(),ref.publicationId());
         var pinned=data.questions().stream().map(ref->new GrammarCatalog.QuestionRef(ref.itemId(),items.pin(ref.itemId(),ref.publicationId()))).toList();
         if(!pinned.equals(data.questions())) {
-            var content=new GrammarCatalog(data.title(),data.titleEn(),data.description(),data.descriptionEn(),data.parentId(),data.orderIndex(),data.accessMode(),data.requiredFeatureKey(),pinned,data.theory());
+            var content=new GrammarCatalog(data.title(),data.titleEn(),data.description(),data.descriptionEn(),data.parentId(),data.orderIndex(),data.accessMode(),data.requiredFeatureKey(),pinned);
             revision=documents.save(namespace(kind),id,revision,content,actor,GrammarCatalog.class).revision();
         }
         return documents.publish(namespace(kind),id,revision,reason,actor,GrammarCatalog.class);
@@ -83,8 +83,6 @@ public class GrammarCatalogEditor {
             try {
                 items.validateStandalone(ref.itemId(),ref.publicationId());
                 var question=items.published(ref.itemId(),ref.publicationId());
-                if((question.translationVi()==null || question.translationVi().isBlank()) && (question.combinedTranslationVi()==null || question.combinedTranslationVi().isBlank())) result.add(new CheckIssue("MISSING_TRANSLATION",ref.itemId(),i+1,"WARNING","Vietnamese translation is missing"));
-                if(question.explanationVi()==null || question.explanationVi().isBlank()) result.add(new CheckIssue("MISSING_EXPLANATION",ref.itemId(),i+1,"WARNING","Answer explanation is missing"));
             } catch(RequestValidationException|ResourceNotFoundException invalid) {result.add(new CheckIssue("INVALID_QUESTION",ref.itemId(),i+1,"ERROR",invalid.getMessage()));}
         }
         return result;
@@ -94,33 +92,9 @@ public class GrammarCatalogEditor {
         if(d==null || d.title()==null || d.title().isBlank() || d.title().length()>500 || d.questions()==null) throw new RequestValidationException("Title and question collection are required");
         if(d.accessMode()==null || !Set.of("PUBLIC","FEATURE").contains(d.accessMode()) || "FEATURE".equals(d.accessMode()) && !"grammar.advanced".equals(d.requiredFeatureKey()) || "PUBLIC".equals(d.accessMode()) && d.requiredFeatureKey()!=null) throw new RequestValidationException("Invalid Grammar access policy");
         if(kind.equals("subtopic")) {if(d.parentId()==null) throw new RequestValidationException("Parent topic is required");get("topic",d.parentId());}
-        validateTheory(kind, d, publish);
         if(d.questions().size()>5000) throw new RequestValidationException("At most 5000 questions per catalog");
         var unique=new HashSet<UUID>();for(var ref:d.questions()) if(ref==null || ref.itemId()==null || !unique.add(ref.itemId())) throw new RequestValidationException("Question references must be unique");
         if(publish && kind.equals("bank") && d.questions().isEmpty()) throw new RequestValidationException("Add questions before publishing a bank");
     }
 
-    private static void validateTheory(String kind, GrammarCatalog catalog, boolean publish) {
-        var theory = catalog.theory();
-        if (theory == null) return;
-        if (!kind.equals("subtopic") || theory.order() < 1 || theory.order() > 9999
-            || theory.examples() == null || theory.examples().size() > 8)
-            throw new RequestValidationException("Invalid Grammar theory lesson");
-        checkTheoryText(theory.objectiveVi(), 500, publish);
-        checkTheoryText(theory.objectiveEn(), 500, publish);
-        checkTheoryText(theory.ruleVi(), 5000, publish);
-        checkTheoryText(theory.ruleEn(), 5000, publish);
-        if (publish && (theory.examples().isEmpty() || catalog.questions().isEmpty()))
-            throw new RequestValidationException("Add a bilingual example and practice questions before publishing theory");
-        for (var example : theory.examples()) {
-            if (example == null) throw new RequestValidationException("Invalid Grammar theory example");
-            checkTheoryText(example.en(), 500, publish);
-            checkTheoryText(example.vi(), 500, publish);
-        }
-    }
-
-    private static void checkTheoryText(String text, int limit, boolean required) {
-        if ((required && (text == null || text.isBlank())) || (text != null && text.length() > limit))
-            throw new RequestValidationException("Grammar theory requires bounded bilingual text");
-    }
 }

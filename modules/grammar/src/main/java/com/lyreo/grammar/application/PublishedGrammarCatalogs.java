@@ -16,9 +16,6 @@ public class PublishedGrammarCatalogs {
     private final EntitlementService entitlements;private final AssessmentLibrary questions;private final AssessmentSessions sessions;
     public PublishedGrammarCatalogs(DocumentStore documents,GrammarCatalogSource source,GrammarCatalogEditor editor,EntitlementService entitlements,AssessmentLibrary questions,AssessmentSessions sessions) {this.documents=documents;this.source=source;this.editor=editor;this.entitlements=entitlements;this.questions=questions;this.sessions=sessions;}
     public record Catalog(UUID id,String kind,String title,String titleEn,String description,String descriptionEn,UUID parentId,int questionCount) {}
-    public record TheorySummary(UUID subtopicId, UUID topicId, String titleVi, String titleEn,
-                                int order, int questionCount) {}
-    public record TheoryLesson(TheorySummary lesson, GrammarCatalog.Theory content) {}
 
     public Catalog detail(UUID learnerId,String kind,UUID id) {
         var metadata = visibleMetadata(learnerId, kind, id);
@@ -41,32 +38,6 @@ public class PublishedGrammarCatalogs {
         return metadata;
     }
 
-    public TheoryLesson theory(UUID learnerId, UUID subtopicId) {
-        var metadata = visibleMetadata(learnerId, "subtopic", subtopicId);
-        var data = metadata.content();
-        var theory = data.theory();
-        if (theory == null) throw new ResourceNotFoundException("Grammar theory lesson unavailable");
-        return new TheoryLesson(new TheorySummary(subtopicId, data.parentId(), data.title(), data.titleEn(),
-            theory.order(), metadata.questionCount()), theory);
-    }
-
-    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
-    public List<TheorySummary> theoryPath(UUID learnerId) {
-        var lessons = new ArrayList<TheorySummary>();
-        for (int page = 0; ; page++) {
-            var rows = source.list("subtopic", "", null, page, 100);
-            for (var row : rows) {
-                try {
-                    lessons.add(theory(learnerId, row.id()).lesson());
-                } catch (ResourceNotFoundException | org.springframework.security.access.AccessDeniedException unavailable) {
-                    // Hidden, restricted and practice-only subtopics are omitted.
-                }
-            }
-            if (rows.size() < 100) break;
-        }
-        lessons.sort(Comparator.comparingInt(TheorySummary::order).thenComparing(TheorySummary::subtopicId));
-        return List.copyOf(lessons);
-    }
     public List<Catalog> list(UUID learnerId,String kind,int page,int size) {
         editor.namespace(kind);
         if(page<0 || page>100000 || size<1 || size>100) throw new RequestValidationException("Invalid page");

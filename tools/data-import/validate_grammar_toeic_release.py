@@ -15,7 +15,6 @@ from bs4 import BeautifulSoup
 from build_grammar_toeic_release import GRAPHIC_RE, REVIEWED_STALE_IMAGE, canonical_json, clean_html, sha256, visible_tokens, repaired_source, item_from_grammar, item_from_toeic, clean, VI_RE
 from maintenance_overrides import verify_effective
 import source_repairs
-import grammar_theory
 
 
 def require(condition: bool, message: str) -> None:
@@ -80,6 +79,8 @@ def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
     items = index(item_list, "item")
     group_list = rows(root, "toeic/groups.jsonl")
     groups = index(group_list, "group")
+    topics = index(rows(root, "grammar/topics.jsonl"), "topic")
+    subtopics = index(rows(root, "grammar/subtopics.jsonl"), "subtopic")
     repair_meta = manifest["source"].get("source_repairs")
     reviewed_repairs = None
     baseline_items, baseline_groups = items, groups
@@ -87,7 +88,10 @@ def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
         require(repair_meta["path"] == source_repairs.PATH, "Unexpected source repair path")
         reviewed_repairs = source_repairs.validate(json.loads((root / source_repairs.PATH).read_text()), "grammar-toeic")
         require(repair_meta["count"] == len(reviewed_repairs["repairs"]), "Source repair count differs")
-        source_repairs.require_targets(reviewed_repairs, {"shared/items.jsonl": items, "toeic/groups.jsonl": groups})
+        source_repairs.require_targets(reviewed_repairs, {
+            "shared/items.jsonl": items, "toeic/groups.jsonl": groups,
+            "grammar/topics.jsonl": topics, "grammar/subtopics.jsonl": subtopics,
+        })
         baseline_items = {key: source_repairs.record("shared/items.jsonl", value, reviewed_repairs, reverse=True) for key, value in items.items()}
         baseline_groups = {key: source_repairs.record("toeic/groups.jsonl", value, reviewed_repairs, reverse=True) for key, value in groups.items()}
     override_meta = manifest["source"].get("language_overrides")
@@ -101,8 +105,11 @@ def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
     tests = index(rows(root, "toeic/tests.jsonl"), "test")
     documents = index(rows(root, "toeic/documents.jsonl"), "document")
     placements = index(rows(root, "toeic/placements.jsonl"), "TOEIC placement")
-    topics = index(rows(root, "grammar/topics.jsonl"), "topic")
-    subtopics = index(rows(root, "grammar/subtopics.jsonl"), "subtopic")
+    if reviewed_repairs:
+        for value in topics.values():
+            source_repairs.record("grammar/topics.jsonl", value, reviewed_repairs, reverse=True)
+        for value in subtopics.values():
+            source_repairs.record("grammar/subtopics.jsonl", value, reviewed_repairs, reverse=True)
     banks = index(rows(root, "grammar/bank_sets.jsonl"), "bank set")
     levels = index(rows(root, "grammar/difficulty_levels.jsonl"), "difficulty level")
     memberships = index(rows(root, "grammar/memberships.jsonl"), "Grammar membership")
@@ -110,14 +117,6 @@ def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
     quarantined_subtopics = index(rows(root, "quarantine/grammar_subtopics.jsonl"), "quarantined subtopic")
     stats = rows(root, "source_only/difficulty_observations.jsonl")
     issue_report = json.loads((root / "validation_report.json").read_text(encoding="utf-8"))
-    theory_projection = {key: row["theory"] for key, row in subtopics.items() if "theory" in row}
-    if theory_projection or manifest["source"].get("grammar_theory"):
-        require(manifest["source"].get("grammar_theory") == grammar_theory.PATH, "Unexpected grammar theory provenance")
-        authored = json.loads((root / grammar_theory.PATH).read_text())
-        basis = [{k: v for k, v in row.items() if k != "theory"} for row in subtopics.values()]
-        expected = grammar_theory.apply(authored, basis, list(memberships.values()))
-        require(theory_projection == expected and issue_report.get("grammar_theory_lessons") == len(expected),
-                "Grammar theory projection differs from authored content")
     if language_overrides:
         require(issue_report.get("accepted_language_changes") == len(language_overrides["changes"]), "Accepted language change count differs")
     if reviewed_repairs:
@@ -263,6 +262,7 @@ def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
             expected = item_from_toeic(source)
             require(all(actual[field] == expected[field] for field in ("stem_en", "options", "correct_option")),
                     f"Part 7 stem, choices or answer differs from source: {item_id}")
+        raw_topics = index(json.loads((raw / "grammar_data/grammar_topics.json").read_text(encoding="utf-8")), "raw topic")
         raw_subtopics = index(json.loads((raw / "grammar_data/grammar_subtopics.json").read_text(encoding="utf-8")), "raw subtopic")
         raw_memberships = index(json.loads((raw / "grammar_data/grammar_question_memberships.json").read_text(encoding="utf-8")), "raw Grammar membership")
         raw_stats = json.loads((raw / "mock_test_data/all_difficulty_stats.json").read_text(encoding="utf-8"))
@@ -289,6 +289,9 @@ def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
                     if repair["collection"] == "toeic/groups.jsonl":
                         values = {clean(q.get("dich_nghia")) for q in raw_questions.values() if q.get("passage_id") == repair["id"]}
                         require(len(values) == 1 and baseline_groups[repair["id"]]["content_translation_vi"] in values, "Reviewed group translation differs from immutable raw source")
+                    if repair["collection"] in ("grammar/topics.jsonl", "grammar/subtopics.jsonl"):
+                        raw_catalog = raw_topics if repair["collection"] == "grammar/topics.jsonl" else raw_subtopics
+                        require(repair["before"] == clean(raw_catalog.get(repair["id"], {}).get("title_en")), "Reviewed title differs from immutable raw source")
         require(set(raw_passages) == set(groups) | set(quarantined_passages), "Raw passage partition differs")
         require(set(raw_subtopics) == set(subtopics) | set(quarantined_subtopics), "Raw subtopic partition differs")
         require(set(raw_memberships) == set(memberships), "Raw Grammar memberships differ")

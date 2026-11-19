@@ -1461,6 +1461,7 @@
     "verifyTranslation": "Verify translation",
     "unverifyTranslation": "Remove verification",
     "qualityCodes": {
+      "TRANSLATION_MARKERS": "The Vietnamese passage has different sentence insertion markers",
       "DOCUMENT_REVIEW": "Review the document split and question links",
       "MISSING_EXPLANATION": "Explanation is missing",
       "MISSING_AUDIO": "Required audio is missing",
@@ -1630,21 +1631,10 @@
   "files": {
     "none": "No file selected"
   },
-  "grammarTheory": {
-    "title": "Theory",
-    "empty": "Add a short lesson linked to this subtopic’s practice questions.",
-    "add": "Add theory lesson",
-    "order": "Learning path order",
-    "remove": "Remove lesson",
-    "objectiveVi": "Learning objective (VI)",
-    "objectiveEn": "Learning objective (EN)",
-    "ruleVi": "Grammar rule (VI)",
-    "ruleEn": "Grammar rule (EN)",
-    "exampleEn": "English example",
-    "exampleVi": "Vietnamese example translation",
-    "practiceHelp": "The practice link opens the current subtopic’s published questions."
-  },
   "dictionary": {
+    "editThisMeaning": "Edit this meaning",
+    "morePronunciations": "Show {{count}} more pronunciations",
+    "moreMeanings": "Show {{count}} more meanings",
     "lookupPreview": "Try lookup",
     "editMeanings": "Edit meanings",
     "readingMode": "Dictionary language",

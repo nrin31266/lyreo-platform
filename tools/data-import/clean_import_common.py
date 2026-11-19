@@ -246,6 +246,28 @@ def prior_release_exists(conn, package: ReleasePackage) -> bool:
     )
 
 
+def ensure_single_install(conn, package: ReleasePackage) -> None:
+    """Allow one immutable content release per domain; reruns of that release stay safe."""
+    prior = conn.execute(
+        """SELECT dr.id, dr.package_version, dr.checksum_sha256
+           FROM dataset_release dr
+           LEFT JOIN dataset_active_release a ON a.release_id=dr.id
+          WHERE dr.domain=%s AND (
+              a.release_id IS NOT NULL OR EXISTS (
+                  SELECT 1 FROM dataset_import_run r WHERE r.release_id=dr.id
+                    AND r.run_type='APPLY' AND r.status='SUCCEEDED' AND r.completed_at IS NOT NULL
+              ))
+          ORDER BY (a.release_id IS NOT NULL) DESC, dr.created_at DESC
+          LIMIT 1""",
+        (package.domain,),
+    ).fetchone()
+    if prior and prior[0] != package.release_id:
+        raise ValueError(
+            f"{package.domain} is already installed ({prior[1]}, {prior[2]}). "
+            "Normal setup will not replace an installed dataset."
+        )
+
+
 def audit_orphans(conn, release_id: uuid.UUID, checks: dict[str, str]) -> dict[str, int]:
     """Run fixed, importer-owned relationship probes and return observed orphan counts."""
     counts: dict[str, int] = {}
@@ -276,39 +298,21 @@ def package_record_count(package: ReleasePackage) -> int:
     return sum(package.counts.values())
 
 
-def activate_release(
-    conn,
-    package: ReleasePackage,
-    *,
-    activated_by: str,
-    action: str,
-) -> None:
-    if not activated_by.strip():
-        raise ValueError("activated_by must not be empty")
-    from editorial_reconciliation import reconcile_editorial, assert_reconciled
-    reconcile_editorial(conn, package.domain, package.release_id)
+def finalize_install(conn, package: ReleasePackage, *, installed_by: str = "setup-data") -> None:
+    """Pin the single accepted release without mutable activation/rollback history."""
     with conn.transaction():
-        assert_reconciled(conn, package.domain, package.release_id)
-        current = conn.execute(
-            "SELECT release_id FROM dataset_active_release WHERE domain=%s FOR UPDATE",
-            (package.domain,),
-        ).fetchone()
-        previous_id = current[0] if current else None
-        if previous_id == package.release_id:
-            return
-        conn.execute(
-            """INSERT INTO dataset_activation_history(
-                   id,domain,release_id,previous_release_id,action,activated_by
-               ) VALUES(%s,%s,%s,%s,%s,%s)""",
-            (uuid.uuid4(), package.domain, package.release_id, previous_id, action, activated_by),
-        )
         conn.execute(
             """INSERT INTO dataset_active_release(domain,release_id,activated_by)
                VALUES(%s,%s,%s)
-               ON CONFLICT(domain) DO UPDATE SET release_id=excluded.release_id,
-                   activated_at=now(),activated_by=excluded.activated_by""",
-            (package.domain, package.release_id, activated_by),
+               ON CONFLICT(domain) DO NOTHING""",
+            (package.domain, package.release_id, installed_by),
         )
+        current = conn.execute(
+            "SELECT release_id FROM dataset_active_release WHERE domain=%s",
+            (package.domain,),
+        ).fetchone()
+        if current is None or current[0] != package.release_id:
+            raise ValueError("A different release is already installed for this domain")
 
 
 def db_url_from_args(value: str | None) -> str:
@@ -337,27 +341,6 @@ def unlock_import_domain(conn, domain: str) -> None:
     conn.execute("SELECT pg_advisory_unlock(hashtextextended(%s,0))", (f"lyreo.import.{domain}",))
 
 
-def activate_existing_release(conn, package: ReleasePackage, *, activated_by: str, action: str,
-                              expected_by_table: dict[str, int]) -> dict[str, dict[str, int]]:
-    release = conn.execute(
-        """SELECT id,checksum_sha256,schema_version FROM dataset_release
-           WHERE domain=%s AND package_version=%s""",
-        (package.domain, package.version),
-    ).fetchone()
-    if release is None:
-        raise ValueError(f"Release {package.domain}-{package.version} has not been imported")
-    if release[0] != package.release_id or release[1] != package.checksum or release[2] != package.schema_version:
-        raise ValueError("Imported release metadata differs from the validated package")
-    applied = conn.execute(
-        """SELECT EXISTS(SELECT 1 FROM dataset_import_run
-           WHERE release_id=%s AND run_type='APPLY' AND status='SUCCEEDED' AND completed_at IS NOT NULL)""",
-        (package.release_id,),
-    ).fetchone()[0]
-    if not applied:
-        raise ValueError("Release has no successful APPLY run")
-    counts = reconcile_counts(conn, package.release_id, expected_by_table)
-    activate_release(conn, package, activated_by=activated_by, action=action)
-    return counts
 
 
 def insert_batches(conn, run_id: uuid.UUID, rows: Iterable[dict], *, batch_size: int,

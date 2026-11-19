@@ -108,7 +108,7 @@ class FlywayMigrationIT {
 
         assertThat(applied)
             .as("All append-only migrations must be applied")
-            .hasSize(28);
+            .hasSize(31);
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
@@ -133,8 +133,8 @@ class FlywayMigrationIT {
         assertThat(applied[7].getVersion().getVersion()).isEqualTo("008");
         assertThat(applied[7].getState()).isEqualTo(MigrationState.SUCCESS);
         assertThat(flyway.info().current().getVersion().getVersion())
-            .as("Current Flyway version must be 028")
-            .isEqualTo("028");
+            .as("Current Flyway version must be 031")
+            .isEqualTo("031");
     }
 
     @Test
@@ -158,7 +158,6 @@ class FlywayMigrationIT {
             "dataset_release",
             "dataset_import_run",
             "dataset_active_release",
-            "dataset_activation_history",
             "entitlement_feature",
             "user_entitlement_grant",
             "module_runtime_config"
@@ -1119,7 +1118,7 @@ class FlywayMigrationIT {
             """, release);
 
         var named = new NamedParameterJdbcTemplate(jdbcTemplate.getDataSource());
-        var grammar = new JdbcGrammarCatalogSource(named, new tools.jackson.databind.ObjectMapper());
+        var grammar = new JdbcGrammarCatalogSource(named);
         var topic = grammar.find("topic", topicCatalog).orElseThrow();
         assertThat(topic.questions()).extracting("itemId").contains(item);
         assertThat(grammar.metadata("topic", topicCatalog).orElseThrow().questionCount()).isEqualTo(1);

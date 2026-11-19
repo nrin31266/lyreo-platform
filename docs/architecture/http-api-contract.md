@@ -185,9 +185,8 @@ asset requiring preview/accept. AI never changes a supplied answer or publishes 
 Dataset package installation is operator-only. See the [import guide](../../tools/data-import/README.md).
 
 Learners use `/grammar/catalogs/{kind}` and `/toeic/catalog` plus detail/start-session endpoints.
-`GET /grammar/theory` returns visible lessons in learning order. `GET /grammar/theory/{id}` returns
-a published bilingual lesson and its subtopic link for practice. Parent and subtopic access policies
-apply to both routes. The Lexicon detail's `readingModes` lists available `en-vi` and `en-en` views.
+Grammar catalog summaries expose the Vietnamese title and `titleEn` for locale-aware display.
+The Lexicon detail's `readingModes` lists available `en-vi` and `en-en` views.
 `/assessment-sessions` provides private history/detail, optimistic answer saves and idempotent submit.
 Open DTOs omit answer keys and transcripts; submitted results carry pinned grading evidence.
 Media authorization requires membership in that learner's session. Sessions remain resumable for
