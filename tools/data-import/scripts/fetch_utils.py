@@ -40,7 +40,7 @@ def _download_file(url: str, target: Path) -> None:
         else:
             public_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t"
             subprocess.run(["curl", "--fail", "--location", "--no-progress-meter", "--connect-timeout", "20", "--max-time", "600",
-                            "--retry", "2", "--output", str(target), public_url], check=True, timeout=650)
+                            "--retry", "2", "--retry-all-errors", "--output", str(target), public_url], check=True, timeout=650)
     elif parsed.scheme in ("http", "https"):
         subprocess.run(
             ["curl", "--fail", "--location", "--retry", "3", "--retry-delay", "2", "--output", str(target), url],

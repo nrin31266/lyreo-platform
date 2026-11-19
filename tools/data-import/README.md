@@ -115,9 +115,10 @@ tools/data-import/.venv/bin/python tools/data-import/validate_grammar_toeic_rele
 
 Builders reject existing output paths. Version metadata must match the intended release; path names
 alone do not change it. Preserve the same `--generated-at` for reproducibility checks. Validate with
-raw source before publishing, upload privately, download again and verify archive SHA before pinning
-new `.env.example` defaults. Keep all old source/package versions. Dataset/credential/generated large
-files are Git-ignored; never distribute a database snapshot containing accounts or secrets.
+raw source, upload to the designated team folder, then verify the downloaded archive SHA and clean
+install before pinning new `.env.example` defaults. Keep the raw inputs, the pinned archives and the
+review evidence. Remove duplicate downloads, split caches and intermediate builds after verification.
+Dataset and credential files stay outside Git. Team setup uses the content archives.
 
 ### Lexicon v2
 
