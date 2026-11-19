@@ -1,7 +1,7 @@
 import copy
 import json
 import pytest
-from source_repairs import FORMAT, digest, record, require_targets, validate
+from source_repairs import FORMAT, QUESTION_TRANSCRIPTION, digest, record, require_targets, validate
 
 
 def repair_bundle(collection, row, field, before, after, domain='grammar-toeic'):
@@ -53,6 +53,32 @@ def test_choice_repair_restores_only_the_suffix_of_an_incorrect_toeic_choice():
     after[-1]['text'] = 'Rewritten choice'
     with pytest.raises(ValueError, match='truncated ending'):
         validate(bundle, 'grammar-toeic')
+
+
+def test_mismatched_toeic_question_transcription_roundtrips_without_changing_the_key():
+    choices = lambda text: [{'key': key, 'text': f'{text} {key}'} for key in 'ABCD']
+    row = {'id': 'q', 'source_domains': ['toeic'], 'correct_option': 'B',
+           'stem_en': 'Unrelated question?', 'options': choices('Unrelated'),
+           'annotations': {'question_options_translation_vi': 'Wrong translation', 'rationale_vi': 'Wrong rationale'}}
+    before = {'stem_en': row['stem_en'], 'options': row['options'],
+              'annotations.question_options_translation_vi': 'Wrong translation', 'annotations.rationale_vi': 'Wrong rationale'}
+    after = {'stem_en': 'Actual question?', 'options': choices('Original'),
+             'annotations.question_options_translation_vi': 'Verified translation', 'annotations.rationale_vi': 'Verified rationale'}
+    bundle = repair_bundle('shared/items.jsonl', row, QUESTION_TRANSCRIPTION, before, after)
+    repair = bundle['repairs'][0]
+    repair['sources'] = ['https://one.example/scan']
+    with pytest.raises(ValueError, match='independent HTTPS sources'):
+        validate(bundle, 'grammar-toeic')
+    repair['sources'].append('https://two.example/transcription')
+    changed = record('shared/items.jsonl', row, validate(bundle, 'grammar-toeic'))
+    assert changed['stem_en'] == after['stem_en']
+    assert changed['options'] == after['options']
+    assert changed['annotations']['rationale_vi'] == after['annotations.rationale_vi']
+    assert changed['correct_option'] == row['correct_option']
+    assert record('shared/items.jsonl', changed, bundle, reverse=True) == row
+    changed['correct_option'] = 'D'
+    with pytest.raises(ValueError, match='protected'):
+        record('shared/items.jsonl', changed, bundle, reverse=True)
 
 
 def test_lexicon_example_repair_preserves_translation_and_updates_offsets():

@@ -41,7 +41,10 @@ Builders reject stale rows, wrong domains, duplicate targets and unsupported fie
 
 The narrow allowlist covers question Vietnamese explanations/translations, group Vietnamese
 translations, Lexicon examples and corroborated truncated endings of incorrect TOEIC choices.
-A choice repair preserves the order, every other choice and the keyed answer. Source passages,
+A choice repair preserves the order, every other choice and the keyed answer. For an entire
+question demonstrably transcribed from the wrong context, a TOEIC-only transcription repair
+requires two independent source references and replaces the stem, four choices, translation and
+rationale together. The original keyed answer and option order are preserved. Source passages,
 media and identities are protected. The independent validator reverses repairs, verifies every original row hash, then
 compares against raw source when supplied. The report retains `accepted_source_repairs`; the bundle
 retains the original text. Raw files and earlier releases remain immutable. AI-reviewed changes

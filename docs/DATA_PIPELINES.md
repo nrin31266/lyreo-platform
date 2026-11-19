@@ -61,6 +61,26 @@ authorized by the pilot ceiling. Operational review/export commands live in
 [Data Import](../tools/data-import/README.md#bounded-deepseek-maintenance); spending policy lives in
 [BR-AI-006](requirements/ai.md#br-ai-006--bounded-library-maintenance-pilot).
 
+### Part 7 source review, 2026-11-19
+
+The local Grammar/TOEIC 2.0.11 candidate preserves 75 complete tests and 15,000 placements.
+The full validator compares it with the original corpus and verifies all 4,875 media. AI produced
+schema-valid review results for 1,123 of 1,125 Part 7 groups. The remaining two groups were checked
+directly against the source, with their passages, seven questions and answer keys confirmed.
+
+The package carries 48 accepted language overrides and 23 separately reviewed source repairs.
+These include recovered document boundaries, six translations attached to the wrong passage,
+three translations that had inserted the answer into a sentence-placement passage, and a complete
+source transcription correction for ETS 2019 Test 4 question 150. The full replacement stem and
+choices were checked against the book transcription and an independent reproduction. The answer
+remains B. Uncertain answer-key suggestions stayed in the review ledger. The package records exact
+before/after values and evidence. [Book transcription](https://pdfcoffee.com/ets-toeic-2019-rc-key-pdf-free.html)
+[Independent reproduction](https://anhnguantoan.com/kiem-tra/bo-de-8-test-4/)
+
+Review coverage describes which groups were screened. Additional language suggestions and source
+translation marker discrepancies still need curator review. The archive must complete its public
+Drive download and clean install verification before replacing the pinned Grammar/TOEIC package.
+
 ## Curriculum and artifacts
 
 Curriculum content references existing owners rather than copying their durable records. Stable small defaults may use Flyway; large paths and learning content use versioned imports. PostgreSQL owns normalized/queryable records, object storage holds immutable media and raw debug artifacts, and databases persist keys rather than signed URLs.

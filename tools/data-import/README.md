@@ -22,11 +22,12 @@ in the ignored importer env. Reruns preserve existing rows, and unresolved edito
 stop activation. Use the reports from the CLI or the affected content's quality checks to inspect
 issues. The runtime does not start or schedule dataset imports.
 
-### Private Drive access
+### Drive access
 
 The pinned URLs may point to a `lyreo.archive-parts.v1` JSON transport index. Fetch verifies each
-part and the reassembled archive, then validates package checksums before installation. Splitting
-changes transport only; package bytes and archive SHA stay identical.
+part and the reassembled archive, then validates package checksums before installation. The
+downloader fetches up to four remote parts concurrently and assembles them in index order.
+Splitting changes transport only; package bytes and archive SHA stay identical.
 
 For private files, install rclone from its official distribution, authorize a Drive remote with an
 account that already has access, and set `DATA_DRIVE_REMOTE` to its name (without the colon) in the

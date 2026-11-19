@@ -1,4 +1,6 @@
 import json
+import hashlib
+import subprocess
 import sys
 from pathlib import Path
 import pytest
@@ -22,6 +24,42 @@ def test_remote_index_cannot_fetch_local_files(tmp_path,monkeypatch):
     monkeypatch.setattr('fetch_utils._download_file',lambda url,path:None)
     with pytest.raises(ValueError,match='only HTTPS Google Drive'):
         download_archive('https://drive.google.com/file/d/index/view',target)
+
+
+def test_interrupted_remote_part_can_be_fetched_again(tmp_path, monkeypatch):
+    parts = [b'first', b'second']
+    url = 'https://drive.google.com/file/d/index/view'
+    index = {
+        'format': 'lyreo.archive-parts.v1',
+        'archive_sha256': hashlib.sha256(b''.join(parts)).hexdigest(),
+        'parts': [
+            {'url': f'https://drive.google.com/file/d/part_{i}/view',
+             'size_bytes': len(part), 'sha256': hashlib.sha256(part).hexdigest()}
+            for i, part in enumerate(parts)
+        ],
+    }
+    interrupted = True
+
+    def fetch(source, destination):
+        if source == url:
+            destination.write_text(json.dumps(index))
+        elif source == index['parts'][0]['url']:
+            destination.write_bytes(parts[0])
+        elif interrupted:
+            destination.write_bytes(parts[1][:3])
+            raise subprocess.CalledProcessError(18, 'curl')
+        else:
+            destination.write_bytes(parts[1])
+
+    monkeypatch.setattr('fetch_utils._download_file', fetch)
+    target = tmp_path / 'download'
+    with pytest.raises(subprocess.CalledProcessError):
+        download_archive(url, target)
+    assert json.loads(target.read_text()) == index
+    assert not list(tmp_path.glob('archive-parts.*'))
+    interrupted = False
+    download_archive(url, target)
+    assert target.read_bytes() == b''.join(parts)
 
 
 def test_private_drive_uses_authenticated_remote_without_putting_credentials_in_command(tmp_path,monkeypatch):

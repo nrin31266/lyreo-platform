@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse, parse_qs
 
@@ -38,7 +39,7 @@ def _download_file(url: str, target: Path) -> None:
             subprocess.run(["rclone", "backend", "copyid", remote + ":", file_id, str(target.resolve()), "--retries", "2", "--contimeout", "20s", "--timeout", "120s"], check=True, timeout=600)
         else:
             public_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t"
-            subprocess.run(["curl", "--fail", "--location", "--connect-timeout", "20", "--max-time", "600",
+            subprocess.run(["curl", "--fail", "--location", "--no-progress-meter", "--connect-timeout", "20", "--max-time", "600",
                             "--retry", "2", "--output", str(target), public_url], check=True, timeout=650)
     elif parsed.scheme in ("http", "https"):
         subprocess.run(
@@ -68,7 +69,7 @@ def download_archive(url: str, target: Path) -> None:
         raise ValueError("Multipart archive requires a full checksum")
     remote = urlparse(url).scheme in ("http", "https")
     with tempfile.TemporaryDirectory(prefix="archive-parts.", dir=target.parent) as directory:
-        verified = []
+        downloads = []
         for number, part in enumerate(parts):
             child = urlparse(part.get("url", ""))
             if remote and (child.scheme != "https" or child.hostname != "drive.google.com" or child.username or child.password):
@@ -76,11 +77,18 @@ def download_archive(url: str, target: Path) -> None:
             size = part.get("size_bytes")
             if not isinstance(size, int) or isinstance(size, bool) or not 0 < size <= 536870912 or not re.fullmatch(r"[0-9a-f]{64}", part.get("sha256", "")):
                 raise ValueError("Invalid archive part size/checksum")
+            downloads.append((number, part))
+
+        def download_part(download):
+            number, part = download
             path = Path(directory) / str(number)
             _download_file(part["url"], path)
-            if path.stat().st_size != size or sha256_file(path) != part["sha256"]:
+            if path.stat().st_size != part["size_bytes"] or sha256_file(path) != part["sha256"]:
                 raise ValueError(f"Archive part {number + 1} failed size/SHA-256 verification")
-            verified.append(path)
+            return path
+
+        with ThreadPoolExecutor(max_workers=4 if remote else 1) as pool:
+            verified = list(pool.map(download_part, downloads))
         with target.open("wb") as result:
             for path in verified:
                 with path.open("rb") as source:
