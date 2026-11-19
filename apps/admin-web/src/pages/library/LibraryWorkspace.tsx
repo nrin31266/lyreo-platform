@@ -5,7 +5,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, ApiError } from "@/lib/api";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { RiArrowLeftLine, RiHistoryLine, RiFileCopyLine, RiSaveLine, RiCheckLine, RiArrowGoBackLine } from "@remixicon/react";
+import { RiArrowLeftLine, RiHistoryLine, RiSaveLine, RiCheckLine, RiArrowGoBackLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -24,13 +24,12 @@ export function TextField({ label, value, onChange, multiline = false, disabled 
 
 export { LibraryList } from "./LibraryCatalog";
 
-export function DraftLoader<T>({ endpoint, id, initial, children }: { endpoint: string; id: string; initial: T; children: (document: Document<T>) => ReactNode }) {
-  const query = useQuery({ queryKey: ["library", endpoint, id], enabled: id !== "new", queryFn: ({ signal }) => api<Document<T>>(`${endpoint}/${id}`, { signal }), refetchOnWindowFocus: false });
-  if (id === "new") return children({ id: "new", revision: 0, status: "DRAFT", publicationId: null, hasUnpublishedChanges: true, draft: initial, updatedAt: null, updatedBy: null });
+export function DraftLoader<T>({ endpoint, id, children }: { endpoint: string; id: string; children: (document: Document<T>) => ReactNode }) {
+  const query = useQuery({ queryKey: ["library", endpoint, id], queryFn: ({ signal }) => api<Document<T>>(`${endpoint}/${id}`, { signal }), refetchOnWindowFocus: false });
   return <><CatalogError error={query.error} retry={() => void query.refetch()} />{query.isPending ? <CatalogSkeleton /> : query.data && children(query.data)}</>;
 }
 
-export function DraftWorkspace<T extends { title: string; titleEn?: string | null }>({ document: initial, endpoint, route, duplicate, assistant, pendingEditorChanges = false, children }: { pendingEditorChanges?: boolean; document: Document<T>; endpoint: string; route: string; duplicate?: (value: T) => T | null; assistant?: (current: Document<T>, dirty: boolean, adopt: (result: Document<T>) => void) => ReactNode; children: (value: T, change: (value: T) => void, dirty: boolean, savedRevision: number, document: Document<T>, adopt: (result: Document<T>) => void) => ReactNode }) {
+export function DraftWorkspace<T extends { title: string; titleEn?: string | null }>({ document: initial, endpoint, route, assistant, pendingEditorChanges = false, children }: { pendingEditorChanges?: boolean; document: Document<T>; endpoint: string; route: string; assistant?: (current: Document<T>, dirty: boolean, adopt: (result: Document<T>) => void) => ReactNode; children: (value: T, change: (value: T) => void, dirty: boolean, savedRevision: number, document: Document<T>, adopt: (result: Document<T>) => void) => ReactNode }) {
   const { t, i18n } = useTranslation("admin");
   const navigate = useNavigate();
   const cache = useQueryClient();
@@ -53,31 +52,30 @@ export function DraftWorkspace<T extends { title: string; titleEn?: string | nul
   const reload=useMutation({mutationFn:()=>api<Document<T>>(`${endpoint}/${document.id}`),onSuccess:result=>{applySnapshot(result);mutation.reset();}});
   useEffect(() => { if (removed) navigate(route); }, [removed, navigate, route]);
   const remove = useMutation({ mutationFn: () => api(`${endpoint}/${document.id}?revision=${document.revision}`, { method: "DELETE" }), onSuccess: async () => { await cache.invalidateQueries({ queryKey: ["library", endpoint] }); if(active.current) setRemoved(true); } });
-  const audit = useQuery({ queryKey: ["library-audit", endpoint, document.id], enabled: historyOpen && document.id !== "new", queryFn: ({ signal }) => api<{ action: string; revision: number; actor: string; reason: string | null; occurred_at: string }[]>(`${endpoint}/${document.id}/audit`, { signal }) });
+  const audit = useQuery({ queryKey: ["library-audit", endpoint, document.id], enabled: historyOpen, queryFn: ({ signal }) => api<{ action: string; revision: number; actor: string; reason: string | null; occurred_at: string }[]>(`${endpoint}/${document.id}/audit`, { signal }) });
   const changed = JSON.stringify(value) !== JSON.stringify(document.draft);
-  const dirty = document.id === "new" || changed;
+  const dirty = changed;
   const pendingPublication = changed || document.hasUnpublishedChanges;
   const hasPublication = document.publicationId !== null || document.status !== "DRAFT";
   const publishLabel = hasPublication ? "library.applyChanges" : "library.publish";
-  const history = useQuery({ queryKey: ["library-history", endpoint, document.id], enabled: historyOpen && document.id !== "new", queryFn: ({ signal }) => api<Publication<T>[]>(`${endpoint}/${document.id}/history`, { signal }) });
+  const history = useQuery({ queryKey: ["library-history", endpoint, document.id], enabled: historyOpen, queryFn: ({ signal }) => api<Publication<T>[]>(`${endpoint}/${document.id}/history`, { signal }) });
   async function save() {
-    return api<Document<T>>(document.id === "new" ? endpoint : `${endpoint}/${document.id}/draft`, { method: document.id === "new" ? "POST" : "PUT", body: JSON.stringify(document.id === "new" ? value : { revision: document.revision, content: value }) });
+    return api<Document<T>>(`${endpoint}/${document.id}/draft`, { method: "PUT", body: JSON.stringify({ revision: document.revision, content: value }) });
   }
   const mutation = useMutation({
     mutationFn: async (action: string) => {
-      if (action === "duplicate" && duplicate) { const copy = duplicate(value); if (!copy) return; return api<Document<T>>(endpoint, { method: "POST", body: JSON.stringify(copy) }); }
       let current = document;
       if ((action === "save" || action === "publish") && (dirty || current.revision === 0)) { current = await save(); if(action === "publish") applySnapshot(current); }
       if (action === "save") return current;
       if (action.startsWith("restore:")) return api<Document<T>>(`${endpoint}/${current.id}/restore`, { method: "POST", body: JSON.stringify({ revision: current.revision, publicationId: action.slice(8) }) });
       return api<Document<T>>(`${endpoint}/${current.id}/${action === "publish" ? "publish" : "status"}`, { method: action === "publish" ? "POST" : "PUT", body: JSON.stringify({ revision: current.revision, status: action }) });
     },
-    onSuccess: async result => { if (!result) return; applySnapshot(result); await cache.invalidateQueries({ queryKey: ["library", endpoint] }); await cache.invalidateQueries({ queryKey: ["library-history", endpoint] }); if (active.current && initial.id !== result.id) navigate(`${route}/${result.id}`, { replace: initial.id === "new" }); },
+    onSuccess: async result => { if (!result) return; applySnapshot(result); await cache.invalidateQueries({ queryKey: ["library", endpoint] }); await cache.invalidateQueries({ queryKey: ["library-history", endpoint] }); },
   });
   const busy=mutation.isPending || remove.isPending || reload.isPending;
   return <section className="library-workspace library-editor">
     <UnsavedChangesGuard dirty={!removed && (changed || pendingEditorChanges)} includeSearch={pendingEditorChanges} />
-    <header className="library-editor-header"><div className="library-editor-heading"><Link className="text-xs text-muted-foreground hover:underline" to={route}><RiArrowLeftLine className="mr-1 inline size-3" aria-hidden="true" />{t("library.back")}</Link><h1 title={title ?? undefined}>{title || t(route.endsWith("questions") ? "library.untitledQuestion" : "library.untitled")}</h1><div className="mt-2 flex flex-wrap items-center gap-2"><Badge variant={document.status === "PUBLISHED" ? "success" : document.status === "DRAFT" ? "warning" : "secondary"}>{t(`library.states.${document.status}`)}</Badge><span className="text-xs text-muted-foreground">{document.revision === 0 ? t(document.id === "new" ? "library.newDraft" : "library.sourceVersion") : t("library.revision", { revision: document.revision })} {changed || pendingEditorChanges ? `· ${t("library.unsaved")}` : document.hasUnpublishedChanges ? `· ${t("library.pendingPublication")}` : ""}</span></div></div><div className="library-editor-actions"><Button tooltip={t("library.help.history")} variant="ghost" disabled={busy || document.id === "new"} onClick={() => setHistoryOpen(true)}><RiHistoryLine aria-hidden="true" />{t("library.history")}</Button>{duplicate && <Button tooltip={t("library.help.duplicate")} variant="outline" disabled={busy} onClick={() => mutation.mutate("duplicate")}><RiFileCopyLine aria-hidden="true" />{t("library.duplicate")}</Button>}</div></header>
+    <header className="library-editor-header"><div className="library-editor-heading"><Link className="text-xs text-muted-foreground hover:underline" to={route}><RiArrowLeftLine className="mr-1 inline size-3" aria-hidden="true" />{t("library.back")}</Link><h1 title={title ?? undefined}>{title || t(route.endsWith("questions") ? "library.untitledQuestion" : "library.untitled")}</h1><div className="mt-2 flex flex-wrap items-center gap-2"><Badge variant={document.status === "PUBLISHED" ? "success" : document.status === "DRAFT" ? "warning" : "secondary"}>{t(`library.states.${document.status}`)}</Badge><span className="text-xs text-muted-foreground">{document.revision === 0 ? t("library.sourceVersion") : t("library.revision", { revision: document.revision })} {changed || pendingEditorChanges ? `· ${t("library.unsaved")}` : document.hasUnpublishedChanges ? `· ${t("library.pendingPublication")}` : ""}</span></div></div><div className="library-editor-actions"><Button tooltip={t("library.help.history")} variant="ghost" disabled={busy} onClick={() => setHistoryOpen(true)}><RiHistoryLine aria-hidden="true" />{t("library.history")}</Button></div></header>
     <Fragment key={`assistant-${editorEpoch}`}>{assistant?.(document, dirty || busy, adopt)}</Fragment>
     <fieldset key={editorEpoch} className="library-editor-body" disabled={busy}>{children(value, change, dirty, document.revision, document, adopt)}</fieldset>
     <footer className="library-editor-dock" aria-label={t("library.editorActions")} aria-busy={busy}>
@@ -86,9 +84,9 @@ export function DraftWorkspace<T extends { title: string; titleEn?: string | nul
         {mutation.error instanceof ApiError && mutation.error.status === 409 && <p className="rounded-lg border p-4 text-sm">{t("library.conflictHelp")} <Button variant="link" disabled={busy} onClick={() => reload.mutate()}>{t("library.reload")}</Button></p>}
       </div>
       <p className="w-full text-xs text-muted-foreground">{t(pendingPublication ? "library.pendingPublicationHelp" : "library.upToDate")}</p>
-      {document.id !== "new" && <><EditorialExport endpoint={endpoint} id={document.id} disabled={dirty || pendingEditorChanges || busy} />
+      <EditorialExport endpoint={endpoint} id={document.id} disabled={dirty || pendingEditorChanges || busy} />
         {document.publicationId === null && document.revision > 0 && document.status === "DRAFT" && <Button tooltip={t("library.help.deleteDraft")} variant="ghost" disabled={busy || dirty || pendingEditorChanges} onClick={() => { if (window.confirm(t("library.deleteDraftConfirm"))) remove.mutate(); }}>{t("library.deleteDraft")}</Button>}
-        {hasPublication && <Button tooltip={t(document.status === "PUBLISHED" ? "library.help.hide" : "library.help.show")} variant="ghost" disabled={busy || changed || pendingEditorChanges} onClick={() => mutation.mutate(document.status === "PUBLISHED" ? "HIDDEN" : "PUBLISHED")}>{t(document.status === "PUBLISHED" ? "library.hide" : "library.show")}</Button>}</>}
+        {hasPublication && <Button tooltip={t(document.status === "PUBLISHED" ? "library.help.hide" : "library.help.show")} variant="ghost" disabled={busy || changed || pendingEditorChanges} onClick={() => mutation.mutate(document.status === "PUBLISHED" ? "HIDDEN" : "PUBLISHED")}>{t(document.status === "PUBLISHED" ? "library.hide" : "library.show")}</Button>}
       <div className="ml-auto flex flex-wrap items-center gap-2">{(changed || pendingEditorChanges) && <Button variant="ghost" disabled={busy} tooltip={t("library.discardHelp")} onClick={() => { setValue(structuredClone(document.draft)); resetEditors(); mutation.reset(); }}><RiArrowGoBackLine aria-hidden="true" />{t("library.discard")}</Button>}<Button tooltip={t("library.help.save")} variant="outline" disabled={busy || pendingEditorChanges || !dirty} onClick={() => mutation.mutate("save")}><RiSaveLine aria-hidden="true" />{t("library.save")}</Button>{pendingPublication && <Button tooltip={t("library.help.publish")} disabled={busy || pendingEditorChanges} onClick={() => mutation.mutate("publish")}><RiCheckLine aria-hidden="true" />{t(publishLabel)}</Button>}</div>
     </footer>
 

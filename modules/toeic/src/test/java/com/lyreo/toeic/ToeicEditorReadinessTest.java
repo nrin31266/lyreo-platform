@@ -3,10 +3,12 @@ package com.lyreo.toeic;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import com.lyreo.assessment.api.AssessmentLibrary;
+import com.lyreo.assessment.api.AssessmentSessions;
 import com.lyreo.assessment.domain.QuestionContent;
 import com.lyreo.platform.content.AssetStore;
 import com.lyreo.platform.content.DocumentStore;
 import com.lyreo.toeic.application.ToeicEditor;
+import com.lyreo.toeic.application.PublishedToeicTests;
 import com.lyreo.toeic.application.port.*;
 import com.lyreo.toeic.domain.ToeicDraft;
 import java.util.*;
@@ -51,12 +53,78 @@ class ToeicEditorReadinessTest {
         verify(assets).available(argThat(ids->ids.size()==2 && new HashSet<>(ids).equals(Set.of(audio,image))));
         editor.validateStructure(fullTest());
     }
+    @Test void previewBatchesImportedQuestionsAndUsesPinnedPublication() {
+        var full=fullTest();
+        var first=full.placements().getFirst();
+        var second=full.placements().get(1);
+        var publication=UUID.randomUUID();
+        var placements=List.of(first,new ToeicDraft.Placement(second.id(),second.itemId(),publication,
+            second.groupId(),second.part(),second.questionNumber(),second.gapNumber()));
+        var previewDraft=new ToeicDraft(full.title(),full.code(),full.type(),full.year(),full.testNumber(),
+            2700,4500,"PUBLIC",null,List.of(),placements);
+        var testId=UUID.randomUUID();
+        when(documents.find("toeic",testId,ToeicDraft.class)).thenReturn(Optional.of(
+            new DocumentStore.Document<>(testId,1,"DRAFT",null,previewDraft,null,null)));
+        when(questions.importedQuestions(List.of(first.itemId()))).thenReturn(Map.of(first.itemId(),content.get(first.itemId())));
+        when(questions.published(second.itemId(),publication)).thenReturn(content.get(second.itemId()));
+
+        var preview=editor.preview(testId);
+
+        assertThat(preview.test()).isEqualTo(previewDraft);
+        assertThat(preview.questions()).containsExactlyInAnyOrderEntriesOf(Map.of(
+            first.id(),content.get(first.itemId()),second.id(),content.get(second.itemId())));
+        verify(questions,never()).published(first.itemId(),null);
+    }
+    @Test void learnerSnapshotBatchesImportedQuestionsAndKeepsExplicitPublicationPins() {
+        var full = fullTest();
+        var first = full.placements().getFirst();
+        var pinned = UUID.randomUUID();
+        var placements = new ArrayList<>(full.placements());
+        placements.set(0, new ToeicDraft.Placement(first.id(), first.itemId(), pinned,
+            first.groupId(), first.part(), first.questionNumber(), first.gapNumber()));
+        var test = new ToeicDraft(full.title(), full.code(), full.type(), full.year(), full.testNumber(),
+            2700, 4500, "PUBLIC", null, full.groups(), placements);
+        var source = mock(ToeicEditorSource.class);
+        var sessions = mock(AssessmentSessions.class);
+        var learner = UUID.randomUUID();
+        var testId = UUID.randomUUID();
+        when(source.find(testId)).thenReturn(Optional.of(test));
+        when(source.status(testId)).thenReturn("PUBLISHED");
+        var batch = placements.stream().skip(1).map(ToeicDraft.Placement::itemId).toList();
+        when(questions.importedQuestions(batch)).thenReturn(content);
+
+        new PublishedToeicTests(documents, source, questions, sessions, null)
+            .start(learner, testId, "FULL_TEST", null);
+
+        verify(questions).importedQuestions(batch);
+        verify(questions).published(first.itemId(), pinned);
+        verifyNoMoreInteractions(questions);
+        verify(sessions).start(eq(learner), eq("toeic"), eq(testId), eq("FULL_TEST"),
+            argThat(snapshot -> snapshot.items().size() == 200 && pinned.equals(snapshot.items().getFirst().publicationId())));
+    }
     @Test void refusesPartialAdminTestsAndDrillsWhileKeepingLearnerPracticeSeparate() {
         var full=fullTest();
         var drill=new ToeicDraft(full.title(),full.code(),"DRILL",full.year(),full.testNumber(),2700,4500,"PUBLIC",null,full.groups(),full.placements());
         assertThatThrownBy(()->editor.save(UUID.randomUUID(),0,drill,"admin")).isInstanceOf(com.lyreo.contracts.errors.RequestValidationException.class).hasMessageContaining("complete 200-question");
         var partial=new ToeicDraft(full.title(),full.code(),"FULL_TEST",full.year(),full.testNumber(),2700,4500,"PUBLIC",null,full.groups(),full.placements().subList(0,100));
         assertThatThrownBy(()->editor.save(UUID.randomUUID(),0,partial,"admin")).isInstanceOf(com.lyreo.contracts.errors.RequestValidationException.class).hasMessageContaining("exactly 200");
+    }
+    @Test void rejectsSwappingQuestionPositionsInAnOtherwiseCompleteTest() {
+        var full = fullTest();
+        var id = UUID.randomUUID();
+        when(documents.find("toeic", id, ToeicDraft.class)).thenReturn(Optional.of(
+            new DocumentStore.Document<>(id, 1, "DRAFT", null, full, null, null)));
+        var changed = new ArrayList<>(full.placements());
+        var first = changed.get(0);
+        var second = changed.get(1);
+        changed.set(0, new ToeicDraft.Placement(first.id(), first.itemId(), null, first.groupId(), 1, 2, null));
+        changed.set(1, new ToeicDraft.Placement(second.id(), second.itemId(), null, second.groupId(), 1, 1, null));
+        var invalid = new ToeicDraft(full.title(), full.code(), full.type(), full.year(), full.testNumber(),
+            2700, 4500, "PUBLIC", null, full.groups(), changed);
+
+        assertThatThrownBy(() -> editor.save(id, 1, invalid, "admin"))
+            .isInstanceOf(com.lyreo.contracts.errors.RequestValidationException.class)
+            .hasMessageContaining("placement");
     }
     @Test void noReviewCheckboxCanOverrideTheActualDocumentStructure() {
         var full=fullTest();var changed=new ArrayList<>(full.groups());

@@ -31,4 +31,27 @@ class PronunciationGroupsTest {
         var groups=PronunciationGroups.from("record",List.of(respelling,sound(item,"/ˈrɛkɔːd/","noun","UK","noun"),sound(item,"/rɪˈkɔːd/","verb","UK","verb")));
         assertThat(groups).hasSize(3);assertThat(groups.getFirst().notationSystem()).isEqualTo("SOURCE");
     }
+    @Test void recoversRegionsFromLegacySourceLabels() {
+        var raw = List.of("General-American", "Received_Pronunciation", "miền Nam nước Anh", "Úc", "unusual");
+        var sound = new LexiconEntry.Pronunciation(UUID.randomUUID(), null, "unspecified", null, null,
+            "https://example.test/record.mp3", null, null, "[]", null, Map.of("labels", raw));
+        assertThat(PronunciationGroups.regions(sound)).containsExactly("US", "UK", "Southern-England", "AU");
+    }
+
+    @Test void combinesNotationRegionsAndPreservesLabelledAudioWithoutLinkingIt() {
+        var item = UUID.randomUUID();
+        var uk = sound(item, "/kəmˈpækt/", "uk", "UK", null);
+        var us = sound(item, "/kəmˈpækt/", "us", "US", null);
+        var wav = new LexiconEntry.Pronunciation(UUID.randomUUID(), item, "unspecified", null,
+            "compact (adjective).wav", "https://example.test/compact.mp3", null, null, "[]", null,
+            Map.of("source", "enwiktionary", "labels", List.of("Southern-England")));
+
+        var variants = PronunciationGroups.from("compact", List.of(uk, us, wav), Map.of(item, "adj"));
+        assertThat(variants).hasSize(2);
+        assertThat(variants.getFirst().regions()).containsExactly("UK", "US");
+        assertThat(variants.getFirst().recordings()).doesNotContain(wav);
+        assertThat(variants.getLast().notation()).isNull();
+        assertThat(variants.getLast().partOfSpeech()).isEqualTo("adj");
+        assertThat(variants.getLast().regions()).containsExactly("Southern-England");
+    }
 }

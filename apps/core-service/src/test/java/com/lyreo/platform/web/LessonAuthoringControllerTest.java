@@ -15,6 +15,24 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class LessonAuthoringControllerTest {
+    @Test void batchSaveRejectsUnknownVoicesBeforeWriting() throws Exception {
+        var service = mock(LessonAuthoringService.class);
+        var media = mock(com.lyreo.lesson.application.port.AuthoringMediaPort.class);
+        when(media.voices()).thenReturn(new com.lyreo.lesson.application.port.AuthoringMediaPort.Voices(
+            "af_heart", List.of(new com.lyreo.lesson.application.port.AuthoringMediaPort.Voice("af_heart", "US", "Heart"))));
+        var catalog = mock(com.lyreo.lesson.application.port.LessonCatalogPort.class);
+        var mvc = MockMvcBuilders.standaloneSetup(
+            new LessonAuthoringController(service, catalog),
+            new com.lyreo.lesson.api.LessonMediaController(media, service, catalog,
+                mock(com.lyreo.lesson.application.port.VoiceSamplesPort.class)))
+            .setControllerAdvice(new ApiExceptionHandler()).build();
+        mvc.perform(put("/api/v1/admin/lesson-authoring/" + UUID.randomUUID() + "/changes")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"changes\":{\"revision\":0,\"voice\":\"bf_unknown\",\"sentences\":[]}}"))
+            .andExpect(status().isBadRequest());
+        verifyNoInteractions(service, catalog);
+    }
+
     @Test void publicationRecordsTheTokenSubjectWhenThePrincipalNameIsAnEmail() throws Exception {
         var service=mock(LessonAuthoringService.class);
         var draft=new AuthoringLesson();draft.id=UUID.randomUUID();
@@ -109,6 +127,14 @@ class LessonAuthoringControllerTest {
                 .andExpect(jsonPath("$.correlationId").isNotEmpty())
                 .andExpect(jsonPath("$.detail").value("YouTube source is unavailable. Check the source and media tools, then retry."));
         }
+        doThrow(new com.lyreo.lesson.application.build.SourceMaterializationException(
+            "YOUTUBE_MEDIA_TIMEOUT", "credential=secret provider details", true))
+            .when(service).create(isNull(), anyString(), eq(0L), eq(1000L), isNull());
+        mvc.perform(post("/api/v1/admin/lesson-authoring/drafts").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"sourceReference\":\"https://youtu.be/abcdefghijk\",\"startMs\":0,\"endMs\":1000}"))
+            .andExpect(status().isServiceUnavailable())
+            .andExpect(jsonPath("$.code").value("YOUTUBE_MEDIA_TIMEOUT"))
+            .andExpect(jsonPath("$.detail").value("YouTube source is unavailable. Check the source and media tools, then retry."));
         doThrow(new com.lyreo.contracts.errors.RequestValidationException("A valid YouTube video URL is required")).when(service).inspect(anyString());
         mvc.perform(post("/api/v1/admin/lesson-authoring/inspect")
             .contentType(MediaType.APPLICATION_JSON).content("{\"sourceReference\":\"invalid\"}"))

@@ -41,35 +41,34 @@ public class LexiconEditor {
         if(q.length()>500 || size<1 || size>100 || skip<0 || skip>90 || (after!=null && before!=null) || (tail && (after!=null || before!=null))) throw new RequestValidationException("Invalid cursor or page size");
         return source.browse(q,type,translation,state,pos,after,before,tail,skip,size);
     }
-    public void validateNew(LexiconDraft input) {
-        validate(input,false);
-        if(source.list(input.title().strip(),input.type(),"","",null,100).stream().anyMatch(row->row.title().equals(input.title().strip()) && row.type().equals(input.type())))
-            throw new StateConflictException("This headword and type already exist");
-    }
-    @Transactional public Document<LexiconDraft> create(LexiconDraft input,String actor) {
-        validateNew(input);
-        UUID headword=source.headword(input.title().strip());
-        if(source.contains(headword,input.type())) throw new StateConflictException("This case-sensitive headword and entry type already exist; edit the existing entry");
-        var data=new LexiconDraft(input.title().strip(),input.type(),headword,input.sourceMetadataJson(),input.licenseText(),input.items(),input.senses(),input.forms(),input.pronunciations(),input.translations());
-        return documents.save("lexicon",UUID.randomUUID(),0,data.withProvenanceFrom(data),actor,LexiconDraft.class);
-    }
     public Document<LexiconDraft> save(UUID id,long revision,LexiconDraft data,String actor) {
         validate(data,false);
-        var current=get(id);if(!Objects.equals(current.draft().headwordId(),data.headwordId()) || !current.draft().title().equals(data.title())) throw new RequestValidationException("Headword identity cannot change; duplicate the entry instead");
+        var current=get(id);if(!Objects.equals(current.draft().headwordId(),data.headwordId()) || !current.draft().title().equals(data.title())) throw new RequestValidationException("Headword identity cannot change");
         if(!Objects.equals(current.draft().sourceMetadataJson(),data.sourceMetadataJson()) || !Objects.equals(current.draft().licenseText(),data.licenseText())) throw new RequestValidationException("Keep the original source attribution and license");
         data=data.withProvenanceFrom(current.draft());validate(data,false);
         documents.save("lexicon",id,revision,data,actor,LexiconDraft.class);return get(id);
     }
-    @Transactional public Document<LexiconDraft> publish(UUID id,long revision,String reason,String actor) {validatePublication(get(id).draft());var published=documents.publish("lexicon",id,revision,reason,actor,LexiconDraft.class);source.indexPublication(id,published.draft());return published;}
-    @Transactional public Document<LexiconDraft> restore(UUID id,long revision,UUID publicationId,String actor) {var previous=documents.publication("lexicon",id,publicationId,LexiconDraft.class);validatePublication(previous.content());var restored=documents.restore("lexicon",id,revision,publicationId,actor,LexiconDraft.class);source.indexPublication(id,restored.draft());return restored;}
-    private void validatePublication(LexiconDraft content) {
-        validate(content,true);
+    @Transactional public Document<LexiconDraft> publish(UUID id,long revision,String reason,String actor) {validatePublication(id,get(id).draft());var published=documents.publish("lexicon",id,revision,reason,actor,LexiconDraft.class);source.indexPublication(id,published.draft());return published;}
+    @Transactional public Document<LexiconDraft> restore(UUID id,long revision,UUID publicationId,String actor) {var previous=documents.publication("lexicon",id,publicationId,LexiconDraft.class);validatePublication(id,previous.content());var restored=documents.restore("lexicon",id,revision,publicationId,actor,LexiconDraft.class);source.indexPublication(id,restored.draft());return restored;}
+    private void validatePublication(UUID id, LexiconDraft content) {
+        var sourceStubs = content.senses().stream().anyMatch(sense -> !hasMeaning(sense))
+            ? source.source(id).stream().flatMap(draft -> draft.senses().stream())
+                .filter(sense -> !hasMeaning(sense) && sense.tags().contains("no-gloss")).toList()
+            : List.<LexiconDraft.Sense>of();
+        validate(content,true,sourceStubs);
         for(var pronunciation:content.pronunciations()) if(pronunciation.assetId()!=null) {
             if(!assets.get(pronunciation.assetId()).mimeType().startsWith("audio/") || !assets.exists(pronunciation.assetId()))
                 throw new RequestValidationException("Pronunciation audio is unavailable or has the wrong type");
         }
     }
     public static void validate(LexiconDraft d,boolean publish) {
+        validate(d,publish,List.of());
+    }
+    private static boolean hasMeaning(LexiconDraft.Sense sense) {
+        return sense.definitionEn()!=null && !sense.definitionEn().isBlank()
+            || sense.translationVi()!=null && !sense.translationVi().isBlank();
+    }
+    private static void validate(LexiconDraft d,boolean publish,List<LexiconDraft.Sense> sourceStubs) {
         require(d!=null && d.title()!=null && !d.title().isBlank() && d.title().length()<=500,"Headword is required (up to 500 characters)");
         require(Arrays.stream(LexiconEntry.EntryType.values()).anyMatch(t->t.name().equals(d.type())),"Invalid entry type");
         require(d.items()!=null && d.senses()!=null && d.forms()!=null && d.pronunciations()!=null && d.translations()!=null,"Entry collections are required");
@@ -79,12 +78,12 @@ public class LexiconEditor {
         var senses=new HashSet<UUID>();
         for(var s:d.senses()) {
             require(s!=null && s.id()!=null && senses.add(s.id()) && ids.contains(s.itemId()),"Sense references an invalid item");
-            require(!publish || s.definitionEn()!=null && !s.definitionEn().isBlank() || s.translationVi()!=null && !s.translationVi().isBlank(),"A definition in at least one language is required for publication");
+            require(!publish || hasMeaning(s) || sourceStubs.contains(s),"A definition in at least one language is required for publication");
             require(s.rawGlosses()!=null && s.examples()!=null && s.tags()!=null,"Sense collections are required");
             require(Arrays.stream(LexiconEntry.TranslationStatus.values()).anyMatch(t->t.name().equals(s.translationStatus())),"Invalid translation status");
             require(!"VERIFIED".equals(s.translationStatus()) || s.translationVi()!=null && !s.translationVi().isBlank(),"Verified translation cannot be empty");
         }
-        if(publish) require(!d.senses().isEmpty(),"Add at least one sense before publication");
+        if(publish) require(d.senses().stream().anyMatch(LexiconEditor::hasMeaning),"Add at least one readable meaning before publication");
         var translationIds=new HashSet<UUID>();
         for(var t:d.translations()) {
             require(t!=null && t.id()!=null && translationIds.add(t.id()) && t.wordVi()!=null && t.linkStatus()!=null,"Invalid translation");

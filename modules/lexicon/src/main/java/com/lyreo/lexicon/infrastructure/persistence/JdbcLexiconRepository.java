@@ -263,7 +263,7 @@ public final class JdbcLexiconRepository implements LexiconRepository {
                 r.getString("cached_audio_object_key"), r.getString("tags"),null,jsonMap(r.getString("pronunciation_context"))));
         Map<UUID, List<LexiconTranslation>> translations = loadChildren(releaseId, entryIds, """
             SELECT entry_id, id, item_id, sense_id, word_vi, source, source_scope, source_sense_qualifier,
-                   link_status, unlinked_reason, tags::text AS tags, source_pos
+                   link_status, unlinked_reason, tags::text AS tags, source_pos, source_context::text
               FROM lexicon_translation
              WHERE release_id = :release AND entry_id IN (:entries)
              ORDER BY entry_id, id
@@ -271,7 +271,8 @@ public final class JdbcLexiconRepository implements LexiconRepository {
                 r.getObject("item_id", UUID.class), r.getObject("sense_id", UUID.class),
                 r.getString("word_vi"), r.getString("source"), r.getString("source_scope"),
                 r.getString("source_sense_qualifier"), r.getString("link_status"),
-                r.getString("unlinked_reason"), r.getString("tags"), r.getString("source_pos")));
+                r.getString("unlinked_reason"), r.getString("tags"), r.getString("source_pos"),
+                r.getString("source_context") == null ? null : jsonMap(r.getString("source_context"))));
 
         return headers.stream().map(header -> new LexiconEntry(
             header.id(), header.headwordId(), header.displayForm(), header.lookupForm(), header.entryType(),

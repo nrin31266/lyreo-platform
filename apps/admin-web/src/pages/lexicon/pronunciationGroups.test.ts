@@ -1,5 +1,5 @@
 import {expect,it} from "vitest";
-import {pronunciationGroups} from "./pronunciationGroups";
+import {pronunciationGroups, pronunciationRegions} from "./pronunciationGroups";
 import type {Sound} from "../library/library.types";
 const sound=(id:string,patch:Partial<Sound>={}):Sound=>({id,itemId:'noun',accent:'US',ipa:null,audioUrl:null,assetId:null,tags:[],...patch});
 it('keeps separate IPA and audio records apart even when their accents match',()=>{
@@ -15,4 +15,21 @@ it('keeps distinct audio URLs from the same source record',()=>{
  const context={scope_status:'EXPLICIT',notation_system:'IPA',source_record_key:'one-record'};
  const records=[sound('a',{ipa:'/riːd/',audioUrl:'https://example.test/a.ogg',pronunciationContext:context}),sound('b',{ipa:'/riːd/',audioUrl:'https://example.test/b.ogg',pronunciationContext:context})];
  expect(pronunciationGroups('read',records)[0]).toHaveLength(2);
+});
+
+it('collapses the same notation across accents and keeps a labelled source recording separate', () => {
+ const parts = [{ id: 'adj', partOfSpeech: 'adj', posTitle: null, etymologyText: null }];
+ const rows = [
+   sound('uk', { ipa: '/kəmˈpækt/', accent: 'UK' }),
+   sound('us', { ipa: '/kəmˈpækt/' }),
+   sound('wav', { itemId: 'adj', audioUrl: 'https://example.test/adjective.ogg',
+     audioFile: 'LL-Q1860 (eng)-compact (adjective).wav', pronunciationContext: { source: 'enwiktionary', labels: ['Southern-England'] } }),
+ ];
+ expect(pronunciationGroups('compact', rows, parts).map(group => group.map(row => row.id))).toEqual([['uk', 'us'], ['wav']]);
+});
+
+it('recovers normalized regions from unchanged source labels without guessing unknown tags', () => {
+  const context = { labels: ['General-American', 'Received_Pronunciation', 'miền Nam nước Anh', 'Úc', 'unusual'] };
+  expect(pronunciationRegions(sound('old', { accent: 'unspecified', pronunciationContext: context })))
+    .toEqual(['US', 'UK', 'Southern-England', 'AU']);
 });

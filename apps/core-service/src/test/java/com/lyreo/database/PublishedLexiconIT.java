@@ -1,8 +1,9 @@
 package com.lyreo.database;
 
 import static org.assertj.core.api.Assertions.*;
-import com.lyreo.contracts.errors.StateConflictException;
+import com.lyreo.lexicon.api.LexiconController;
 import com.lyreo.lexicon.application.LexiconEditor;
+import com.lyreo.lexicon.application.LexiconSearchService;
 import com.lyreo.lexicon.domain.LexiconDraft;
 import com.lyreo.lexicon.infrastructure.persistence.*;
 import com.lyreo.platform.content.DocumentStore;
@@ -33,12 +34,12 @@ class PublishedLexiconIT {
     @Autowired NamedParameterJdbcTemplate jdbc;
     @Autowired ObjectMapper json;
     @Test void onlyPublishedContentAndFormsReachLearnersAndHeadwordIdentitySurvivesRestore() {
-        UUID item=UUID.randomUUID(),sense=UUID.randomUUID();
-        var input=new LexiconDraft("LyreoWord","WORD",null,null,null,List.of(new LexiconDraft.Item(item,"noun",null,null)),List.of(new LexiconDraft.Sense(sense,item,"A test word","Từ thử","VERIFIED",List.of(),List.of(),List.of(),null)),List.of(new LexiconDraft.Form(UUID.randomUUID(),item,"LyreoWords",List.of())),List.of(),List.of());
-        var draft=editor.create(input,"admin");
+        UUID item=UUID.randomUUID(),sense=UUID.randomUUID(),headword=UUID.randomUUID();
+        jdbc.getJdbcTemplate().update("INSERT INTO lexicon_headword(id,language,identity_form) VALUES(?,'en','LyreoWord')",headword);
+        var input=new LexiconDraft("LyreoWord","WORD",headword,null,null,List.of(new LexiconDraft.Item(item,"noun",null,null)),List.of(new LexiconDraft.Sense(sense,item,"A test word","Từ thử","VERIFIED",List.of(),List.of(),List.of(),null)),List.of(new LexiconDraft.Form(UUID.randomUUID(),item,"LyreoWords",List.of())),List.of(),List.of());
+        var draft=documents.save("lexicon",UUID.randomUUID(),0,input.withProvenanceFrom(input),"admin",LexiconDraft.class);
         assertThat(learner.findById(draft.id())).isEmpty();
         assertThat(learner.search("LyreoWords","lyreowords",20).results()).isEmpty();
-        assertThatThrownBy(()->editor.create(input,"other")).isInstanceOf(StateConflictException.class);
         var published=editor.publish(draft.id(),draft.revision(),"Reviewed","admin");
         assertThat(learner.search("LyreoWords","lyreowords",20).results()).extracting(hit->hit.entryId()).containsExactly(draft.id());
         assertThat(learner.exactHeadwordIds("lyreowords")).containsExactly(published.draft().headwordId());
@@ -85,7 +86,8 @@ class PublishedLexiconIT {
         var visible=learner.findById(entry).orElseThrow();
         assertThat(visible.pronunciations().getFirst().audioFile()).isEqualTo("book.ogg");
         assertThat(visible.translations().getFirst().unlinkedReason()).isEqualTo("ambiguous");
-        assertThat(json.writeValueAsString(visible.translations())).doesNotContain("sourceContext","record_line");
+        var response = new LexiconController(new LexiconSearchService(learner), json).get(entry);
+        assertThat(json.writeValueAsString(response.translations())).doesNotContain("sourceContext", "record_line");
     }
 
 }

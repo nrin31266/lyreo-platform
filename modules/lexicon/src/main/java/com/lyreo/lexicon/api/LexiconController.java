@@ -81,9 +81,9 @@ public class LexiconController {
 
     public record PronunciationResponse(UUID id, UUID itemId, String accent, String ipa,
                                         String audioFile, String audioUrl, String sourceUrl,
-                                        List<String> tags, UUID assetId,Map<String,Object> pronunciationContext) {}
+                                        List<String> tags, UUID assetId,Map<String,Object> pronunciationContext, List<String> regions) {}
 
-    public record PronunciationVariantResponse(UUID id,String form,String notation,String notationSystem,String usage,String scopeStatus,List<String> regions,List<PronunciationResponse> recordings) {}
+    public record PronunciationVariantResponse(UUID id,String form,String notation,String notationSystem,String usage,String scopeStatus,String partOfSpeech,List<String> regions,List<PronunciationResponse> recordings) {}
     public record TranslationResponse(UUID id, UUID itemId, UUID senseId, String wordVi,
                                       String source, String sourceScope, String sourceSenseQualifier,
                                       String linkStatus, String unlinkedReason, List<String> tags, String sourcePos) {}

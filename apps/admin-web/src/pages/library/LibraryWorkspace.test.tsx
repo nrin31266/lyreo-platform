@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { I18nextProvider } from "react-i18next";
 import { i18n } from "@/i18n";
 import { api, ApiError } from "@/lib/api";
@@ -155,15 +155,4 @@ it('preserves unsaved edits when viewing older publications',async()=>{
   await userEvent.click(screen.getByRole('button',{name:'Update history'}));
   expect(await screen.findByRole('button',{name:'Restore as new publication'})).toBeDisabled();
   expect(screen.getByLabelText('Title')).toHaveValue('Unsaved edit');
-});
-it('does not navigate back to a newly saved document after leaving its workspace',async()=>{
-  let finish!: (result:typeof document)=>void;
-  vi.mocked(api).mockReturnValue(new Promise(resolve=>{finish=resolve;}));
-  render(<QueryClientProvider client={cache}><I18nextProvider i18n={i18n}><MemoryRouter initialEntries={['/library/new']}><Routes><Route path="/library/new" element={<DraftWorkspace document={{...document,id:'new',revision:0}} endpoint="/api/library" route="/library">{(value,change)=><TextField label="Title" value={value.title} onChange={title=>change({title})} />}</DraftWorkspace>} /><Route path="/library" element={<p>Library list</p>} /><Route path="/library/:id" element={<p>Reopened document</p>} /></Routes></MemoryRouter></I18nextProvider></QueryClientProvider>);
-  await userEvent.click(screen.getByRole('button',{name:'Save draft'}));
-  await userEvent.click(screen.getByRole('link',{name:'Back to library'}));
-  expect(screen.getByText('Library list')).toBeVisible();
-  await act(async()=>{finish({...document,id:'created',revision:1});});
-  expect(screen.getByText('Library list')).toBeVisible();
-  expect(screen.queryByText('Reopened document')).not.toBeInTheDocument();
 });

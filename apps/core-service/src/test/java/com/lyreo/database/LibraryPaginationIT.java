@@ -100,8 +100,8 @@ class LibraryPaginationIT {
             "title","Book","type","WORD","items",List.of(Map.of("partOfSpeech","verb")),
             "senses",List.of(Map.of("translationStatus","VERIFIED","translationVi","dat truoc"))),"admin",Map.class);
         assertThat(lexicon.count("", "", "VERIFIED", "", "noun")).isZero();
-        assertThat(lexicon.count("", "", "VERIFIED", "EDITED", "verb")).isEqualTo(1);
-        assertThat(lexicon.list("", "", "VERIFIED", "EDITED", "verb", null, 30))
+        assertThat(lexicon.count("", "", "VERIFIED", "PUBLISHED", "verb")).isEqualTo(1);
+        assertThat(lexicon.list("", "", "VERIFIED", "PUBLISHED", "verb", null, 30))
             .extracting(row -> row.translationVi()).containsExactly("dat truoc");
     }
     @Test void adminFindsNewAndEditedDraftFormsBeforePublication() {

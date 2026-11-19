@@ -147,11 +147,8 @@ class MockRuntime:
             structured = {"suggestions": suggestions, "warnings": ["Mock suggestion; human review required."], "audioAssetId": None}
         elif schema == "library_question_v1":
             question = request.input.get("question") or {}
-            count = min(10, max(1, int(request.input.get("count", 1))))
-            variants = "Operation: VARIANTS" in (request.prompt or "")
-            structured = {"suggestions": [] if variants else [{"field": "explanationVi", "value": f"[mock] Answer {question.get('correctOption')}"}],
-                          "candidates": [{**question, "title": f"[mock {index + 1}] {question.get('title') or 'Choose the answer'}", "media": []} for index in range(count)] if variants else [],
-                          "warnings": ["Mock suggestion; human review required."]}
+            structured = {"suggestions": [{"field": "explanationVi", "value": f"[mock] Answer {question.get('correctOption')}"}],
+                          "candidates": [], "warnings": ["Mock suggestion; human review required."]}
         elif schema == "lesson_content_v1":
             rows = [(int(i), text) for i, text in re.findall(r"^(\d+)\|(.*)$", request.prompt or "", re.M)]
             structured = {"tr": [[i, f"[mock] {text}"] for i, text in rows],

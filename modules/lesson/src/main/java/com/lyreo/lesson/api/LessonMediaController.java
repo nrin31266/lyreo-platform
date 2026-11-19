@@ -54,6 +54,20 @@ public class LessonMediaController {
         return LessonAuthoringResponse.from(service.text(id,request.revision(),request.text()));
     }
     public record TextSourceRequest(long revision,@NotBlank @jakarta.validation.constraints.Size(max=10000) String text) {}
+    @PutMapping("/{id}/changes") @Transactional
+    public LessonAuthoringResponse changes(@PathVariable UUID id,@RequestBody ChangesRequest request) {
+        if (request.changes() != null && request.changes().voice() != null) {
+            requireVoice(request.changes().voice());
+        }
+        var result = service.saveChanges(id, request.changes());
+        if (request.metadata() != null) {
+            var metadata = request.metadata();
+            catalog.assertVersion(id, metadata.version(), false);
+            catalog.updateMetadata(id, metadata.title(), metadata.description(), metadata.imageUrl(), metadata.categoryIds());
+        }
+        return LessonAuthoringResponse.from(service.get(result.id));
+    }
+    public record ChangesRequest(LessonAuthoringService.Changes changes, LessonCatalogController.Metadata metadata) {}
     @PutMapping("/{id}/voice") public LessonAuthoringResponse voice(@PathVariable UUID id,@RequestBody VoiceRequest request) {
         requireVoice(request.voice());return LessonAuthoringResponse.from(service.voice(id,request.revision(),request.voice()));
     }

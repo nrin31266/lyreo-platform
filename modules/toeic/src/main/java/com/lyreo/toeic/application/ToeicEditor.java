@@ -28,12 +28,43 @@ public class ToeicEditor {
         var data=source.find(id).orElseThrow(()->new ResourceNotFoundException("TOEIC test not found"));
         return new Document<>(id,0,source.status(id),null,data,null,null);
     });}
+    public record Preview(ToeicDraft test,Map<UUID,QuestionContent> questions) {}
+    @Transactional(readOnly=true)
+    public Preview preview(UUID id) {
+        var test=get(id).draft();
+        var imported=items.importedQuestions(test.placements().stream()
+            .filter(p->p.publicationId()==null).map(ToeicDraft.Placement::itemId).distinct().toList());
+        var questions=new HashMap<UUID,QuestionContent>();
+        for(var placement:test.placements()) {
+            var content=placement.publicationId()==null?imported.get(placement.itemId()):null;
+            if(content==null) {
+                try {content=items.published(placement.itemId(),placement.publicationId());}
+                catch(ResourceNotFoundException missing) {continue;}
+            }
+            questions.put(placement.id(),content);
+        }
+        return new Preview(test,questions);
+    }
     public Document<ToeicDraft> save(UUID id,long revision,ToeicDraft data,String actor) {
         validateShape(data);
         validateStructure(data);
+        var current = get(id);
+        if (current.revision() != revision) throw new StateConflictException("The test changed; reload it before saving");
+        var previousPlacements = new HashMap<UUID, ToeicDraft.Placement>();
+        current.draft().placements().forEach(p -> previousPlacements.put(p.id(), p));
+        for (var placement : data.placements()) {
+            var previous = previousPlacements.remove(placement.id());
+            require(previous != null && previous.itemId().equals(placement.itemId())
+                && previous.part() == placement.part() && previous.questionNumber() == placement.questionNumber()
+                && Objects.equals(previous.groupId(), placement.groupId())
+                && Objects.equals(previous.gapNumber(), placement.gapNumber()),
+                "Keep imported question placements and their context unchanged");
+        }
+        require(previousPlacements.isEmpty(), "Keep imported question placements unchanged");
         var sourceGroups=source.find(id).stream().flatMap(d->d.groups().stream()).collect(java.util.stream.Collectors.toMap(ToeicDraft.Group::id,g->g));
         var groups=data.groups().stream().map(g->new ToeicDraft.Group(g.id(),g.part(),g.kind(),g.title(),g.transcriptEn(),g.translationVi(),g.vocabularyNote(),g.documents().stream().map(d->new ToeicDraft.Document(d.id(),d.ordinal(),d.type(),html.clean(d.html()))).toList(),g.media(),g.reviewed(),sourceGroups.containsKey(g.id())?sourceGroups.get(g.id()).sourceIssues():g.sourceIssues())).toList();
-        var clean=new ToeicDraft(data.title(),data.code(),data.type(),data.year(),data.testNumber(),data.listeningDurationSeconds(),data.readingDurationSeconds(),data.accessMode(),data.requiredFeatureKey(),groups,data.placements());
+        var placements = data.placements().stream().sorted(Comparator.comparingInt(ToeicDraft.Placement::questionNumber)).toList();
+        var clean=new ToeicDraft(data.title(),data.code(),data.type(),data.year(),data.testNumber(),data.listeningDurationSeconds(),data.readingDurationSeconds(),data.accessMode(),data.requiredFeatureKey(),groups,placements);
         documents.save("toeic",id,revision,clean,actor,ToeicDraft.class);return get(id);
     }
     @Transactional public Document<ToeicDraft> publish(UUID id,long revision,String reason,String actor) {

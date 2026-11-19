@@ -1,5 +1,5 @@
 import { LibrarySelect } from "../library/LibrarySelect";
-import { RiFileList3Line, RiInformationLine, RiShieldCheckLine, RiVolumeUpLine, RiBookOpenLine, RiAddLine, RiArrowUpLine, RiEditLine, RiArrowGoBackLine, RiDeleteBinLine } from "@remixicon/react";
+import { RiFileList3Line, RiInformationLine, RiShieldCheckLine, RiVolumeUpLine, RiBookOpenLine, RiAddLine, RiArrowUpLine, RiEditLine, RiArrowGoBackLine, RiDeleteBinLine, RiEyeLine } from "@remixicon/react";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Navigate, useParams, useSearchParams } from "react-router-dom";
@@ -13,12 +13,12 @@ import { DraftLoader, DraftWorkspace, LibraryList, TextField } from "@/pages/lib
 import { MediaEditor, MediaPreview } from "@/pages/library/ContentMedia";
 import { PassageEditor, PassagePreview } from "@/pages/library/PassageEditor";
 import { ToeicQuestion } from "./ToeicQuestion";
+import { ToeicPreview } from "./ToeicPreview";
 import { QualityPanel } from "../library/QualityPanel";
 import { AccessFields, ReferenceRow } from "@/pages/grammar/GrammarPage";
-import type { Group, ToeicDraft } from "@/pages/library/library.types";
+import type { Group, Placement, ToeicDraft } from "@/pages/library/library.types";
 
 const endpoint = "/api/v1/admin/toeic";
-function emptyTest(): ToeicDraft { return { title: "", code: "", type: "FULL_TEST", year: null, testNumber: null, listeningDurationSeconds: 2700, readingDurationSeconds: 4500, accessMode: "PUBLIC", requiredFeatureKey: null, groups: [], placements: [] }; }
 export function ToeicPage() {
   const { t } = useTranslation("admin");
   return <LibraryList endpoint={endpoint} route="/toeic" title={t("navigation.toeic")} />;
@@ -27,21 +27,21 @@ export function ToeicDetailPage() {
   const { id = "new" } = useParams();
   const [questionDirty, setQuestionDirty] = useState(false);
   if (id === "new") return <Navigate to="/toeic" replace />;
-  return <DraftLoader endpoint={endpoint} id={id} initial={emptyTest()}>{document => <DraftWorkspace key={id} document={document} endpoint={endpoint} route="/toeic" pendingEditorChanges={questionDirty}>{(value, change, dirty, savedRevision, _current, adopt) => <ToeicFields questionDirty={questionDirty} onQuestionDirtyChange={setQuestionDirty} onSaved={adopt} id={id} value={value} onChange={change} dirty={dirty} savedRevision={savedRevision} />}</DraftWorkspace>}</DraftLoader>;
+  return <DraftLoader<ToeicDraft> endpoint={endpoint} id={id}>{document => <DraftWorkspace key={id} document={document} endpoint={endpoint} route="/toeic" pendingEditorChanges={questionDirty}>{(value, change, dirty, savedRevision, _current, adopt) => <ToeicFields questionDirty={questionDirty} onQuestionDirtyChange={setQuestionDirty} onSaved={adopt} id={id} value={value} onChange={change} dirty={dirty} savedRevision={savedRevision} />}</DraftWorkspace>}</DraftLoader>;
 }
 function ToeicFields({ id, value, onChange, dirty, savedRevision, onSaved, questionDirty, onQuestionDirtyChange }: { questionDirty: boolean; onQuestionDirtyChange: (dirty: boolean) => void; onSaved: (document: import("../library/library.types").Document<ToeicDraft>) => void; savedRevision: number; id: string; value: ToeicDraft; onChange: (value: ToeicDraft) => void; dirty: boolean }) {
   const { t } = useTranslation("admin");
   const [params, setParams] = useSearchParams();
   const requestedPart = Number(params.get("part"));
   const part = requestedPart >= 1 && requestedPart <= 7 ? requestedPart : 1;
-  const tab = ["quality", "metadata"].includes(params.get("tab") ?? "") ? params.get("tab")! : "content";
+  const tab = ["preview", "quality", "metadata"].includes(params.get("tab") ?? "") ? params.get("tab")! : "content";
   const [groupEditorOpen, setGroupEditorOpen] = useState(params.get("review") === "1");
   const [groupId, setGroupId] = useState(params.get("group") ?? "");
   const [removedDocuments,setRemovedDocuments] = useState<{groupId:string;document:Group["documents"][number];index:number}|null>(null);
   const [previewGroup, setPreviewGroup] = useState(false);
   const groupEditor = useRef<HTMLDetailsElement>(null);
   useEffect(() => { if (groupEditorOpen) groupEditor.current?.scrollIntoView({behavior:"smooth",block:"start"}); }, [groupEditorOpen, groupId, part]);
-  const original = useQuery({ queryKey: ["toeic-source", id], enabled: previewGroup && id !== "new", queryFn: ({ signal }) => api<ToeicDraft>(`${endpoint}/${id}/source`, { signal }), retry: false });
+  const original = useQuery({ queryKey: ["toeic-source", id], enabled: previewGroup, queryFn: ({ signal }) => api<ToeicDraft>(`${endpoint}/${id}/source`, { signal }), retry: false });
   const groups = value.groups.filter(row => row.part === part);
   const group = groups.find(row => row.id === groupId) ?? groups[0];
   const questions = value.placements.filter(row => row.part === part).sort((a, b) => a.questionNumber - b.questionNumber);
@@ -73,8 +73,20 @@ function ToeicFields({ id, value, onChange, dirty, savedRevision, onSaved, quest
     setGroupId(group?.id ?? question?.groupId ?? "");
     setGroupEditorOpen(!!group);
   }
+  function openPreviewQuestion(row: Placement) {
+    setGroupEditorOpen(false);
+    setParams(previous => {
+      const updated = new URLSearchParams(previous);
+      updated.set("tab", "content");
+      updated.set("part", String(row.part));
+      updated.set("question", String(row.questionNumber));
+      for (const key of ["group", "location", "review"]) updated.delete(key);
+      return updated;
+    }, { replace: true });
+  }
   useEffect(() => { const location = params.get("location"); if (location) openIssue(location); }, [params.get("location")]);
-  return <><Tabs value={tab} onValueChange={next => { setParams(previous => { const updated = new URLSearchParams(previous); updated.set("tab", next); return updated; }, {replace:true}); }}><TabsList><TabsTrigger value="content"><RiFileList3Line aria-hidden="true" />{t("library.content")}</TabsTrigger><TabsTrigger value="metadata"><RiInformationLine aria-hidden="true" />{t("library.metadata")}</TabsTrigger><TabsTrigger value="quality"><RiShieldCheckLine aria-hidden="true" />{t("library.quality")}</TabsTrigger></TabsList>
+  return <><Tabs value={tab} onValueChange={next => { if (questionDirty && !window.confirm(t("catalog.unsaved"))) return; setParams(previous => { const updated = new URLSearchParams(previous); updated.set("tab", next); return updated; }, {replace:true}); }}><TabsList className="h-auto flex-wrap"><TabsTrigger value="content"><RiFileList3Line aria-hidden="true" />{t("library.content")}</TabsTrigger><TabsTrigger value="preview"><RiEyeLine aria-hidden="true" />{t("toeicPreview.tab")}</TabsTrigger><TabsTrigger value="metadata"><RiInformationLine aria-hidden="true" />{t("library.metadata")}</TabsTrigger><TabsTrigger value="quality"><RiShieldCheckLine aria-hidden="true" />{t("library.quality")}</TabsTrigger></TabsList>
+    <TabsContent value="preview" className="mt-5"><ToeicPreview testId={id} revision={savedRevision} onEdit={openPreviewQuestion} /></TabsContent>
     <TabsContent value="metadata" className="mt-6 grid items-start gap-5 lg:grid-cols-2"><div className="grid gap-4"><TextField label={t("library.title")} value={value.title} onChange={title => onChange({ ...value, title })} /><TextField label={t("library.code")} value={value.code} onChange={code => onChange({ ...value, code })} /><p className="text-sm text-muted-foreground">{t(`library.types.${value.type}`)} · {t("library.questionCount", { count: value.placements.length })}</p><AccessFields value={value} feature="toeic.full-access" onChange={patch => onChange({ ...value, ...patch })} /></div><div className="grid content-start gap-4 rounded-xl border bg-card p-5"><label className="grid gap-2 text-sm font-medium">{t("library.year")}<Input type="number" value={value.year ?? ""} onChange={event => onChange({ ...value, year: event.target.value ? Number(event.target.value) : null })} /></label><label className="grid gap-2 text-sm font-medium">{t("library.listeningDuration")}<Input type="number" min={1} max={14400} value={value.listeningDurationSeconds ?? ""} onChange={event => onChange({ ...value, listeningDurationSeconds: event.target.value ? Number(event.target.value) : null })} /></label><label className="grid gap-2 text-sm font-medium">{t("library.readingDuration")}<Input type="number" min={1} max={14400} value={value.readingDurationSeconds ?? ""} onChange={event => onChange({ ...value, readingDurationSeconds: event.target.value ? Number(event.target.value) : null })} /></label><p className="text-sm text-muted-foreground">{t("library.testDistribution")}</p></div></TabsContent>
     <TabsContent value="quality" className="mt-5 grid gap-4"><div className="flex flex-wrap gap-x-6 gap-y-2 text-sm font-medium"><span>{t("library.toeicTotal", {count:value.placements.length})}</span><span>Listening: {value.placements.filter(row => row.part <= 4).length}/100</span><span>Reading: {value.placements.filter(row => row.part >= 5).length}/100</span></div><QualityPanel endpoint={`${endpoint}/${id}/quality`} revision={savedRevision} dirty={dirty} onOpen={issue => openIssue(issue.location)} /></TabsContent>
     <TabsContent value="content" className="mt-6 grid gap-5"><p className="text-sm text-muted-foreground">{t("library.toeicStructureHelp")}</p><nav className="flex flex-wrap gap-2" aria-label={t("library.parts")}>{[1, 2, 3, 4, 5, 6, 7].map(number => <Button key={number} size="sm" aria-pressed={part === number} variant={part === number ? "secondary" : "outline"} onClick={() => { if (number === part || questionDirty && !window.confirm(t("catalog.unsaved"))) return; setGroupEditorOpen(false); setGroupId(""); setParams(previous => { const updated = new URLSearchParams(previous); updated.set("part", String(number)); for (const key of ["question", "group", "location", "review"]) updated.delete(key); return updated; }, {replace:true}); }}>{t("library.part", { number })} <span className="text-xs text-muted-foreground">{value.placements.filter(row => row.part === number).length}</span></Button>)}</nav>

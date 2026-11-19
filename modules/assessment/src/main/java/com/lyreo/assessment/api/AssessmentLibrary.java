@@ -28,6 +28,7 @@ public class AssessmentLibrary {
         return source.find(id).orElseGet(()->documents.published("assessment",id,QuestionContent.class)
             .orElseThrow(()->new ResourceNotFoundException("Question is not published")).content());
     }
+    public Map<UUID,QuestionContent> importedQuestions(Collection<UUID> ids) {return source.findAll(ids);}
     public UUID pin(UUID id,UUID publicationId) {
         if(id==null) throw new RequestValidationException("Question ID is required");
         if(publicationId!=null) {published(id,publicationId);return publicationId;}
@@ -41,8 +42,7 @@ public class AssessmentLibrary {
         require(question.title()!=null && !question.title().isBlank() && question.options().stream().noneMatch(o->o.text().isBlank()),"Standalone Grammar questions require a stem and nonempty options");
     }
     public List<Map<String,Object>> context(UUID id) {return source.context(id);}
-    public Document<QuestionContent> save(UUID id,long revision,QuestionContent data,String actor) {validate(data,false);documents.save("assessment",id,revision,data,actor,QuestionContent.class);return get(id);}
-    public Document<QuestionContent> create(QuestionContent data,String actor) {return save(UUID.randomUUID(),0,data,actor);}
+    public Document<QuestionContent> save(UUID id,long revision,QuestionContent data,String actor) {validate(data,false);get(id);documents.save("assessment",id,revision,data,actor,QuestionContent.class);return get(id);}
     public Document<QuestionContent> publish(UUID id,long revision,String reason,String actor) {validate(get(id).draft(),true);return documents.publish("assessment",id,revision,reason,actor,QuestionContent.class);}
     public static void validate(QuestionContent q,boolean publish) {
         require(q!=null && q.options()!=null && q.media()!=null,"Question options and media are required");

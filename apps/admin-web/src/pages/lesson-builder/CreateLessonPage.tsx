@@ -14,7 +14,6 @@ import { z } from "zod";
 import { RiLink as Link2, RiSearchLine as Search, RiLoader4Line as LoaderCircle, RiErrorWarningLine as AlertCircle } from "@remixicon/react";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupInput, InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -40,7 +39,7 @@ import { ContentOptionsPanel, defaultContentOptions } from "./ContentEditor";
 import type { SourceInspection } from "./lesson-builder.types";
 import { createMetadataSchema as metadataSchema } from "@/pages/lessons/catalog.api";
 import { useCategories, catalogKeys } from "@/pages/lessons/catalog.queries";
-import { CatalogError } from "@/pages/lessons/CatalogFeedback";
+import { UnsavedChangesGuard } from "./UnsavedChangesGuard";
 const sourceSchema = z.object({
   sourceReference: z.string().trim().pipe(z.url()),
 });
@@ -158,7 +157,7 @@ function CreateYouTubePage({ onDirtyChange, onBusyChange }: { onDirtyChange: (di
         endMs,
       });
       await client.invalidateQueries({ queryKey: catalogKeys.all });
-      navigate(`/lessons/new?draft=${result.lessonId}`);
+      if (version === inspectionVersion.current) navigate(`/lessons/new?draft=${result.lessonId}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally { creating.current = false; }
@@ -316,10 +315,11 @@ export function CreateLessonPage() {
   const [busy, setBusy] = useState(false);
   const type = params.get('type') === 'text' ? 'text' : params.get('type') === 'audio' ? 'audio' : 'youtube';
   return <section className="create-lesson-page grid gap-4">
+    <UnsavedChangesGuard dirty={dirty || busy} includeSearch={false} />
     <header className="authoring-heading"><h1>{t("navigation.createLesson")}</h1></header>
     <Tabs value={type} onValueChange={value => { if (value !== type && (!dirty || window.confirm(t("catalog.unsaved")))) { setDirty(false); setParams({ type: value }); } }}>
     <div className="flex flex-wrap items-center justify-between gap-3"><TabsList aria-label={t('media.sourceType')}>
-      <TabsTrigger disabled={busy} value="youtube">YouTube</TabsTrigger><TabsTrigger disabled={busy} value="text">{t('media.textType')}</TabsTrigger><TabsTrigger disabled={busy} value="audio">Audio</TabsTrigger>
+      <TabsTrigger disabled={busy} value="youtube">YouTube</TabsTrigger><TabsTrigger disabled={busy} value="text">{t('media.textType')}</TabsTrigger><TabsTrigger disabled={busy} value="audio">{t('media.audioType')}</TabsTrigger>
     </TabsList><AuthoringPrompt type={type} /></div>
     <TabsContent value="youtube"><CreateYouTubePage onDirtyChange={setDirty} onBusyChange={setBusy} /></TabsContent>
     <TabsContent value="text"><CreateMediaLessonPage type="text" onDirtyChange={setDirty} onBusyChange={setBusy} /></TabsContent>

@@ -131,7 +131,9 @@ class LibraryPublicationIT {
     }
     @Test void aiAcceptanceCommitsDraftAndLedgerTogetherWithoutChangingPublication() {
         var question=new QuestionContent("Choose","MCQ_SINGLE",List.of(new QuestionContent.Option("A","One"),new QuestionContent.Option("B","Two")),"A",1,null,null,null,null,null,List.of());
-        var draft=questions.create(question,"admin");
+        UUID legacyId=UUID.randomUUID();
+        assertThatThrownBy(()->questions.save(legacyId,0,question,"admin")).isInstanceOf(com.lyreo.contracts.errors.ResourceNotFoundException.class);
+        var draft=documents.save("assessment",legacyId,0,question,"admin",QuestionContent.class);
         var published=questions.publish(draft.id(),draft.revision(),"Reviewed source","admin");
         UUID request=UUID.randomUUID(),job=UUID.randomUUID();
         jdbc.update("INSERT INTO background_job(id,job_type,owner_module,status) VALUES(?,'QUESTION_EDITORIAL_AI','assessment','SUCCEEDED')",job);

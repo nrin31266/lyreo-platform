@@ -17,7 +17,6 @@ import { DraftLoader, DraftWorkspace, TextField } from "./LibraryWorkspace";
 import { MediaEditor, MediaPreview } from "./ContentMedia";
 import type { CatalogPage, Document, Question, QuestionRef, Summary } from "./library.types";
 
-export const emptyQuestion = (): Question => ({ title: "", kind: "MCQ_SINGLE", options: ["A", "B", "C", "D"].map(key => ({ key, text: "" })), correctOption: "A", difficultyLevel: 1, explanationVi: "", translationVi: "", answerTranslationVi: "", vocabularyNote: "", transcriptEn: "", media: [] });
 
 export function QuestionFields({ value, onChange, part }: { part?: number; value: Question; onChange: (value: Question) => void }) {
   const { t } = useTranslation("admin");
@@ -88,8 +87,8 @@ export function QuestionPicker({ onSelect, excludeIds = [] }: { onSelect: (refer
 }
 
 export function QuestionDetailPage() {
-  const { id = "new" } = useParams();
+  const { id = "" } = useParams();
   const { t } = useTranslation("admin");
-  const usage = useQuery({ queryKey: ["question-usage", id], enabled: id !== "new", queryFn: ({ signal }) => api<{ domain: string; id: string; title: string }[]>(`/api/v1/admin/assessment-items/${id}/usage`, { signal }) });
-  return <DraftLoader endpoint="/api/v1/admin/assessment-items" id={id} initial={emptyQuestion()}>{document => <DraftWorkspace key={id} document={document} endpoint="/api/v1/admin/assessment-items" route="/grammar/questions" assistant={(current, dirty, adopt) => <AiSuggestions endpoint="/api/v1/admin/assessment-items" document={current} dirty={dirty} adopt={adopt} />} duplicate={value => ({ ...value, title: `${value.title} (${t("library.copy")})` })}>{(value, change) => <><QuestionFields value={value} onChange={change} />{usage.data && <div className="rounded-lg border p-4"><h2 className="mb-3 font-medium">{t("library.usage")}</h2>{usage.data.map((row, i) => <p key={`${row.id}-${i}`} className="py-1 text-sm"><Link className="underline" to={row.domain === "TOEIC" || row.domain === "toeic" ? `/toeic/${row.id}` : `/grammar/${row.domain.startsWith("grammar-") ? row.domain.slice(8) : "topic"}/${row.id}`}>{row.title}</Link></p>)}<p className="mt-3 text-xs text-muted-foreground">{t("library.sharedQuestionHelp")}</p></div>}</>}</DraftWorkspace>}</DraftLoader>;
+  const usage = useQuery({ queryKey: ["question-usage", id], queryFn: ({ signal }) => api<{ domain: string; id: string; title: string }[]>(`/api/v1/admin/assessment-items/${id}/usage`, { signal }) });
+  return <DraftLoader<Question> endpoint="/api/v1/admin/assessment-items" id={id}>{document => <DraftWorkspace key={id} document={document} endpoint="/api/v1/admin/assessment-items" route="/grammar/questions" assistant={(current, dirty, adopt) => <AiSuggestions endpoint="/api/v1/admin/assessment-items" document={current} dirty={dirty} adopt={adopt} />}>{(value, change) => <><QuestionFields value={value} onChange={change} />{usage.data && <div className="rounded-lg border p-4"><h2 className="mb-3 font-medium">{t("library.usage")}</h2>{usage.data.map((row, i) => <p key={`${row.id}-${i}`} className="py-1 text-sm"><Link className="underline" to={row.domain === "TOEIC" || row.domain === "toeic" ? `/toeic/${row.id}` : `/grammar/${row.domain.startsWith("grammar-") ? row.domain.slice(8) : "topic"}/${row.id}`}>{row.title}</Link></p>)}<p className="mt-3 text-xs text-muted-foreground">{t("library.sharedQuestionHelp")}</p></div>}</>}</DraftWorkspace>}</DraftLoader>;
 }

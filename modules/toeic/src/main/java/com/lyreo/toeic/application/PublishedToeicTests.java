@@ -44,7 +44,14 @@ public class PublishedToeicTests {
         var placements=data.placements().stream().filter(p->selected==null || selected.contains(p.id())).toList();
         var groupIds=new HashSet<UUID>();placements.forEach(p->{if(p.groupId()!=null) groupIds.add(p.groupId());});
         if(selected!=null && data.placements().stream().anyMatch(p->groupIds.contains(p.groupId()) && !selected.contains(p.id()))) throw new RequestValidationException("Select the complete question group to preserve its shared passage/audio");
-        var items=placements.stream().map(p->new AssessmentSessions.Item(p.id(),p.itemId(),p.publicationId(),p.part(),p.questionNumber(),null,null,p.groupId(),questions.published(p.itemId(),p.publicationId()),p.gapNumber())).toList();
+        var imported = questions.importedQuestions(placements.stream()
+            .filter(p -> p.publicationId() == null).map(ToeicDraft.Placement::itemId).distinct().toList());
+        var items = placements.stream().map(p -> {
+            var content = p.publicationId() == null ? imported.get(p.itemId()) : null;
+            if (content == null) content = questions.published(p.itemId(), p.publicationId());
+            return new AssessmentSessions.Item(p.id(), p.itemId(), p.publicationId(), p.part(), p.questionNumber(),
+                null, null, p.groupId(), content, p.gapNumber());
+        }).toList();
         var groups=data.groups().stream().filter(g->groupIds.contains(g.id())).map(g->new AssessmentSessions.Group(g.id(),g.part(),g.documents().stream().map(ToeicDraft.Document::html).toList(),g.media(),g.transcriptEn(),ReadingTranslation.hasMisalignedMarkers(g)?null:g.translationVi())).toList();
         UUID publication=documents.published("toeic",id,ToeicDraft.class).map(DocumentStore.Publication::id).orElse(null);
         return sessions.start(learnerId,"toeic",id,mode,new AssessmentSessions.Snapshot(data.title(),publication,items,groups));

@@ -4,7 +4,7 @@ import { RiEditLine } from '@remixicon/react';
 import { Button } from '@/components/ui/button';
 import type { LexiconDraft, Sense, Sound } from '../library/library.types';
 import { PronunciationRecording } from './PronunciationEditor';
-import { pronunciationGroups } from './pronunciationGroups';
+import { pronunciationGroups, pronunciationRegions, pronunciationScope } from './pronunciationGroups';
 
 type Language = 'vi' | 'en';
 
@@ -32,26 +32,19 @@ function Pronunciation({ records, entry }: { records: Sound[]; entry: LexiconDra
   const { t } = useTranslation('admin');
   const first = records[0];
   const context = first.pronunciationContext;
-  const item = context?.scope_status === 'EXPLICIT' && entry.items.find(row => row.id === first.itemId);
+  const item = pronunciationScope(first, entry.items);
   const scope = item && t(`library.partsOfSpeech.${item.partOfSpeech}`, { defaultValue: item.partOfSpeech });
-  const recordings = new Map<string, Sound[]>();
-  for (const sound of records) {
-    if (!sound.assetId && !sound.audioUrl) continue;
-    const accent = sound.accent ?? 'unspecified';
-    recordings.set(accent, [...(recordings.get(accent) ?? []), sound]);
-  }
-  return <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+  const region = (value: string) => t(`dictionary.accents.${value}`, { defaultValue: value.replaceAll('-', ' ') });
+  const regions = [...new Set(records.flatMap(pronunciationRegions))];
+  const recordings = records.filter(sound => sound.assetId || sound.audioUrl);
+  return <div className="flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
     {context?.form && context.form !== entry.title && <span className="font-medium">{context.form}</span>}
     {first.ipa && <span className="font-mono">{first.ipa}</span>}
     {first.ipa && context?.notation_system !== 'IPA' && <span className="text-xs text-muted-foreground">{t('dictionary.sourceNotation')}</span>}
-    <span className="text-muted-foreground">{context?.usage || scope || t('dictionary.unknownUsage')}</span>
-    {[...recordings].map(([accent, sounds]) => <div key={accent} className="flex flex-wrap items-center gap-2">
-      <span className="text-xs text-muted-foreground">{t(`dictionary.accents.${accent}`, { defaultValue: accent })}</span>
-      <PronunciationRecording sound={sounds[0]} />
-      {sounds.length > 1 && <details><summary className="cursor-pointer text-xs text-muted-foreground">{t('dictionary.otherRecordings', { count: sounds.length - 1 })}</summary>
-        <div className="mt-2 flex flex-wrap gap-2">{sounds.slice(1).map(sound => <PronunciationRecording key={sound.id} sound={sound} />)}</div>
-      </details>}
-    </div>)}
+    {(context?.usage || scope) && <span className="text-muted-foreground">{context?.usage || scope}</span>}
+    {regions.length > 0 && <span className="text-xs text-muted-foreground">{regions.map(region).join(' · ')}</span>}
+    {recordings.map(sound => <PronunciationRecording key={sound.id} sound={sound}
+      label={[context?.usage || scope, ...pronunciationRegions(sound).map(region)].filter(Boolean).join(' · ') || undefined} />)}
   </div>;
 }
 
@@ -62,9 +55,9 @@ export function DictionaryPreview({ entry, onEditSense }: { entry: LexiconDraft;
   const other = language === 'vi' ? 'en' : 'vi';
   const senses = entry.senses.filter(sense => definition(sense, language));
   const alternatives = entry.senses.some(sense => definition(sense, other));
-  const sounds = pronunciationGroups(entry.title, entry.pronunciations)
-    .filter(group => group[0].ipa || group.some(sound => sound.assetId || sound.audioUrl))
-    .sort((a, b) => Number(b.some(sound => sound.assetId || sound.audioUrl)) - Number(a.some(sound => sound.assetId || sound.audioUrl)));
+  const groups = pronunciationGroups(entry.title, entry.pronunciations.filter(sound => sound.ipa?.trim() || sound.assetId || sound.audioUrl), entry.items);
+  const notation = groups.filter(group => group[0].ipa);
+  const standalone = groups.filter(group => !group[0].ipa);
   const byPartOfSpeech = new Map<string, Sense[]>();
   for (const item of entry.items) {
     const meanings = senses.filter(sense => sense.itemId === item.id);
@@ -78,12 +71,19 @@ export function DictionaryPreview({ entry, onEditSense }: { entry: LexiconDraft;
           aria-pressed={mode === language} onClick={() => setChoice(mode)}>{t(`dictionary.mode.${mode}`)}</Button>)}
       </div>
     </div>
-    {sounds.length > 0 && <section className="grid gap-3 border-b pb-5" aria-label={t('library.pronunciations')}>
+    {groups.length > 0 && <section className="grid gap-2 border-b pb-4" aria-label={t('library.pronunciations')}>
       <h3 className="text-sm font-semibold">{t('library.pronunciations')}</h3>
-      {sounds.slice(0, 3).map(records => <Pronunciation key={records[0].id} records={records} entry={entry} />)}
-      {sounds.length > 3 && <details><summary className="cursor-pointer text-sm font-medium text-muted-foreground">{t('dictionary.morePronunciations', { count: sounds.length - 3 })}</summary>
-        <div className="mt-3 grid gap-3">{sounds.slice(3).map(records => <Pronunciation key={records[0].id} records={records} entry={entry} />)}</div>
+      {notation.slice(0, 4).map(records => <Pronunciation key={records[0].id} records={records} entry={entry} />)}
+      {notation.length > 4 && <details><summary className="cursor-pointer text-sm text-muted-foreground">{t('dictionary.morePronunciations', { count: notation.length - 4 })}</summary>
+        {notation.slice(4).map(records => <Pronunciation key={records[0].id} records={records} entry={entry} />)}
       </details>}
+      {standalone.length > 0 && <div className="grid gap-1 border-t pt-2">
+        {notation.length > 0 && <p className="text-xs font-medium text-muted-foreground">{t('dictionary.independentRecordings')}</p>}
+        {standalone.slice(0, 3).map(records => <Pronunciation key={records[0].id} records={records} entry={entry} />)}
+        {standalone.length > 3 && <details><summary className="cursor-pointer text-sm text-muted-foreground">{t('dictionary.otherRecordings', { count: standalone.length - 3 })}</summary>
+          {standalone.slice(3).map(records => <Pronunciation key={records[0].id} records={records} entry={entry} />)}
+        </details>}
+      </div>}
     </section>}
     {senses.length === 0 && <div className="grid justify-items-start gap-2">
       <p className="text-sm text-muted-foreground">{t(`dictionary.missing.${language}`)}</p>

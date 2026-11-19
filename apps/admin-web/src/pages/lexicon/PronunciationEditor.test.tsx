@@ -13,10 +13,12 @@ it('keeps IPA-only and audio-only source records separate and loads audio only o
   const draft: LexiconDraft = { title: 'book', type: 'WORD', headwordId: null, sourceMetadataJson: null, licenseText: null, items: [{ id: 'noun', partOfSpeech: 'noun', posTitle: null, etymologyText: null }, { id: 'verb', partOfSpeech: 'verb', posTitle: null, etymologyText: null }], senses: [], forms: [], translations: [], pronunciations: [{ id: 'verb-ipa', itemId: 'verb', accent: 'US', ipa: '/bʊk/', audioUrl: null, assetId: null, tags: [] }, { id: 'ipa', itemId: 'noun', accent: 'US', ipa: '/bʊk/', audioUrl: null, assetId: null, tags: [] }, { id: 'audio', itemId: 'noun', accent: 'US', ipa: null, audioUrl: 'https://example.test/book.ogg', assetId: null, tags: [] }] };
   const document: Document<LexiconDraft> = { id: 'word', revision: 2, status: 'DRAFT', publicationId: null, hasUnpublishedChanges: true, draft, updatedAt: null, updatedBy: null };
   render(<QueryClientProvider client={cache}><I18nextProvider i18n={i18n}><PronunciationEditor value={draft} document={document} dirty={false} onChange={vi.fn()} adopt={vi.fn()} /></I18nextProvider></QueryClientProvider>);
-  expect(screen.getAllByText('Usage not specified')).toHaveLength(2);
-  expect(screen.getAllByText('No recording supplied')).toHaveLength(2);
-  expect(screen.queryByRole('group', { name: 'Audio preview' })).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: 'Load audio' }));
-  expect(screen.getByRole('group', { name: 'Audio preview' })).toBeVisible();
+  expect(screen.getAllByText('No recording supplied')).toHaveLength(1);
+  const player = globalThis.document.querySelector('audio')!;
+  expect(player).not.toHaveAttribute('src');
+  const play = vi.spyOn(player, 'play').mockResolvedValue();
+  await userEvent.click(screen.getByRole('button', { name: 'Play pronunciation' }));
+  expect(player).toHaveAttribute('src', 'https://example.test/book.ogg');
+  expect(play).toHaveBeenCalledOnce();
   cache.clear();
 });

@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes, useSearchParams } from 'react-router-dom';
+import { createMemoryRouter, Link, MemoryRouter, Route, RouterProvider, Routes, useSearchParams } from 'react-router-dom';
 import { I18nextProvider } from 'react-i18next';
 import { i18n } from '@/i18n';
 import userEvent from '@testing-library/user-event';
@@ -21,7 +21,7 @@ beforeEach(async () => {
   vi.mocked(catalog.fetchCategories).mockResolvedValue([]);
   vi.mocked(authoring.fetchVoices).mockResolvedValue({defaultVoice:'bf_emma',voices:[{id:'bf_emma',name:'Emma',accent:'UK',gender:'FEMALE',sampleAvailable:false}],sampleText:'Example.',sampleJobId:null,sampleStatus:null,sampleProgress:0,sampleError:null});
 });
-afterEach(()=>{cleanup();client.clear();});
+afterEach(()=>{cleanup();client.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 function TestSource({type}:{type:'text'|'audio'}) {
   const [params]=useSearchParams();
   return params.has('draft') ? <h1>Editor</h1> : <CreateMediaLessonPage type={type} />;
@@ -78,6 +78,43 @@ it('blocks an oversized audio file before uploading', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('30 MiB');
   expect(screen.getByRole('button',{name:'Create lesson'})).toBeDisabled();
   expect(authoring.uploadAudio).not.toHaveBeenCalled();
+});
+
+it('keeps the selected audio range after a failed replacement and allows reselecting the same file', async () => {
+  vi.mocked(authoring.fetchAudioSource).mockResolvedValue({id:'source-1',durationMs:300000,contentType:'audio/mpeg'});
+  vi.mocked(authoring.uploadAudio).mockRejectedValueOnce(new Error('Upload unavailable')).mockResolvedValueOnce({id:'source-2',durationMs:2000,contentType:'audio/mpeg'});
+  show('audio','?type=audio&source=source-1&start=500&end=1500');
+  const input = await screen.findByLabelText('Audio file');
+  const file = new File(['audio'],'replacement.mp3',{type:'audio/mpeg'});
+  await userEvent.upload(input,file);
+  await screen.findByRole('alert');
+  expect(screen.getByText('00:00.500–00:01.500')).toBeVisible();
+  await userEvent.upload(input,file);
+  await waitFor(() => expect(authoring.uploadAudio).toHaveBeenCalledTimes(2));
+});
+
+it.each([
+  ['youtube', 'YouTube URL', 'https://www.youtube.com/watch?v=abcdefghijk'],
+  ['text', 'English text', 'Keep my lesson text'],
+  ['audio', 'Title', 'Keep my recording title'],
+])('guards unsaved %s input on route navigation and reload', async (type, name, value) => {
+  vi.stubGlobal('AbortController', transferableAbortController().constructor);
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const router = createMemoryRouter([
+    {path:'/lessons/new',element:<><Link to="/lessons">Leave</Link><CreateLessonPage /></>},
+    {path:'/lessons',element:<h1>Catalog</h1>},
+  ],{initialEntries:[`/lessons/new?type=${type}`]});
+  render(<QueryClientProvider client={client}><I18nextProvider i18n={i18n}><RouterProvider router={router} /></I18nextProvider></QueryClientProvider>);
+  fireEvent.change(screen.getByLabelText(name),{target:{value}});
+  await userEvent.click(screen.getByRole('link',{name:'Leave'}));
+  expect(confirm).toHaveBeenCalledOnce();
+  expect(screen.getByLabelText(name)).toHaveValue(value);
+  const unload = new Event('beforeunload',{cancelable:true});
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(true);
+  confirm.mockReturnValue(true);
+  await userEvent.click(screen.getByRole('link',{name:'Leave'}));
+  await screen.findByRole('heading',{name:'Catalog'});
 });
 
 it('prevents switching source types until upload finishes', async () => {
@@ -180,3 +217,4 @@ it('shows the YouTube settings panel before entering a URL without starting infe
   expect(screen.getByRole('button', {name:'Create lesson'})).toBeDisabled();
   expect(authoring.inspectSource).not.toHaveBeenCalled();
 });
+import { transferableAbortController } from 'node:util';

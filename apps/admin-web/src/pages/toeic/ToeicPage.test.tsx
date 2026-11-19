@@ -39,3 +39,35 @@ it('shows a failed quality job without displaying a previous pass',async()=>{
   expect(screen.queryByText('Passed automated checks')).not.toBeInTheDocument();
   expect(screen.getByRole('button',{name:'Run checks'})).toBeEnabled();cache.clear();
 });
+
+it('previews the whole test with one request and filters to a Part with its shared passage', async () => {
+  await i18n.changeLanguage('en');
+  const cache = new QueryClient({defaultOptions:{queries:{retry:false}}});
+  const question = (title: string) => ({ title, options:[{key:'A',text:'Option text'}], media:[] });
+  const draft = {
+    title:'Imported test',code:'TEST',type:'FULL_TEST',accessMode:'PUBLIC',
+    groups:[{id:'group',part:7,kind:'TEXT',documents:[{id:'doc',ordinal:1,type:'PASSAGE',html:'<p>Source passage</p>'}],media:[]}],
+    placements:[
+      {id:'p192',itemId:'q192',part:7,groupId:'group',questionNumber:192},
+      {id:'p1',itemId:'q1',part:1,groupId:null,questionNumber:1},
+      {id:'p191',itemId:'q191',part:7,groupId:'group',questionNumber:191},
+    ],
+  };
+  vi.mocked(api).mockImplementation(async url => url.endsWith('/test/preview')
+    ? {test:draft,questions:{p1:question('Listening stem'),p191:question('First reading stem'),p192:question('Second reading stem')}}
+    : url.includes('assessment-items') ? null : {id:'test',revision:0,status:'PUBLISHED',draft});
+  render(<QueryClientProvider client={cache}><I18nextProvider i18n={i18n}><MemoryRouter initialEntries={['/toeic/test?tab=preview']}><Routes><Route path="/toeic/:id" element={<ToeicDetailPage />} /></Routes></MemoryRouter></I18nextProvider></QueryClientProvider>);
+  expect(await screen.findByText('Listening stem')).toBeVisible();
+  expect(screen.getAllByText('Source passage')).toHaveLength(1);
+  expect(screen.getAllByRole('button',{name:/Open question \d+ in editor/}).map(button=>button.getAttribute('aria-label')))
+    .toEqual(['Open question 1 in editor','Open question 191 in editor','Open question 192 in editor']);
+  await userEvent.click(screen.getByRole('combobox',{name:'Show questions'}));
+  await userEvent.click(screen.getByRole('option',{name:'Reading'}));
+  expect(screen.queryByText('Listening stem')).not.toBeInTheDocument();
+  expect(screen.getByText('Second reading stem')).toBeVisible();
+  expect(vi.mocked(api).mock.calls.map(([url])=>url)).toEqual(['/api/v1/admin/toeic/test','/api/v1/admin/toeic/test/preview']);
+  await userEvent.click(screen.getByRole('button',{name:'Open question 192 in editor'}));
+  expect(screen.getByRole('tab',{name:'Content'})).toHaveAttribute('aria-selected','true');
+  expect(screen.getByRole('button',{name:'Question 192'})).toHaveAttribute('aria-pressed','true');
+  cache.clear();
+});

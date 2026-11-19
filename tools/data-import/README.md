@@ -23,6 +23,8 @@ installed domain. Use the CLI reports and catalog quality checks to inspect issu
 
 ### Drive access
 
+See [Drive handoff](DRIVE_HANDOFF.md) for the exact archives and environment settings used when moving the packages.
+
 The pinned URLs may point to a `lyreo.archive-parts.v1` JSON transport index. Fetch verifies each
 part and the reassembled archive, then validates package checksums before installation. The
 downloader fetches up to four remote parts concurrently and assembles them in index order.

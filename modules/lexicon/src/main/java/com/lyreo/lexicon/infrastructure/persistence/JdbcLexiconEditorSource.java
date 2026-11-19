@@ -10,8 +10,7 @@ import tools.jackson.databind.ObjectMapper;
 public class JdbcLexiconEditorSource implements LexiconEditorSource {
     private final NamedParameterJdbcTemplate jdbc;
     private final LexiconDraftMapper mapper;
-    private final ObjectMapper json;
-    public JdbcLexiconEditorSource(NamedParameterJdbcTemplate jdbc,ObjectMapper json) {this.jdbc=jdbc;this.json=json;mapper=new LexiconDraftMapper(json);}
+    public JdbcLexiconEditorSource(NamedParameterJdbcTemplate jdbc,ObjectMapper json) {this.jdbc=jdbc;mapper=new LexiconDraftMapper(json);}
     public Optional<LexiconDraft> source(UUID id) {
         var active=jdbc.query("""
             SELECT e.id FROM lexicon_entry e JOIN dataset_active_release a ON a.release_id=e.release_id
@@ -19,28 +18,7 @@ public class JdbcLexiconEditorSource implements LexiconEditorSource {
               WHERE old.id=:id AND old.headword_id=e.headword_id AND old.entry_type=e.entry_type)
             """,Map.of("id",id),(rs,n)->rs.getObject(1,UUID.class));
         if(active.isEmpty()) return Optional.empty();
-        return new JdbcLexiconRepository(jdbc).findById(active.getFirst()).map(mapper::from).map(draft->{
-            var contexts=new HashMap<UUID,Map<String,Object>>();
-            jdbc.query("SELECT id,source_context FROM lexicon_translation WHERE entry_id=:entry AND source_context IS NOT NULL",Map.of("entry",active.getFirst()),rs->{
-                contexts.put(rs.getObject(1,UUID.class),json.readValue(rs.getString(2),new tools.jackson.core.type.TypeReference<Map<String,Object>>(){}));
-            });
-            return new LexiconDraft(draft.title(),draft.type(),draft.headwordId(),draft.sourceMetadataJson(),draft.licenseText(),draft.items(),draft.senses(),draft.forms(),draft.pronunciations(),
-                draft.translations().stream().map(t->new LexiconDraft.Translation(t.id(),t.itemId(),t.senseId(),t.wordVi(),t.source(),t.sourceScope(),t.sourceSenseQualifier(),t.linkStatus(),t.sourcePos(),t.unlinkedReason(),t.tags(),contexts.get(t.id()),t.origin())).toList());
-        });
-    }
-    public UUID headword(String title) {
-        jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(:title,9127))",Map.of("title",title),rs->{});
-        UUID id=UUID.randomUUID();
-        jdbc.update("INSERT INTO lexicon_headword(id,language,identity_form) VALUES(:id,'en',:title) ON CONFLICT(language,identity_form) DO NOTHING",Map.of("id",id,"title",title));
-        return jdbc.queryForObject("SELECT id FROM lexicon_headword WHERE language='en' AND identity_form=:title",Map.of("title",title),UUID.class);
-    }
-    public boolean contains(UUID headwordId,String type) {
-        return Boolean.TRUE.equals(jdbc.queryForObject("""
-            SELECT EXISTS(SELECT 1 FROM lexicon_entry e JOIN dataset_active_release a ON a.release_id=e.release_id
-              WHERE a.domain='lexicon' AND e.headword_id=:headword AND e.entry_type=:type)
-              OR EXISTS(SELECT 1 FROM content_document d WHERE d.namespace='lexicon' AND NOT EXISTS(SELECT 1 FROM content_source_binding off WHERE off.namespace=d.namespace AND off.document_id=d.id AND NOT off.enabled)
-              AND d.draft->>'headwordId'=:text AND d.draft->>'type'=:type)
-            """,Map.of("headword",headwordId,"text",headwordId.toString(),"type",type),Boolean.class));
+        return new JdbcLexiconRepository(jdbc).findById(active.getFirst()).map(mapper::from);
     }
     public void indexPublication(UUID id,LexiconDraft content) {
         jdbc.update("DELETE FROM content_search_term WHERE namespace='lexicon' AND document_id=:id",Map.of("id",id));
@@ -147,7 +125,7 @@ public class JdbcLexiconEditorSource implements LexiconEditorSource {
 
     private static final String FILTERS = """
 SELECT %s FROM candidates WHERE (:type='' OR type=:type)
-                AND (:state='' OR status=:state OR (:state='EDITED' AND edited))
+                AND (:state='' OR status=:state)
                             """;
     public List<Summary> list(String query,String type,String translation,String state,String pos,String after,int size) {
         return browse(query,type,translation,state,pos,after,null,false,0,size);
@@ -192,18 +170,15 @@ SELECT %s FROM candidates WHERE (:type='' OR type=:type)
             SELECT p.*, CASE WHEN p.edited THEN (SELECT string_agg(DISTINCT i->>'partOfSpeech',', ') FROM jsonb_array_elements(d.draft->'items') i)
                 ELSE (SELECT string_agg(DISTINCT i.part_of_speech,', ') FROM lexicon_item i WHERE i.entry_id=p.id) END AS part_of_speech,
                 CASE WHEN p.edited THEN jsonb_array_length(d.draft->'senses') ELSE stats.sense_count END AS sense_count,
-                CASE WHEN p.edited THEN (SELECT count(*) FROM jsonb_array_elements(d.draft->'senses') s WHERE nullif(trim(s->>'translationVi'),'') IS NOT NULL) ELSE stats.translated_count END AS translated_count,
-                CASE WHEN p.edited THEN (SELECT count(*) FROM jsonb_array_elements(d.draft->'senses') s WHERE s->>'translationStatus'='VERIFIED') ELSE stats.verified_count END AS verified_count,
                 CASE WHEN p.edited THEN (SELECT s->>'definitionEn' FROM jsonb_array_elements(d.draft->'senses') s WHERE nullif(trim(s->>'definitionEn'),'') IS NOT NULL LIMIT 1) ELSE stats.definition END AS definition,
                 CASE WHEN p.edited THEN (SELECT s->>'translationVi' FROM jsonb_array_elements(d.draft->'senses') s WHERE nullif(trim(s->>'translationVi'),'') IS NOT NULL LIMIT 1) ELSE stats.translation_vi END AS translation_vi
             FROM selected p LEFT JOIN content_document d ON d.namespace='lexicon' AND d.id=p.id AND p.edited
-            LEFT JOIN LATERAL (SELECT count(*) AS sense_count,count(*) FILTER(WHERE nullif(trim(s.translation_vi),'') IS NOT NULL) AS translated_count,
-                count(*) FILTER(WHERE s.translation_status='VERIFIED') AS verified_count,
+            LEFT JOIN LATERAL (SELECT count(*) AS sense_count,
                 (array_agg(s.definition_en ORDER BY s.position,s.id) FILTER(WHERE nullif(trim(s.definition_en),'') IS NOT NULL))[1] AS definition,
                 (array_agg(s.translation_vi ORDER BY s.position,s.id) FILTER(WHERE nullif(trim(s.translation_vi),'') IS NOT NULL))[1] AS translation_vi FROM lexicon_sense s WHERE s.entry_id=p.id AND s.release_id=p.release_id) stats ON NOT p.edited
             ORDER BY p.rank %s,p.id %s
             """.formatted(order,order),params,
-                (rs,n)->new Summary(rs.getObject("id",UUID.class),rs.getString("title"),rs.getString("type"),rs.getString("status"),rs.getBoolean("edited"),new Cursor(rs.getInt("rank"),rs.getObject("id",UUID.class)).encode(),rs.getString("part_of_speech"),rs.getInt("sense_count"),rs.getInt("translated_count"),rs.getInt("verified_count"),rs.getString("definition"),rs.getString("translation_vi")));
+                (rs,n)->new Summary(rs.getObject("id",UUID.class),rs.getString("title"),rs.getString("type"),rs.getString("status"),new Cursor(rs.getInt("rank"),rs.getObject("id",UUID.class)).encode(),rs.getString("part_of_speech"),rs.getInt("sense_count"),rs.getString("definition"),rs.getString("translation_vi")));
         if(reverse) Collections.reverse(rows);
         return rows;
     }

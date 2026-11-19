@@ -39,6 +39,7 @@ class JdbcLexiconRepositoryTest {
         org.mockito.Mockito.when(translation.getObject("entry_id", UUID.class)).thenReturn(entryId);
         org.mockito.Mockito.when(translation.getObject("id", UUID.class)).thenReturn(UUID.randomUUID());
         org.mockito.Mockito.when(translation.getString("source_pos")).thenReturn(sourcePos);
+        org.mockito.Mockito.when(translation.getString("source_context")).thenReturn("{\"source\":\"vi-dictionary\"}");
         org.mockito.Mockito.when(translation.getString("link_status")).thenReturn("ENTRY_CANDIDATE");
         doAnswer(invocation -> List.of(((RowMapper) invocation.getArgument(2)).mapRow(header, 0)))
             .when(jdbc).query(anyString(), any(java.util.Map.class), any(RowMapper.class));
@@ -52,7 +53,7 @@ class JdbcLexiconRepositoryTest {
         assertThat(found.sourcePos()).isEqualTo(sourcePos);
         assertThat(found.itemId()).isNull();
         assertThat(found.senseId()).isNull();
-        verify(translation, org.mockito.Mockito.never()).getString("source_context");
+        assertThat(found.sourceContext()).containsEntry("source", "vi-dictionary");
     }
 
     @Test
@@ -89,8 +90,7 @@ class JdbcLexiconRepositoryTest {
             .anySatisfy(sql -> assertThat(sql).contains("FROM lexicon_form"))
             .anySatisfy(sql -> assertThat(sql).contains("FROM lexicon_sense"))
             .anySatisfy(sql -> assertThat(sql).contains("FROM lexicon_pronunciation"))
-            .anySatisfy(sql -> assertThat(sql).contains("FROM lexicon_translation", "source_pos")
-                .doesNotContain("source_context"));
+            .anySatisfy(sql -> assertThat(sql).contains("FROM lexicon_translation", "source_pos", "source_context"));
         assertThat(childParameters.getAllValues()).allSatisfy(parameters -> {
             assertThat(parameters.getValue("release")).isEqualTo(RELEASE_ID);
             assertThat(parameters.getValue("entries")).isEqualTo(List.of(firstId));

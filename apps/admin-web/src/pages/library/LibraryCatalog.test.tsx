@@ -29,10 +29,10 @@ it('returns to the real final page after filtered results shrink',async()=>{
   expect(screen.getByRole('button',{name:'Page 2'})).toHaveAttribute('aria-current','page');
 });
 it('shows dictionary meaning/translation data and jumps to the final partial page', async () => {
-  vi.mocked(api).mockImplementation(async url => url.includes('/count?') ? 1019 : [{id:'word',title:'Book',type:'WORD',status:'PUBLISHED',cursor:'ranked',partOfSpeech:'noun',senseCount:2,translatedCount:1,verifiedCount:1,definition:'A bound volume.',translationVi:'quyển sách'}]);
+  vi.mocked(api).mockImplementation(async url => url.includes('/count?') ? 1019 : [{id:'word',title:'Book',type:'WORD',status:'PUBLISHED',cursor:'ranked',partOfSpeech:'noun',senseCount:2,definition:'A bound volume.',translationVi:'quyển sách'}]);
   show('/lexicon','/api/v1/admin/lexicon','/lexicon?q=book');
-  expect(await screen.findByText('quyển sách')).toBeInTheDocument();
-  expect(screen.getByText('A bound volume.')).toBeInTheDocument();
+  expect(await screen.findByText('A bound volume.')).toBeInTheDocument();
+  expect(screen.getByText('Visible')).toBeInTheDocument();
   expect(screen.getByText(/Word · noun/)).toBeInTheDocument();
   expect(screen.queryByText('Standard Listening & Reading test')).not.toBeInTheDocument();
   expect(screen.getByText('…')).toBeInTheDocument();
@@ -71,11 +71,11 @@ it('hides a published item directly from its table row using the current revisio
   expect(await screen.findByRole('button',{name:'Show TOEIC 2026'})).toBeVisible();
   expect(api).not.toHaveBeenCalledWith(expect.stringContaining('/publish'),expect.anything());
 });
-it('keeps the parent topic in subtopic navigation and creation',async()=>{
+it('keeps the parent topic in subtopic navigation without manual creation',async()=>{
   vi.mocked(api).mockImplementation(async url=>url.includes('/topic?')?[{id:'topic',title:'Tenses'}]:{items:[{id:'sub',title:'Present tense',status:'PUBLISHED',parentId:'topic',questionCount:10}],total:1,page:0,size:30});
   show('/grammar/subtopic','/api/v1/admin/grammar/subtopic','/grammar/subtopic?parentId=topic');
   expect(await screen.findByRole('link',{name:'Tenses'})).toHaveAttribute('href','/grammar/topic/topic');
-  expect(screen.getByRole('link',{name:'Add subtopic'})).toHaveAttribute('href','/grammar/subtopic/new?parentId=topic');
+  expect(screen.queryByRole('link',{name:'Add subtopic'})).not.toBeInTheDocument();
   expect(api).toHaveBeenCalledWith(expect.stringContaining('parentId=topic'),expect.anything());
 });
 

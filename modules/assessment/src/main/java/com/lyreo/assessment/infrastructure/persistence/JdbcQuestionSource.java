@@ -20,19 +20,31 @@ public class JdbcQuestionSource implements QuestionSource {
         return active.isEmpty()?Optional.empty():find(active.getFirst());
     }
     public Optional<QuestionContent> find(UUID id) {
-        return jdbc.query("""
-            SELECT i.* FROM assessment_item i WHERE i.id=:id AND EXISTS (
+        return Optional.ofNullable(findAll(List.of(id)).get(id));
+    }
+    @Override public Map<UUID,QuestionContent> findAll(Collection<UUID> ids) {
+        if(ids.isEmpty()) return Map.of();
+        var media=new HashMap<UUID,List<QuestionContent.Media>>();
+        var params=Map.of("ids",ids);
+        jdbc.query("""
+            SELECT u.item_id,a.id,u.role FROM media_asset_use u JOIN release_media_asset a
+            ON a.release_id=u.release_id AND a.package_asset_id=u.asset_id WHERE u.item_id IN (:ids)
+            """,params,rs->{
+                media.computeIfAbsent(rs.getObject("item_id",UUID.class),ignored->new ArrayList<>())
+                    .add(new QuestionContent.Media(rs.getObject("id",UUID.class),rs.getString("role")));
+            });
+        var found=new HashMap<UUID,QuestionContent>();
+        jdbc.query("""
+            SELECT i.* FROM assessment_item i WHERE i.id IN (:ids) AND EXISTS (
                 SELECT 1 FROM dataset_import_run r WHERE r.release_id=i.release_id
                 AND r.run_type='APPLY' AND r.status='SUCCEEDED')
-            """,Map.of("id",id),(rs,n)->{
+            """,params,rs->{
+                var id=rs.getObject("id",UUID.class);
                 Map<String,Object> annotations=json.readValue(rs.getString("annotations"),new TypeReference<>(){});
-                List<QuestionContent.Media> media=jdbc.query("""
-                    SELECT a.id,u.role FROM media_asset_use u JOIN release_media_asset a
-                    ON a.release_id=u.release_id AND a.package_asset_id=u.asset_id WHERE u.item_id=:id
-                    """,Map.of("id",id),(r,i)->new QuestionContent.Media(r.getObject(1,UUID.class),r.getString(2)));
-                return new QuestionContent(rs.getString("stem_en"),rs.getString("kind"),json.readValue(rs.getString("options"),new TypeReference<List<QuestionContent.Option>>(){}),rs.getString("correct_option"),rs.getObject("difficulty_level",Integer.class),
-                    text(annotations,"rationale_vi"),text(annotations,"content_translation_vi"),text(annotations,"option_translation_note_vi"),text(annotations,"vocabulary_note_vi"),rs.getString("transcript_en"),media,text(annotations,"question_options_translation_vi"));
-            }).stream().findFirst();
+                found.put(id,new QuestionContent(rs.getString("stem_en"),rs.getString("kind"),json.readValue(rs.getString("options"),new TypeReference<List<QuestionContent.Option>>(){}),rs.getString("correct_option"),rs.getObject("difficulty_level",Integer.class),
+                    text(annotations,"rationale_vi"),text(annotations,"content_translation_vi"),text(annotations,"option_translation_note_vi"),text(annotations,"vocabulary_note_vi"),rs.getString("transcript_en"),media.getOrDefault(id,List.of()),text(annotations,"question_options_translation_vi")));
+            });
+        return found;
     }
     private static String text(Map<String,Object> values,String key) {return values.get(key) instanceof String s?s:null;}
     public boolean requiresContext(UUID id) {

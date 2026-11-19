@@ -47,19 +47,19 @@ AI chỉ tạo đề xuất/nháp, không xác minh nguồn.
 
 Phát âm nhóm theo cách đọc/trường hợp sử dụng → vùng/giọng → recording. Mỗi bản có dạng chữ,
 ký hiệu và hệ ký hiệu (IPA hoặc ký hiệu nguồn), phạm vi có căn cứ và attribution. Nhãn vùng được
-ánh xạ chính xác, giữ nhiều vùng và nhãn chưa biết; Australia không phải US. Không suy ra IPA–audio
-chỉ vì cùng accent, không suy ra cách đọc theo POS từ dữ liệu nguồn lặp. Phạm vi thiếu được ghi
-“Chưa xác định trường hợp sử dụng”. Một recording chính mỗi nhóm, các bản khác thu gọn; chỉ gộp
-recording cùng định danh nguồn/checksum và phạm vi. TTS chỉ theo yêu cầu có phạm vi rõ và nhãn tổng hợp.
+ánh xạ chính xác, giữ nhiều vùng và nhãn nguồn. Các bản ghi có cùng phiên âm và phạm vi được gom
+theo cách đọc, với vùng của từng bản ghi. Bản ghi thiếu IPA hiển thị riêng. Ghép IPA với audio
+dựa trên bản ghi nguồn cung cấp cả hai. Phạm vi từ loại dùng thông tin nguồn tường minh hoặc
+nhãn từ loại trong tên audio khớp mục nguồn. TTS chỉ theo yêu cầu có phạm vi rõ và nhãn tổng hợp.
 Learner API cung cấp nhóm để caller chọn đúng cách đọc; không xây Mobile UI trong đợt này.
 
-Identity phân biệt hoa/thường; `headwordId` và liên kết Lesson/SRS trường tồn qua release. CSV đơn giản
-và JSON có version hỗ trợ nhập nháp tối đa 10 MiB/5.000 dòng, có preview lỗi; export CSV ngăn công thức.
+Identity phân biệt hoa/thường; `headwordId` và liên kết Lesson/SRS trường tồn qua release.
+CLI cài gói từ điển đã xác minh. Admin biên tập mục đã có và có thể xuất một mục để đối chiếu.
 
 ### BR-LEX-003 — Editorial publication
 
-Nguồn import bất biến. Bản sửa được lưu thưa, tách nháp khỏi publication bất biến; nội dung tự tạo
-không phụ thuộc release. Mutation dùng revision và trả 409 khi stale. Công bố/phục hồi có actor,
+Nguồn import bất biến. Admin biên tập mục đã có, lưu bản sửa thưa và tách nháp khỏi publication
+bất biến. Mutation dùng revision và trả 409 khi stale. Công bố/phục hồi có actor,
 thời điểm; ghi chú lý do không bắt buộc. UI không yêu cầu nhập lý do khi công bố.
 Nội dung đã công bố không có nút công bố lặp; khi có sửa khác bản đang dùng thì hiện “Áp dụng thay đổi”.
 Trạng thái thay đổi được so nội dung, không suy từ số revision; reload vẫn giữ đúng trạng thái.

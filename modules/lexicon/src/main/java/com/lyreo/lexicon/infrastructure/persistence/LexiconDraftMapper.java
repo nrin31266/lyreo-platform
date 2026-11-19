@@ -17,7 +17,7 @@ public final class LexiconDraftMapper {
                 strings(s.rawGlossesJson()),s.examplesJson()==null?List.of():json.readValue(s.examplesJson(),new TypeReference<List<Map<String,Object>>>(){}),strings(s.tagsJson()),s.matchedQualifier(),s.definitions(),s.sourceContext())).toList(),
             e.forms().stream().map(f->new LexiconDraft.Form(f.id(),f.itemId(),f.form(),strings(f.tagsJson()))).toList(),
             e.pronunciations().stream().map(p->new LexiconDraft.Sound(p.id(),p.itemId(),p.accent(),p.ipa(),p.audioUrl(),p.assetId(),strings(p.tagsJson()),p.audioFile(),p.sourceUrl(),p.cachedAudioObjectKey(),p.pronunciationContext())).toList(),
-            e.translations().stream().map(t->new LexiconDraft.Translation(t.id(),t.itemId(),t.senseId(),t.wordVi(),t.source(),t.sourceScope(),t.sourceSenseQualifier(),t.linkStatus(),t.sourcePos(),t.unlinkedReason(),strings(t.tagsJson()),null,new LexiconDraft.TranslationOrigin(t.itemId(),t.senseId(),t.linkStatus()))).toList());
+            e.translations().stream().map(t->new LexiconDraft.Translation(t.id(),t.itemId(),t.senseId(),t.wordVi(),t.source(),t.sourceScope(),t.sourceSenseQualifier(),t.linkStatus(),t.sourcePos(),t.unlinkedReason(),strings(t.tagsJson()),t.sourceContext(),new LexiconDraft.TranslationOrigin(t.itemId(),t.senseId(),t.linkStatus()))).toList());
     }
     public LexiconEntry entry(UUID id,LexiconDraft d) {
         var pos=new HashMap<UUID,String>();d.items().forEach(i->pos.put(i.id(),i.partOfSpeech()));
@@ -26,6 +26,6 @@ public final class LexiconDraftMapper {
             d.forms().stream().map(f->new LexiconEntry.LexiconForm(f.id(),f.itemId(),f.form(),com.lyreo.lexicon.application.LexiconLookupNormalizer.lookupQuery(f.form()),json.writeValueAsString(f.tags()))).toList(),
             d.senses().stream().map(s->new LexiconEntry.LexiconSense(s.id(),s.itemId(),d.senses().indexOf(s),pos.get(s.itemId()),s.definitionEn(),s.translationVi(),LexiconEntry.TranslationStatus.valueOf(s.translationStatus()),json.writeValueAsString(s.rawGlosses()),json.writeValueAsString(s.examples()),json.writeValueAsString(s.tags()),s.matchedQualifier(),s.definitions(),s.sourceContext())).toList(),
             d.pronunciations().stream().map(p->new LexiconEntry.Pronunciation(p.id(),p.itemId(),p.accent(),p.ipa(),p.audioFile(),p.audioUrl(),p.sourceUrl(),p.cachedAudioObjectKey(),json.writeValueAsString(p.tags()),p.assetId(),p.pronunciationContext())).toList(),
-            d.translations().stream().map(t->new LexiconEntry.LexiconTranslation(t.id(),t.itemId(),t.senseId(),t.wordVi(),t.source(),t.sourceScope(),t.sourceSenseQualifier(),t.linkStatus(),t.unlinkedReason(),json.writeValueAsString(t.tags()==null?List.of():t.tags()),t.sourcePos())).toList());
+            d.translations().stream().map(t->new LexiconEntry.LexiconTranslation(t.id(),t.itemId(),t.senseId(),t.wordVi(),t.source(),t.sourceScope(),t.sourceSenseQualifier(),t.linkStatus(),t.unlinkedReason(),json.writeValueAsString(t.tags()==null?List.of():t.tags()),t.sourcePos(),t.sourceContext())).toList());
     }
 }

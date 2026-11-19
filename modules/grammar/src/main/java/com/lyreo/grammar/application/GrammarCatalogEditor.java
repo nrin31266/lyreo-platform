@@ -26,7 +26,7 @@ public class GrammarCatalogEditor {
         var data=source.find(kind,id).orElseThrow(()->new ResourceNotFoundException("Grammar catalog not found"));
         return new Document<>(id,0,source.status(kind,id),null,data,null,null);
     });}
-    public Document<GrammarCatalog> save(String kind,UUID id,long revision,GrammarCatalog data,String actor) {validate(kind,data,false);documents.save(namespace(kind),id,revision,data,actor,GrammarCatalog.class);return get(kind,id);}
+    public Document<GrammarCatalog> save(String kind,UUID id,long revision,GrammarCatalog data,String actor) {validate(kind,data,false);get(kind,id);documents.save(namespace(kind),id,revision,data,actor,GrammarCatalog.class);return get(kind,id);}
     @Transactional public Document<GrammarCatalog> publish(String kind,UUID id,long revision,String reason,String actor) {
         var data=get(kind,id).draft();validate(kind,data,true);
         for(var ref:data.questions()) items.validateStandalone(ref.itemId(),ref.publicationId());
@@ -82,7 +82,6 @@ public class GrammarCatalogEditor {
             var ref=data.questions().get(i);
             try {
                 items.validateStandalone(ref.itemId(),ref.publicationId());
-                var question=items.published(ref.itemId(),ref.publicationId());
             } catch(RequestValidationException|ResourceNotFoundException invalid) {result.add(new CheckIssue("INVALID_QUESTION",ref.itemId(),i+1,"ERROR",invalid.getMessage()));}
         }
         return result;

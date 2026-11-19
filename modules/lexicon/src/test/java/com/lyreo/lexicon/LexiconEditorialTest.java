@@ -30,7 +30,7 @@ class LexiconEditorialTest {
         var entry=new LexiconEntry(UUID.randomUUID(),UUID.randomUUID(),"book","book",LexiconEntry.EntryType.WORD,"en",null,null,
             List.of(new LexiconEntry.LexiconItem(noun,"noun",null,2,"Etymology",0)),List.of(),List.of(),
             List.of(new LexiconEntry.Pronunciation(UUID.randomUUID(),noun,"US","/bʊk/","book.ogg","https://example.test/book.ogg","https://example.test/source","source/audio","[\"regional\"]")),
-            List.of(new LexiconEntry.LexiconTranslation(UUID.randomUUID(),noun,null,"sách","source","item","printed pages","ITEM_CANDIDATE","ambiguous","[\"literary\"]","noun")));
+            List.of(new LexiconEntry.LexiconTranslation(UUID.randomUUID(),noun,null,"sách","source","item","printed pages","ITEM_CANDIDATE","ambiguous","[\"literary\"]","noun",Map.of("sense_ordinal",2))));
         var mapper=new LexiconDraftMapper(new ObjectMapper());
         var result=mapper.entry(entry.id(),mapper.from(entry));
         assertThat(result.items()).isEqualTo(entry.items());

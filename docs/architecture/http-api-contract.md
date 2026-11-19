@@ -141,7 +141,7 @@ The source action may save and then explicitly enqueue `/synthesize` with the re
 ## Library administration and learner cutover
 
 Admin library roots are `/admin/lexicon`, `/admin/grammar/{topic|subtopic|bank}`,
-`/admin/assessment-items` and `/admin/toeic` under `/api/v1`. They support list/detail (create for Lexicon/Grammar/assessment),
+`/admin/assessment-items` and `/admin/toeic` under `/api/v1`. They support list/detail and corrections to existing content,
 `PUT /{id}/draft {revision,content}`, publish `{revision}` (optional `reason`, at most 2,000 characters), status `{revision,status}`,
 history/audit and restore `{revision,publicationId}`. Stale mutations return 409. Restore creates a
 new immutable publication. `DELETE /{id}?revision=N` permits unpublished unreferenced drafts only.
@@ -157,6 +157,9 @@ current document without allocating another revision. Visibility changes do not 
 TOEIC accepts only FULL_TEST content with 200 placements in the standard Part ranges.
 Restoring a TOEIC publication also validates its structure and current publication blockers.
 `GET /admin/toeic/source-review` returns active-source passage issue locations for review deep links.
+`GET /admin/toeic/{id}/preview` returns the saved test and its published question content keyed
+by placement ID. The Admin can filter this read-only preview by section or Part without
+opening a learner session. An unavailable question is omitted from the question map.
 `GET /admin/grammar/review` lists current structural issues (`id,title,kind,code,parentId`), separate
 from immutable import reports. `GET /admin/grammar/{kind}/{id}/check` validates saved metadata and
 pinned question revisions, returning `{code,questionId,number}` issues without changing content.
@@ -165,11 +168,9 @@ Lexicon filters include type/POS/translation/state, Grammar access/state, TOEIC 
 and current quality-report status. `POST /bulk-preview` accepts `{items:[{id,revision}]}` and reports current
 revisions/usages. `/bulk-status` applies `{items,status}` atomically for 1–100 unique targets.
 
-`POST /import?apply=false` accepts multipart CSV or JSON up to 10 MiB/5,000 rows and returns per-row
-content/errors. `apply=true` revalidates all rows and creates drafts in one transaction. Versioned
-JSON is `{version:1,records:[...]}`. Export is `GET /{id}/export?format=json|csv`; CSV is a lossy
+Content enters these catalogs through the offline dataset pipeline. Export is `GET /{id}/export?format=json|csv`; CSV is a lossy
 simple-field interchange, rejected for known complex annotation/media cases. Formula-leading CSV
-cells are escaped. TOEIC export/import uses versioned JSON; it retains complete related groups.
+cells are escaped. TOEIC export uses versioned JSON; it retains complete related groups.
 
 Question/Lexicon `/{id}/ai` list/start durable suggestions. Async responses include job Location.
 Accept checks base/accepted revision and only selected fields, with per-suggestion idempotency.

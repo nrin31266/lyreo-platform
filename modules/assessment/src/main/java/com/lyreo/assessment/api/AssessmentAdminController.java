@@ -24,7 +24,6 @@ public class AssessmentAdminController {
     }
     @GetMapping("/{id}") public DocumentStore.Document<QuestionContent> get(@PathVariable UUID id) {return library.get(id);}
     @GetMapping("/{id}/usage") public List<Map<String,Object>> usage(@PathVariable UUID id) {return source.usage(id);}
-    @PostMapping @ResponseStatus(org.springframework.http.HttpStatus.CREATED) public DocumentStore.Document<QuestionContent> create(@RequestBody QuestionContent data,@AuthenticationPrincipal Jwt jwt) {return library.create(data,jwt.getSubject());}
     @PutMapping("/{id}/draft") public DocumentStore.Document<QuestionContent> save(@PathVariable UUID id,@RequestBody Save input,@AuthenticationPrincipal Jwt jwt) {return library.save(id,input.revision(),input.content(),jwt.getSubject());}
     @PostMapping("/{id}/publish") public DocumentStore.Document<QuestionContent> publish(@PathVariable UUID id,@RequestBody Action a,@AuthenticationPrincipal Jwt jwt) {return library.publish(id,a.revision(),a.reason(),jwt.getSubject());}
     @GetMapping("/{id}/history") public List<DocumentStore.Publication<QuestionContent>> history(@PathVariable UUID id) {return documents.history("assessment",id,QuestionContent.class);}

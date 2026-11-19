@@ -74,5 +74,12 @@ public record LexiconEntry(
 
     public record LexiconTranslation(UUID id, UUID itemId, UUID senseId, String wordVi,
                                      String source, String sourceScope, String sourceSenseQualifier,
-                                     String linkStatus, String unlinkedReason, String tagsJson, String sourcePos) {}
+                                     String linkStatus, String unlinkedReason, String tagsJson, String sourcePos,
+                                     Map<String,Object> sourceContext) {
+        public LexiconTranslation(UUID id, UUID itemId, UUID senseId, String wordVi, String source,
+                                  String sourceScope, String sourceSenseQualifier, String linkStatus,
+                                  String unlinkedReason, String tagsJson, String sourcePos) {
+            this(id,itemId,senseId,wordVi,source,sourceScope,sourceSenseQualifier,linkStatus,unlinkedReason,tagsJson,sourcePos,null);
+        }
+    }
 }

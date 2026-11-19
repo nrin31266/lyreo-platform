@@ -50,11 +50,20 @@ class QuestionAiTest {
         verify(requests).start(eq("assessment"),eq(id),eq(2L),eq("SUGGEST"),argThat(input->input.get("sourceContext").equals(context) && input.get("question").equals(question())),eq("admin"),eq(ai.jobType()));
     }
 
-    @Test void untrustedOutputCannotChangeAnswersOrInventMedia() {
+    @Test void untrustedOutputCannotChangeAnswersOrSupplyNewQuestions() {
         assertThatThrownBy(()->QuestionAi.validate(new QuestionAi.Output(List.of(new QuestionAi.Suggestion("correctOption","B")),List.of(),List.of()),"SUGGEST",20)).isInstanceOf(RequestValidationException.class);
         var q=question();var invented=new QuestionContent(q.title(),q.kind(),q.options(),q.correctOption(),1,null,null,null,null,null,List.of(new QuestionContent.Media(UUID.randomUUID(),"audio")));
-        assertThatThrownBy(()->QuestionAi.validate(new QuestionAi.Output(List.of(),List.of(invented),List.of()),"VARIANTS",1)).isInstanceOf(RequestValidationException.class);
+        assertThatThrownBy(()->QuestionAi.validate(new QuestionAi.Output(List.of(),List.of(invented),List.of()),"SUGGEST",1)).isInstanceOf(RequestValidationException.class);
         assertThatThrownBy(()->QuestionAi.validate(new QuestionAi.Output(List.of(new QuestionAi.Suggestion("difficultyLevel",2.5)),List.of(),List.of()),"SUGGEST",20)).isInstanceOf(RequestValidationException.class);
+    }
+
+    @Test void retiredVariantRequestsAndCandidatesCannotWrite() {
+        assertThatThrownBy(()->ai.request(id,2,"VARIANTS",1,"","admin",List.of())).isInstanceOf(RequestValidationException.class);
+        when(requests.get(requestId,true)).thenReturn(request(Map.of(),Map.of()));
+        when(library.get(id)).thenReturn(draft(2));
+        assertThatThrownBy(()->ai.accept(id,requestId,2,"candidate",0,"admin")).isInstanceOf(RequestValidationException.class);
+        verify(requests,never()).start(any(),any(),anyLong(),any(),any(),any(),any());
+        verify(library,never()).save(any(),anyLong(),any(),any());
     }
 
     @Test void acceptanceOnlySavesSelectedDraftFieldAndRepeatedAcceptanceIsIdempotent() {
