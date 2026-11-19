@@ -35,13 +35,14 @@ The canonical Grammar/TOEIC archive uses `grammar-toeic-<package-version>/` (for
 A changed version may include `editorial/source_repairs.json` with
 `format=lyreo.reviewed-source-repairs.v1`, its domain and an explicit list of repairs.
 `source.source_repairs` records its path/count; the normal file inventory verifies the bundle.
-Each repair identifies a collection, stable row ID and allowed language field, the canonical
+Each repair identifies a collection, stable row ID and allowed field, the canonical
 SHA-256 of the full original row, exact before/after values, reviewer, time, reason and evidence.
 Builders reject stale rows, wrong domains, duplicate targets and unsupported fields.
 
 The narrow allowlist covers question Vietnamese explanations/translations, group Vietnamese
-translations and Lexicon examples. It cannot change answer keys, options, source passages, media
-or identities. The independent validator reverses repairs, verifies every original row hash, then
+translations, Lexicon examples and corroborated truncated endings of incorrect TOEIC choices.
+A choice repair preserves the order, every other choice and the keyed answer. Source passages,
+media and identities are protected. The independent validator reverses repairs, verifies every original row hash, then
 compares against raw source when supplied. The report retains `accepted_source_repairs`; the bundle
 retains the original text. Raw files and earlier releases remain immutable. AI-reviewed changes
 stay in their separate `editorial/language_overrides.json` bundle.

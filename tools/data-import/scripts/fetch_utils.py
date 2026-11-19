@@ -27,17 +27,19 @@ def _download_file(url: str, target: Path) -> None:
             raise ValueError("file:// URL must refer to a local path")
         shutil.copyfile(Path(unquote(parsed.path)).expanduser(), target)
     elif parsed.scheme in ("http", "https") and parsed.hostname == "drive.google.com":
+        match = re.fullmatch(r"/file/d/([A-Za-z0-9_-]+)/?(?:view)?", parsed.path)
+        file_id = match.group(1) if match else parse_qs(parsed.query).get("id", [""])[0]
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", file_id):
+            raise ValueError("Google Drive release URL requires a file ID")
         remote = os.getenv("DATA_DRIVE_REMOTE", "").strip()
         if remote:
             if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_-]*", remote):
                 raise ValueError("DATA_DRIVE_REMOTE must be an rclone remote name")
-            match = re.fullmatch(r"/file/d/([A-Za-z0-9_-]+)/?(?:view)?", parsed.path)
-            file_id = match.group(1) if match else parse_qs(parsed.query).get("id", [""])[0]
-            if not re.fullmatch(r"[A-Za-z0-9_-]+", file_id):
-                raise ValueError("Google Drive release URL requires a file ID")
             subprocess.run(["rclone", "backend", "copyid", remote + ":", file_id, str(target.resolve()), "--retries", "2", "--contimeout", "20s", "--timeout", "120s"], check=True, timeout=600)
         else:
-            subprocess.run(["uvx", "--from", "gdown==6.2.0", "gdown", url, "-O", str(target)], check=True)
+            public_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t"
+            subprocess.run(["curl", "--fail", "--location", "--connect-timeout", "20", "--max-time", "600",
+                            "--retry", "2", "--output", str(target), public_url], check=True, timeout=650)
     elif parsed.scheme in ("http", "https"):
         subprocess.run(
             ["curl", "--fail", "--location", "--retry", "3", "--retry-delay", "2", "--output", str(target), url],

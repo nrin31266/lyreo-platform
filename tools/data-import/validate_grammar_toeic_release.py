@@ -256,7 +256,7 @@ def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
                 continue
             item_id = placement["item_id"]
             source = raw_questions.get(item_id)
-            actual = items[item_id]
+            actual = baseline_items[item_id]
             require(source is not None and source["question_number"] == placement["question_number"]
                     and source["passage_id"] == placement["group_id"],
                     f"Part 7 placement differs from source: {item_id}")

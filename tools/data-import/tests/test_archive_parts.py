@@ -35,3 +35,17 @@ def test_private_drive_uses_authenticated_remote_without_putting_credentials_in_
     monkeypatch.setenv('DATA_DRIVE_REMOTE','--unsafe')
     with pytest.raises(ValueError,match='remote name'):
         _download_file('https://drive.google.com/file/d/file_123/view',target)
+
+
+def test_public_drive_fetches_the_download_endpoint_without_account_cookies(tmp_path, monkeypatch):
+    from fetch_utils import _download_file
+    calls=[]
+    monkeypatch.delenv('DATA_DRIVE_REMOTE', raising=False)
+    monkeypatch.setattr('fetch_utils.subprocess.run', lambda args, **kwargs: calls.append((args, kwargs)))
+    _download_file('https://drive.google.com/file/d/file_123/view', tmp_path/'part')
+    args, kwargs = calls[0]
+    assert args[0] == 'curl'
+    assert args[-1] == 'https://drive.usercontent.google.com/download?id=file_123&export=download&confirm=t'
+    assert '--cookie' not in args and kwargs['timeout'] > 0
+    with pytest.raises(ValueError, match='file ID'):
+        _download_file('https://drive.google.com/drive/folders/folder_123', tmp_path/'part')

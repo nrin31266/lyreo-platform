@@ -37,6 +37,24 @@ def test_group_translation_preserves_source_passage_and_requires_exact_field():
     with pytest.raises(ValueError, match='missing'): require_targets(bundle, {'toeic/groups.jsonl': {}})
 
 
+def test_choice_repair_restores_only_the_suffix_of_an_incorrect_toeic_choice():
+    before = [{'key': key, 'text': 'Join the GN' if key == 'D' else 'Other'} for key in 'ABCD']
+    row = {'id': 'q', 'source_domains': ['toeic'], 'correct_option': 'A', 'options': before}
+    after = copy.deepcopy(before)
+    after[-1]['text'] += 'A.'
+    bundle = validate(repair_bundle('shared/items.jsonl', row, 'options', before, after), 'grammar-toeic')
+    changed = record('shared/items.jsonl', row, bundle)
+    assert changed['options'] == after
+    assert record('shared/items.jsonl', changed, bundle, reverse=True) == row
+    correct = {**row, 'correct_option': 'D'}
+    keyed = validate(repair_bundle('shared/items.jsonl', correct, 'options', before, after), 'grammar-toeic')
+    with pytest.raises(ValueError, match='keyed TOEIC answer'):
+        record('shared/items.jsonl', correct, keyed)
+    after[-1]['text'] = 'Rewritten choice'
+    with pytest.raises(ValueError, match='truncated ending'):
+        validate(bundle, 'grammar-toeic')
+
+
 def test_lexicon_example_repair_preserves_translation_and_updates_offsets():
     row = {'id': 'sense', 'examples': [{'text': 'to writer a book', 'bold_text_offsets': [[12, 16]], 'translation': 'viết một cuốn sách'}]}
     after = [{'text': 'to write a book', 'bold_text_offsets': [[11, 15]], 'translation': 'viết một cuốn sách'}]

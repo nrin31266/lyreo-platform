@@ -1,4 +1,4 @@
-"""Apply reviewed language repairs while proving every other source field unchanged."""
+"""Apply reviewed source repairs while proving every other field unchanged."""
 from __future__ import annotations
 import copy
 import hashlib
@@ -8,10 +8,26 @@ import re
 FORMAT = 'lyreo.reviewed-source-repairs.v1'
 PATH = 'editorial/source_repairs.json'
 FIELDS = {
-    'shared/items.jsonl': {'annotations.rationale_vi', 'annotations.content_translation_vi'},
+    'shared/items.jsonl': {'annotations.rationale_vi', 'annotations.content_translation_vi', 'options'},
     'toeic/groups.jsonl': {'content_translation_vi'},
     'senses.jsonl': {'examples'},
 }
+
+
+def restored_option_key(before, after):
+    for options in (before, after):
+        if not isinstance(options, list) or len(options) != 4 or any(
+            not isinstance(option, dict) or option.keys() != {'key', 'text'}
+            or not isinstance(option['text'], str) or not option['text'].strip() for option in options
+        ) or [option['key'] for option in options] != list('ABCD'):
+            raise ValueError('Invalid choice transcription repair')
+    changes = [(original, fixed) for original, fixed in zip(before, after) if original != fixed]
+    if len(changes) != 1:
+        raise ValueError('A choice transcription repair must restore one choice')
+    original, fixed = changes[0]
+    if not fixed['text'].startswith(original['text']) or not re.fullmatch(r'[A-Za-z]{1,3}[.!?]?', fixed['text'][len(original['text']):]):
+        raise ValueError('A choice transcription repair must restore a truncated ending')
+    return original['key']
 
 
 def digest(value):
@@ -35,6 +51,9 @@ def validate(bundle, domain):
         for name in ('id', 'reviewer', 'reviewed_at', 'evidence', 'reason'):
             if not isinstance(repair.get(name), str) or not repair[name].strip():
                 raise ValueError(f'Missing source repair {name}')
+        if field == 'options':
+            restored_option_key(repair.get('before'), repair.get('after'))
+            continue
         for name in ('before', 'after'):
             value = repair.get(name)
             if field == 'examples':
@@ -56,6 +75,11 @@ def record(collection, value, bundle, *, reverse=False):
         raise ValueError('Source repair record hash no longer matches')
     changed = copy.deepcopy(value)
     for repair in repairs:
+        if repair['field'] == 'options' and (
+            'toeic' not in value.get('source_domains', ())
+            or restored_option_key(repair['before'], repair['after']) == value['correct_option']
+        ):
+            raise ValueError('Choice transcription repair must preserve the keyed TOEIC answer')
         target = changed
         parts = repair['field'].split('.')
         for name in parts[:-1]:

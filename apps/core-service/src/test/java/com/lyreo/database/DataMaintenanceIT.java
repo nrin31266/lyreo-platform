@@ -88,6 +88,20 @@ class DataMaintenanceIT {
         assertThat(Files.readString(output)).contains("after-fallback").doesNotContain("before-fallback");
         verify(ai,times(1)).executeMaintenance(anyString(),anyMap(),eq(4096),anyString(),eq("GEMINI"),eq("gemini-3.5-flash-lite"));
     }
+
+    @Test void resumesWithASmallerQueueUnderTheExplicitCumulativeCeiling() throws Exception {
+        Path input=directory.resolve("subset.jsonl"),output=directory.resolve("subset-results.json");
+        when(ai.executeMaintenance(anyString(),anyMap(),anyInt(),anyString()))
+            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"DEEPSEEK","deepseek-flash",
+                Map.of("structured",Map.of("changes",List.of(),"issues",List.of())),100,20,10));
+        var ceiling=new java.math.BigDecimal("0.10");
+        Files.writeString(input,work("first"));
+        maintenance.run(input,output,true,LocalDate.now(),"test-only-key",true,false,"DEEPSEEK",ceiling);
+        Files.writeString(input,work("second"));
+        maintenance.run(input,output,true,LocalDate.now(),"test-only-key",true,false,"DEEPSEEK",ceiling);
+        verify(ai,times(2)).executeMaintenance(anyString(),anyMap(),anyInt(),anyString());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM data_maintenance_work WHERE status='SUCCEEDED'",Integer.class)).isEqualTo(2);
+    }
     private String work(String id) {
         return """
             {"domain":"grammar","id":"%s","task":"translate","context":{"text":"A source"},"targets":[{"id":"q","fields":{},"allowedFields":["translation_vi"]}]}

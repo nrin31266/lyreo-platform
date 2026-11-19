@@ -21,8 +21,8 @@ public class DataMaintenance {
     static final BigDecimal INPUT_RATE=new BigDecimal("0.00000030"),OUTPUT_RATE=new BigDecimal("0.00000120");
     private enum MaintenanceModel {
         DEEPSEEK("DEEPSEEK", MODEL, "0.30", "1.20", OUTPUT, 8),
-        GEMINI_FLASH_LITE("GEMINI", "gemini-3.5-flash-lite", "0.30", "2.50", 4096, 2),
-        GEMINI_31_FLASH_LITE("GEMINI", "gemini-3.1-flash-lite", "0.25", "1.50", 4096, 2),
+        GEMINI_FLASH_LITE("GEMINI", "gemini-3.5-flash-lite", "0.30", "2.50", 4096, 1),
+        GEMINI_31_FLASH_LITE("GEMINI", "gemini-3.1-flash-lite", "0.25", "1.50", 4096, 1),
         GROQ_GPT_OSS("GROQ", "openai/gpt-oss-120b", "0.15", "0.60", 4096, 1);
 
         public final String provider;
@@ -119,7 +119,9 @@ public class DataMaintenance {
     private void run(Path input, Path output, boolean execute, LocalDate pricingDate, String credential,
                     boolean finalBatch, boolean sample, MaintenanceModel model, BigDecimal ceiling) throws Exception {
         boolean alternate = model != MaintenanceModel.DEEPSEEK;
-        if (alternate && (!finalBatch || ceiling == null || ceiling.signum() <= 0))
+        if (ceiling != null && ceiling.signum() <= 0)
+            throw new IllegalArgumentException("Maintenance USD ceiling must be positive");
+        if (alternate && (!finalBatch || ceiling == null))
             throw new IllegalArgumentException("Alternate maintenance models require batch mode and an explicit USD ceiling");
         String runId = finalBatch ? FINAL_RUN + (alternate ? "-" + model.model.replace('/','-') : "") : RUN;
         String version = finalBatch ? FINAL_VERSION : VERSION;
@@ -131,9 +133,9 @@ public class DataMaintenance {
         for(var unit:work) {int bytes=json.writeValueAsBytes(payload(unit, version, model)).length+prompt.getBytes(StandardCharsets.UTF_8).length;
             if(!Set.of("lexicon","grammar","toeic").contains(unit.domain()) || unit.targets()==null || unit.targets().isEmpty() || bytes > (finalBatch ? 60000 : MAX_INPUT_BYTES)) throw new IllegalArgumentException("Invalid or oversized maintenance work unit");
             estimate=estimate.add(model.reserve(bytes));}
-        BigDecimal budget = finalBatch ? estimate : BUDGET;
-        if (ceiling != null) budget=budget.min(ceiling);
-        final BigDecimal allowedBudget=budget;
+        // A final batch can resume with a narrower queue, while the ledger remains cumulative.
+        BigDecimal budget = finalBatch ? (ceiling == null ? estimate : ceiling)
+            : (ceiling == null ? BUDGET : BUDGET.min(ceiling));
         System.out.println("Work units="+work.size()+", conservative reservation USD="+estimate+", total cap="+budget+"; model="+model.model+". No automatic retries.");
         if(!execute) return;
         if(!LocalDate.now().equals(pricingDate)) throw new IllegalArgumentException("Confirm official pricing today before execution");
@@ -161,13 +163,19 @@ public class DataMaintenance {
         }
         int concurrency = finalBatch && !sample ? model.concurrency : 1;
         var halted = new java.util.concurrent.atomic.AtomicBoolean();
+        long nextGeminiCall = 0L;
         try (var pool = java.util.concurrent.Executors.newFixedThreadPool(concurrency)) {
             for (int offset = 0; offset < ready.size() && !halted.get(); offset += concurrency) {
+                if (!sample && model.provider.equals("GEMINI")) {
+                    long waitMillis = nextGeminiCall - System.currentTimeMillis();
+                    if (waitMillis > 0) Thread.sleep(waitMillis);
+                    nextGeminiCall = System.currentTimeMillis() + 4500;
+                }
                 var wave = ready.subList(offset, Math.min(offset + concurrency, ready.size()));
                 var futures = new ArrayList<java.util.concurrent.Future<?>>();
                 for (var unit : wave) {
                     futures.add(pool.submit(() -> {
-                        if (!halted.get() && !executeUnit(unit, runId, prompt, credential, allowedBudget, finalBatch, model)) {
+                        if (!halted.get() && !executeUnit(unit, runId, prompt, credential, budget, finalBatch, model)) {
                             halted.set(true);
                         }
                     }));
@@ -196,6 +204,9 @@ public class DataMaintenance {
         BigDecimal bound = prepared.bound();
         Boolean reserved = tx.execute(status -> {
             var run = jdbc.queryForMap("SELECT * FROM data_maintenance_run WHERE id=:run FOR UPDATE", Map.of("run", runId));
+            var reservedUsd = (BigDecimal) run.get("reserved_usd");
+            var limit = ((BigDecimal) run.get("budget_usd")).min(budget);
+            if (reservedUsd.compareTo(limit) > 0) return false;
             if (finalBatch && jdbc.update("""
                 UPDATE data_maintenance_work SET status='RESERVED',error_code=NULL,completed_at=NULL
                 WHERE fingerprint=:key AND status='FAILED' AND error_code='AI_HTTP_429'
@@ -204,7 +215,7 @@ public class DataMaintenance {
                 return true;
             }
             if ((!finalBatch && ((Number) run.get("attempts")).intValue() >= 100)
-                || ((BigDecimal) run.get("reserved_usd")).add(bound).compareTo(((BigDecimal) run.get("budget_usd")).min(budget)) > 0) {
+                || reservedUsd.add(bound).compareTo(limit) > 0) {
                 return false;
             }
             int inserted = jdbc.update("""

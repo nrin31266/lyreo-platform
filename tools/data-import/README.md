@@ -32,7 +32,7 @@ For private files, install rclone from its official distribution, authorize a Dr
 account that already has access, and set `DATA_DRIVE_REMOTE` to its name (without the colon) in the
 importer env. Use a private OAuth client when a shared rclone client is rate limited. Tokens remain
 in rclone's local credential store, never in the repository, package or command examples. An empty
-remote uses gdown for already-downloadable releases; it cannot bypass private Drive authorization.
+remote uses the public Drive download endpoint. Private releases require account authorization.
 No fetch command modifies sharing permissions.
 
 A local archive path or `file://` URL supports offline setup. Relative paths resolve from
@@ -176,7 +176,9 @@ To audit the final queue, add `--final` to the preparation command and set
 with `ARGS='--batch --sample --execute'`, then run the full queue with `ARGS='--batch --execute'`
 after review. Both execute modes require the pricing confirmation date. A rate limit stops new
 requests and exports completed results. A subsequent batch command reuses the saved results and
-the existing reservations for requests rejected with HTTP 429.
+the existing reservations for requests rejected with HTTP 429. When resuming with a smaller
+queue, set `DATA_MAINTENANCE_BUDGET_USD` to the cumulative ceiling for that model, including its
+existing ledger reservations. Set `DATA_MAINTENANCE_AI_URL` to target a separate maintenance runtime.
 
 For a provider fallback, set `DATA_MAINTENANCE_MODEL` to `GEMINI_FLASH_LITE`,
 `GEMINI_31_FLASH_LITE`, or `GROQ_GPT_OSS`. The script loads `GEMINI_API_KEY` or `GROQ_API_KEY`
