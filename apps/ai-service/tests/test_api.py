@@ -1,11 +1,17 @@
+import asyncio
+import logging
 import os
 
 os.environ["AI_RUNTIME_MODE"] = "mock"
 os.environ["AI_SERVICE_INTERNAL_TOKEN"] = "test-token"
 
+import httpx
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.runtime.qwen import _resolve_audio
 
 client = TestClient(app)
 AUTH = {"X-Lyreo-Internal-Token": "test-token"}
@@ -28,6 +34,29 @@ def test_health():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["runtime_mode"] == "mock"
+
+
+@pytest.mark.parametrize("upstream_status", [200, 403])
+def test_audio_download_keeps_signed_query_out_of_logs(monkeypatch, caplog, upstream_status):
+    client_type = httpx.AsyncClient
+    signature = "synthetic-signature-only-for-test"
+
+    def download(request):
+        assert request.url.params["X-Amz-Signature"] == signature
+        return httpx.Response(upstream_status, content=b"audio data")
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(
+        transport=httpx.MockTransport(download), **kwargs,
+    ))
+    monkeypatch.setattr("app.runtime.qwen._read_audio", lambda source: source)
+    url = f"https://media.example/audio?X-Amz-Signature={signature}"
+    with caplog.at_level(logging.INFO):
+        if upstream_status == 200:
+            assert asyncio.run(_resolve_audio(url)) == b"audio data"
+        else:
+            with pytest.raises(HTTPException, match="^502: Audio download failed$"):
+                asyncio.run(_resolve_audio(url))
+    assert signature not in caplog.text
 
 
 def test_internal_auth_required():

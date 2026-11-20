@@ -55,6 +55,13 @@ Browser chỉ nhận configured/last4/status, không plaintext. FastAPI không p
 `mock` hỗ trợ dev/CI deterministic không GPU/paid provider; `local` lazy-load
 Qwen ASR/alignment. SaaS provider routing độc lập với runtime mode; External provider execution follows the configured route.
 
+### FR-AI-005 — Configured paid providers
+
+DeepSeek là provider LLM thông thường. Admin nhập key qua màn hình provider, bật kết nối,
+chọn model và đặt priority/fallback trong route `GENERAL_LLM` như các provider khác.
+Core mã hóa key, chỉ chuyển credential qua gateway phía server và ghi provider/model thực tế
+vào audit. DeepSeek không được bật ngầm hoặc gọi khi provider chưa enabled.
+
 ### BR-AI-004 — Raw versus normalized output
 
 Raw provider output là artifact debug/audit trong object storage; normalized
@@ -93,7 +100,8 @@ error cho client, và không commit output nếu job không còn quyền tiếp 
 
 ### BR-AI-006 — Bounded library maintenance pilot
 
-Luồng bảo trì dữ liệu có quyền trả phí riêng, không thay chính sách route của app. Core sở hữu prompt,
+Luồng bảo trì dữ liệu có thể dùng provider đã cấu hình hoặc credential vận hành riêng, không tự bật
+route hay phát sinh gọi trả phí. Core sở hữu prompt,
 context, schema, cache và ngân sách; FastAPI chỉ thực thi capability. Pilot tối đa 100 đơn vị/1,5 USD,
 khóa ngân sách trước mỗi gọi, tính cả output/failure và không gọi lại mục đã thành công khi resume.
 Xác nhận giá chính thức ngày chạy; key đọc từ `.env` root phía server. Kết quả có diff/provenance,

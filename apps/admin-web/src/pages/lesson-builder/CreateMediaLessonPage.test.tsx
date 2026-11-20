@@ -29,6 +29,16 @@ function TestSource({type}:{type:'text'|'audio'}) {
 function show(type:'text'|'audio',query='') {
   render(<QueryClientProvider client={client}><I18nextProvider i18n={i18n}><MemoryRouter initialEntries={[`/lessons/new${query}`]}><Routes><Route path="/lessons/new" element={<TestSource type={type} />} /><Route path="/lessons/:id" element={<h1>Editor</h1>} /></Routes></MemoryRouter></I18nextProvider></QueryClientProvider>);
 }
+function CreateRoute() {
+  const [params] = useSearchParams();
+  return params.get('draft') ? <h1>Editor</h1> : <CreateLessonPage />;
+}
+function showCreateRoute(initialEntries: string[]) {
+  vi.stubGlobal('AbortController', transferableAbortController().constructor);
+  const router = createMemoryRouter([{ path: '/lessons/new', element: <CreateRoute /> }], { initialEntries });
+  render(<QueryClientProvider client={client}><I18nextProvider i18n={i18n}><RouterProvider router={router} /></I18nextProvider></QueryClientProvider>);
+  return router;
+}
 it('saves text with the discovered default voice without invoking synthesis', async () => {
   vi.mocked(authoring.createTextDraft).mockResolvedValue({id:'text-1'} as LessonDraft);
   show('text');
@@ -115,6 +125,53 @@ it.each([
   confirm.mockReturnValue(true);
   await userEvent.click(screen.getByRole('link',{name:'Leave'}));
   await screen.findByRole('heading',{name:'Catalog'});
+});
+
+it.each([
+  ['/lessons/new', 'YouTube URL'],
+  ['/lessons/new?type=text&draft=existing', 'Editor'],
+])('keeps unsaved form input until browser Back to %s is confirmed', async (previous, destination) => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const router = showCreateRoute([previous, '/lessons/new?type=text']);
+  fireEvent.change(screen.getByLabelText('English text'), { target: { value: 'Keep this draft.' } });
+
+  await act(async () => { await router.navigate(-1); });
+  expect(confirm).toHaveBeenCalledOnce();
+  expect(screen.getByLabelText('English text')).toHaveValue('Keep this draft.');
+
+  confirm.mockReturnValue(true);
+  await act(async () => { await router.navigate(-1); });
+  expect(screen.getByText(destination, { exact: true })).toBeVisible();
+});
+
+it('prompts once per source tab selection and keeps the form if canceled', async () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  showCreateRoute(['/lessons/new?type=text']);
+  fireEvent.change(screen.getByLabelText('English text'), { target: { value: 'Discard this draft.' } });
+
+  await userEvent.click(screen.getByRole('tab', { name: 'YouTube' }));
+  expect(confirm).toHaveBeenCalledOnce();
+  expect(screen.getByLabelText('English text')).toHaveValue('Discard this draft.');
+
+  confirm.mockReturnValue(true);
+  await userEvent.keyboard('{Enter}');
+  expect(confirm).toHaveBeenCalledTimes(2);
+  expect(screen.getByLabelText('YouTube URL')).toBeVisible();
+});
+
+it('allows audio range updates and navigation to the saved draft without a prompt', async () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  vi.mocked(authoring.fetchAudioSource).mockResolvedValue({ id: 'source-1', durationMs: 300000, contentType: 'audio/mpeg' });
+  vi.mocked(authoring.createAudioDraft).mockResolvedValue({ lessonId: 'audio-1', jobId: 'job-1' });
+  const router = showCreateRoute(['/lessons/new?type=audio&source=source-1']);
+  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Keep this audio title.' } });
+
+  await userEvent.click(await screen.findByRole('button', { name: 'Choose range' }));
+  expect(router.state.location.search).toContain('start=500&end=1500');
+  expect(screen.getByLabelText('Title')).toHaveValue('Keep this audio title.');
+  await userEvent.click(screen.getByRole('button', { name: 'Create lesson' }));
+  await screen.findByRole('heading', { name: 'Editor' });
+  expect(confirm).not.toHaveBeenCalled();
 });
 
 it('prevents switching source types until upload finishes', async () => {

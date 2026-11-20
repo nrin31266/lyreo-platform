@@ -612,7 +612,9 @@ class LessonAuthoringIT {
             .isInstanceOf(PermanentJobException.class).hasMessageContaining("draft changed");
         assertThat(service.get(draft.id).audioObjectKey).isNull();
         assertThat(service.get(draft.id).ttsVoice).isEqualTo("bf_emma");
-        verify(storage).delete(endsWith("/"+accepted.jobId()+".wav"));
+        var deletedKey = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(storage).delete(deletedKey.capture());
+        assertThat(deletedKey.getValue()).startsWith("lessons/"+draft.id+"/tts/").endsWith(".wav").doesNotEndWith("/"+accepted.jobId()+".wav");
     }
     @Test void audioUploadSurvivesReloadAndPreparesOnlySelectedRange() throws Exception {
         byte[] bytes=wav(2);

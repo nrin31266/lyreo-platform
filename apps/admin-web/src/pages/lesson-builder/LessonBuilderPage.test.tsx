@@ -67,6 +67,23 @@ it('starts the transport from the first playable sentence before a row is clicke
   await show();expect(screen.getByTestId('player')).toHaveAttribute('data-selected','s1');
 });
 
+it('collects vocabulary and grammar across sentences and jumps to the source note', async () => {
+  const first = { ...original.sentences[0], vocabulary: [
+    { surface: 'Hello', explanation: 'A greeting', label: 'LEXICAL', importance: 'MEDIUM', tokenStart: 0, tokenEnd: 1 },
+    { surface: '', explanation: '', label: 'LEXICAL', importance: 'MEDIUM', tokenStart: -1, tokenEnd: -1 },
+  ] };
+  const second = { ...original.sentences[0], id: 's2', contentStale: true, grammar: [
+    { surface: 'Hello world', explanation: 'A greeting followed by an address', label: 'GRAMMAR', importance: 'MEDIUM', tokenStart: 0, tokenEnd: 2 },
+  ] };
+  await show({ ...original, sentences: [first, second] });
+  await userEvent.click(screen.getByRole('button', { name: 'Lesson notes 2' }));
+  const dialog = screen.getByRole('dialog', { name: 'Lesson notes' });
+  expect(within(dialog).getByText('A greeting')).toBeVisible();
+  expect(within(dialog).getByText('A greeting followed by an address')).toBeVisible();
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Open sentence 2' }));
+  await waitFor(() => expect(screen.getByTestId('player')).toHaveAttribute('data-selected', 's2'));
+});
+
 it('shows publication failures inside the open preview and allows retry',async()=>{
   vi.mocked(api.publishLesson).mockRejectedValue(new Error('Publication failed'));
   await show();fireEvent.click(screen.getByRole('button',{name:'Preview & publish'}));

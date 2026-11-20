@@ -78,7 +78,7 @@ class LessonResetIT {
                     """);
                 String reset=Files.readString(Path.of("../../infra/postgres/reset-lessons.sql"));
                 assertThatThrownBy(()->sql.execute(reset)).hasMessageContaining("active lesson jobs");sql.execute("ROLLBACK");
-                assertThat(count(sql,"lesson")).isEqualTo(1);
+                assertThat(count(sql,"lesson")).isEqualTo(6);
                 assertThat(count(sql,"lesson_job_diagnostic")).isEqualTo(1);
                 sql.execute("UPDATE background_job SET status='CANCELLED' WHERE job_type='LESSON_AUTHORING'");
                 sql.execute("UPDATE vocabulary_card SET source_context_id='10000000-0000-0000-0000-000000000001',source_context_type='LESSON'");

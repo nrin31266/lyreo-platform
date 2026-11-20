@@ -8,6 +8,7 @@ import com.lyreo.ai.application.execution.AiExecutionResult;
 import com.lyreo.ai.application.execution.AiInvocationService;
 import com.lyreo.ai.domain.AiCapability;
 import com.lyreo.lesson.application.authoring.*;
+import com.lyreo.lesson.application.port.AuthoringMediaPort;
 import com.lyreo.lesson.application.port.AuthoringRepository;
 import com.lyreo.lesson.application.port.AuthoringSourcePort;
 import com.lyreo.lesson.domain.authoring.AuthoringLesson;
@@ -60,6 +61,32 @@ class LessonAuthoringJobHandlerTest {
         assertThatThrownBy(()->handler.execute(job,context)).isInstanceOfSatisfying(PermanentJobException.class,
             failure->assertThat(failure.errorCode()).isEqualTo("AI_CONFIGURATION_REQUIRED"));
         verifyNoInteractions(committer);
+    }
+    @Test void expiredTtsAttemptCannotDeleteTheRecoveredAttemptsAudio() throws Exception {
+        var media=mock(AuthoringMediaPort.class);
+        handler.setMedia(media);
+        lesson.sourceType="TEXT";lesson.ttsVoice="af_heart";lesson.sentences=List.of(sentence);
+        var recovered=new AuthoringLesson();
+        recovered.id=lesson.id;recovered.transcriptRevision=lesson.transcriptRevision;recovered.activeJobId=job.id();
+        recovered.sourceType=lesson.sourceType;recovered.ttsVoice=lesson.ttsVoice;recovered.sentences=List.of(sentence);
+        when(repository.find(lesson.id,false)).thenReturn(Optional.of(lesson),Optional.of(recovered));
+        when(repository.jobInput(job.id())).thenReturn(new AuthoringRepository.JobInput(lesson.id,"TTS",1,false));
+        when(ai.executeForProvider(eq(AiCapability.TTS),eq("LOCAL_KOKORO"),anyString(),anyMap(),anyMap()))
+            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"LOCAL_KOKORO","test",Map.of(
+                "audio_base64","AQ==","segments",List.of(Map.of("start_ms",0,"end_ms",1000))),null,null,1));
+        when(media.storeTts(eq(lesson.id),any(UUID.class),any(byte[].class))).thenAnswer(call ->
+            new AuthoringMediaPort.Audio("lessons/"+lesson.id+"/tts/"+call.getArgument(1)+".wav",1000));
+        doAnswer(call -> {
+            handler.execute(job,context);
+            throw new JobLeaseLostException("expired");
+        }).when(committer).commit(eq(job),any(),same(lesson));
+
+        assertThatThrownBy(()->handler.execute(job,context)).isInstanceOf(JobLeaseLostException.class);
+
+        var removed=ArgumentCaptor.forClass(String.class);
+        verify(storage).delete(removed.capture());
+        assertThat(removed.getValue()).isEqualTo(lesson.audioObjectKey).isNotEqualTo(recovered.audioObjectKey);
+        verify(committer).commit(eq(job),any(),same(recovered));
     }
     @Test void alignmentCommitsObservedPhraseGroupsWithoutChangingApprovedText() throws Exception {
         alignment(List.of(Map.of("text","We","start_ms",100,"end_ms",200),

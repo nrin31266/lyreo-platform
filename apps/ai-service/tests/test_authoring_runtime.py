@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
+from fastapi import HTTPException
 
 from app.config import Settings
 from app.providers.gemini import GeminiProvider, _interaction_usage
@@ -27,6 +28,50 @@ class Waveform:
 
 def request(**overrides):
     return ExecuteRequest(invocation_id='authoring-test', provider='GROQ', model='model', **overrides)
+
+
+@pytest.mark.parametrize('operation', ['stt', 'align'])
+def test_qwen_downloads_http_audio_before_normalizing(monkeypatch, operation):
+    runtime = QwenRuntime(Settings(_env_file=None))
+    client_type = httpx.AsyncClient
+
+    async def fetch(req):
+        assert req.url.query == b'X-Amz-Signature=a%2Fb'
+        assert req.extensions['timeout']['connect'] == 5
+        return httpx.Response(200, content=b'audio data')
+
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: client_type(
+        transport=httpx.MockTransport(fetch), **kwargs,
+    ))
+    read_audio = Mock(return_value=Waveform(1600))
+    monkeypatch.setattr('app.runtime.qwen._read_audio', read_audio)
+    runtime._load_asr = AsyncMock(return_value=SimpleNamespace(transcribe=Mock(return_value=[
+        SimpleNamespace(text='First window.'),
+    ])))
+    runtime._load_aligner = AsyncMock(return_value=SimpleNamespace(align=Mock(return_value=[
+        SimpleNamespace(text='Hi', start_time=0, end_time=.05),
+    ])))
+    asyncio.run(getattr(runtime, operation)(request(input={
+        'audio_url': 'https://media.example/audio?X-Amz-Signature=a%2Fb', 'text': 'Hi',
+    })))
+    read_audio.assert_called_once_with(b'audio data')
+
+
+def test_qwen_sanitizes_audio_fetch_timeout(monkeypatch):
+    runtime = QwenRuntime(Settings(_env_file=None))
+    client_type = httpx.AsyncClient
+
+    async def stall(req):
+        raise httpx.ConnectTimeout('connect failure with signed URL', request=req)
+
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: client_type(
+        transport=httpx.MockTransport(stall), **kwargs,
+    ))
+    read_audio = Mock()
+    monkeypatch.setattr('app.runtime.qwen._read_audio', read_audio)
+    with pytest.raises(HTTPException, match='^504: Audio download timed out$'):
+        asyncio.run(runtime.stt(request(input={'audio_url': 'https://media.example/audio?token=secret'})))
+    read_audio.assert_not_called()
 
 
 def test_asr_windows_preserve_every_sample_and_bound_gpu_input():

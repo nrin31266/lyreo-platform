@@ -94,4 +94,21 @@ class AssessmentSessionIT {
         assertThat(submitted.result().questions().getFirst().gapNumber()).isEqualTo(131);
         assertThat(submitted.result().groups().getFirst().documents()).containsExactly("<p>Gap (131)</p>");
     }
+
+    @Test void partTwoHidesSpokenTextUntilFeedback() {
+        UUID user = UUID.randomUUID(), placement = UUID.randomUUID();
+        jdbc.update("INSERT INTO app_user(id,keycloak_subject) VALUES(?,?)", user, user.toString());
+        var question = new QuestionContent("Where is the station?", "MULTIPLE_CHOICE",
+            List.of(new QuestionContent.Option("A", "On Main Street"), new QuestionContent.Option("B", "At noon"),
+                new QuestionContent.Option("C", "By train")),
+            "A", 1, null, null, null, null, null, List.of());
+        var item = new AssessmentSessions.Item(placement, UUID.randomUUID(), null, 2, 7, null, null, null, question, null);
+        var snapshot = new AssessmentSessions.Snapshot("Listening", null, List.of(item), List.of());
+        var started = sessions.start(user, "toeic", UUID.randomUUID(), "LISTENING", snapshot);
+
+        assertThat(started.questions().getFirst().text()).isNull();
+        assertThat(started.questions().getFirst().options()).extracting(QuestionContent.Option::text).containsOnly("");
+        var submitted = sessions.submit(user, started.id(), started.revision());
+        assertThat(submitted.result().questions().getFirst().content().title()).isEqualTo(question.title());
+    }
 }

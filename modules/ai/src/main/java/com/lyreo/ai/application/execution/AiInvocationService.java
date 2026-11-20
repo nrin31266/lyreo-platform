@@ -209,6 +209,9 @@ public final class AiInvocationService {
     private boolean permittedFreeRoute(AiRoute route) {
         String provider = route.providerCode().toUpperCase(java.util.Locale.ROOT);
         String model = route.model();
+        // DeepSeek is an explicitly configured paid route. Its credential, priority and spend
+        // decision are owned by Admin, so it is allowed through the same normal route path.
+        if (provider.equals("DEEPSEEK")) return model != null && model.startsWith("deepseek-");
         if (provider.equals("DEV_MOCK") && model.equals("mock")) return true;
         if (Set.of("LOCAL_KOKORO", "KOKORO").contains(provider)) {
             return route.capability() == AiCapability.TTS

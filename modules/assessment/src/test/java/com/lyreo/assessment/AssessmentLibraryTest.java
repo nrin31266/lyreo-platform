@@ -4,13 +4,18 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.lyreo.assessment.api.AssessmentLibrary;
+import com.lyreo.assessment.api.AssessmentSessions;
+import com.lyreo.assessment.application.port.SessionRepository;
 import com.lyreo.assessment.application.port.QuestionSource;
 import com.lyreo.assessment.domain.QuestionContent;
 import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.platform.content.DocumentStore;
+import com.lyreo.platform.content.AssetStore;
 import java.time.Instant;
 import java.util.*;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 
 class AssessmentLibraryTest {
     DocumentStore documents=mock(DocumentStore.class);
@@ -57,5 +62,18 @@ class AssessmentLibraryTest {
         assertThatThrownBy(()->library.validateStandalone(id,null)).isInstanceOf(RequestValidationException.class).hasMessageContaining("passage/audio");
         when(source.requiresContext(id)).thenReturn(false);
         assertThatCode(()->library.validateStandalone(id,null)).doesNotThrowAnyException();
+    }
+
+    @Test void sessionRejectsMalformedGroupMediaBeforePersistence() {
+        var sessions = new AssessmentSessions(mock(SessionRepository.class), new ObjectMapper(),
+            mock(ApplicationEventPublisher.class), mock(AssetStore.class));
+        UUID itemId = UUID.randomUUID();
+        var item = new AssessmentSessions.Item(itemId, itemId, null, 5, 101, null, null, null, question("A"), null);
+        var group = new AssessmentSessions.Group(UUID.randomUUID(), 7, List.of(),
+            List.of(new QuestionContent.Media(UUID.randomUUID(), "video")));
+        var snapshot = new AssessmentSessions.Snapshot("Test", null, List.of(item), List.of(group));
+        assertThatThrownBy(() -> sessions.start(UUID.randomUUID(), "toeic", UUID.randomUUID(), "full", snapshot))
+            .isInstanceOf(RequestValidationException.class)
+            .hasMessage("Invalid session group");
     }
 }

@@ -50,7 +50,9 @@ public class AssessmentSessions {
         if(domain==null || !Set.of("grammar","toeic").contains(domain) || snapshot==null || snapshot.title()==null || snapshot.groups()==null || snapshot.items()==null || snapshot.items().isEmpty() || snapshot.items().size()>200) throw new RequestValidationException("Choose between 1 and 200 questions");
         var ids=new HashSet<UUID>();var groups=new HashSet<UUID>();
         for(var group:snapshot.groups()) {
-            if(group==null || group.id()==null || !groups.add(group.id()) || group.documents()==null || group.media()==null || group.documents().stream().anyMatch(Objects::isNull)) throw new RequestValidationException("Invalid session group");
+            if(group==null || group.id()==null || !groups.add(group.id()) || group.documents()==null || group.media()==null || group.documents().stream().anyMatch(Objects::isNull)
+                || group.media().stream().anyMatch(media -> media==null || media.assetId()==null || media.role()==null || !Set.of("audio","image").contains(media.role())))
+                throw new RequestValidationException("Invalid session group");
         }
         for(var item:snapshot.items()) {
             if(item==null || item.id()==null || item.itemId()==null || !ids.add(item.id()) || item.groupId()!=null && !groups.contains(item.groupId())) throw new RequestValidationException("Invalid session questions");
@@ -102,8 +104,10 @@ public class AssessmentSessions {
     }
     public AssetStore.Asset media(UUID learnerId,UUID sessionId,UUID assetId) {
         var snapshot=snapshot(owned(learnerId,sessionId,false));
-        boolean present=snapshot.items().stream().flatMap(item->item.content().media().stream()).anyMatch(media->media.assetId().equals(assetId))
-            || snapshot.groups().stream().flatMap(group->group.media().stream()).anyMatch(media->media.assetId().equals(assetId));
+        boolean present=snapshot.items().stream().flatMap(item->item.content().media().stream())
+            .anyMatch(media->media!=null && media.assetId()!=null && media.assetId().equals(assetId))
+            || snapshot.groups().stream().flatMap(group->group.media().stream())
+            .anyMatch(media->media!=null && media.assetId()!=null && media.assetId().equals(assetId));
         if(!present) throw new ResourceNotFoundException("Session media not found");
         return assets.get(assetId);
     }
@@ -124,7 +128,15 @@ public class AssessmentSessions {
     private String status(SessionRepository.Row row) {return row.submittedAt()!=null?"SUBMITTED":row.expiresAt().isAfter(Instant.now())?"OPEN":"EXPIRED";}
     private View view(SessionRepository.Row row) {
         var snapshot=snapshot(row);
-        var questions=snapshot.items().stream().map(item->new QuestionView(item.id(),item.itemId(),item.part(),item.number(),item.groupId(),item.content().title(),item.part()==1 || item.part()==2?item.content().options().stream().map(option->new QuestionContent.Option(option.key(),"")).toList():item.content().options(),item.content().media(),item.gapNumber())).toList();
+        var questions = snapshot.items().stream().map(item -> {
+            var content = item.content();
+            boolean audioOnly = item.part() == 1 || item.part() == 2;
+            var options = audioOnly
+                ? content.options().stream().map(option -> new QuestionContent.Option(option.key(), "")).toList()
+                : content.options();
+            return new QuestionView(item.id(), item.itemId(), item.part(), item.number(), item.groupId(),
+                audioOnly ? null : content.title(), options, content.media(), item.gapNumber());
+        }).toList();
         return new View(row.id(),row.domain(),row.catalogId(),row.mode(),row.revision(),status(row),row.createdAt(),row.expiresAt(),snapshot.title(),questions,snapshot.groups().stream().map(group->new GroupView(group.id(),group.part(),group.documents(),group.media())).toList(),answers(row),result(row));
     }
 }

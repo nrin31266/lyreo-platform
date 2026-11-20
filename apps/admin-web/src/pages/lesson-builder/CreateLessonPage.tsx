@@ -5,7 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { CreateMediaLessonPage } from "./CreateMediaLessonPage";
 import "./lesson-builder.css";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link, type BlockerFunction } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -308,16 +308,27 @@ function CreateYouTubePage({ onDirtyChange, onBusyChange }: { onDirtyChange: (di
   );
 }
 
+function sourceType(params: URLSearchParams) {
+  const type = params.get('type');
+  return type === 'text' || type === 'audio' ? type : 'youtube';
+}
+
+const changesSourceInHistory: BlockerFunction = ({ currentLocation, nextLocation, historyAction }) => {
+  if (historyAction !== 'POP') return false;
+  const next = new URLSearchParams(nextLocation.search);
+  return !!next.get('draft') || sourceType(new URLSearchParams(currentLocation.search)) !== sourceType(next);
+};
+
 export function CreateLessonPage() {
   const { t } = useTranslation('admin');
   const [params, setParams] = useSearchParams();
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
-  const type = params.get('type') === 'text' ? 'text' : params.get('type') === 'audio' ? 'audio' : 'youtube';
+  const type = sourceType(params);
   return <section className="create-lesson-page grid gap-4">
-    <UnsavedChangesGuard dirty={dirty || busy} includeSearch={false} />
+    <UnsavedChangesGuard dirty={dirty || busy} includeSearch={changesSourceInHistory} />
     <header className="authoring-heading"><h1>{t("navigation.createLesson")}</h1></header>
-    <Tabs value={type} onValueChange={value => { if (value !== type && (!dirty || window.confirm(t("catalog.unsaved")))) { setDirty(false); setParams({ type: value }); } }}>
+    <Tabs value={type} activationMode="manual" onValueChange={value => { if (value !== type && (!dirty || window.confirm(t("catalog.unsaved")))) { setDirty(false); setParams({ type: value }); } }}>
     <div className="flex flex-wrap items-center justify-between gap-3"><TabsList aria-label={t('media.sourceType')}>
       <TabsTrigger disabled={busy} value="youtube">YouTube</TabsTrigger><TabsTrigger disabled={busy} value="text">{t('media.textType')}</TabsTrigger><TabsTrigger disabled={busy} value="audio">{t('media.audioType')}</TabsTrigger>
     </TabsList><AuthoringPrompt type={type} /></div>
