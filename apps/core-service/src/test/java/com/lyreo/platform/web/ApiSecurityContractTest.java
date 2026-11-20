@@ -70,7 +70,7 @@ class ApiSecurityContractTest {
 
     @Test
     void featureEntitlementDenialUsesSpecific403Code() {
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/toeic/tests/test/attempts");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/toeic/catalog/test/sessions");
         var response = new ApiExceptionHandler().handleAccessDenied(
             new FeatureEntitlementRequiredException(FeatureKey.of("toeic.full-access")), request);
         assertThat(response.getStatusCode().value()).isEqualTo(403);

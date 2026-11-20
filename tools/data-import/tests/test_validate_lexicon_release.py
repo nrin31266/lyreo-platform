@@ -122,7 +122,9 @@ class LexiconValidatorFailureTest(unittest.TestCase):
             # Corrupt senses.jsonl: AVAILABLE translation with matched_qualifier removed
             senses_file = out_dir / "senses.jsonl"
             lines = [json.loads(line) for line in senses_file.open()]
-            available_idx = next(i for i, s in enumerate(lines) if s["translation_status"] == "AVAILABLE")
+            available_idx = 0
+            lines[available_idx]["translation_status"] = "AVAILABLE"
+            lines[available_idx]["translation_vi"] = "bản dịch chưa xác minh"
             lines[available_idx]["matched_qualifier"] = None
             with senses_file.open("w", encoding="utf-8") as f:
                 for line in lines:

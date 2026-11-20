@@ -72,21 +72,19 @@ class LessonResetIT {
                       VALUES(gen_random_uuid(),'10000000-0000-0000-0000-000000000004','APPLY','SUCCEEDED',now());
                     INSERT INTO dataset_active_release(domain,release_id,activated_by)
                       VALUES('lexicon','10000000-0000-0000-0000-000000000004','reset-test');
-                    INSERT INTO dataset_activation_history(id,domain,release_id,action,activated_by)
-                      VALUES(gen_random_uuid(),'lexicon','10000000-0000-0000-0000-000000000004','ACTIVATE','reset-test');
                     INSERT INTO vocabulary_card(id,learner_id,headword_id,next_review_at)
                       VALUES(gen_random_uuid(),'10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000006',now());
                     INSERT INTO vocabulary_review(id,card_id,rating,next_due_at) SELECT gen_random_uuid(),id,'GOOD',now() FROM vocabulary_card;
                     """);
                 String reset=Files.readString(Path.of("../../infra/postgres/reset-lessons.sql"));
                 assertThatThrownBy(()->sql.execute(reset)).hasMessageContaining("active lesson jobs");sql.execute("ROLLBACK");
-                assertThat(count(sql,"lesson")).isEqualTo(1);
+                assertThat(count(sql,"lesson")).isEqualTo(6);
                 assertThat(count(sql,"lesson_job_diagnostic")).isEqualTo(1);
                 sql.execute("UPDATE background_job SET status='CANCELLED' WHERE job_type='LESSON_AUTHORING'");
                 sql.execute("UPDATE vocabulary_card SET source_context_id='10000000-0000-0000-0000-000000000001',source_context_type='LESSON'");
                 assertThatThrownBy(()->sql.execute(reset)).hasMessageContaining("Detach curriculum or vocabulary");sql.execute("ROLLBACK");
                 sql.execute("UPDATE vocabulary_card SET source_context_id=NULL");
-                List<String> kept=List.of("app_user","ai_provider","ai_capability_route","module_runtime_config","dataset_release","dataset_import_run","dataset_active_release","dataset_activation_history","lexicon_headword","lexicon_entry","assessment_item","toeic_test_catalog","toeic_test_version","grammar_topic_catalog","grammar_topic_version","vocabulary_card","vocabulary_review","lesson_category","lesson_youtube_channel","lesson_audio_source");
+                List<String> kept=List.of("app_user","ai_provider","ai_capability_route","module_runtime_config","dataset_release","dataset_import_run","dataset_active_release","lexicon_headword","lexicon_entry","assessment_item","toeic_test_catalog","toeic_test_version","grammar_topic_catalog","grammar_topic_version","vocabulary_card","vocabulary_review","lesson_category","lesson_youtube_channel","lesson_audio_source");
                 Map<String,Long> before=new HashMap<>();for(String table:kept) before.put(table,count(sql,table));
                 sql.execute(reset);
                 for(String table:kept) assertThat(count(sql,table)).as(table).isEqualTo(before.get(table));

@@ -21,8 +21,12 @@ import tarfile
 import time
 import unicodedata
 import uuid
+import re
 from pathlib import Path
 from typing import Iterator
+from lexicon_pronunciation import accent as source_accent, pronunciation_metadata
+from lexicon_vi_baseline import stage_record
+import source_repairs
 
 from lexicon_vi_context import (
     inventory_raw_record,
@@ -34,10 +38,10 @@ from lexicon_vi_context import (
 )
 
 BUILDER_NAME = "build_lexicon_release.py"
-BUILDER_VERSION = "1.0.1"
+BUILDER_VERSION = "2.0.1"
 PACKAGE_DOMAIN = "lexicon"
-PACKAGE_VERSION = "1.0.1"
-SCHEMA_VERSION = "1.1.0"
+PACKAGE_VERSION = "2.0.0"
+SCHEMA_VERSION = "2.0.0"
 PINNED_RAW_EN_SHA256 = "5ab411b8859490789d0d002074cc029569648f901db940c0ab10e709932e1632"
 PINNED_RAW_EN_DUMP_DATE = "2026-09-02"
 PINNED_RAW_VI_SHA256 = "10e62bccdf3d85fc9e7472c1f85b2149602f97c75177b09523f4762c57ef7d3d"
@@ -255,7 +259,11 @@ def build(
     staging_dir: Path,
     raw_vi_path: Path | None = None,
     enforce_checksum: bool = True,
+    version: str = PACKAGE_VERSION,
+    repairs: Path | None = None,
 ) -> dict:
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version) or repairs and tuple(map(int, version.split('.'))) <= (2, 0, 0):
+        fail("Reviewed source repairs require a new package version after 2.0.0")
     if unicodedata.unidata_version != REQUIRED_UNICODE_DATA_VERSION:
         fail(
             f"Unicode database {REQUIRED_UNICODE_DATA_VERSION} is required for stable Lexicon IDs; "
@@ -481,148 +489,15 @@ def build(
                 continue
             seen_en_vi_in_item.add(k)
             en_vi_emitted += 1
-            t_sense = identity_normalization(raw_qualifier or "").lower()
-            t_stems = content_stems(t_sense)
-
-            if not t_sense:
-                # No qualifier -> ITEM_CANDIDATE
-                t_hash = hashlib.sha256(vi_word.encode("utf-8")).hexdigest()[:12]
-                trans_id = str(uuid.uuid5(NAMESPACE_LYREO, f"lyreo:lexicon:trans:enwiktionary:{item_id}:{vi_word}:{t_hash}"))
-                trans_payload = {
-                    "id": trans_id,
-                    "entry_id": entry_id,
-                    "item_id": item_id,
-                    "sense_id": None,
-                    "word_vi": vi_word,
-                    "source": "enwiktionary",
-                    "source_scope": "item",
-                    "source_sense_qualifier": None,
-                    "link_status": "ITEM_CANDIDATE",
-                    "reason": "NO_SENSE_QUALIFIER",
-                    "tags": trans.get("tags") or [],
-                }
-                batch_translations.append((
-                    trans_id,
-                    entry_id,
-                    item_id,
-                    None,
-                    vi_word,
-                    "enwiktionary",
-                    "item",
-                    None,
-                    "ITEM_CANDIDATE",
-                    "NO_SENSE_QUALIFIER",
-                    canonical_json(trans_payload),
-                ))
-                continue
-
-            # Deterministic matching using substring and plural-stem containment
-            matches = []
-            for s in parsed_senses:
-                search_text = [identity_normalization(g).lower() for g in s["glosses"] + s["raw_glosses"]]
-                search_stems = [content_stems(g) for g in s["glosses"] + s["raw_glosses"]]
-                matched = bool(t_stems) and any(t_stems.issubset(toks) for toks in search_stems if toks)
-                if not matched and t_sense:
-                    matched = any(t_sense in g or g in t_sense for g in search_text if g)
-                if matched:
-                    matches.append(s)
-
-            if len(matches) == 1:
-                # Exactly one deterministic qualifier match -> QUALIFIER_MATCH
-                target_sense = matches[0]
-                if vi_word not in target_sense["linked_translations"]:
-                    target_sense["linked_translations"].append(vi_word)
-                if raw_qualifier and raw_qualifier not in target_sense["matched_qualifiers"]:
-                    target_sense["matched_qualifiers"].append(raw_qualifier)
-
-                t_hash = hashlib.sha256(f"{target_sense['id']}:{raw_qualifier}".encode("utf-8")).hexdigest()[:12]
-                trans_id = str(uuid.uuid5(NAMESPACE_LYREO, f"lyreo:lexicon:trans:enwiktionary:{item_id}:{vi_word}:{t_hash}"))
-                trans_payload = {
-                    "id": trans_id,
-                    "entry_id": entry_id,
-                    "item_id": item_id,
-                    "sense_id": target_sense["id"],
-                    "word_vi": vi_word,
-                    "source": "enwiktionary",
-                    "source_scope": "item",
-                    "source_sense_qualifier": raw_qualifier,
-                    "link_status": "QUALIFIER_MATCH",
-                    "reason": None,
-                    "tags": trans.get("tags") or [],
-                }
-                batch_translations.append((
-                    trans_id,
-                    entry_id,
-                    item_id,
-                    target_sense["id"],
-                    vi_word,
-                    "enwiktionary",
-                    "item",
-                    raw_qualifier,
-                    "QUALIFIER_MATCH",
-                    None,
-                    canonical_json(trans_payload),
-                ))
-            elif len(matches) > 1:
-                # Ambiguous match -> ITEM_CANDIDATE
-                t_hash = hashlib.sha256(f"ambiguous:{t_sense}".encode("utf-8")).hexdigest()[:12]
-                trans_id = str(uuid.uuid5(NAMESPACE_LYREO, f"lyreo:lexicon:trans:enwiktionary:{item_id}:{vi_word}:{t_hash}"))
-                trans_payload = {
-                    "id": trans_id,
-                    "entry_id": entry_id,
-                    "item_id": item_id,
-                    "sense_id": None,
-                    "word_vi": vi_word,
-                    "source": "enwiktionary",
-                    "source_scope": "item",
-                    "source_sense_qualifier": raw_qualifier,
-                    "link_status": "ITEM_CANDIDATE",
-                    "reason": f"AMBIGUOUS_MULTI_SENSE_MATCH ({len(matches)} matches)",
-                    "tags": trans.get("tags") or [],
-                }
-                batch_translations.append((
-                    trans_id,
-                    entry_id,
-                    item_id,
-                    None,
-                    vi_word,
-                    "enwiktionary",
-                    "item",
-                    raw_qualifier,
-                    "ITEM_CANDIDATE",
-                    f"AMBIGUOUS_MULTI_SENSE_MATCH ({len(matches)} matches)",
-                    canonical_json(trans_payload),
-                ))
-            else:
-                # No match in senses -> ITEM_CANDIDATE
-                t_hash = hashlib.sha256(f"nomatch:{t_sense}".encode("utf-8")).hexdigest()[:12]
-                trans_id = str(uuid.uuid5(NAMESPACE_LYREO, f"lyreo:lexicon:trans:enwiktionary:{item_id}:{vi_word}:{t_hash}"))
-                trans_payload = {
-                    "id": trans_id,
-                    "entry_id": entry_id,
-                    "item_id": item_id,
-                    "sense_id": None,
-                    "word_vi": vi_word,
-                    "source": "enwiktionary",
-                    "source_scope": "item",
-                    "source_sense_qualifier": raw_qualifier,
-                    "link_status": "ITEM_CANDIDATE",
-                    "reason": "NO_EXACT_SENSE_MATCH",
-                    "tags": trans.get("tags") or [],
-                }
-                batch_translations.append((
-                    trans_id,
-                    entry_id,
-                    item_id,
-                    None,
-                    vi_word,
-                    "enwiktionary",
-                    "item",
-                    raw_qualifier,
-                    "ITEM_CANDIDATE",
-                    "NO_EXACT_SENSE_MATCH",
-                    canonical_json(trans_payload),
-                ))
+            # A prose qualifier is evidence to review, not a source sense ID.
+            t_hash = hashlib.sha256(f"candidate:{raw_qualifier or ''}".encode("utf-8")).hexdigest()[:12]
+            trans_id = str(uuid.uuid5(NAMESPACE_LYREO, f"lyreo:lexicon:trans:enwiktionary:{item_id}:{vi_word}:{t_hash}"))
+            payload = {"id":trans_id,"entry_id":entry_id,"item_id":item_id,"sense_id":None,
+                "word_vi":vi_word,"source":"enwiktionary","source_scope":"item",
+                "source_sense_qualifier":raw_qualifier,"link_status":"ITEM_CANDIDATE",
+                "reason":"SOURCE_RELATION_UNVERIFIED","tags":trans.get("tags") or []}
+            batch_translations.append((trans_id,entry_id,item_id,None,vi_word,"enwiktionary","item",
+                raw_qualifier,"ITEM_CANDIDATE","SOURCE_RELATION_UNVERIFIED",canonical_json(payload)))
 
         # Build senses records
         for s in parsed_senses:
@@ -642,6 +517,8 @@ def build(
                 "translation_vi": trans_vi,
                 "translation_status": status,
                 "matched_qualifier": matched_q,
+                "definitions": {"en": s["primary_def"]} if s["primary_def"] else {},
+                "source_context": {"source": "enwiktionary"},
             }
             batch_senses.append((
                 s["id"],
@@ -693,13 +570,7 @@ def build(
             if not ipa and not audio_url and not audio_file:
                 continue
 
-            tags_str = " ".join(str(t).strip().lower() for t in sound.get("tags") or [] if str(t).strip())
-            if any(t in tags_str for t in ("us", "general american", "american")):
-                accent = "US"
-            elif any(t in tags_str for t in ("uk", "received pronunciation", "british", "england")):
-                accent = "UK"
-            else:
-                accent = "general"
+            accent = source_accent(sound)
 
             ipa_hash = hashlib.sha256((ipa or "").encode("utf-8")).hexdigest()[:12]
             audio_hash = hashlib.sha256((audio_url or audio_file or "").encode("utf-8")).hexdigest()[:12]
@@ -717,6 +588,7 @@ def build(
                 "audio_file": audio_file,
                 "source_url": source_url,
                 "tags": sound.get("tags") or [],
+                "pronunciation_context": pronunciation_metadata(sound, form=item.get("word", ""), source="enwiktionary"),
             }
             batch_pronunciations.append((
                 pron_id,
@@ -749,20 +621,11 @@ def build(
             inventory_raw_record(vi_item, record_line, vi_field_inventory)
             vi_word = identity_normalization(str(vi_item.get("word") or ""))
             entry_id = str(uuid.uuid5(NAMESPACE_LYREO, f"lyreo:lexicon:entry:en:{vi_word}"))
-            entry_row = conn.execute("SELECT 1 FROM entries WHERE id = ?", (entry_id,)).fetchone() if vi_word else None
+            matched_item_id, source_senses = stage_record(conn, vi_item, record_line, source_vi_sha, entry_id,
+                identity_normalization, lookup_normalization, canonical_json)
+            entry_row = bool(matched_item_id)
             vi_pos = normalized_source_pos(vi_item.get("pos"))
-            compatible_items = conn.execute(
-                "SELECT id FROM items WHERE entry_id = ? AND pos = ?", (entry_id, vi_pos)
-            ).fetchall() if vi_pos else []
-            matched_item_id = compatible_items[0][0] if len(compatible_items) == 1 else None
-            if vi_pos is None:
-                reason = "AUXILIARY_VI_UNKNOWN_POS"
-            elif len(compatible_items) == 1:
-                reason = "AUXILIARY_VI_UNIQUE_POS_ITEM"
-            elif len(compatible_items) > 1:
-                reason = "AUXILIARY_VI_AMBIGUOUS_POS_ITEMS"
-            else:
-                reason = "AUXILIARY_VI_NO_COMPATIBLE_POS_ITEM"
+            source_item_id = matched_item_id
 
             for sense_ordinal, vi_s in enumerate(vi_item.get("senses") or [], start=1):
                 vi_raw_senses_total += 1
@@ -780,14 +643,17 @@ def build(
                         continue
                     vi_emitted += 1
                     vi_candidates_count += 1
+                    reason = "SOURCE_SENSE"
                     vi_reason_counts[reason] = vi_reason_counts.get(reason, 0) + 1
-                    link_status = "ITEM_CANDIDATE" if matched_item_id else "ENTRY_CANDIDATE"
+                    matched_item_id = source_item_id
+                    linked_sense_id = source_senses[sense_ordinal]
+                    link_status = "DIRECT_SENSE"
                     trans_id = occurrence_id(source_vi_sha, record_line, sense_ordinal, gloss_ordinal)
                     trans_payload = {
                         "id": trans_id,
                         "entry_id": entry_id,
                         "item_id": matched_item_id,
-                        "sense_id": None,
+                        "sense_id": linked_sense_id,
                         "word_vi": gloss,
                         "source": "viwiktionary",
                         "source_scope": "viwiktionary_gloss",
@@ -801,7 +667,7 @@ def build(
                         "tags": vi_s.get("tags") or [],
                     }
                     batch_translations.append((
-                        trans_id, entry_id, matched_item_id, None, gloss,
+                        trans_id, entry_id, matched_item_id, linked_sense_id, gloss,
                         "viwiktionary", "viwiktionary_gloss", None,
                         link_status, reason, canonical_json(trans_payload),
                     ))
@@ -814,6 +680,17 @@ def build(
 
     # Write collections sorted deterministically by ID
     output_dir.mkdir(parents=True, exist_ok=True)
+    reviewed_repairs = source_repairs.validate(json.loads(repairs.read_text()), "lexicon") if repairs else None
+    if reviewed_repairs:
+        for target_id in {repair["id"] for repair in reviewed_repairs["repairs"]}:
+            row = conn.execute("SELECT payload FROM senses WHERE id=?", (target_id,)).fetchone()
+            if row is None:
+                fail("Source repair target is missing")
+            payload = source_repairs.record("senses.jsonl", json.loads(row[0]), reviewed_repairs)
+            conn.execute("UPDATE senses SET payload=? WHERE id=?", (canonical_json(payload), target_id))
+        target = output_dir / source_repairs.PATH
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(canonical_json(reviewed_repairs) + "\n", encoding="utf-8")
 
     def write_entries_collection() -> tuple[int, int, str]:
         target = output_dir / "entries.jsonl"
@@ -911,8 +788,9 @@ def build(
         "source_reconciliation": {
             "source_rows_total": raw_rows_count,
             "source_rows_english": en_rows_count,
+            "source_rows_vietnamese": vi_field_inventory["record"]["preserved"].get("pos", 0),
             "items_emitted": counts["items.jsonl"],
-            "difference_unreconciled": en_rows_count - counts["items.jsonl"],
+            "difference_unreconciled": en_rows_count + vi_field_inventory["record"]["preserved"].get("pos", 0) - counts["items.jsonl"],
             "rows_skipped": skipped_rows_count,
             "rows_merged": 0,
             "rows_deduplicated": 0,
@@ -956,10 +834,12 @@ def build(
     }
 
     report_path = output_dir / "validation_report.json"
+    if reviewed_repairs:
+        report["accepted_source_repairs"] = len(reviewed_repairs["repairs"])
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     # Write LICENSE and ATTRIBUTION notices
-    license_text = """Lyreo Lexicon Data Release (v1.0.1)
+    license_text = f"""Lyreo Lexicon Data Release (v{version})
 
 This dataset incorporates content extracted from Wiktionary (English edition)
 and optionally Vietnamese Wiktionary via the Wiktextract parser by Tatu Ylönen (Kaikki.org).
@@ -1006,7 +886,7 @@ maintains its own independent author attribution and license (e.g. CC0, CC BY, C
         "manifest_schema_version": 1,
         "package": {
             "domain": PACKAGE_DOMAIN,
-            "version": PACKAGE_VERSION,
+            "version": version,
             "schema_version": SCHEMA_VERSION,
             "generated_at": generated_at,
         },
@@ -1042,6 +922,8 @@ maintains its own independent author attribution and license (e.g. CC0, CC BY, C
         },
     }
 
+    if reviewed_repairs:
+        manifest["source"]["source_repairs"] = {"path": source_repairs.PATH, "count": len(reviewed_repairs["repairs"])}
     manifest_path = output_dir / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -1049,7 +931,7 @@ maintains its own independent author attribution and license (e.g. CC0, CC BY, C
     staging_size_bytes = staging_db_path.stat().st_size if staging_db_path.exists() else 0
 
     # Package tar.gz
-    canonical_root_name = f"{PACKAGE_DOMAIN}-{PACKAGE_VERSION}"
+    canonical_root_name = f"{PACKAGE_DOMAIN}-{version}"
     archive_sha = package_release(output_dir, archive_path, canonical_root_name)
     archive_size_bytes = archive_path.stat().st_size
 
@@ -1089,6 +971,8 @@ def main() -> None:
     parser.add_argument("--raw-vi", type=Path, help="Optional auxiliary Vietnamese Wiktionary extract")
     parser.add_argument("--output", type=Path, required=True, help="Output directory for clean release")
     parser.add_argument("--archive", type=Path, required=True, help="Output path for archive .tar.gz")
+    parser.add_argument("--version", default=PACKAGE_VERSION)
+    parser.add_argument("--source-repairs", type=Path, help="Reviewed source corrections with exact before/after and record hashes")
     parser.add_argument(
         "--generated-at",
         default=dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
@@ -1115,6 +999,8 @@ def main() -> None:
         staging_dir=args.staging_dir.resolve(),
         raw_vi_path=args.raw_vi.resolve() if args.raw_vi else None,
         enforce_checksum=not args.allow_unverified_checksum,
+        version=args.version,
+        repairs=args.source_repairs,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

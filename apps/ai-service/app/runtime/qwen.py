@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import math
 from typing import Any
 from urllib.parse import unquote, urlparse
+
+import httpx
+from fastapi import HTTPException
 
 from ..config import Settings
 from ..schemas import ExecuteRequest, ExecuteResponse
@@ -106,7 +110,7 @@ class QwenRuntime:
         source = _normalize_audio_source(request.input.get('audio') or request.input.get('audio_url'))
         if not source:
             raise ValueError('STT requires input.audio or input.audio_url')
-        audio = await asyncio.to_thread(_read_audio, source)
+        audio = await _resolve_audio(source)
         language = request.options.get('language', 'English')
         model = await self._load_asr()
         segments = []
@@ -153,7 +157,7 @@ class QwenRuntime:
         })
 
     async def _align_words(self, audio: Any, text: str, language: Any, segments=None) -> list[dict[str, Any]]:
-        waveform = await asyncio.to_thread(_read_audio, audio)
+        waveform = await _resolve_audio(audio)
         model = await self._load_aligner()
         windows = _alignment_windows(
             waveform, text, segments,
@@ -195,8 +199,28 @@ def _bound_alignment_word(word: dict[str, Any], duration_ms: float, precision_ms
     return word
 
 
+async def _resolve_audio(source: Any):
+    if isinstance(source, str) and urlparse(source).scheme in ('http', 'https'):
+        # Async HTTPX races IPv4/IPv6 addresses, unlike qwen-asr's blocking urllib download.
+        try:
+            async with asyncio.timeout(120):
+                async with httpx.AsyncClient(timeout=httpx.Timeout(30, connect=5), follow_redirects=True) as client:
+                    response = await client.get(source)
+                    response.raise_for_status()
+                    source = response.content
+        except (httpx.TimeoutException, TimeoutError):
+            raise HTTPException(504, 'Audio download timed out') from None
+        except httpx.HTTPError:
+            raise HTTPException(502, 'Audio download failed') from None
+    return await asyncio.to_thread(_read_audio, source)
+
+
 def _read_audio(source: Any):
     from qwen_asr.inference.utils import normalize_audio_input
+    if isinstance(source, bytes):
+        import soundfile
+
+        source = soundfile.read(io.BytesIO(source), dtype='float32')
     waveform = normalize_audio_input(source)
     if not len(waveform):
         raise ValueError('Audio contains no samples')

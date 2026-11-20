@@ -76,11 +76,11 @@ class AuxiliaryViBuilderTest(unittest.TestCase):
                 with self.subTest(name=name, reason=reason):
                     rows, _, _ = self.build_records(primary, [auxiliary])
                     row = rows[0]
-                    self.assertEqual(row["link_status"], status)
-                    self.assertEqual(row["reason"], "AUXILIARY_VI_" + reason)
+                    self.assertEqual(row["link_status"], "DIRECT_SENSE")
+                    self.assertEqual(row["reason"], "SOURCE_SENSE")
                     self.assertEqual(row["source_pos"], pos)
-                    self.assertEqual(row["item_id"] is not None, status == "ITEM_CANDIDATE")
-                    self.assertIsNone(row["sense_id"])
+                    self.assertIsNotNone(row["item_id"])
+                    self.assertIsNotNone(row["sense_id"])
 
     def test_multiple_blocks_and_duplicate_glosses_preserve_occurrences_and_context(self):
         records = [vi(pos="noun", glosses=["same", "same"], pos_title="block one"),
@@ -92,7 +92,7 @@ class AuxiliaryViBuilderTest(unittest.TestCase):
         self.assertEqual(len({r["id"] for r in rows}), 5)
         nouns = [r for r in rows if r["source_pos"] == "noun"]
         self.assertEqual(len(nouns), 4)
-        self.assertTrue(all(r["item_id"] is None for r in nouns))
+        self.assertTrue(all(r["item_id"] is not None for r in nouns))
         self.assertEqual(len({r["source_context"]["record_line"] for r in nouns}), 2)
         self.assertEqual({r["source_context"]["sense_ordinal"] for r in nouns}, {1, 2})
         self.assertEqual({r["source_context"]["gloss_ordinal"] for r in nouns}, {1, 2})
@@ -106,7 +106,8 @@ class AuxiliaryViBuilderTest(unittest.TestCase):
         # Two valid unmatched glosses count as two skipped occurrences, not one sense.
         text += json.dumps(vi("absent", glosses=["a", "b"])) + "\n"
         rows, report, result = self.build_records([en()], raw_vi_text=text)
-        self.assertEqual({r["word_vi"] for r in rows}, {"A", "B"})
+        self.assertEqual({r["word_vi"] for r in rows}, {"A", "B", "a", "b"})
+        rows = [r for r in rows if r["source_context"]["record_line"] == 4]
         contexts = [r["source_context"] for r in rows]
         self.assertTrue(all(c["record_line"] == 4 and c["sense_ordinal"] == 2 for c in contexts))
         self.assertEqual({c["gloss_ordinal"] for c in contexts}, {3, 4})
@@ -115,7 +116,7 @@ class AuxiliaryViBuilderTest(unittest.TestCase):
         counts = report["translation_source_reconciliation"]
         self.assertEqual(counts["viwiktionary_gloss_occurrences_total"], 6)
         self.assertEqual(counts["viwiktionary_empty_gloss_occurrences"], 2)
-        self.assertEqual(counts["viwiktionary_unmatched_entry_gloss_occurrences"], 2)
+        self.assertEqual(counts["viwiktionary_unmatched_entry_gloss_occurrences"], 0)
         self.assertEqual(counts["viwiktionary_senses_without_glosses"], 1)
         self.assertEqual(counts["viwiktionary_difference_unreconciled"], 0)
 
@@ -213,8 +214,8 @@ class AuxiliaryViBuilderTest(unittest.TestCase):
         third, _, _ = self.build_records([en("arbitrary", "noun", 12)], raw_vi_path=source)
         self.assertEqual(first[0]["id"], second[0]["id"])
         self.assertEqual(first[0]["id"], third[0]["id"])
-        self.assertIsNone(second[0]["item_id"])
-        self.assertNotEqual(first[0]["item_id"], third[0]["item_id"])
+        self.assertIsNotNone(second[0]["item_id"])
+        self.assertEqual(first[0]["item_id"], third[0]["item_id"])
 
     def test_collision_fails_without_replacing_a_source_occurrence(self):
         with mock.patch("build_lexicon_release.occurrence_id", return_value="collision"):
@@ -247,24 +248,13 @@ class AuxiliaryViBuilderTest(unittest.TestCase):
         release = Path(result["release"])
         entries = {e["id"]: e["identity_form"] for e in map(json.loads, (release / "entries.jsonl").read_text().splitlines())}
         items = list(map(json.loads, (release / "items.jsonl").read_text().splitlines()))
-        compatible = {}
-        for item in items:
-            compatible.setdefault((item["entry_id"], item["pos"]), []).append(item["id"])
-        self.assertEqual(set(entries.values()), {"bank", "seal", "bark", "lead", "fan", "tear", "match", "bass", "saw", "watch", "spring", "palm", "rock"})
+        vi_items = {item["id"] for item in items if item.get("source_context",{}).get("source") == "viwiktionary"}
         rows = [r for r in rows if r["source"] == "viwiktionary"]
         for row in rows:
-            targets = compatible.get((row["entry_id"], row["source_pos"]), [])
             with self.subTest(word=entries[row["entry_id"]], pos=row["source_pos"], gloss=row["word_vi"]):
-                self.assertEqual(row["item_id"], targets[0] if len(targets) == 1 else None)
-                self.assertIsNone(row["sense_id"])
-        for word in ("bank", "seal", "bark", "lead", "fan", "tear", "match", "bass", "palm", "rock"):
-            noun_rows = [r for r in rows if entries[r["entry_id"]] == word and r["source_pos"] == "noun"]
-            self.assertTrue(noun_rows)
-            self.assertTrue(all(r["link_status"] == "ENTRY_CANDIDATE" and r["item_id"] is None for r in noun_rows))
-        for word in ("watch", "spring"):
-            noun_rows = [r for r in rows if entries[r["entry_id"]] == word and r["source_pos"] == "noun"]
-            self.assertTrue(noun_rows)
-            self.assertTrue(all(r["link_status"] == "ITEM_CANDIDATE" for r in noun_rows))
+                self.assertIn(row["item_id"], vi_items)
+                self.assertIsNotNone(row["sense_id"])
+                self.assertEqual(row["link_status"], "DIRECT_SENSE")
         saw = [r for r in rows if entries[r["entry_id"]] == "saw" and r["word_vi"].rstrip(".") == "Quá khứ của see"]
         self.assertEqual(len(saw), 2)
         self.assertNotEqual(saw[0]["id"], saw[1]["id"])

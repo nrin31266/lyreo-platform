@@ -175,6 +175,7 @@ class Runner:
 def main():
     runner = Runner(Path(__file__).resolve().parents[1])
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+    signal.signal(signal.SIGHUP, lambda *_: sys.exit(129))  # Closing the terminal must stop the JVM too.
     try:
         return runner.run()
     except KeyboardInterrupt:

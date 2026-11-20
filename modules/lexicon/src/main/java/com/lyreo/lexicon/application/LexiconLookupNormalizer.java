@@ -4,12 +4,12 @@ import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.text.Normalizer2;
 
 /** Mirrors the clean release builder's NFKC, strip, full casefold lookup contract. */
-final class LexiconLookupNormalizer {
+public final class LexiconLookupNormalizer {
     private static final Normalizer2 NFKC = Normalizer2.getNFKCInstance();
 
     private LexiconLookupNormalizer() {}
 
-    static String displayQuery(String rawQuery) {
+    public static String displayQuery(String rawQuery) {
         String normalized = NFKC.normalize(rawQuery == null ? "" : rawQuery);
         int start = 0;
         int end = normalized.length();
@@ -27,7 +27,7 @@ final class LexiconLookupNormalizer {
         return UCharacter.isUWhiteSpace(codePoint) || (codePoint >= 0x1c && codePoint <= 0x1f);
     }
 
-    static String lookupQuery(String displayQuery) {
+    public static String lookupQuery(String displayQuery) {
         return UCharacter.foldCase(displayQuery, true);
     }
 }

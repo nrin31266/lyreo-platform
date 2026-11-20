@@ -7,3 +7,9 @@ class TestResizeObserver {
   disconnect() {}
 }
 globalThis.ResizeObserver = TestResizeObserver;
+
+// Radix Select uses browser pointer/scroll APIs that jsdom does not implement.
+HTMLElement.prototype.hasPointerCapture ??= () => false;
+HTMLElement.prototype.setPointerCapture ??= () => {};
+HTMLElement.prototype.releasePointerCapture ??= () => {};
+HTMLElement.prototype.scrollIntoView ??= () => {};

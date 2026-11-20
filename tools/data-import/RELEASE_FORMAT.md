@@ -1,8 +1,8 @@
-# Lyreo dataset release convention (v1)
+# Lyreo dataset release convention
 
 This document defines the small envelope shared by independently versioned data packages. It does not define a universal content schema or a generic ingestion framework. Each domain owns its builder, records, validation rules, and release lifecycle.
 
-Archive filenames use the domain and full package version, for example `grammar-toeic-1.0.1.tar.gz` and `lexicon-1.0.0.tar.gz`. Install each version beside earlier versions under `.data/releases/<domain>/<package-version>/` so rollback does not depend on overwriting a mutable path.
+Archive filenames use the domain and full package version, for example `grammar-toeic-1.0.1.tar.gz` and `lexicon-1.0.0.tar.gz`. Install the pinned package once under `.data/releases/<domain>/<package-version>/`; later packages are rejected by normal setup.
 
 ## Package envelope
 
@@ -30,6 +30,26 @@ The builder refuses an existing output path and never writes under raw source. A
 
 The canonical Grammar/TOEIC archive uses `grammar-toeic-<package-version>/` (for example `grammar-toeic-1.0.1/`) as its single tar member root. The fetcher verifies this root and installs it under `.data/releases/grammar-toeic/<package-version>/` after checking the manifest's exact package and schema versions. Future packages similarly use their canonical domain and version as the tar member root.
 
+## Reviewed source repairs
+
+A changed version may include `editorial/source_repairs.json` with
+`format=lyreo.reviewed-source-repairs.v1`, its domain and an explicit list of repairs.
+`source.source_repairs` records its path/count; the normal file inventory verifies the bundle.
+Each repair identifies a collection, stable row ID and allowed field, the canonical
+SHA-256 of the full original row, exact before/after values, reviewer, time, reason and evidence.
+Builders reject stale rows, wrong domains, duplicate targets and unsupported fields.
+
+The narrow allowlist covers question Vietnamese explanations/translations, group Vietnamese
+translations, Lexicon examples and corroborated truncated endings of incorrect TOEIC choices.
+A choice repair preserves the order, every other choice and the keyed answer. For an entire
+question demonstrably transcribed from the wrong context, a TOEIC-only transcription repair
+requires two independent source references and replaces the stem, four choices, translation and
+rationale together. The original keyed answer and option order are preserved. Source passages,
+media and identities are protected. The independent validator reverses repairs, verifies every original row hash, then
+compares against raw source when supplied. The report retains `accepted_source_repairs`; the bundle
+retains the original text. Raw files and earlier releases remain immutable. AI-reviewed changes
+stay in their separate `editorial/language_overrides.json` bundle.
+
 ## Issue states
 
 Use `FIXED`, `NORMALIZED`, `DERIVED`, `QUARANTINED`, `SOURCE_ONLY`, or `UNRESOLVED`. An issue code describes the anomaly; the state describes its treatment. `QUARANTINED` means the source row is retained in a quarantine collection and excluded from active content. `SOURCE_ONLY` means the source value is retained in a named source-only collection or field and has no inferred active relationship or behavior. `UNRESOLVED` is allowed only if the domain validator establishes that the affected content still has a safe, complete fallback or the record is withheld. A release report must retain issues even when transformations repair them.
@@ -39,7 +59,7 @@ The domain-specific importer later needs only the clean package contract. Downlo
 ## Lexicon clean schema 1.1.0
 
 Lexicon package `1.0.1` uses canonical schema `1.1.0` and builder `1.0.1`; import and
-validation also support immutable schema `1.0.0` for old snapshots and rollback.
+validation also supports immutable schema `1.0.0` for old snapshots.
 Entry/item/sense/form/pronunciation records and English-native translation semantics
 are unchanged. `QUALIFIER_MATCH` remains a deterministic heuristic, not verified meaning.
 
@@ -94,3 +114,38 @@ Canonical structural IDs remain stable on the same pinned input/EN algorithm; pu
 PostgreSQL/API snapshot IDs are release-scoped and change for a new manifest/release.
 Only `headwordId` is the lifetime Vocabulary reference. VI occurrence IDs are stable
 for the pinned dump, not across upstream reordering or recompression.
+
+
+## Lexicon clean schema 2.0.0
+
+Package 2.0.0 retains one case-sensitive entry/headword identity, adding source-owned VI items,
+senses, examples, forms and sounds. `definition_en` may be null when `definitions.vi` supplies a
+valid meaning. `definitions` is a language-keyed object; `source_context` identifies source/locator
+for internal reconciliation. A language string does not imply an equivalent meaning in another
+source. Old sense/candidate links are not promoted by POS/ordinal/lexical similarity. Each native
+sense and occurrence keeps its own stable package ID; the importer maps snapshot IDs within the
+release while retaining lifetime `headwordId`.
+
+Pronunciations add `pronunciation_context`: form, notation/system, exact source regions/labels,
+usage/scope evidence and source record identity. `IPA` and `SOURCE` notation systems remain distinct.
+An unspecified scope stays `UNSPECIFIED`; one record containing both notation and audio supplies
+link evidence, while matching accents across records do not. Rendering may group duplicate
+recordings only within the same proven usage/notation context and source identity/checksum.
+Selected provenance stays internal; learner DTOs expose the source name and usage groups without
+source locators or storage keys. The source field inventory and raw validator check coverage.
+
+## Grammar/TOEIC package 2.0.0
+
+The additive clean schema remains 1.0.0. Shared annotations retain
+`question_options_translation_vi` even when a separate question/options translation cannot be
+reliably split. Normalized ordered `toeic/documents.jsonl` preserves visible text, tables and
+source question links. Hash-pinned source corrections are recorded as fixed issues; unresolved
+required source media remains in group `source_issues`, not silently removed after import.
+
+## Multipart transport
+
+A private Drive file can contain a JSON index with `format=lyreo.archive-parts.v1`,
+`archive_sha256` and ordered `parts` (`url`, `size_bytes`, `sha256`). The transport reader checks
+part bounds and hashes, concatenates in order and verifies the original archive SHA before normal
+package validation. Remote index children must be HTTPS Drive files. Index URLs are not package
+content or credentials. An archive split never changes its package/manifest version or checksum.

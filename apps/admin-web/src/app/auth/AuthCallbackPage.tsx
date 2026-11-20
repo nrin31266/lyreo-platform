@@ -18,8 +18,10 @@ export function AuthCallbackPage() {
 
     userManager
       .signinRedirectCallback()
-      .then(() => {
-        navigate('/', { replace: true });
+      .then(user => {
+        const state = user.state as { returnTo?: unknown } | undefined;
+        const path = typeof state?.returnTo === 'string' ? state.returnTo : '/';
+        navigate(path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/auth/') ? path : '/', { replace: true });
       })
       .catch((cause: unknown) => {
         setError(cause instanceof Error ? cause.message : t('signInFailed'));

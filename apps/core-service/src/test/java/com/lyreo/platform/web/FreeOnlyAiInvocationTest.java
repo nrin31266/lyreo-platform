@@ -60,8 +60,8 @@ class FreeOnlyAiInvocationTest {
         verifyNoInteractions(gateway, audit);
     }
 
-    @Test void blocksPaidAndUnconfirmedRoutesBeforeReadingCredentialOrCallingProvider() {
-        for (String provider : List.of("DEEPSEEK", "GEMINI")) {
+    @Test void blocksUnconfirmedRoutesBeforeReadingCredentialOrCallingProvider() {
+        for (String provider : List.of("GEMINI")) {
             when(routes.findEnabledRoutes(AiCapability.GENERAL_LLM)).thenReturn(List.of(
                 new AiRoute(UUID.randomUUID(), provider, "gemini-3.5-flash-lite", AiCapability.GENERAL_LLM, 10, false)));
             var service = new AiInvocationService(new AiRouter(routes), routes, gateway, audit);
@@ -71,6 +71,21 @@ class FreeOnlyAiInvocationTest {
         }
         verify(routes, never()).decryptedCredentialFor(any());
         verifyNoInteractions(gateway, audit);
+    }
+
+    @Test void allowsConfiguredDeepSeekRouteThroughNormalCredentialAndPriorityPath() {
+        var route = new AiRoute(UUID.randomUUID(), "DEEPSEEK", "deepseek-flash", AiCapability.GENERAL_LLM, 1, false);
+        when(routes.findEnabledRoutes(AiCapability.GENERAL_LLM)).thenReturn(List.of(route));
+        when(routes.decryptedCredentialFor(route)).thenReturn("encrypted-key");
+        var expected = new AiExecutionResult(UUID.randomUUID(), "DEEPSEEK", route.model(), Map.of("ok", true), 10, 5, 12);
+        when(gateway.execute(any())).thenReturn(expected);
+        var service = new AiInvocationService(new AiRouter(routes), routes, gateway, audit);
+
+        assertThat(service.execute(AiCapability.GENERAL_LLM, "test", Map.of(), Map.of())).isSameAs(expected);
+        var command = org.mockito.ArgumentCaptor.forClass(AiExecutionCommand.class);
+        verify(gateway).execute(command.capture());
+        assertThat(command.getValue().provider()).isEqualTo("DEEPSEEK");
+        assertThat(command.getValue().credential()).isEqualTo("encrypted-key");
     }
 
     @Test void refusesOversizedGroqFallbackWithoutChangingContextOrSendingRequest() {

@@ -128,6 +128,20 @@ class AuthoringContentGeneratorTest {
         verify(ai,never()).executeForProvider(any(),anyString(),anyString(),anyMap(),anyMap());
         verify(ai).execute(any(),argThat(prompt->!prompt.contains("1|")),anyMap(),anyMap());
     }
+    @Test void retryRequiresOriginalSentenceIdsAndRejectsRenumberedRows() {
+        lesson.options=new AuthoringOptions(Set.of(),Set.of("TRANSLATION"),"vi-VN","AUTO",20,8,"DISABLED","US","LOCAL");
+        var first=lesson.sentences.getFirst();
+        first.translation="Một";first.contentKeys.put("TRANSLATION",AuthoringContent.key(lesson,0,"TRANSLATION"));
+        when(ai.execute(any(),anyString(),anyMap(),anyMap())).thenReturn(result(Map.of(
+            "structured",Map.of("tr",List.of(List.of(1,"Sai"))))));
+
+        assertThatThrownBy(()->generator.generate(job,input,lesson,context)).hasMessageContaining("sentence=2: missing translation");
+
+        verify(ai).execute(any(),argThat(prompt->prompt.contains("Use the exact ID before |")
+            && prompt.contains("Allowed IDs in this batch: [2]") && prompt.contains("2|She feels better now.")),anyMap(),anyMap());
+        assertThat(first.translation).isEqualTo("Một");
+        assertThat(lesson.sentences.getLast().translation).isNull();
+    }
     @Test void cancellationAfterInferencePreventsCheckpoint() {
         when(ai.execute(any(),anyString(),anyMap(),anyMap())).thenAnswer(call->{
             doThrow(new java.util.concurrent.CancellationException()).when(context).throwIfCancellationRequested();

@@ -1,5 +1,6 @@
 package com.lyreo.platform.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -15,6 +16,31 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class JobFailureBoundaryTest {
+    @Test void claimsEachJobImmediatelyBeforeExecutingIt() throws Exception {
+        var repository = mock(BackgroundJobRepository.class);
+        var transitions = mock(JobStateTransitionService.class);
+        var handler = mock(JobHandler.class);
+        var first = mock(BackgroundJob.class);
+        var second = mock(BackgroundJob.class);
+        var lease = Duration.ofSeconds(60);
+        when(first.jobType()).thenReturn("TEST");
+        when(second.jobType()).thenReturn("TEST");
+        when(handler.jobType()).thenReturn("TEST");
+        when(repository.claim("worker", 1, lease)).thenReturn(List.of(first), List.of(second), List.of());
+        when(repository.heartbeat(any(), eq("worker"), eq(lease))).thenReturn(true);
+        when(transitions.succeeded(any(), eq("worker"))).thenReturn(true);
+
+        try (var worker = new BackgroundJobWorker(repository, List.of(handler), transitions, "worker", lease, 5)) {
+            assertThat(worker.runOnce()).isEqualTo(2);
+        }
+        var order = inOrder(repository, handler);
+        order.verify(repository).claim("worker", 1, lease);
+        order.verify(handler).execute(eq(first), any());
+        order.verify(repository).claim("worker", 1, lease);
+        order.verify(handler).execute(eq(second), any());
+        order.verify(repository).claim("worker", 1, lease);
+    }
+
     @Test void unexpectedFailureKeepsDatabaseDetailsOutOfRetryAndTerminalMessages() throws Exception {
         for (int attempt : List.of(1, 3)) {
             var repository = mock(BackgroundJobRepository.class);

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { RiRefreshLine, RiSearchLine, RiLoader4Line, RiExternalLinkLine, RiFileCopyLine, RiDownloadLine, RiCheckLine } from '@remixicon/react';
+import { AdminPagination } from '@/components/AdminPagination';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -25,7 +26,7 @@ import type { Job } from './jobs.types';
 const active = new Set(['QUEUED', 'RUNNING', 'RETRY_WAIT', 'CANCEL_REQUESTED']);
 const cancellable = new Set(['QUEUED', 'RUNNING', 'RETRY_WAIT']);
 const statuses = ['ACTIVE', 'QUEUED', 'RUNNING', 'RETRY_WAIT', 'CANCEL_REQUESTED', 'FAILED', 'SUCCEEDED', 'CANCELLED'];
-const jobTypes = ['LESSON_AUTHORING', 'LESSON_BUILD', 'LESSON_SOURCE_PREVIEW', 'VOICE_SAMPLE_PREPARE', 'YOUTUBE_CHANNEL_SYNC'];
+const jobTypes = ['LESSON_AUTHORING', 'LESSON_BUILD', 'LESSON_SOURCE_PREVIEW', 'VOICE_SAMPLE_PREPARE', 'YOUTUBE_CHANNEL_SYNC', 'DATA_IMPORT', 'LEXICON_EDITORIAL_AI', 'QUESTION_EDITORIAL_AI'];
 const authoring = (job: Job) => job.ownerModule === 'lesson' && job.jobType === 'LESSON_AUTHORING' && !!job.ownerReferenceId;
 function JobStatus({ job }: { job: Job }) {
   const { t } = useTranslation('admin');
@@ -83,7 +84,7 @@ export function JobsPage() {
       <TableCell><div className="jobs-progress"><span>{job.currentStep ? t(`lessonAuthoring.labels.${job.currentStep}`, { defaultValue: job.currentStep }) : t('jobs.waiting')}</span>{active.has(job.status) && <Progress value={job.progressPercent} aria-label={t('jobs.progress')} />}{job.errorCode && <span className="text-destructive">{job.errorCode}</span>}</div></TableCell>
       <TableCell className="jobs-date">{date(job.createdAt)}</TableCell><TableCell><Duration job={job} /></TableCell><TableCell><Button variant="outline" size="sm" onClick={() => update('job', job.id)}>{t('jobs.details')}</Button></TableCell>
     </TableRow>)}</TableBody></Table></div> : !list.isError && <Empty><EmptyTitle>{t('jobs.emptyTitle')}</EmptyTitle><EmptyDescription>{t(status || type ? 'jobs.emptyFiltered' : 'jobs.emptyDescription')}</EmptyDescription>{(status || type) && <Button variant="outline" onClick={() => { const next = new URLSearchParams(params); ['status', 'type', 'page'].forEach(key => next.delete(key)); setParams(next); }}>{t('jobs.clearFilters')}</Button>}</Empty>}
-    {list.data && <footer className="jobs-pagination"><span>{t('jobs.total', { count: list.data.total })}</span><div><span>{t('jobs.page', { number: list.data.page + 1 })}</span><Button variant="outline" disabled={list.isFetching || page === 0} onClick={() => update('page', String(page - 1))}>{t('catalog.previous')}</Button><Button variant="outline" disabled={list.isFetching || (page + 1) * list.data.size >= list.data.total} onClick={() => update('page', String(page + 1))}>{t('catalog.next')}</Button></div></footer>}
+    {list.data && <footer className="jobs-pagination"><span>{t('jobs.total', { count: list.data.total })}</span><AdminPagination page={list.data.page} pageCount={Math.ceil(list.data.total / list.data.size)} disabled={list.isFetching || list.isError} onPageChange={page => update('page', page ? String(page) : '')} /></footer>}
     <Sheet open={!!queryId} onOpenChange={open => { if (!open) update('job', ''); }}><SheetContent className="jobs-sheet"><SheetHeader><SheetTitle>{t('jobs.details')}</SheetTitle><SheetDescription>{t('jobs.detailsHelp')}</SheetDescription></SheetHeader>
       {!validId ? <p role="alert">{t('jobs.enterUuid')}</p> : query.isPending ? <JobSkeleton /> : <><CatalogError error={query.error} retry={() => void query.refetch()} retrying={query.isFetching} />{query.data && <JobDetails key={query.data.id} job={query.data} date={date} />}</>}
     </SheetContent></Sheet>

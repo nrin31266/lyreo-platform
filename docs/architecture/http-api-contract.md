@@ -137,3 +137,73 @@ and restoration is hidden. Shared source/media and learning history are retained
 10,000-character/1,000-sentence limits, splits the source consistently and preserves unchanged
 sentence identities. Source edits invalidate generated audio/timing/review; saving never invokes AI.
 The source action may save and then explicitly enqueue `/synthesize` with the returned revision.
+
+## Library administration and learner cutover
+
+Admin library roots are `/admin/lexicon`, `/admin/grammar/{topic|subtopic|bank}`,
+`/admin/assessment-items` and `/admin/toeic` under `/api/v1`. They support list/detail and corrections to existing content,
+`PUT /{id}/draft {revision,content}`, publish `{revision}` (optional `reason`, at most 2,000 characters), status `{revision,status}`,
+history/audit and restore `{revision,publicationId}`. Stale mutations return 409. Restore creates a
+new immutable publication. `DELETE /{id}?revision=N` permits unpublished unreferenced drafts only.
+
+Grammar/assessment/TOEIC `/page` returns `{items,total,page,size}` (zero-based page, size 1–100);
+array list routes remain available for existing callers. Lexicon `/count` returns the exact filtered
+total and `/browse` uses opaque `after`/`before` cursors. `tail=true` reads the final page, with
+bounded `skip` (0–90) for its neighbouring pages; no deep offset is used. Admin uses one numbered
+paginator with first/last pages and ellipses across catalogs. Search debounces 300 ms and resets
+pagination; filters and page anchors are encoded in the URL.
+Admin document DTOs include `hasUnpublishedChanges`; unchanged publication requests return the
+current document without allocating another revision. Visibility changes do not count as content edits.
+TOEIC accepts only FULL_TEST content with 200 placements in the standard Part ranges.
+Restoring a TOEIC publication also validates its structure and current publication blockers.
+`GET /admin/toeic/source-review` returns active-source passage issue locations for review deep links.
+`GET /admin/toeic/{id}/preview` returns the saved test and its published question content keyed
+by placement ID. The Admin can filter this read-only preview by section or Part without
+opening a learner session. An unavailable question is omitted from the question map.
+`GET /admin/grammar/review` lists current structural issues (`id,title,kind,code,parentId`), separate
+from immutable import reports. `GET /admin/grammar/{kind}/{id}/check` validates saved metadata and
+pinned question revisions, returning `{code,questionId,number}` issues without changing content.
+
+Lexicon filters include type/POS/translation/state, Grammar access/state, TOEIC access/year/state
+and current quality-report status. `POST /bulk-preview` accepts `{items:[{id,revision}]}` and reports current
+revisions/usages. `/bulk-status` applies `{items,status}` atomically for 1–100 unique targets.
+
+Content enters these catalogs through the offline dataset pipeline. Export is `GET /{id}/export?format=json|csv`; CSV is a lossy
+simple-field interchange, rejected for known complex annotation/media cases. Formula-leading CSV
+cells are escaped. TOEIC export uses versioned JSON; it retains complete related groups.
+
+Question/Lexicon `/{id}/ai` list/start durable suggestions. Async responses include job Location.
+Accept checks base/accepted revision and only selected fields, with per-suggestion idempotency.
+Dictionary requests include `{revision,senseIds,brief,operation}` with MATCH, TRANSLATE or EXAMPLE
+(legacy SUGGEST remains readable). Accept is `{revision,index,mode}`; translation mode must be
+REPLACE or APPEND. Suggestions include senseId/field/value and nullable candidateId plus reason.
+Admin translation DTOs retain sourceContext/origin for review; learner translations omit them. Learner senses expose only the source name, language-keyed definitions and stable sense ID, without raw source locators.
+TTS requests include operation TTS, supported voice, optional itemId scope and `reviewed=true`; output is a synthetic
+asset requiring preview/accept. AI never changes a supplied answer or publishes content.
+
+`/admin/content-media` uploads decoded bounded audio/images, returning opaque metadata. Authorized
+`/{assetId}/file` serves a Resource (including framework byte-range responses), no-store/nosniff.
+Dataset package installation is operator-only. See the [import guide](../../tools/data-import/README.md).
+
+Learners use `/grammar/catalogs/{kind}` and `/toeic/catalog` plus detail/start-session endpoints.
+Grammar catalog summaries expose the Vietnamese title and `titleEn` for locale-aware display.
+The Lexicon detail's `readingModes` lists available `en-vi` and `en-en` views.
+`/assessment-sessions` provides private history/detail, optimistic answer saves and idempotent submit.
+Open DTOs omit answer keys and transcripts; submitted results carry pinned grading evidence.
+Media authorization requires membership in that learner's session. Sessions remain resumable for
+24 hours despite later publication/hiding. Obsolete source scaffold discovery/direct-submit controllers
+and service stacks are removed; old stored attempts and schema remain preserved.
+
+
+### Current library quality and TOEIC context
+
+`GET /admin/toeic/{id}/quality` and `GET /admin/grammar/{kind}/{id}/quality` return the latest
+report (nullable). POST starts a durable check and returns 202 with jobId/Location. Reports include
+status, revision/fingerprint, rulesVersion, checkedAt and issues `{code,severity,location,message,href}`.
+Changed dependencies or rules invalidate older reports. Cancelled/failed jobs never imply pass;
+publication validates current saved content on the server.
+
+`/admin/toeic/{id}/questions/{placement}` reads/edits a question in test context. Draft mutations
+carry test/question revisions; AI uses the current saved Part, placement, transcript and documents.
+Saving pins the question publication into that test draft; publishing the whole test is separate.
+Learner sessions keep the publication/question/media evidence captured at start.

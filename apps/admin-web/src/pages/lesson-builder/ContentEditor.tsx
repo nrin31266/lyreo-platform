@@ -1,7 +1,9 @@
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RiAddLine, RiDeleteBinLine, RiInformationLine } from '@remixicon/react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -36,6 +38,45 @@ export function AnnotatedTranscript({ sentence }: { sentence: AuthoringSentence 
     const end = sorted[i + 1], matching = spans.filter(span => span.start <= start && span.end >= end);
     return matching.length ? <mark key={start} title={matching.map(span => span.explanation).join('\n')}>{sentence.text.slice(start, end)}</mark> : <span key={start}>{sentence.text.slice(start, end)}</span>;
   })}</p>;
+}
+export function LessonNotes({ sentences, onJump }: { sentences: AuthoringSentence[]; onJump: (id: string) => void }) {
+  const { t } = useTranslation('admin');
+  const [open, setOpen] = useState(false);
+  const target = useRef<string | null>(null);
+  const groups = (['vocabulary', 'grammar'] as const).map(kind => ({
+    label: kind === 'vocabulary' ? 'LEXICAL' : 'GRAMMAR',
+    notes: sentences.flatMap((sentence, index) => sentence[kind]
+      .filter(note => note.surface.trim() && note.explanation.trim())
+      .map((note, position) => ({ note, index, position, sentenceId: sentence.id, stale: sentence.contentStale }))),
+  }));
+  const total = groups.reduce((count, group) => count + group.notes.length, 0);
+
+  return <Dialog open={open} onOpenChange={setOpen}>
+    <DialogTrigger asChild><Button variant="outline" size="sm">{t('finish.lessonNotes')} <span className="tabular-nums text-muted-foreground">{total}</span></Button></DialogTrigger>
+    <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl" onCloseAutoFocus={() => {
+      if (!target.current) return;
+      const id = target.current;
+      target.current = null;
+      requestAnimationFrame(() => onJump(id));
+    }}>
+      <DialogHeader><DialogTitle>{t('finish.lessonNotes')}</DialogTitle><DialogDescription>{t('finish.lessonNotesHelp')}</DialogDescription></DialogHeader>
+      {groups.map(({ label, notes }) => <section key={label} className="min-w-0 space-y-2">
+        <h3 className="text-sm font-semibold">{t(`contentAuthoring.${label}`)} <span className="tabular-nums text-muted-foreground">{notes.length}</span></h3>
+        {!notes.length ? <p className="text-sm text-muted-foreground">{t('finish.lessonNotesEmpty')}</p> :
+          <ul className="divide-y rounded-md border">{notes.map(({ note, sentenceId, index, position, stale }) =>
+            <li className="space-y-1 p-3 text-sm wrap-break-word" key={`${sentenceId}-${position}`}>
+              <strong>{note.surface}</strong>
+              {stale && <span className="ms-2 text-xs text-muted-foreground">{t('contentAuthoring.stale')}</span>}
+              <p>{note.explanation}</p>
+              <Button variant="link" size="sm" className="h-auto px-0 py-1" onClick={() => {
+                target.current = sentenceId;
+                setOpen(false);
+              }}>{t('finish.openNoteSentence', { number: index + 1 })}</Button>
+            </li>
+          )}</ul>}
+      </section>)}
+    </DialogContent>
+  </Dialog>;
 }
 export function ContentOptionsPanel({ draft, disabled, onChange }: { draft: Pick<LessonDraft, "options" | "statistics">; disabled: boolean; onChange: (options: AuthoringOptions) => void }) {
   const { t } = useTranslation('admin');

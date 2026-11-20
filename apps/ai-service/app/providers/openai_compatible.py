@@ -72,6 +72,13 @@ class OpenAICompatibleProvider:
             body["max_completion_tokens"] = budget
         if "max_tokens" in body and "max_completion_tokens" in body:
             raise ValueError("Specify only one completion token budget")
+        thinking = request.options.get("thinking")
+        if thinking is not None:
+            if request.provider.upper() != "DEEPSEEK" or thinking not in ("enabled", "disabled"):
+                raise ValueError("thinking is only supported for DeepSeek with enabled/disabled")
+            body["thinking"] = {"type": thinking}
+            if "max_completion_tokens" in body:
+                body["max_tokens"] = body.pop("max_completion_tokens")
         schema = request.options.get("json_schema")
         if isinstance(schema, dict) and schema:
             name = request.options.get("response_schema") or "lyreo_response"
@@ -96,11 +103,19 @@ class OpenAICompatibleProvider:
         choice = data["choices"][0]
         content = choice["message"].get("content")
         if not isinstance(content, str) or not content.strip():
-            raise ValueError("AI completion returned no text output")
+            if request.provider.upper() != "DEEPSEEK" or choice.get("finish_reason") != "length":
+                raise ValueError("AI completion returned no text output")
+            # Core rejects the truncated completion and records even reasoning-only usage.
+            content = ""
         structured = _json_object_or_none(content)
         output: dict[str, Any] = {"content": content}
         if structured is not None:
             output["structured"] = structured
+        details = usage.get("completion_tokens_details")
+        if isinstance(details, dict):
+            reasoning = details.get("reasoning_tokens")
+            if type(reasoning) is int and reasoning >= 0:
+                output["reasoning_tokens"] = reasoning
 
         return ExecuteResponse(
             output=output,

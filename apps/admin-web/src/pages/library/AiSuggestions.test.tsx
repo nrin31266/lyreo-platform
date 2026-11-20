@@ -1,0 +1,24 @@
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { I18nextProvider } from 'react-i18next';
+import { i18n } from '@/i18n';
+import { api } from '@/lib/api';
+import { AiSuggestions } from './AiSuggestions';
+vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), api:vi.fn() }));
+let cache: QueryClient;
+beforeEach(async () => { vi.clearAllMocks(); await i18n.changeLanguage('en'); cache=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}}); });
+afterEach(()=>{cleanup();cache.clear();});
+it('starts suggestions for imported content in one action, saving a draft with the returned revision first', async () => {
+  const draft={title:'Choose the verb',transcriptEn:null};
+  const document={id:'word',revision:0,hasUnpublishedChanges:false,status:'PUBLISHED',publicationId:null,draft,updatedAt:null,updatedBy:null};
+  const adopt=vi.fn();
+  vi.mocked(api).mockImplementation(async (url,options) => url.endsWith('/draft') ? {...document,revision:1} : options?.method==='POST' ? {id:'request'} : []);
+  render(<QueryClientProvider client={cache}><I18nextProvider i18n={i18n}><AiSuggestions endpoint='/api/v1/admin/assessment-items' document={document} dirty={false} adopt={adopt} /></I18nextProvider></QueryClientProvider>);
+  expect(api).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByText('AI suggestions'));
+  await userEvent.click(screen.getByRole('button',{name:'Suggest translations & explanations'}));
+  await waitFor(()=>expect(api).toHaveBeenCalledWith('/api/v1/admin/assessment-items/word/ai', expect.objectContaining({method:'POST',body:JSON.stringify({revision:1,operation:'SUGGEST',count:20,brief:''})})));
+  expect(adopt).toHaveBeenCalledWith({...document,revision:1});
+});

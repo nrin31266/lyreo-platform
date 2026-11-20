@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.lyreo.lexicon.domain.LexiconEntry;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,20 @@ import tools.jackson.databind.ObjectMapper;
 
 class LexiconDetailMapperTest {
     private final LexiconDetailMapper mapper = new LexiconDetailMapper(new ObjectMapper());
+
+    @Test
+    void exposesVietnameseSourceMeaningWithoutInternalLocators() {
+        var old = entry("", "");
+        var sense = old.senses().getFirst();
+        var vi = new LexiconEntry.LexiconSense(sense.id(),sense.itemId(),0,"noun",null,"Ngân hàng",
+            LexiconEntry.TranslationStatus.AVAILABLE,"[]","[]","[]",null,Map.of("vi","Ngân hàng"),
+            Map.of("source","viwiktionary","record_line",42,"source_sha256","internal"));
+        var source = new LexiconEntry(old.id(),old.headwordId(),old.canonicalForm(),old.normalizedForm(),old.type(),old.language(),old.sourceMetadataJson(),old.licenseText(),old.items(),old.forms(),List.of(vi),old.pronunciations(),old.translations());
+        var response = mapper.from(source).senses().getFirst();
+        assertThat(response.definitionEn()).isNull();
+        assertThat(response.definitions()).containsExactlyEntriesOf(Map.of("vi","Ngân hàng"));
+        assertThat(response.sourceContext()).containsExactlyEntriesOf(Map.of("source","viwiktionary"));
+    }
 
     static Stream<Arguments> invalidJson() {
         return Stream.of("form.tags", "sense.rawGlosses", "sense.examples", "sense.tags",

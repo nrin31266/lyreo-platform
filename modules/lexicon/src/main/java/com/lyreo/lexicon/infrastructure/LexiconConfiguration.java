@@ -14,8 +14,8 @@ public class LexiconConfiguration {
         return new com.lyreo.lexicon.api.LexiconLinkService(repository);
     }
     @Bean
-    LexiconRepository lexiconRepository(NamedParameterJdbcTemplate jdbc) {
-        return new JdbcLexiconRepository(jdbc);
+    LexiconRepository lexiconRepository(NamedParameterJdbcTemplate jdbc,com.lyreo.platform.content.DocumentStore documents,tools.jackson.databind.ObjectMapper json) {
+        return new JdbcLexiconRepository(jdbc,documents,json);
     }
 
     @Bean

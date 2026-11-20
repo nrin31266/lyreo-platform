@@ -9,18 +9,19 @@ import mimetypes
 import os
 import sys
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
 from clean_import_common import (
     ReleasePackage,
     audit_orphans,
-    activate_existing_release,
-    activate_release,
     begin_run,
     chunks,
     connect,
     db_url_from_args,
+    ensure_single_install,
+    finalize_install,
     fail_run,
     finish_run,
     insert_values,
@@ -130,6 +131,7 @@ def group_row(package: ReleasePackage, row: dict[str, Any]) -> tuple[Any, ...]:
         row.get("source_html_sha256"),
         row.get("document_parse_status"),
         row["document_count"],
+        pg_json(row.get("source_issues", [])),
     )
 
 
@@ -570,6 +572,15 @@ def verify_or_upload_media(client, bucket: str, path: Path, *, sha256: str,
 
 
 def _media_configuration() -> tuple[Any, str]:
+    mode = os.getenv("STORAGE_MODE", "r2")
+    if mode == "local":
+        from local_media import LocalMediaClient
+        root = os.getenv("LOCAL_STORAGE_ROOT")
+        if not root:
+            raise ValueError("LOCAL_STORAGE_ROOT is required for local media import")
+        return LocalMediaClient(Path(root)), "local"
+    if mode != "r2":
+        raise ValueError("STORAGE_MODE must be local or r2")
     bucket = os.getenv("R2_BUCKET")
     client = s3_client()
     if client is None or not bucket:
@@ -581,49 +592,48 @@ def _upload_and_insert_assets(conn, package: ReleasePackage, run_id: uuid.UUID, 
                               client, bucket: str, progress: dict[str, int]) -> tuple[int, int]:
     uploads = 0
     release_rows_inserted = 0
-    for batch in chunks(jsonl_rows(package.root / "shared/assets.jsonl"), batch_size):
-        for row in batch:
-            path = (package.root / row["path"]).resolve(strict=True)
-            if not path.is_relative_to(package.root.resolve()):
-                raise ValueError(f"Media path escapes release root: {row['path']}")
-            key = media_object_key(row["id"])
-            if verify_or_upload_media(
-                client,
-                bucket,
-                path,
-                sha256=row["id"],
-                size_bytes=row["size_bytes"],
-                mime_type=row["mime_type"],
-                object_key=key,
-            ):
-                uploads += 1
-        blob_rows = [
-            (row["id"], row["mime_type"], row["size_bytes"], media_object_key(row["id"]))
-            for row in batch
-        ]
-        asset_rows = [asset_row(package, row) for row in batch]
-        with conn.transaction():
-            insert_values(conn, "media_blob", ("sha256", "mime_type", "size_bytes", "storage_object_key"), blob_rows)
-            for digest, mime_type, size_bytes, object_key in blob_rows:
-                existing = conn.execute(
-                    "SELECT mime_type,size_bytes,storage_object_key FROM media_blob WHERE sha256=%s",
-                    (digest,),
-                ).fetchone()
-                if existing != (mime_type, size_bytes, object_key):
-                    raise ValueError(f"Conflicting media blob metadata for SHA-256 {digest}")
-            release_rows_inserted += insert_values(
-                conn,
-                "release_media_asset",
-                ("id", "release_id", "package_asset_id", "blob_sha256", "package_path", "source_paths"),
-                asset_rows,
-            )
-            progress["active_rows_read"] += len(batch)
-            progress["records_inserted"] += release_rows_inserted - progress.get("asset_inserted_before", 0)
-            progress["asset_inserted_before"] = release_rows_inserted
-            conn.execute(
-                "UPDATE dataset_import_run SET records_read=%s,records_inserted=%s WHERE id=%s",
-                (progress["records_read"], progress["records_inserted"], run_id),
-            )
+    def verify(row):
+        path = (package.root / row["path"]).resolve(strict=True)
+        if not path.is_relative_to(package.root.resolve()):
+            raise ValueError(f"Media path escapes release root: {row['path']}")
+        return verify_or_upload_media(client, bucket, path, sha256=row["id"],
+                                      size_bytes=row["size_bytes"], mime_type=row["mime_type"],
+                                      object_key=media_object_key(row["id"]))
+
+    with ThreadPoolExecutor(max_workers=8) as workers:
+        for batch in chunks(jsonl_rows(package.root / "shared/assets.jsonl"), min(batch_size, 100)):
+            uploads += sum(workers.map(verify, batch))
+            blob_rows = [
+                (row["id"], row["mime_type"], row["size_bytes"], media_object_key(row["id"]))
+                for row in batch
+            ]
+            asset_rows = [asset_row(package, row) for row in batch]
+            with conn.transaction():
+                insert_values(conn, "media_blob", ("sha256", "mime_type", "size_bytes", "storage_object_key"), blob_rows)
+                for digest, mime_type, size_bytes, object_key in blob_rows:
+                    existing = conn.execute(
+                        "SELECT mime_type,size_bytes,storage_object_key FROM media_blob WHERE sha256=%s",
+                        (digest,),
+                    ).fetchone()
+                    if existing != (mime_type, size_bytes, object_key):
+                        raise ValueError(f"Conflicting media blob metadata for SHA-256 {digest}")
+                release_rows_inserted += insert_values(
+                    conn,
+                    "release_media_asset",
+                    ("id", "release_id", "package_asset_id", "blob_sha256", "package_path", "source_paths"),
+                    asset_rows,
+                )
+                insert_values(conn, "content_asset",
+                    ("id", "sha256", "storage_key", "mime_type", "size_bytes", "filename", "created_by"),
+                    [(_sid(package, "release-media-asset", row["id"]), row["id"], media_object_key(row["id"]),
+                      row["mime_type"], row["size_bytes"], row["path"], "dataset-import") for row in batch])
+                progress["active_rows_read"] += len(batch)
+                progress["records_inserted"] += release_rows_inserted - progress.get("asset_inserted_before", 0)
+                progress["asset_inserted_before"] = release_rows_inserted
+                conn.execute(
+                    "UPDATE dataset_import_run SET records_read=%s,records_inserted=%s WHERE id=%s",
+                    (progress["records_read"], progress["records_inserted"], run_id),
+                )
     return uploads, release_rows_inserted
 
 
@@ -689,15 +699,10 @@ def dry_run_report(package: ReleasePackage, batch_size: int) -> dict[str, Any]:
 
 
 def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
-                 activate: bool = False, rollback: bool = False,
-                 activated_by: str | None = None, storage_client=None,
+                 storage_client=None,
                  bucket: str | None = None) -> dict[str, Any]:
     if batch_size < 1:
         raise ValueError("--batch-size must be positive")
-    if activate and rollback:
-        raise ValueError("--activate and --rollback are mutually exclusive")
-    if (activate or rollback) and not activated_by:
-        raise ValueError("--activated-by is required with --activate or --rollback")
     if storage_client is None or bucket is None:
         storage_client, bucket = _media_configuration()
 
@@ -707,6 +712,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
     progress = {"records_read": package_record_count(package), "active_rows_read": 0, "records_inserted": 0}
     try:
         lock_import_domain(conn, package.domain)
+        ensure_single_install(conn, package)
         register_release(conn, package)
         baseline = not prior_release_exists(conn, package)
         run_id = begin_run(conn, package, "APPLY")
@@ -737,7 +743,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
         _process(
             conn, package, run_id, batch_size=batch_size,
             filename="toeic/groups", table="toeic_stimulus_group",
-            columns=("id", "release_id", "test_version_id", "package_group_id", "part", "kind", "title", "order_index", "difficulty_level", "question_numbers", "transcript_en", "content_translation_vi", "vocabulary_note_vi", "render_html", "source_html", "source_html_sha256", "document_parse_status", "document_count"),
+            columns=("id", "release_id", "test_version_id", "package_group_id", "part", "kind", "title", "order_index", "difficulty_level", "question_numbers", "transcript_en", "content_translation_vi", "vocabulary_note_vi", "render_html", "source_html", "source_html_sha256", "document_parse_status", "document_count", "source_issues"),
             mapper=group_row, progress=progress,
         )
         _process(
@@ -816,8 +822,10 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
                 "catalog_reconciliation": catalog_counts,
                 "baseline_catalogs_confirmed": confirm_first_baseline_catalogs(conn, package.release_id) if baseline else {},
                 "media": {
+                    "storage_mode": os.getenv("STORAGE_MODE", "r2"),
                     "assets": package.counts["shared/assets"],
                     "uploads_this_run": uploads,
+                    "reused_this_run": package.counts["shared/assets"] - uploads,
                     "object_key_scheme": "media/sha256/{prefix}/{sha256}",
                 },
                 "reconciliation": {
@@ -830,10 +838,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
             }
             finish_run(conn, run_id, package_record_count(package), progress["records_inserted"], details)
         run_succeeded = True
-
-        if activate or rollback:
-            activate_release(conn, package, activated_by=activated_by or "",
-                             action="ROLLBACK" if rollback else "ACTIVATE")
+        finalize_install(conn, package)
         return {
             "mode": "APPLY",
             "run_id": str(run_id),
@@ -846,8 +851,9 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
                 if name.startswith("quarantine/") or name.startswith("source_only/")
             },
             "media_uploads_this_run": uploads,
-            "activated": bool(activate or rollback),
-            "activation_action": "ROLLBACK" if rollback else "ACTIVATE" if activate else None,
+            "media_reused_this_run": package.counts["shared/assets"] - uploads,
+            "media_storage_mode": details["media"]["storage_mode"],
+            "installed": True,
         }
     except Exception as exc:
         if run_id is not None and not run_succeeded:
@@ -864,40 +870,12 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
         conn.close()
 
 
-def activate_only(package: ReleasePackage, *, database_url: str, activated_by: str,
-                  rollback: bool = False) -> dict[str, Any]:
-    conn = connect(database_url)
-    try:
-        lock_import_domain(conn, package.domain)
-        counts = activate_existing_release(
-            conn,
-            package,
-            activated_by=activated_by,
-            action="ROLLBACK" if rollback else "ACTIVATE",
-            expected_by_table={table: package.counts[name] for name, table in COLLECTION_TABLES.items()},
-        )
-        return {"mode": "ACTIVATE_ONLY", "release_id": str(package.release_id),
-                "activation_action": "ROLLBACK" if rollback else "ACTIVATE", "database_counts": counts}
-    finally:
-        try:
-            unlock_import_domain(conn, package.domain)
-        except Exception:
-            pass
-        conn.close()
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", type=Path, default=os.getenv("GRAMMAR_TOEIC_RELEASE_DIR"))
     parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"))
     parser.add_argument("--batch-size", type=int, default=500)
     parser.add_argument("--apply", action="store_true", help="Write to PostgreSQL/storage; default is a full dry run")
-    activation = parser.add_mutually_exclusive_group()
-    activation.add_argument("--activate", action="store_true", help="Set this imported release active")
-    activation.add_argument("--rollback", action="store_true", help="Activate this older release and record a rollback")
-    activation.add_argument("--activate-only", action="store_true", help="Activate an already imported release")
-    activation.add_argument("--rollback-only", action="store_true", help="Roll back to an already imported release")
-    parser.add_argument("--activated-by", help="Operator label recorded in activation history")
     return parser.parse_args()
 
 
@@ -905,33 +883,17 @@ def main() -> None:
     args = parse_args()
     if not args.release:
         raise SystemExit("--release or GRAMMAR_TOEIC_RELEASE_DIR is required")
-    if (args.activate or args.rollback) and not args.apply:
-        raise SystemExit("--activate/--rollback requires --apply")
-    if (args.activate_only or args.rollback_only) and args.apply:
-        raise SystemExit("--activate-only/--rollback-only cannot be combined with --apply")
-    if (args.activate or args.rollback or args.activate_only or args.rollback_only) and not args.activated_by:
-        raise SystemExit("--activated-by is required for activation")
     package = validate_clean_release(
         args.release,
         domain="grammar-toeic",
         validator_name="validate_grammar_toeic_release.py",
     )
-    if args.activate_only or args.rollback_only:
-        report = activate_only(
-            package,
-            database_url=db_url_from_args(args.database_url),
-            activated_by=args.activated_by,
-            rollback=args.rollback_only,
-        )
-    elif args.apply:
+    if args.apply:
         client, bucket = _media_configuration()
         report = apply_import(
             package,
             database_url=db_url_from_args(args.database_url),
             batch_size=args.batch_size,
-            activate=args.activate,
-            rollback=args.rollback,
-            activated_by=args.activated_by,
             storage_client=client,
             bucket=bucket,
         )

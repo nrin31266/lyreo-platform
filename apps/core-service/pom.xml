@@ -14,6 +14,8 @@
   <artifactId>lyreo-core-service</artifactId>
 
   <dependencies>
+    <dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-dataset</artifactId><version>${project.version}</version></dependency>
+ <dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-assessment</artifactId><version>${project.version}</version></dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
@@ -217,6 +219,7 @@
     <profile>
       <id>core-dev</id>
       <dependencies>
+ <dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-assessment</artifactId><version>${project.version}</version></dependency>
         <dependency>
           <groupId>org.springframework.boot</groupId>
           <artifactId>spring-boot-devtools</artifactId>

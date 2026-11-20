@@ -46,6 +46,7 @@ public final class LessonAuthoringJobHandler implements JobHandler {
             throw new PermanentJobException("AUTHORING_STALE","Draft changed before authoring job started");
         if(Set.of("SEMANTIC","IPA").contains(input.operation())) throw new PermanentJobException("AUTHORING_OPERATION_REMOVED","This authoring operation is no longer supported");
         boolean committed=false;
+        String newTtsKey=null;
         try (var observation=ai.observe(attempt->{
             repository.usage(job.id(),new AuthoringLesson.Invocation(attempt.provider(),attempt.model(),attempt.inputTokens(),attempt.outputTokens(),attempt.latencyMs(),attempt.output().get("audio_seconds") instanceof Number seconds?seconds.doubleValue():null,
                 attempt.invocationId(),attempt.capability(),attempt.error().isEmpty()?"SUCCEEDED":"FAILED",attempt.fallback()));
@@ -56,7 +57,7 @@ public final class LessonAuthoringJobHandler implements JobHandler {
             context.throwIfCancellationRequested();
             switch(input.operation()) {
                 case "PREPARE" -> prepare(job,context,lesson);
-                case "TTS" -> synthesize(job,context,lesson);
+                case "TTS" -> newTtsKey=synthesize(context,lesson);
                 case "ALIGN" -> align(job,context,lesson);
                 case "CONTENT" -> new AuthoringContentGenerator(ai,repository,committer).generate(job,input,lesson,context);
                 case "SEMANTIC", "IPA" -> throw new PermanentJobException("AUTHORING_OPERATION_REMOVED","This authoring operation is no longer supported. Continue with transcript and timing review.");
@@ -87,12 +88,12 @@ public final class LessonAuthoringJobHandler implements JobHandler {
             for(int depth=0;cause!=null && depth<6;depth++,cause=cause.getCause()) causes.add(cause.getClass().getSimpleName()+": "+cause.getMessage());
             repository.diagnostic(job.id(),null,Map.of("causes",causes,"operation",input.operation()));throw failure;
         } finally {
-            if(!committed && "TTS".equals(input.operation()) && lesson.audioObjectKey!=null && lesson.audioObjectKey.endsWith("/"+job.id()+".wav")) {
-                try {storage.delete(lesson.audioObjectKey);} catch(RuntimeException ignored) { /* Keep the original job failure. */ }
+            if(!committed && newTtsKey!=null) {
+                try {storage.delete(newTtsKey);} catch(RuntimeException ignored) { /* Keep the original job failure. */ }
             }
         }
     }
-    private void synthesize(BackgroundJob job,JobExecutionContext context,AuthoringLesson lesson) {
+    private String synthesize(JobExecutionContext context,AuthoringLesson lesson) {
         LessonAuthoringService.require("TEXT".equals(lesson.sourceType),"Only text lessons use TTS");
         context.progress("SYNTHESIZING",0);
         var result=ai.executeForProvider(AiCapability.TTS,"LOCAL_KOKORO","",
@@ -117,10 +118,16 @@ public final class LessonAuthoringJobHandler implements JobHandler {
             LessonAuthoringService.require(sentence.coarseStartMs>=0 && sentence.coarseEndMs>sentence.coarseStartMs
                 && sentence.coarseEndMs-sentence.coarseStartMs<=115000,"Split long text sentences before generating speech");
         }
-        var stored=media.storeTts(lesson.id,job.id(),audio);
+        // A recovered worker can be storing audio for the same job concurrently.
+        var stored=media.storeTts(lesson.id,java.util.UUID.randomUUID(),audio);
         lesson.audioObjectKey=stored.key();lesson.endMs=stored.durationMs();
         try {LessonAuthoringService.alignmentSegments(lesson);}
-        catch(RuntimeException failure) {storage.delete(stored.key());lesson.audioObjectKey=null;throw failure;}
+        catch(RuntimeException failure) {
+            lesson.audioObjectKey=null;
+            try {storage.delete(stored.key());} catch(RuntimeException cleanup) {failure.addSuppressed(cleanup);}
+            throw failure;
+        }
+        return stored.key();
     }
     private void prepare(BackgroundJob job,JobExecutionContext context,AuthoringLesson lesson) {
         context.progress("SOURCE_PREPARE",0);

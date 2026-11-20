@@ -160,6 +160,7 @@
     <module>platform/config</module>
     <module>platform/jobs</module>
     <module>platform/storage</module>
+    <module>platform/content</module>
     <module>platform/security</module>
     <module>platform/observability</module>
     <module>modules/identity</module>
@@ -170,6 +171,8 @@
     <module>modules/speech-assessment</module>
     <module>modules/lexicon</module>
     <module>modules/vocabulary</module>
+    <module>modules/assessment</module>
+    <module>modules/dataset</module>
     <module>modules/grammar</module>
     <module>modules/toeic</module>
     <module>modules/curriculum</module>

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
+from fastapi import HTTPException
 
 from app.config import Settings
 from app.providers.gemini import GeminiProvider, _interaction_usage
@@ -27,6 +28,50 @@ class Waveform:
 
 def request(**overrides):
     return ExecuteRequest(invocation_id='authoring-test', provider='GROQ', model='model', **overrides)
+
+
+@pytest.mark.parametrize('operation', ['stt', 'align'])
+def test_qwen_downloads_http_audio_before_normalizing(monkeypatch, operation):
+    runtime = QwenRuntime(Settings(_env_file=None))
+    client_type = httpx.AsyncClient
+
+    async def fetch(req):
+        assert req.url.query == b'X-Amz-Signature=a%2Fb'
+        assert req.extensions['timeout']['connect'] == 5
+        return httpx.Response(200, content=b'audio data')
+
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: client_type(
+        transport=httpx.MockTransport(fetch), **kwargs,
+    ))
+    read_audio = Mock(return_value=Waveform(1600))
+    monkeypatch.setattr('app.runtime.qwen._read_audio', read_audio)
+    runtime._load_asr = AsyncMock(return_value=SimpleNamespace(transcribe=Mock(return_value=[
+        SimpleNamespace(text='First window.'),
+    ])))
+    runtime._load_aligner = AsyncMock(return_value=SimpleNamespace(align=Mock(return_value=[
+        SimpleNamespace(text='Hi', start_time=0, end_time=.05),
+    ])))
+    asyncio.run(getattr(runtime, operation)(request(input={
+        'audio_url': 'https://media.example/audio?X-Amz-Signature=a%2Fb', 'text': 'Hi',
+    })))
+    read_audio.assert_called_once_with(b'audio data')
+
+
+def test_qwen_sanitizes_audio_fetch_timeout(monkeypatch):
+    runtime = QwenRuntime(Settings(_env_file=None))
+    client_type = httpx.AsyncClient
+
+    async def stall(req):
+        raise httpx.ConnectTimeout('connect failure with signed URL', request=req)
+
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: client_type(
+        transport=httpx.MockTransport(stall), **kwargs,
+    ))
+    read_audio = Mock()
+    monkeypatch.setattr('app.runtime.qwen._read_audio', read_audio)
+    with pytest.raises(HTTPException, match='^504: Audio download timed out$'):
+        asyncio.run(runtime.stt(request(input={'audio_url': 'https://media.example/audio?token=secret'})))
+    read_audio.assert_not_called()
 
 
 def test_asr_windows_preserve_every_sample_and_bound_gpu_input():
@@ -158,6 +203,15 @@ def test_gemini_real_usage_and_generation_contract():
     assert body['store'] is False
     assert result.metadata['finish_reason'] == 'stop'
     assert result.usage == {}
+
+    provider._interaction.return_value['usage'] = {
+        'total_input_tokens': 12, 'total_output_tokens': 5, 'total_thought_tokens': 11,
+    }
+    maintenance = asyncio.run(provider.complete(request(options={
+        'include_reasoning_usage': True,
+    }), 'test-credential'))
+    assert maintenance.output['reasoning_tokens'] == 11
+    assert maintenance.usage == {'input_tokens': 12, 'output_tokens': 16}
 
 
 def install_transport(monkeypatch, handler):
@@ -379,3 +433,40 @@ def test_stt_can_defer_forced_alignment_until_the_caller_confirms_text(monkeypat
     runtime._align_words.assert_not_awaited()
     assert result.output['timestamps'] == []
     assert max(s['end_ms']-s['start_ms'] for s in result.output['segments']) <= 115000
+
+
+@pytest.mark.parametrize('thinking', ['enabled', 'disabled'])
+def test_deepseek_maintenance_uses_a_fixed_budget_including_reasoning(monkeypatch, thinking):
+    captured = {}
+    async def post(self, url, **kwargs):
+        captured.update(kwargs['json'])
+        return httpx.Response(200, request=httpx.Request('POST', url), json={
+            'choices': [{'message': {'content': '{"changes": [], "issues": []}', 'reasoning_content': 'internal provider reasoning'}, 'finish_reason': 'stop'}],
+            'usage': {'prompt_tokens': 10, 'completion_tokens': 20},
+        })
+    monkeypatch.setattr(httpx.AsyncClient, 'post', post)
+    req = request(options={'thinking': thinking, 'max_output_tokens': 8192, 'response_schema': 'maintenance', 'provider_options': {'reasoning_effort': 'high'}})
+    req.provider = 'DEEPSEEK'
+    result = asyncio.run(OpenAICompatibleProvider('https://api.deepseek.com').complete(req, 'test-only'))
+    assert captured['thinking'] == {'type': thinking}
+    assert captured['reasoning_effort'] == 'high'
+    assert captured['max_tokens'] == 8192
+    assert 'max_completion_tokens' not in captured
+    assert result.output == {'content': '{"changes": [], "issues": []}', 'structured': {'changes': [], 'issues': []}}
+    assert result.usage == {'input_tokens': 10, 'output_tokens': 20}
+
+
+def test_deepseek_truncation_without_text_keeps_billable_usage(monkeypatch):
+    async def post(self, url, **kwargs):
+        return httpx.Response(200, request=httpx.Request('POST', url), json={
+            'choices': [{'message': {'content': None}, 'finish_reason': 'length'}],
+            'usage': {'prompt_tokens': 10, 'completion_tokens': 8192,
+                      'completion_tokens_details': {'reasoning_tokens': 8192}},
+        })
+    monkeypatch.setattr(httpx.AsyncClient, 'post', post)
+    req = request(options={'thinking': 'enabled', 'max_output_tokens': 8192})
+    req.provider = 'DEEPSEEK'
+    result = asyncio.run(OpenAICompatibleProvider('https://api.deepseek.com').complete(req, 'test-only'))
+    assert result.metadata['finish_reason'] == 'length'
+    assert result.output == {'content': '', 'reasoning_tokens': 8192}
+    assert result.usage == {'input_tokens': 10, 'output_tokens': 8192}

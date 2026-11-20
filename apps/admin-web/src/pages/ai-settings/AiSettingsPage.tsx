@@ -75,6 +75,7 @@ const presets = {
     displayName: "Gemini",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
   },
+  DEEPSEEK: { displayName: "DeepSeek", baseUrl: "https://api.deepseek.com" },
   QWEN: { displayName: "Qwen · Local", baseUrl: "" },
   LOCAL_NLP: { displayName: "NLP · Local", baseUrl: "" },
 };

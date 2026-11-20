@@ -1,3 +1,4 @@
+import logging
 import os
 os.environ.setdefault('OMP_NUM_THREADS', '2')
 os.environ.setdefault('MKL_NUM_THREADS', '2')
@@ -19,6 +20,9 @@ from .runtime.ipa import IpaRuntime
 from .runtime.qwen import QwenRuntime
 from .schemas import ExecuteRequest, ExecuteResponse, HealthResponse
 from .security import verify_internal_token
+
+# HTTPX request summaries include the full signed media URL.
+logging.getLogger('httpx').setLevel(logging.WARNING)
 
 cfg = settings()
 mock = MockRuntime()
@@ -82,7 +86,6 @@ async def provider_http_error_handler(request: Request, error: httpx.HTTPStatusE
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(_: Request, error: Exception):
-    import logging
     import traceback
     logging.error("Unhandled exception in AI service: %s\n%s", error, traceback.format_exc())
     return JSONResponse(

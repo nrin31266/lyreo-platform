@@ -69,7 +69,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       isLoading,
       isAuthenticated,
       isAdmin,
-      login: () => userManager.signinRedirect(),
+      login: () => userManager.signinRedirect({ state: { returnTo: window.location.pathname + window.location.search + window.location.hash } }),
       logout: () => userManager.signoutRedirect(),
     };
   }, [user, isLoading]);
