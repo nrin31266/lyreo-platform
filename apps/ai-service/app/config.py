@@ -24,7 +24,6 @@ class Settings(BaseSettings):
     groq_base_url: str = 'https://api.groq.com/openai/v1'
     deepseek_base_url: str = 'https://api.deepseek.com'
     gemini_base_url: str = 'https://generativelanguage.googleapis.com'
-    gemini_openai_base_url: str = 'https://generativelanguage.googleapis.com/v1beta/openai'
 
     max_request_bytes: int = 10_485_760
 

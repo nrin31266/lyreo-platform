@@ -1,12 +1,17 @@
 package com.lyreo.database;
 
 import static org.assertj.core.api.Assertions.*;
+import com.lyreo.lesson.infrastructure.persistence.JdbcLessonPracticeRepository;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.*;
 import java.util.*;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 class LessonResetIT {
@@ -19,13 +24,28 @@ class LessonResetIT {
                 sql.execute("INSERT INTO lesson(id,title,source_type,status) VALUES('10000000-0000-0000-0000-000000000001','Old title','TEXT','DRAFT')");
                 assertThat(count(sql,"lesson")).isEqualTo(1);
                 String seed=Files.readString(Path.of("../../infra/postgres/seed/dev.sql"));sql.execute(seed);
+                assertThat(count(sql,"lesson")).isEqualTo(1);
                 sql.execute("UPDATE lesson_category SET name='Custom travel',translations='{\"vi\":\"Tự sửa\"}' WHERE id='20000000-0000-0000-0000-000000000002'");
                 sql.execute(seed);assertThat(count(sql,"lesson_category")).isEqualTo(24);
-                String sampleLessons=Files.readString(Path.of("../../infra/postgres/seed/lessons.sql"));
-                sql.execute(sampleLessons);
+                var sampleLessons=new ResourceDatabasePopulator(new FileSystemResource("../../infra/postgres/seed/lessons.sql"));
+                sampleLessons.populate(connection);
                 assertThat(count(sql,"lesson")).isEqualTo(6);
-                sql.execute(sampleLessons);
+                assertSampleLessonProjections(sql);
+                sql.execute("UPDATE lesson_metadata SET title='Edited sample title' WHERE lesson_id='246d7560-e4a3-4807-a022-190220c7a00d'");
+                sampleLessons.populate(connection);
                 assertThat(count(sql,"lesson")).isEqualTo(6);
+                assertSampleLessonProjections(sql);
+                assertThat(scalar(sql,"SELECT title FROM lesson_metadata WHERE lesson_id='246d7560-e4a3-4807-a022-190220c7a00d'"))
+                    .isEqualTo("Edited sample title");
+                assertThatThrownBy(() -> sql.execute("UPDATE lesson_sentence SET text='Edited published sentence'"))
+                    .hasMessageContaining("Published lesson content is immutable");
+                var datasource=new DriverManagerDataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword());
+                var practice=new JdbcLessonPracticeRepository(new NamedParameterJdbcTemplate(datasource));
+                UUID summer=UUID.fromString("246d7560-e4a3-4807-a022-190220c7a00d");
+                UUID dictation=UUID.fromString(scalar(sql,"SELECT id FROM lesson_activity WHERE lesson_id='"+summer+"' AND activity_type='DICTATION'"));
+                UUID firstSentence=UUID.fromString(scalar(sql,"SELECT id FROM lesson_sentence WHERE lesson_id='"+summer+"' AND position=0"));
+                assertThat(practice.findDictationTarget(summer,dictation,firstSentence)).hasValueSatisfying(target ->
+                    assertThat(target.expectedText()).startsWith("Hey everybody"));
                 try(var result=sql.executeQuery("SELECT name,translations->>'vi' FROM lesson_category WHERE id='20000000-0000-0000-0000-000000000002'")) {
                     result.next();assertThat(result.getString(1)).isEqualTo("Custom travel");assertThat(result.getString(2)).isEqualTo("Tự sửa");
                 }
@@ -100,6 +120,25 @@ class LessonResetIT {
             }
         }
     }
+
+    private static void assertSampleLessonProjections(Statement sql) throws SQLException {
+        assertThat(scalar(sql,"SELECT count(*) FROM lesson WHERE source_type='YOUTUBE' AND status='PUBLISHED'")).isEqualTo("4");
+        assertThat(scalar(sql,"SELECT count(*) FROM lesson WHERE source_type='TEXT' AND status='PUBLISHED'")).isEqualTo("1");
+        assertThat(count(sql,"lesson_sentence")).isEqualTo(184);
+        assertThat(count(sql,"lesson_word_timestamp")).isEqualTo(2650);
+        assertThat(count(sql,"lesson_annotation")).isEqualTo(184);
+        assertThat(count(sql,"sentence_pronunciation")).isEqualTo(184);
+        assertThat(count(sql,"lesson_activity")).isEqualTo(15);
+        assertThat(count(sql,"lesson_activity_sentence")).isEqualTo(552);
+        assertThat(count(sql,"lesson_category_membership")).isEqualTo(5);
+        assertThat(scalar(sql,"SELECT sum(jsonb_array_length(document)) FROM lesson_authoring WHERE published_at IS NOT NULL"))
+            .isEqualTo("184");
+    }
+
+    private static String scalar(Statement sql,String query) throws SQLException {
+        try(var result=sql.executeQuery(query)) {result.next();return result.getString(1);}
+    }
+
     private static long count(Statement sql,String table) throws SQLException {
         try(var result=sql.executeQuery("SELECT count(*) FROM "+table)) {result.next();return result.getLong(1);}
     }

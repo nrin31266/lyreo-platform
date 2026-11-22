@@ -14,7 +14,7 @@ Deployment capability and secrets
 
 A lower layer cannot exceed a higher layer's capability or safety limit. For example, an Admin-disabled pronunciation feature cannot be enabled by a learner preference. A temporary playback-speed change stays in session state until explicitly saved as a cross-device preference.
 
-Deployment configuration supplies endpoints, credentials, storage mode, runtime resources, and service limits. Every executable has its own `.env.example`. The optional root `.env` is operator-only input for bounded data maintenance (`DEEPSEEK_KEY`), never an app/client configuration source. `scripts/init-dev-env.sh` creates local files and synchronizes values that genuinely cross process boundaries. `VITE_*` and `EXPO_PUBLIC_*` values are public build data and must never contain server secrets.
+Deployment configuration supplies endpoints, credentials, storage mode, runtime resources, and service limits. Every executable has its own `.env.example`. The [root template](../.env.example) and [research template](../tools/research/.env.example) are optional inputs for operator data maintenance. `scripts/init-dev-env.sh` creates local application files and synchronizes values that cross process boundaries. `VITE_*` and `EXPO_PUBLIC_*` values are public build data and must never contain server secrets.
 
 Admin policy controls provider/model routing, enabled capabilities, allowable Lesson processing, rate/cost envelopes, and controlled reward policy. Model identifiers are runtime strings, not Java enums. Provider API keys are encrypted in Core with an environment-held master key; Admin reads masked metadata only.
 

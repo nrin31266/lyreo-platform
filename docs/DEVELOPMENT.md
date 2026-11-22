@@ -39,8 +39,9 @@ not select the Compose database independently. It adds 24 stable categories with
 names and Vietnamese translations. Rerunning skips existing IDs/names and preserves Admin edits.
 No automatic reseeding runs at startup. Large banks stay under the [import tools](DATA_PIPELINES.md).
 
-`make seed-lessons` adds the five sample lessons after bootstrap. It requires Core's storage to
-have access to their canonical audio objects in the shared development bucket. Rerunning leaves
+`make seed-lessons` adds four YouTube lessons and one Text lesson after bootstrap. Each published
+snapshot includes transcript timing, notes and practice content for the learner API. Core's storage
+must have access to their canonical audio objects in the shared development bucket. Rerunning leaves
 existing lessons and metadata untouched.
 
 Large content datasets are imported through the [data-import tool](../tools/data-import/README.md), not Flyway seed blobs. Store raw datasets outside Git.
