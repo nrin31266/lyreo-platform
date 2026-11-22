@@ -19,6 +19,7 @@ import { ProcessingStatus } from './ProcessingStatus';
 import { ContentOptionsPanel,defaultContentOptions } from './ContentEditor';
 import { VoiceSelect } from './VoiceSelect';
 import { validSelection } from './timeline-view';
+import { timecode } from './timecode';
 import * as authoring from './lesson-builder.api';
 
 export function CreateMediaLessonPage({ type, onDirtyChange, onBusyChange }: { type: 'text' | 'audio'; onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void }) {
@@ -50,7 +51,7 @@ export function CreateMediaLessonPage({ type, onDirtyChange, onBusyChange }: { t
         return { id: draft.id, preparationFailed: false };
       })
     : authoring.createAudioDraft({ ...metadata.getValues(), sourceId, startMs, endMs: endMs ?? 0,options }).then(result => ({ id: result.lessonId, preparationFailed: false })),
-    onSuccess: async result => { await client.invalidateQueries({ queryKey: catalogKeys.all }); navigate(`/lessons/new?draft=${result.id}`, { state: { preparationFailed: result.preparationFailed } }); },
+    onSuccess: async result => { await client.invalidateQueries({ queryKey: catalogKeys.all }); if (mounted.current) navigate(`/lessons/new?draft=${result.id}`, { state: { preparationFailed: result.preparationFailed } }); },
   });
   const submitting = useRef(false);
   useEffect(() => { onBusyChange?.(create.isPending || upload.isPending); return () => onBusyChange?.(false); }, [create.isPending, upload.isPending, onBusyChange]);
@@ -76,10 +77,11 @@ export function CreateMediaLessonPage({ type, onDirtyChange, onBusyChange }: { t
         <Field><FieldLabel htmlFor="source-text">{t('media.text')}</FieldLabel><Textarea className="min-h-64" id="source-text" value={text} maxLength={10000} required rows={10} onChange={event => setText(event.target.value)} /><FieldDescription>{t('media.textHelp')}</FieldDescription></Field>
         <VoiceSelect value={voice} onChange={setVoice} disabled={create.isPending} />
       </> : <Field><FieldLabel htmlFor="audio-file">{t('media.upload')}</FieldLabel><Input id="audio-file" type="file" accept=".mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/mp4" disabled={upload.isPending || create.isPending} onChange={event => {
-        const file = event.target.files?.[0]; if (!file) return;
+        const file = event.currentTarget.files?.[0];
+        if (!file) return;
+        event.currentTarget.value = '';
         setUploadError('');
         if (!file.size || file.size > 30 * 1024 * 1024) { setUploadError(t('media.uploadLimit')); return; }
-        setParams({ type: 'audio' });
         upload.mutate(file);
       }} /><FieldDescription>{t(upload.isPending ? 'media.uploading' : 'media.uploadHelp')}</FieldDescription>{uploadError && <p role="alert" className="text-destructive">{uploadError}</p>}</Field>}
     </FieldGroup>
@@ -88,6 +90,12 @@ export function CreateMediaLessonPage({ type, onDirtyChange, onBusyChange }: { t
     </div>
     <aside className="source-metadata-pane"><h2 className="source-section-title">{t('reviewWorkspace.lessonInformation')}</h2><CreateMetadataFields form={metadata} titleHint={type === 'audio' ? source.data?.originalFilename || undefined : text.trim().split(/(?<=[.!?])\s/)[0]?.slice(0, 120)} /><ContentOptionsPanel draft={{options}} disabled={create.isPending} onChange={setOptions} /></aside>
     </fieldset>
-    <footer className="authoring-actionbar"><span className="text-xs text-muted-foreground tabular-nums">{type === 'text' ? `${text.length.toLocaleString()} / 10.000` : t('media.uploadHelp')}</span><div className="authoring-action-buttons">{type === "text" && <Button type="button" variant="ghost" disabled={!valid || create.isPending} onClick={() => void submit(false)}>{t("media.saveText")}</Button>}<Button type="submit" disabled={!valid || create.isPending || upload.isPending}>{create.isPending && <RiLoader4Line className="animate-spin" aria-hidden="true" />}{t(create.isPending ? 'finish.starting' : 'finish.create')}</Button></div></footer>
+    <footer className="authoring-actionbar"><span className="text-xs text-muted-foreground tabular-nums">{type === 'text'
+      ? t('media.characterCount', { count: text.length, limit: 10000 })
+      : source.data && !upload.isPending
+        ? endMs !== null && rangeValid && validSelection(startMs, endMs, source.data.durationMs)
+          ? `${timecode(startMs)}–${timecode(endMs)}`
+          : t('sourceSelection.chooseRange')
+        : t('media.uploadHelp')}</span><div className="authoring-action-buttons">{type === "text" && <Button type="button" variant="ghost" disabled={!valid || create.isPending} onClick={() => void submit(false)}>{t("media.saveText")}</Button>}<Button type="submit" disabled={!valid || create.isPending || upload.isPending}>{create.isPending && <RiLoader4Line className="animate-spin" aria-hidden="true" />}{t(create.isPending ? 'finish.starting' : 'finish.create')}</Button></div></footer>
   </form>;
 }

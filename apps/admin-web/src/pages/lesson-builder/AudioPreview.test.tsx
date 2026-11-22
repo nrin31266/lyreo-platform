@@ -1,9 +1,10 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { I18nextProvider } from 'react-i18next';
 import { i18n } from '@/i18n';
 import { AudioPreview } from './AudioPreview';
 
+beforeEach(() => { vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {}); });
 afterEach(()=>{cleanup();vi.useRealTimers();vi.restoreAllMocks();});
 it('shares the playback clock, seeks and loops the selected range', () => {
   vi.useFakeTimers();

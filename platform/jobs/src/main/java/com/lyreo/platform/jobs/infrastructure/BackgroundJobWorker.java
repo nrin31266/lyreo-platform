@@ -70,11 +70,15 @@ public final class BackgroundJobWorker implements AutoCloseable {
     }
 
     public int runOnce() {
-        List<BackgroundJob> jobs = repository.claim(workerId, claimBatchSize, lease);
-        // A small batch is processed sequentially by this starter. Scale by running more Core
-        // instances or, later, by introducing a bounded executor without changing the DB protocol.
-        jobs.forEach(this::runJob);
-        return jobs.size();
+        int processed = 0;
+        while (processed < claimBatchSize) {
+            // Start each lease just before running its handler.
+            var jobs = repository.claim(workerId, 1, lease);
+            if (jobs.isEmpty()) break;
+            runJob(jobs.getFirst());
+            processed++;
+        }
+        return processed;
     }
 
     public int recoverExpiredLeases() {

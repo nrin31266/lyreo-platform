@@ -21,7 +21,7 @@ public record LessonAuthoringResponse(
         AuthoringSentence previous=null;
         for(var sentence:lesson.sentences) {
             int index=reviewSentences.size();
-            boolean stale=com.lyreo.lesson.domain.authoring.AuthoringContent.features(lesson.options).stream()
+            boolean stale=lesson.publishedAt==null && com.lyreo.lesson.domain.authoring.AuthoringContent.features(lesson.options).stream()
                 .filter(feature->!feature.equals("PROFILE")).anyMatch(feature->!com.lyreo.lesson.domain.authoring.AuthoringContent.current(lesson,index,feature));
             reviewSentences.add(Sentence.from(sentence,lesson.endMs-lesson.startMs,previous,stale));
             previous=sentence;
@@ -30,7 +30,8 @@ public record LessonAuthoringResponse(
             lesson.startMs, lesson.endMs>0 ? lesson.endMs : null, lesson.sourceType,lesson.audioSourceId,lesson.ttsVoice,lesson.audioObjectKey!=null,lesson.audioObjectKey==null ? null : UUID.nameUUIDFromBytes(lesson.audioObjectKey.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString(),lesson.revision, lesson.transcriptRevision, lesson.approvedRevision,
             lesson.karaokeReviewedRevision, lesson.semanticRevision, lesson.status, lesson.timingStatus,
             reviewSentences, lesson.jobs, lesson.alignmentRequired, lesson.options,
-            com.lyreo.lesson.domain.authoring.AuthoringContent.complete(lesson),com.lyreo.lesson.domain.authoring.AuthoringContent.needed(lesson),
+            lesson.publishedAt!=null || com.lyreo.lesson.domain.authoring.AuthoringContent.complete(lesson),
+            lesson.publishedAt==null && com.lyreo.lesson.domain.authoring.AuthoringContent.needed(lesson),
             com.lyreo.lesson.domain.authoring.AuthoringContent.vocabularyLimit(lesson),com.lyreo.lesson.domain.authoring.AuthoringContent.grammarLimit(lesson),
             new Profile(lesson.profile.cefr,lesson.profile.contentType,lesson.profile.manual,!com.lyreo.lesson.domain.authoring.AuthoringContent.profileKey(lesson).equals(lesson.profile.key)),
             new Statistics(com.lyreo.lesson.domain.authoring.AuthoringContent.words(lesson),lesson.sentences.size(),Math.max(0,lesson.endMs-lesson.startMs),
@@ -46,7 +47,7 @@ public record LessonAuthoringResponse(
         String translation, List<AuthoringSentence.Annotation> vocabulary, List<AuthoringSentence.Annotation> grammar,
         String dictationPriority, String shadowingPriority, boolean dictationEligible, boolean shadowingEligible,
         boolean dictationSelected, boolean shadowingSelected, List<AuthoringSentence.Hint> hints,
-        List<AuthoringSentence.Note> notes, List<AuthoringSentence.Group> thoughtGroups, java.util.Set<String> manualFields, boolean contentStale, String timingSource, String ipa, String ipaAccent, String ipaVersion, boolean ipaNeedsReview, Long previewStartMs,String ipaRaw,String ipaDisplayVersion,List<String> contentWarnings,java.util.Map<String,String> exclusions,com.lyreo.lesson.domain.authoring.AuthoringCloze.Targets cloze,boolean clozeManual
+        List<AuthoringSentence.Note> notes, List<AuthoringSentence.Group> thoughtGroups, java.util.Set<String> manualFields, boolean contentStale, String timingSource, String ipa, String ipaAccent, String ipaVersion, boolean ipaNeedsReview, Long previewStartMs,String ipaRaw,String ipaDisplayVersion,List<AuthoringSentence.IpaReviewIssue> ipaReviewIssues,List<String> contentWarnings,java.util.Map<String,String> exclusions,com.lyreo.lesson.domain.authoring.AuthoringCloze.Targets cloze,boolean clozeManual
     ) {
         static Sentence from(AuthoringSentence sentence, long durationMs, AuthoringSentence previous,boolean stale) {
             Long previewStart = sentence.coarseStartMs;
@@ -60,7 +61,7 @@ public record LessonAuthoringResponse(
             return new Sentence(sentence.id, sentence.text, sentence.usage, sentence.hidden, sentence.words, reviewIssues,
                 sentence.translation, sentence.vocabulary, sentence.grammar, sentence.dictationPriority,
                 sentence.shadowingPriority, sentence.dictationEligible, sentence.shadowingEligible,
-                sentence.dictationSelected, sentence.shadowingSelected, sentence.hints, sentence.notes, sentence.thoughtGroups, sentence.manualFields, stale, sentence.timingSource, sentence.ipa, sentence.ipaAccent, sentence.ipaVersion, sentence.ipaNeedsReview, previewStart,sentence.ipaRaw,sentence.ipaDisplayVersion,sentence.contentWarnings,sentence.exclusions,sentence.cloze==null?com.lyreo.lesson.domain.authoring.AuthoringCloze.generate(sentence):sentence.cloze,sentence.clozeManual);
+                sentence.dictationSelected, sentence.shadowingSelected, sentence.hints, sentence.notes, sentence.thoughtGroups, sentence.manualFields, stale, sentence.timingSource, sentence.ipa, sentence.ipaAccent, sentence.ipaVersion, sentence.ipaNeedsReview, previewStart,sentence.ipaRaw,sentence.ipaDisplayVersion,sentence.ipaReviewIssues,sentence.contentWarnings,sentence.exclusions,sentence.cloze==null?com.lyreo.lesson.domain.authoring.AuthoringCloze.generate(sentence):sentence.cloze,sentence.clozeManual);
         }
     }
 }

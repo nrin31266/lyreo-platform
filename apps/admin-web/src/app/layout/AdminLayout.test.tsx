@@ -66,6 +66,14 @@ function show() {
 }
 
 describe('shared Admin navigation', () => {
+  it('opens groups with submenus by default and still allows collapsing them', async () => {
+    desktop=true;show();
+    expect(screen.getByRole('button',{name:'Real-world lessons'})).toHaveAttribute('aria-expanded','true');
+    expect(screen.getByRole('button',{name:'Language library'})).toHaveAttribute('aria-expanded','true');
+    expect(screen.getByRole('link',{name:'TOEIC L&R'})).toBeVisible();
+    await userEvent.click(screen.getByRole('button',{name:'Language library'}));
+    expect(screen.getByRole('button',{name:'Language library'})).toHaveAttribute('aria-expanded','false');
+  });
   it.each([true, false])('opens logout from the avatar menu (desktop=%s)', async (isDesktop) => {
     desktop = isDesktop;
     const user = userEvent.setup();
@@ -172,7 +180,7 @@ describe('shared Admin navigation', () => {
       screen.getByRole('button', { name: 'Expand sidebar' }),
     ).toHaveAttribute('aria-expanded', 'false');
     expect(
-      screen.getByRole('button', { name: 'Lessons' }),
+      screen.getByRole('button', { name: 'Real-world lessons' }),
     ).toBeInTheDocument();
     expect(localStorage.getItem('lyreo.admin.sidebar-collapsed')).toBe('true');
     cleanup();

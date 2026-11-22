@@ -94,6 +94,27 @@ function show(path = "/settings/ai") {
   );
 }
 describe("AI settings", () => {
+  it("shows DeepSeek as a standard provider and allows routing", async () => {
+    const providers = await api.fetchAiProviders();
+    vi.mocked(api.fetchAiProviders).mockResolvedValue([
+      { ...providers[0], id: "deepseek", code: "DEEPSEEK", display_name: "DeepSeek", key_last4: "5678" },
+      ...providers,
+    ]);
+    show();
+    await screen.findByText("•••• 1234");
+    await userEvent.click(document.getElementById("provider-preset")!);
+    await userEvent.click(await screen.findByRole("option", { name: "DeepSeek" }));
+    expect(screen.getByLabelText("New API key")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Save connection" })).toBeVisible();
+
+    await userEvent.click(screen.getByRole("tab", { name: "AI routing" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add model" }));
+    expect(document.getElementById("route-provider")).toHaveTextContent("DeepSeek");
+    await userEvent.click(document.getElementById("route-provider")!);
+    expect(await screen.findByRole("option", { name: "Groq" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "DeepSeek" })).toBeVisible();
+  });
+
   it("switches top tabs without losing an unsaved provider key", async () => {
     show();
     await screen.findByText("•••• 1234");
@@ -170,7 +191,8 @@ describe("AI settings", () => {
     fireEvent.change(screen.getByLabelText("Priority"), {
       target: { value: "2" },
     });
-    fireEvent.click(screen.getByRole("switch", { name: "Fallback" }));
+    expect(screen.queryByRole("switch", { name: "Fallback" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Priority")).toHaveAccessibleDescription(/Lowest number runs first/);
     fireEvent.click(screen.getByRole("button", { name: "Save model" }));
     await waitFor(() =>
       expect(api.saveAiRoute).toHaveBeenCalledWith(
@@ -179,7 +201,7 @@ describe("AI settings", () => {
           providerCode: "GROQ",
           model: "test-model",
           priority: 2,
-          fallback: true,
+          fallback: false,
           enabled: true,
         },
         expect.anything(),

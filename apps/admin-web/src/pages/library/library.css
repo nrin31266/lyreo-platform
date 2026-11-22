@@ -1,0 +1,57 @@
+.library-workspace {
+  --library-gutter: 12px;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 20px;
+}
+.library-editor-header {
+  position: sticky;
+  top: calc(-1 * var(--library-gutter));
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: calc(-1 * var(--library-gutter)) calc(-1 * var(--library-gutter)) 0;
+  padding: 12px var(--library-gutter);
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+}
+.library-editor-heading { flex: 1; min-width: 0; }
+.library-editor-heading h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 20px; line-height: 1.4; margin-top: 4px; }
+.library-editor-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex-shrink: 0; }
+.library-editor-body { min-width: 0; display: grid; align-content: start; align-items: start; gap: 20px; }
+.library-editor-body [data-slot='tabs-list'] { max-width: 100%; height: auto; flex-wrap: wrap; }
+.library-table { width: 100%; table-layout: fixed; }
+.library-table td, .library-table th { white-space: normal; overflow-wrap: anywhere; }
+.library-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.library-filters > [data-slot="field"] { width: 128px; flex: 0 1 128px; }
+.library-search { display: grid; flex: 1 1 220px; max-width: 320px; gap: 8px; }
+.library-question { min-width: 0; }
+.library-review { container-type: inline-size; min-width: 0; }
+.library-review-body { display: grid; align-items: start; gap: 16px; }
+.library-review img { max-width: 100%; max-height: 280px; width: auto; height: auto; object-fit: contain; }
+@container (min-width: 680px) {
+  .library-review-body.has-media { grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); }
+}
+@media (min-width: 768px) { .library-workspace { --library-gutter: 16px; } }
+@media (max-width: 1100px) {
+  .library-editor-header { flex-wrap: wrap; }
+  .library-editor-heading { flex-basis: 100%; }
+}
+
+.library-editor { min-height: 100%; }
+.library-editor-dock {
+  position: sticky;
+  bottom: calc(-1 * var(--library-gutter));
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: auto calc(-1 * var(--library-gutter)) calc(-1 * var(--library-gutter));
+  padding: 12px var(--library-gutter);
+  border-top: 1px solid var(--border);
+  background: var(--background);
+}

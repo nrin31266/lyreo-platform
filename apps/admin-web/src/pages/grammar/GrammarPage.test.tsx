@@ -1,0 +1,37 @@
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { I18nextProvider } from 'react-i18next';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { afterEach, expect, it, vi } from 'vitest';
+import { i18n } from '@/i18n';
+import { api } from '@/lib/api';
+import { GrammarDetailPage } from './GrammarPage';
+
+vi.mock('@/lib/api',async original=>({...await original<typeof import('@/lib/api')>(),api:vi.fn()}));
+afterEach(()=>{cleanup();vi.clearAllMocks();});
+it('opens topic metadata first, then manages question memberships in a compact table',async()=>{
+  await i18n.changeLanguage('en');
+  const cache=new QueryClient({defaultOptions:{queries:{retry:false}}});
+  const question={title:'Choose the verb',kind:'MCQ_SINGLE',options:[{key:'A',text:'go'},{key:'B',text:'gone'}],correctOption:'A',difficultyLevel:1,media:[]};
+  const draft={title:'Tenses',titleEn:'Tenses',description:'',descriptionEn:'',orderIndex:0,accessMode:'PUBLIC',requiredFeatureKey:null,parentId:null,questions:[{itemId:'one',publicationId:null},{itemId:'two',publicationId:null}]};
+  vi.mocked(api).mockImplementation(async(url,init)=>url.includes('assessment-items')?url.includes('/preview')?{...question,title:url.includes('/one/')?'Choose the verb':'Choose the noun'}:{id:'one',publicationId:null,draft:question}:{id:'topic',revision:1,status:'PUBLISHED',publicationId:null,hasUnpublishedChanges:false,draft:init?.body?JSON.parse(init.body as string).content:draft});
+  render(<QueryClientProvider client={cache}><I18nextProvider i18n={i18n}><MemoryRouter initialEntries={['/grammar/topic/topic']}><Routes><Route path="/grammar/:kind/:id" element={<GrammarDetailPage />} /></Routes></MemoryRouter></I18nextProvider></QueryClientProvider>);
+  expect(await screen.findByRole('textbox',{name:'Title (VI)'})).toHaveValue('Tenses');
+  expect(api).not.toHaveBeenCalledWith(expect.stringContaining('assessment-items'),expect.anything());
+  expect(screen.getByRole('link',{name:'View subtopics'})).toHaveAttribute('href','/grammar/subtopic?parentId=topic');
+  await userEvent.click(screen.getByRole('tab',{name:'2 questions'}));
+  const row=(await screen.findByRole('link',{name:'Choose the verb'})).closest('tr')!;
+  expect(screen.getByRole('table')).toContainElement(row);
+  expect(within(row).getByRole('button',{name:'Move up'})).toBeDisabled();
+  await userEvent.click(within(row).getByRole('button',{name:'Open review'}));
+  expect(await screen.findByText('go')).toBeVisible();
+  await userEvent.click(within(row).getByRole('button',{name:'Remove'}));
+  await userEvent.click(screen.getByRole('button',{name:'Save draft'}));
+  await waitFor(()=>expect(api).toHaveBeenCalledWith('/api/v1/admin/grammar/topic/topic/draft',expect.objectContaining({method:'PUT'})));
+  const saved=JSON.parse(vi.mocked(api).mock.calls.find(([url])=>url.endsWith('/draft'))![1]!.body as string).content;
+  expect(saved.questions).toEqual([{itemId:'two',publicationId:null}]);
+  expect(screen.getByRole('tab',{name:/1 question/})).toHaveAttribute('aria-selected','true');
+  expect(api).not.toHaveBeenCalledWith(expect.stringContaining('assessment-items'),expect.objectContaining({method:'DELETE'}));
+  cache.clear();
+});

@@ -13,11 +13,12 @@ from validate_lexicon_release import SUPPORTED_SCHEMAS
 from clean_import_common import (
     ReleasePackage,
     audit_orphans,
-    activate_existing_release,
     begin_run,
     chunks,
     connect,
     db_url_from_args,
+    ensure_single_install,
+    finalize_install,
     fail_run,
     finish_run,
     insert_values,
@@ -96,6 +97,8 @@ def sense_row(package: ReleasePackage, row: dict[str, Any]) -> tuple[Any, ...]:
         row.get("translation_vi"),
         row.get("matched_qualifier"),
         row["translation_status"],
+        pg_json(row.get("definitions") or ({"en":row["definition_en"]} if row.get("definition_en") else {})),
+        pg_json(row.get("source_context") or {}),
     )
 
 
@@ -126,6 +129,7 @@ def pronunciation_row(package: ReleasePackage, row: dict[str, Any]) -> tuple[Any
         row.get("source_url"),
         None,
         pg_json(_json_array(row, "tags")),
+        pg_json(row.get("pronunciation_context") or {}),
     )
 
 
@@ -134,8 +138,8 @@ def translation_row(package: ReleasePackage, row: dict[str, Any]) -> tuple[Any, 
         raise ValueError(f"Unsupported Lexicon schema: {package.schema_version}")
     item_id = row.get("item_id")
     sense_id = row.get("sense_id")
-    source_pos = row.get("source_pos") if package.schema_version == "1.1.0" else None
-    context = row.get("source_context") if package.schema_version == "1.1.0" else None
+    source_pos = row.get("source_pos") if package.schema_version in ("1.1.0", "2.0.0") else None
+    context = row.get("source_context") if package.schema_version in ("1.1.0", "2.0.0") else None
     return (
         scoped_id(package.release_id, "lexicon-translation", row["id"]),
         package.release_id,
@@ -250,8 +254,8 @@ def reconcile_translation_provenance(conn, package: ReleasePackage, batch_size: 
     for batch in chunks(jsonl_rows(package.root / "translations.jsonl"), batch_size):
         expected = {
             package_uuid(row["id"], field="translation.id"): (
-                row.get("source_pos") if package.schema_version == "1.1.0" else None,
-                row.get("source_context") if package.schema_version == "1.1.0" else None,
+                row.get("source_pos") if package.schema_version in ("1.1.0", "2.0.0") else None,
+                row.get("source_context") if package.schema_version in ("1.1.0", "2.0.0") else None,
             ) for row in batch
         }
         actual = {
@@ -272,14 +276,34 @@ def reconcile_translation_provenance(conn, package: ReleasePackage, batch_size: 
     return {"rows_checked": checked, "mismatch_count": 0}
 
 
-def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
-                 activate: bool = False, rollback: bool = False, activated_by: str | None = None) -> dict[str, Any]:
+def reconcile_v2_content(conn, package: ReleasePackage, batch_size: int) -> dict[str, int]:
+    """Verify language content and pronunciation evidence, not only collection counts."""
+    checked = {}
+    if package.schema_version != "2.0.0":
+        return checked
+    for filename, table, identity, fields in (
+        ("senses.jsonl", "lexicon_sense", "package_sense_id", ("definitions", "source_context", "examples", "raw_glosses")),
+        ("pronunciations.jsonl", "lexicon_pronunciation", "package_pronunciation_id", ("pronunciation_context", "accent", "ipa")),
+    ):
+        total = 0
+        for batch in chunks(jsonl_rows(package.root / filename), batch_size):
+            expected = {package_uuid(row["id"], field=filename): tuple(row.get(field) for field in fields) for row in batch}
+            actual = {row[0]: tuple(row[1:]) for row in conn.execute(
+                f"SELECT {identity},{','.join(fields)} FROM {table} WHERE release_id=%s AND {identity}=ANY(%s)",
+                (package.release_id, list(expected)),
+            )}
+            if actual != expected:
+                raise ValueError(f"Source content reconciliation mismatch in {filename}")
+            total += len(batch)
+        if total != package.counts[filename]:
+            raise ValueError(f"Source content row count differs in {filename}")
+        checked[filename] = total
+    return checked
+
+
+def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int) -> dict[str, Any]:
     if batch_size < 1:
         raise ValueError("--batch-size must be positive")
-    if activate and rollback:
-        raise ValueError("--activate and --rollback are mutually exclusive")
-    if (activate or rollback) and not activated_by:
-        raise ValueError("--activated-by is required with --activate or --rollback")
 
     conn = connect(database_url)
     run_id = None
@@ -288,6 +312,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
     records_inserted = 0
     try:
         lock_import_domain(conn, package.domain)
+        ensure_single_install(conn, package)
         register_release(conn, package)
         baseline = not prior_release_exists(conn, package)
         already_imported = conn.execute(
@@ -305,6 +330,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
             expected = {table: package.counts[filename] for filename, table in COLLECTIONS}
             reconciled = reconcile_counts(conn, package.release_id, expected)
             provenance = reconcile_translation_provenance(conn, package, batch_size)
+            content_evidence = reconcile_v2_content(conn, package, batch_size)
             orphan_counts = lexicon_orphans(conn, package.release_id)
             orphan_total = sum(orphan_counts.values())
             if orphan_total:
@@ -327,6 +353,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
                 "reused_complete_snapshot": True,
                 "reconciliation": {
                     "translation_provenance": provenance,
+                    "source_content": content_evidence,
                     "rows_read": records_read,
                     "rows_inserted_this_run": 0,
                     "mismatch_count": 0,
@@ -335,10 +362,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
                 },
             })
             run_succeeded = True
-            if activate or rollback:
-                from clean_import_common import activate_release
-                activate_release(conn, package, activated_by=activated_by or "",
-                                 action="ROLLBACK" if rollback else "ACTIVATE")
+            finalize_install(conn, package)
             return {
                 "mode": "APPLY",
                 "run_id": str(run_id),
@@ -347,8 +371,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
                 "records_inserted_this_run": 0,
                 "database_counts": reconciled,
                 "reused_complete_snapshot": True,
-                "activated": bool(activate or rollback),
-                "activation_action": "ROLLBACK" if rollback else "ACTIVATE" if activate else None,
+                "installed": True,
             }
 
         for filename, table in COLLECTIONS:
@@ -382,9 +405,9 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
                 }
                 columns = {
                     "items.jsonl": ("id", "release_id", "entry_id", "package_item_id", "part_of_speech", "pos_title", "etymology_number", "etymology_text", "order_index"),
-                    "senses.jsonl": ("id", "release_id", "entry_id", "item_id", "package_sense_id", "position", "definition_en", "raw_glosses", "tags", "examples", "translation_vi", "matched_qualifier", "translation_status"),
+                    "senses.jsonl": ("id", "release_id", "entry_id", "item_id", "package_sense_id", "position", "definition_en", "raw_glosses", "tags", "examples", "translation_vi", "matched_qualifier", "translation_status", "definitions", "source_context"),
                     "forms.jsonl": ("id", "release_id", "entry_id", "item_id", "package_form_id", "form", "normalized_form", "tags"),
-                    "pronunciations.jsonl": ("id", "release_id", "entry_id", "item_id", "package_pronunciation_id", "accent", "ipa", "audio_file", "audio_url", "source_url", "cached_audio_object_key", "tags"),
+                    "pronunciations.jsonl": ("id", "release_id", "entry_id", "item_id", "package_pronunciation_id", "accent", "ipa", "audio_file", "audio_url", "source_url", "cached_audio_object_key", "tags", "pronunciation_context"),
                     "translations.jsonl": ("id", "release_id", "entry_id", "item_id", "sense_id", "package_translation_id", "word_vi", "source", "source_scope", "source_sense_qualifier", "link_status", "unlinked_reason", "tags", "source_pos", "source_context"),
                 }[filename]
                 converter = converters[filename]
@@ -405,6 +428,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
         with conn.transaction():
             reconciled = reconcile_counts(conn, package.release_id, expected)
             provenance = reconcile_translation_provenance(conn, package, batch_size)
+            content_evidence = reconcile_v2_content(conn, package, batch_size)
             orphan_counts = lexicon_orphans(conn, package.release_id)
             orphan_total = sum(orphan_counts.values())
             if orphan_total:
@@ -429,6 +453,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
                 "baseline_release": baseline,
                 "reconciliation": {
                     "translation_provenance": provenance,
+                    "source_content": content_evidence,
                     "rows_read": records_read,
                     "rows_inserted_this_run": records_inserted,
                     "mismatch_count": sum(v["expected"] != v["actual"] for v in reconciled.values()),
@@ -438,11 +463,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
             }
             finish_run(conn, run_id, records_read, records_inserted, details)
         run_succeeded = True
-
-        if activate or rollback:
-            from clean_import_common import activate_release
-            activate_release(conn, package, activated_by=activated_by or "",
-                             action="ROLLBACK" if rollback else "ACTIVATE")
+        finalize_install(conn, package)
         return {
             "mode": "APPLY",
             "run_id": str(run_id),
@@ -450,8 +471,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
             "records_read": records_read,
             "records_inserted_this_run": records_inserted,
             "database_counts": reconciled,
-            "activated": bool(activate or rollback),
-            "activation_action": "ROLLBACK" if rollback else "ACTIVATE" if activate else None,
+            "installed": True,
         }
     except Exception as exc:
         if run_id is not None and not run_succeeded:
@@ -468,40 +488,12 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
         conn.close()
 
 
-def activate_only(package: ReleasePackage, *, database_url: str, activated_by: str,
-                  rollback: bool = False) -> dict[str, Any]:
-    conn = connect(database_url)
-    try:
-        lock_import_domain(conn, package.domain)
-        counts = activate_existing_release(
-            conn,
-            package,
-            activated_by=activated_by,
-            action="ROLLBACK" if rollback else "ACTIVATE",
-            expected_by_table={table: package.counts[filename] for filename, table in COLLECTIONS},
-        )
-        return {"mode": "ACTIVATE_ONLY", "release_id": str(package.release_id),
-                "activation_action": "ROLLBACK" if rollback else "ACTIVATE", "database_counts": counts}
-    finally:
-        try:
-            unlock_import_domain(conn, package.domain)
-        except Exception:
-            pass
-        conn.close()
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", type=Path, default=os.getenv("LEXICON_RELEASE_DIR"))
     parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"))
     parser.add_argument("--batch-size", type=int, default=1000)
     parser.add_argument("--apply", action="store_true", help="Write to PostgreSQL; default is a full dry run")
-    activation = parser.add_mutually_exclusive_group()
-    activation.add_argument("--activate", action="store_true", help="Set this imported release active")
-    activation.add_argument("--rollback", action="store_true", help="Activate this older release and record a rollback")
-    activation.add_argument("--activate-only", action="store_true", help="Activate an already imported release")
-    activation.add_argument("--rollback-only", action="store_true", help="Roll back to an already imported release")
-    parser.add_argument("--activated-by", help="Operator label recorded in activation history")
     return parser.parse_args()
 
 
@@ -509,32 +501,16 @@ def main() -> None:
     args = parse_args()
     if not args.release:
         raise SystemExit("--release or LEXICON_RELEASE_DIR is required")
-    if (args.activate or args.rollback) and not args.apply:
-        raise SystemExit("--activate/--rollback requires --apply")
-    if (args.activate_only or args.rollback_only) and args.apply:
-        raise SystemExit("--activate-only/--rollback-only cannot be combined with --apply")
-    if (args.activate or args.rollback or args.activate_only or args.rollback_only) and not args.activated_by:
-        raise SystemExit("--activated-by is required for activation")
     package = validate_clean_release(
         args.release,
         domain="lexicon",
         validator_name="validate_lexicon_release.py",
     )
-    if args.activate_only or args.rollback_only:
-        report = activate_only(
-            package,
-            database_url=db_url_from_args(args.database_url),
-            activated_by=args.activated_by,
-            rollback=args.rollback_only,
-        )
-    elif args.apply:
+    if args.apply:
         report = apply_import(
             package,
             database_url=db_url_from_args(args.database_url),
             batch_size=args.batch_size,
-            activate=args.activate,
-            rollback=args.rollback,
-            activated_by=args.activated_by,
         )
     else:
         report = dry_run_report(package, args.batch_size)

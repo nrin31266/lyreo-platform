@@ -1,6 +1,7 @@
 package com.lyreo.lexicon.api;
 
 import com.lyreo.lexicon.domain.LexiconEntry;
+import com.lyreo.lexicon.domain.PronunciationGroups;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,6 +25,8 @@ final class LexiconDetailMapper {
     }
 
     LexiconController.LexiconEntryResponse from(LexiconEntry entry) {
+        var parts = new java.util.HashMap<java.util.UUID,String>();
+        entry.items().forEach(item -> parts.put(item.id(), item.partOfSpeech()));
         return new LexiconController.LexiconEntryResponse(entry.id(), entry.headwordId(),
             entry.canonicalForm(), entry.normalizedForm(), entry.type().name(), entry.language(),
             entry.sourceMetadataJson(), entry.licenseText(), entry.items(),
@@ -33,14 +36,22 @@ final class LexiconDetailMapper {
                 s.position(), s.partOfSpeech(), s.definitionEn(), s.translationVi(),
                 s.translationStatus().name(), strings(s.rawGlossesJson(), "sense.rawGlosses"),
                 examples(s.examplesJson()), strings(s.tagsJson(), "sense.tags"),
-                s.matchedQualifier())).toList(),
-            entry.pronunciations().stream().map(p -> new LexiconController.PronunciationResponse(
-                p.id(), p.itemId(), p.accent(), p.ipa(), p.audioFile(), p.audioUrl(), p.sourceUrl(),
-                strings(p.tagsJson(), "pronunciation.tags"))).toList(),
+                s.matchedQualifier(),s.definitions(),s.sourceContext() != null && s.sourceContext().get("source") instanceof String source ? Map.of("source", source) : Map.of())).toList(),
+            entry.pronunciations().stream().map(this::pronunciation).toList(),
             entry.translations().stream().map(t -> new LexiconController.TranslationResponse(
                 t.id(), t.itemId(), t.senseId(), t.wordVi(), t.source(), t.sourceScope(),
                 t.sourceSenseQualifier(), t.linkStatus(), t.unlinkedReason(),
-                strings(t.tagsJson(), "translation.tags"), t.sourcePos())).toList());
+                strings(t.tagsJson(), "translation.tags"), t.sourcePos())).toList(),
+            PronunciationGroups.from(entry.canonicalForm(), entry.pronunciations(), parts).stream()
+                .map(v -> new LexiconController.PronunciationVariantResponse(v.id(), v.form(), v.notation(),
+                    v.notationSystem(), v.usage(), v.scopeStatus(), v.partOfSpeech(), v.regions(),
+                    v.recordings().stream().map(this::pronunciation).toList())).toList());
+    }
+
+    private LexiconController.PronunciationResponse pronunciation(LexiconEntry.Pronunciation p) {
+        return new LexiconController.PronunciationResponse(p.id(), p.itemId(), p.accent(), p.ipa(), p.audioFile(),
+            p.audioUrl(), p.sourceUrl(), strings(p.tagsJson(), "pronunciation.tags"), p.assetId(),
+            p.pronunciationContext(), PronunciationGroups.regions(p));
     }
 
     private List<String> strings(String value, String field) {

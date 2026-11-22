@@ -1,0 +1,24 @@
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { I18nextProvider } from 'react-i18next';
+import { i18n } from '@/i18n';
+import { api } from '@/lib/api';
+import { QuestionPicker } from './QuestionEditor';
+vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), api:vi.fn() }));
+let cache: QueryClient;
+beforeEach(async () => { vi.clearAllMocks(); await i18n.changeLanguage('en'); cache=new QueryClient({defaultOptions:{queries:{retry:false}}}); });
+afterEach(()=>{cleanup();cache.clear();});
+it('adds several published questions together and prevents selecting an existing membership', async () => {
+  vi.mocked(api).mockImplementation(async url => url.includes('/page?') ? {items:[{id:'old',title:'Already added',status:'PUBLISHED'},{id:'one',title:'First question',status:'PUBLISHED'},{id:'two',title:'Second question',status:'PUBLISHED'},{id:'cloze',title:'',type:'CLOZE',requiresContext:true,status:'PUBLISHED'}],total:4,page:0,size:30} : {id:url.split('/').at(-1),status:'PUBLISHED',publicationId:'revision',draft:{kind:'MCQ_SINGLE'}});
+  const select=vi.fn();
+  render(<QueryClientProvider client={cache}><I18nextProvider i18n={i18n}><QuestionPicker excludeIds={['old']} onSelect={select} /></I18nextProvider></QueryClientProvider>);
+  await userEvent.click(screen.getByRole('button',{name:'Choose from question bank'}));
+  const rows=await screen.findAllByRole('checkbox');
+  expect(rows[0]).toBeDisabled();
+  expect(rows[3]).toBeDisabled();
+  await userEvent.click(rows[1]);await userEvent.click(rows[2]);
+  await userEvent.click(screen.getByRole('button',{name:'Add 2 questions'}));
+  await waitFor(()=>expect(select).toHaveBeenCalledWith([{itemId:'one',publicationId:'revision'},{itemId:'two',publicationId:'revision'}]));
+});

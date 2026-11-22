@@ -1,7 +1,9 @@
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RiAddLine, RiDeleteBinLine, RiInformationLine } from '@remixicon/react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -37,7 +39,55 @@ export function AnnotatedTranscript({ sentence }: { sentence: AuthoringSentence 
     return matching.length ? <mark key={start} title={matching.map(span => span.explanation).join('\n')}>{sentence.text.slice(start, end)}</mark> : <span key={start}>{sentence.text.slice(start, end)}</span>;
   })}</p>;
 }
-export function ContentOptionsPanel({ draft, disabled, onChange }: { draft: Pick<LessonDraft, "options" | "statistics">; disabled: boolean; onChange: (options: AuthoringOptions) => void }) {
+export function LessonNotes({ draft, onJump }: { draft: Pick<LessonDraft, 'sentences' | 'status' | 'vocabularyBudget' | 'grammarBudget'>; onJump: (id: string) => void }) {
+  const { t } = useTranslation('admin');
+  const [open, setOpen] = useState(false);
+  const target = useRef<string | null>(null);
+  const groups = (['vocabulary', 'grammar'] as const).map(kind => {
+    const label = kind === 'vocabulary' ? 'LEXICAL' : 'GRAMMAR';
+    const notes = draft.sentences.flatMap((sentence, index) => sentence[kind]
+      .filter(note => note.surface.trim() && note.explanation.trim())
+      .map((note, position) => ({ note, index, position, sentenceId: sentence.id, stale: sentence.contentStale,
+        manual: sentence.manualFields?.includes(label) })));
+    const manual = notes.filter(note => note.manual).length;
+    const budget = kind === 'vocabulary' ? draft.vocabularyBudget : draft.grammarBudget;
+    return { label, notes, manual, budget: draft.status === 'PUBLISHED' ? undefined : budget };
+  });
+  const total = groups.reduce((count, group) => count + group.notes.length, 0);
+
+  return <Dialog open={open} onOpenChange={setOpen}>
+    <DialogTrigger asChild><Button variant="outline" size="sm">{t('finish.lessonNotes')} <span className="tabular-nums text-muted-foreground">{total}</span></Button></DialogTrigger>
+    <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl" onCloseAutoFocus={() => {
+      if (!target.current) return;
+      const id = target.current;
+      target.current = null;
+      requestAnimationFrame(() => onJump(id));
+    }}>
+      <DialogHeader><DialogTitle>{t('finish.lessonNotes')}</DialogTitle><DialogDescription>{t('finish.lessonNotesHelp')}</DialogDescription></DialogHeader>
+      {groups.map(({ label, notes, manual, budget }) => <section key={label} className="min-w-0 space-y-2">
+        <h3 className="text-sm font-semibold">{t(`contentAuthoring.${label}`)} <span className="tabular-nums text-muted-foreground">{notes.length}</span></h3>
+        <p className="text-xs text-muted-foreground">
+          {budget === undefined
+            ? t('finish.noteCounts', { generated: notes.length - manual, manual })
+            : t('finish.noteCountsWithBudget', { generated: notes.length - manual, manual, budget })}
+        </p>
+        {!notes.length ? <p className="text-sm text-muted-foreground">{t('finish.lessonNotesEmpty')}</p> :
+          <ul className="divide-y rounded-md border">{notes.map(({ note, sentenceId, index, position, stale }) =>
+            <li className="space-y-1 p-3 text-sm wrap-break-word" key={`${sentenceId}-${position}`}>
+              <strong>{note.surface}</strong>
+              {stale && <span className="ms-2 text-xs text-muted-foreground">{t('contentAuthoring.stale')}</span>}
+              <p>{note.explanation}</p>
+              <Button variant="link" size="sm" className="h-auto px-0 py-1" onClick={() => {
+                target.current = sentenceId;
+                setOpen(false);
+              }}>{t('finish.openNoteSentence', { number: index + 1 })}</Button>
+            </li>
+          )}</ul>}
+      </section>)}
+    </DialogContent>
+  </Dialog>;
+}
+export function ContentOptionsPanel({ draft, disabled, onChange }: { draft: Pick<LessonDraft, "options" | "vocabularyBudget" | "grammarBudget">; disabled: boolean; onChange: (options: AuthoringOptions) => void }) {
   const { t } = useTranslation('admin');
   const options = draft.options ?? defaultContentOptions;
   function toggle(field: 'annotations' | 'activities', value: string, checked: boolean) { onChange({ ...options, [field]: checked ? [...new Set([...options[field], value])] : options[field].filter(item => item !== value) }); }
@@ -48,7 +98,7 @@ export function ContentOptionsPanel({ draft, disabled, onChange }: { draft: Pick
   };
   return <fieldset disabled={disabled} className="finish-settings">
     <section><h3>{t('finish.support')}</h3><div className="finish-fields">{feature('TRANSLATION')}{feature('IPA')}<label>{t('finish.targetLanguage')}<Input value={options.locale} maxLength={35} onChange={e => onChange({ ...options, locale: e.target.value })} /></label><label>{t('contentAuthoring.accent')}<Select value={options.accent} onValueChange={accent => onChange({ ...options, accent: accent as 'US' | 'UK' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="US">US</SelectItem><SelectItem value="UK">UK</SelectItem></SelectContent></Select></label></div></section>
-    <section><h3>{t('finish.notes')}</h3><div className="finish-fields">{feature('LEXICAL')}{feature('GRAMMAR')}<label>{t('contentAuthoring.noteBudget')}<Select value={options.density} onValueChange={density => onChange({ ...options, density: density as 'AUTO' | 'CUSTOM' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="AUTO">{t('contentAuthoring.autoBudget')}</SelectItem><SelectItem value="CUSTOM">{t('contentAuthoring.customBudget')}</SelectItem></SelectContent></Select></label>{options.density === 'CUSTOM' && <><label>{t('contentAuthoring.vocabularyCap')}<Input type="number" min={0} max={100} value={options.vocabularyLimit} onChange={e => onChange({ ...options, vocabularyLimit: Number(e.target.value) })} /></label><label>{t('contentAuthoring.grammarCap')}<Input type="number" min={0} max={30} value={options.grammarLimit} onChange={e => onChange({ ...options, grammarLimit: Number(e.target.value) })} /></label></>}</div><p>{!draft.statistics && options.density === 'AUTO' ? t('finish.autoBudgetHelp') : t('finish.budgetHelp', { vocabulary: options.density === 'CUSTOM' ? options.vocabularyLimit : Math.ceil((draft.statistics?.wordCount ?? 0) / 100), grammar: options.density === 'CUSTOM' ? options.grammarLimit : Math.ceil((draft.statistics?.wordCount ?? 0) / 250) })}</p></section>
+    <section><h3>{t('finish.notes')}</h3><div className="finish-fields">{feature('LEXICAL')}{feature('GRAMMAR')}<label>{t('contentAuthoring.noteBudget')}<Select value={options.density} onValueChange={density => onChange({ ...options, density: density as 'AUTO' | 'CUSTOM' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="AUTO">{t('contentAuthoring.autoBudget')}</SelectItem><SelectItem value="CUSTOM">{t('contentAuthoring.customBudget')}</SelectItem></SelectContent></Select></label>{options.density === 'CUSTOM' && <><label>{t('contentAuthoring.vocabularyCap')}<Input type="number" min={0} max={100} value={options.vocabularyLimit} onChange={e => onChange({ ...options, vocabularyLimit: Number(e.target.value) })} /></label><label>{t('contentAuthoring.grammarCap')}<Input type="number" min={0} max={30} value={options.grammarLimit} onChange={e => onChange({ ...options, grammarLimit: Number(e.target.value) })} /></label></>}</div><p>{options.density === 'AUTO' && (draft.vocabularyBudget == null || draft.grammarBudget == null) ? t('finish.autoBudgetHelp') : t('finish.budgetHelp', { vocabulary: options.density === 'CUSTOM' ? options.vocabularyLimit : draft.vocabularyBudget, grammar: options.density === 'CUSTOM' ? options.grammarLimit : draft.grammarBudget })}</p></section>
     <section><h3>{t('finish.activities')}</h3><div className="finish-fields">{feature('DICTATION')}{feature('SHADOWING')}</div><p>{t('finish.activitiesHelp')}</p></section>
   </fieldset>;
 }
@@ -72,7 +122,27 @@ export function SentenceContentEditor({ sentence, options, disabled, showIpa, on
   }
   return <fieldset disabled={disabled} className="finish-sentence-content">
     {(options.annotations.includes('TRANSLATION') || sentence.translation) && <label className="sr-label">{t('contentAuthoring.TRANSLATION')}<Textarea aria-label={t('contentAuthoring.TRANSLATION')} rows={1} className="finish-translation" placeholder={t('finish.translationMissing')} value={sentence.translation ?? ''} onChange={e => onChange({ translation: e.target.value })} /></label>}
-    {showIpa && <label className="sr-label">{t('contentAuthoring.IPA')}<Textarea aria-label={t('contentAuthoring.IPA')} rows={1} className="finish-ipa" value={sentence.ipa ?? ''} onChange={e => onChange({ ipa: e.target.value })} />{sentence.ipaNeedsReview && <small className="text-muted-foreground">{t('finish.ipaWarning')}</small>}</label>}
+    {showIpa && <div className="space-y-2">
+      <label className="block space-y-1 text-xs text-muted-foreground">
+        <span>{t('finish.referenceIpa', { accent: sentence.ipaAccent ?? options.accent })}</span>
+        <Textarea aria-label={t('contentAuthoring.IPA')} rows={1} className="finish-ipa" value={sentence.ipa ?? ''} onChange={e => onChange({ ipa: e.target.value })} />
+      </label>
+      {sentence.ipaNeedsReview && <div className="text-xs text-muted-foreground">
+        {sentence.ipaReviewIssues?.length ? <ul className="list-disc space-y-1 ps-4">
+          {sentence.ipaReviewIssues.map(issue => <li key={`${issue.start}-${issue.end}-${issue.code}`}>
+            {issue.code !== 'WORD_BOUNDARIES' && <strong className="text-foreground">{issue.surface} · </strong>}
+            {t(`finish.ipaIssues.${issue.code}`)}
+          </li>)}
+        </ul> : <p>{t('finish.ipaWarning')}</p>}
+        {!disabled && !!sentence.ipa?.trim() && <Button variant="ghost" size="sm" type="button" onClick={() => onChange({ ipaNeedsReview: false })}>
+          {t('finish.markIpaReviewed')}
+        </Button>}
+      </div>}
+      {sentence.ipaRaw && <details className="text-xs text-muted-foreground">
+        <summary className="cursor-pointer">{t('finish.rawIpa')}</summary>
+        <p className="mt-1 whitespace-pre-wrap break-words">{sentence.ipaRaw}</p>
+      </details>}
+    </div>}
     <div className="finish-notes">{(['vocabulary', 'grammar'] as const).flatMap(kind => (kind === 'vocabulary' ? vocab : grammar).map((note, index) => {
       const occurrences: { tokenStart: number; tokenEnd: number }[] = [];
       for (let at = 1; at <= textTokens(sentence.text).length; at++) { const span = contentSpan(sentence.text, note.surface, at); if (!span) break; occurrences.push(span); }

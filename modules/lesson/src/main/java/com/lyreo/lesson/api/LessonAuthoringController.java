@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotNull;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -21,7 +22,10 @@ public class LessonAuthoringController {
     private final com.lyreo.lesson.application.port.LessonCatalogPort catalog;
     public LessonAuthoringController(LessonAuthoringService service,com.lyreo.lesson.application.port.LessonCatalogPort catalog) {this.service=service;this.catalog=catalog;}
     @PostMapping("/inspect") public LessonAuthoringService.Inspect inspect(@Valid @RequestBody InspectRequest request) {
-        try { return service.inspect(request.sourceReference()); }
+        return youtubeSource(() -> service.inspect(request.sourceReference()));
+    }
+    private static <T> T youtubeSource(Supplier<T> action) {
+        try { return action.get(); }
         catch (SourceMaterializationException failure) {
             throw new ServiceUnavailableException(failure.errorCode(),
                 "YouTube source is unavailable. Check the source and media tools, then retry.", failure);
@@ -29,7 +33,7 @@ public class LessonAuthoringController {
     }
     @org.springframework.transaction.annotation.Transactional
     @PostMapping("/drafts") public ResponseEntity<LessonAuthoringService.Accepted> create(@Valid @RequestBody CreateRequest request) {
-        var result=service.create(request.title(),request.sourceReference(),request.startMs(),request.endMs(),request.options());
+        var result=youtubeSource(() -> service.create(request.title(),request.sourceReference(),request.startMs(),request.endMs(),request.options()));
         catalog.updateMetadata(result.lessonId(),null,request.description()==null ? "" : request.description(),request.imageUrl(),request.categoryIds()==null ? List.of() : request.categoryIds());
         return accepted(result);
     }
@@ -73,13 +77,6 @@ public class LessonAuthoringController {
         com.lyreo.lesson.domain.authoring.AuthoringProfile.ContentType contentType) {}
     @PostMapping("/{id}/cancel") public LessonAuthoringResponse cancel(@PathVariable UUID id,@RequestBody RevisionRequest request) {return LessonAuthoringResponse.from(service.cancelChain(id,request.revision()));}
     @PostMapping("/{id}/run") public ResponseEntity<LessonAuthoringService.Accepted> run(@PathVariable UUID id,@RequestBody RevisionRequest request) {return accepted(service.run(id,request.revision()));}
-    @PutMapping("/{id}/changes") @org.springframework.transaction.annotation.Transactional
-    public LessonAuthoringResponse changes(@PathVariable UUID id,@RequestBody ChangesRequest request) {
-        var result=service.saveChanges(id,request.changes());
-        if(request.metadata()!=null) {var m=request.metadata();catalog.assertVersion(id,m.version(),false);catalog.updateMetadata(id,m.title(),m.description(),m.imageUrl(),m.categoryIds());}
-        return LessonAuthoringResponse.from(service.get(result.id));
-    }
-    public record ChangesRequest(LessonAuthoringService.Changes changes,LessonCatalogController.Metadata metadata) {}
     @GetMapping("/{id}/readiness") public java.util.Map<String,Object> readiness(@PathVariable UUID id) {var errors=service.readiness(service.get(id));return java.util.Map.of("ready",errors.isEmpty(),"blockers",errors);}
     @PostMapping("/{id}/publish") public LessonAuthoringResponse publish(@PathVariable UUID id,@RequestBody RevisionRequest request,org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken authentication) {return LessonAuthoringResponse.from(service.publish(id,request.revision(),UUID.fromString(authentication.getToken().getSubject())));}
     @PostMapping("/{id}/duplicate") public LessonAuthoringResponse duplicate(@PathVariable UUID id,@RequestBody RevisionRequest request) {return LessonAuthoringResponse.from(service.duplicate(id,request.revision()));}

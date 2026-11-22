@@ -115,9 +115,17 @@ class GeminiProvider:
         output: dict[str, Any] = {'content': content}
         if structured is not None:
             output['structured'] = structured
+        usage = _interaction_usage(data)
+        if request.options.get('include_reasoning_usage'):
+            details = data.get('usage') or {}
+            reasoning = details.get('total_thought_tokens')
+            if type(reasoning) is int and reasoning >= 0:
+                output['reasoning_tokens'] = reasoning
+                if 'output_tokens' in usage:
+                    usage['output_tokens'] += reasoning
         return ExecuteResponse(
             output=output,
-            usage=_interaction_usage(data),
+            usage=usage,
             metadata={
                 'provider': 'GEMINI',
                 'model': request.model,

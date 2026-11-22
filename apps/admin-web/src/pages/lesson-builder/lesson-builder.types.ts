@@ -36,6 +36,7 @@ export type AuthoringSentence = {
   ipaAccent?: string | null;
   ipaVersion?: string | null;
   ipaNeedsReview?: boolean;
+  ipaReviewIssues?: { code: string; start: number; end: number; surface: string }[];
   id: string;
   text: string;
   usage: SentenceUsage;

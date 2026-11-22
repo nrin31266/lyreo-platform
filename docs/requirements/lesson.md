@@ -208,8 +208,9 @@ A single-object JSON array wrapper can be normalized losslessly; multiple root o
 Truncation splits only the failed batch; malformed JSON fails clearly without repair calls or loops.
 Usage includes failed, truncated and fallback attempts. Manual edits are protected; stale manual
 values need explicit reconfirmation or editing. Timing-only edits keep translation/IPA/note results.
-AUTO note budgets use ceil(words/100) and ceil(words/250), with configurable whole-lesson CUSTOM
-maxima (0–100 vocabulary, 0–30 grammar). These are generation caps, not quotas; manual notes do not consume them.
+AUTO note budgets use ceil(words/75) for vocabulary and ceil(words/175) for grammar. CUSTOM maxima
+are 0–100 vocabulary and 0–30 grammar. Later batches can use unused earlier capacity within the
+whole-lesson cap. Admin shows generated and manually edited counts. Manual edits do not consume the cap.
 
 Every sentence with valid timing is selected by default for each enabled activity. LLM exclusions
 are limited to PROMOTION, NON_SPEECH, BROKEN_FRAGMENT and CODE. Length, difficulty, repetition,
@@ -224,10 +225,11 @@ medium; short/unsuitable sentences fall back to full dictation. Manual token tar
 ones, store spans/text hash/version and become stale when transcript changes. Answers come from the transcript.
 No learner attempt or score is implemented in this phase.
 
-Local eSpeak stores raw engine IPA separately from learner display, accent, engine and display version.
-Display uses r for ɹ and (ɪ/ə) with a weak-vowel explanation for ᵻ; flap ɾ, stress, vowels and accent
-are preserved. Manual IPA is never silently converted. Names/ambiguous readings are advisory, with
-one reference-pronunciation explanation per list. No mandatory pronunciation confirmation is recorded.
+Local eSpeak uses a prepared copy of the transcript for reference pronunciation. The original text
+and timing stay available for review. It stores engine output, learner display, accent and versions
+separately. The display uses English dictionary conventions and keeps meaningful vowel and stress
+differences. Admin sees review reasons at the source word or phrase and can open the engine output.
+Existing manual IPA and published snapshots retain their saved values.
 
 Lesson profile uses fixed enums: CEFR `A1|A2|B1|B2|C1|C2|UNKNOWN` and type
 `CONVERSATION|MONOLOGUE|LECTURE|STORY|NEWS|MIXED|OTHER|UNKNOWN`. Suggestions are editable.
@@ -361,3 +363,6 @@ uses a guided conversation by default to clarify topic, level, length and quanti
 configuration fields in Lyreo. Optional discovery is a short note at the end of the prompt and of
 the AI's first reply, rather than an initial Custom/Random choice. Explained titles, idea discovery and source verification remain in
 the base prompts. Switching prompt type never changes the editor's source or its draft fields.
+
+Admin của bài học đã công bố chỉ hiển thị thao tác xem nội dung, không có nút công bố lại hoặc
+nhãn “xem trước và công bố”. Metadata và ẩn/hiện tiếp tục theo luồng quản trị hiện có.

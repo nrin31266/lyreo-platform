@@ -5,6 +5,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name="lyreo.jobs.scheduler-enabled",havingValue="true",matchIfMissing=true)
 public class JobScheduler {
     private final BackgroundJobWorker worker;
 

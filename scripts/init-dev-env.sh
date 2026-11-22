@@ -13,7 +13,7 @@ copy_if_missing() {
   fi
 }
 
-# Keep runtime/tool secrets scoped to the executable that owns them; there is no root .env.
+# Runtime secrets stay with their executable. Root .env is reserved for operator maintenance.
 for example in \
   "$ROOT/infra/docker/.env.example" \
   "$ROOT/infra/keycloak/.env.example" \
@@ -96,11 +96,20 @@ for key in \
   LEXICON_RELEASE_DIR \
   LEXICON_RELEASE_URL \
   LEXICON_RELEASE_SHA256 \
-  R2_REGION; do
+  R2_REGION LOCAL_STORAGE_ROOT DATA_DRIVE_REMOTE; do
   if ! grep -q "^${key}=" "$DATA_ENV"; then
     set_env "$DATA_ENV" "$key" "$(get_env "$DATA_ENV.example" "$key")"
   fi
 done
+
+# Older importer env files used R2 implicitly. Preserve that configured target on upgrade.
+if ! grep -q '^STORAGE_MODE=' "$DATA_ENV"; then
+  if [[ -n "$(get_env "$DATA_ENV" R2_ENDPOINT)" && -n "$(get_env "$DATA_ENV" R2_ACCESS_KEY_ID)" && -n "$(get_env "$DATA_ENV" R2_SECRET_ACCESS_KEY)" ]]; then
+    set_env "$DATA_ENV" STORAGE_MODE r2
+  else
+    set_env "$DATA_ENV" STORAGE_MODE "$(get_env "$DATA_ENV.example" STORAGE_MODE)"
+  fi
+fi
 
 # AES-GCM provider credentials need a local 256-bit master key. Never copy it into frontend env.
 if [[ -z "$(get_env "$CORE_ENV" MASTER_ENCRYPTION_KEY)" ]]; then
@@ -130,7 +139,7 @@ echo 'Local object storage is the default; R2_* values are only needed for R2 in
 if [[ -f "$DATA_ENV" ]]; then
   DATA_URL=$(get_env "$DATA_ENV" GRAMMAR_TOEIC_RELEASE_URL)
   if [[ -n "$DATA_URL" ]]; then
-    echo 'Grammar/TOEIC clean release URL configured; run make data-fetch (or WITH_DATA=1 make setup).'
+    echo 'Grammar/TOEIC clean release URL configured; run make setup-data when you want to install content.'
   else
     echo 'Grammar/TOEIC clean release URL is not configured; add the uploaded archive URL before make data-fetch.'
   fi

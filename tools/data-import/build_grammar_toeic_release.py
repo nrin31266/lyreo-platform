@@ -22,10 +22,12 @@ from urllib.parse import unquote, urlparse
 
 import bleach
 from bleach.css_sanitizer import CSSSanitizer
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, Tag, Comment
+from maintenance_overrides import apply as apply_language_overrides
+import source_repairs
 
 
-BUILDER_VERSION = "1.0.1"
+BUILDER_VERSION = "2.0.2"
 SCHEMA_VERSION = "1.0.0"
 TAGS = ["div", "p", "span", "b", "strong", "i", "em", "u", "br", "hr", "h1", "h2", "h3", "h4", "small", "ul", "ol", "li", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "colgroup", "col", "sup", "sub", "blockquote"]
 ATTRS = {"*": ["class", "style"], "table": ["border", "cellpadding", "cellspacing"], "td": ["colspan", "rowspan"], "th": ["colspan", "rowspan"], "col": ["span"], "div": ["class", "style"]}
@@ -86,7 +88,36 @@ def clean(value: object) -> str | None:
 def clean_html(source: str) -> str:
     # Links and img tags are removed: their visible text remains and media is
     # represented by separately validated assets. Style is allowlisted.
-    return bleach.clean(source, tags=TAGS, attributes=ATTRS, css_sanitizer=CSS, strip=True).strip()
+    return str(BeautifulSoup(bleach.clean(repaired_source(source), tags=TAGS, attributes=ATTRS, css_sanitizer=CSS, strip=True), "html.parser")).strip()
+
+
+DOCUMENT_REPAIRS = json.loads(Path(__file__).with_name("toeic_document_repairs.json").read_text())
+# 2019 Test 5 Q62-64 uses audio only. The next group, Q65-67, has a graphic.
+REVIEWED_STALE_IMAGE = {
+    "5302d70616bca8d33dce08a87b466f24a5884ad233d85481d8b673c25deb5d4d":
+        "https://zenlishtoeic.vn/stm-quizzes/part-3-test-5-2019/",
+}
+
+
+def document_repair(source: str) -> str | None:
+    return DOCUMENT_REPAIRS.get(hashlib.sha256(source.encode()).hexdigest(), {}).get("repair")
+
+
+def repaired_source(source: str) -> str:
+    # The hash-pinned source ends with the literal editor typo "bre" after the last document.
+    value = source.removesuffix("bre") if document_repair(source) == "TRAILING_BRE" else source
+    # Raw e-mail headers sometimes contain literal angle-bracket addresses, not HTML tags.
+    value = re.sub(r"<([A-Za-z0-9.!#$%&'*+/?^_`{|}~=-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63})>",
+                   r"&lt;\1&gt;", value)
+    # The source sometimes duplicates both quotes around an HTML attribute value.
+    value = re.sub(r"<[a-zA-Z][^<>]*>", lambda tag: re.sub(
+        r'(?i)(\s(?:class|style|border|cellpadding|cellspacing|colspan|rowspan|span)\s*=\s*)""([^"<>]+)""(?=\s|/?>)',
+        r'\1"\2"', tag[0]), value)
+    soup = BeautifulSoup(value, "html.parser")
+    for paragraph in soup.find_all("p"):
+        if not paragraph.find(True) and re.fullmatch(r"\s*[-–—_=*]{3,}\s*", paragraph.get_text()):
+            paragraph.replace_with(soup.new_tag("hr"))
+    return str(soup)
 
 
 def visible_tokens(source: str) -> list[str]:
@@ -161,7 +192,7 @@ def common(rows: list[dict], field: str) -> str | None:
 
 def detect_document_type(fragment: str) -> str:
     soup = BeautifulSoup(fragment, "html.parser")
-    known = ("email", "article", "notice", "letter", "memo", "webpage", "textmsg", "chat", "brochure", "report", "form", "advertisement", "jobad")
+    known = ("email", "article", "schedule", "notice", "letter", "memo", "webpage", "textmsg", "chat", "brochure", "report", "form", "advertisement", "jobad")
     for tag in soup.find_all(True):
         for class_name in tag.get("class", []):
             if class_name.lower() in known:
@@ -169,27 +200,100 @@ def detect_document_type(fragment: str) -> str:
     return "unknown"
 
 
+def reviewed_email_and_form(node: Tag) -> list[str]:
+    children = [child for child in node.contents if str(child).strip()
+                and not (isinstance(child, Tag) and child.name in ("br", "hr"))]
+    headings = ("to:", "from:", "date:", "subject:")
+    starts = [
+        index for index in range(len(children) - 3)
+        if all(isinstance(child, Tag) and child.name == "p"
+               and child.get_text(strip=True).casefold().startswith(heading)
+               for child, heading in zip(children[index:index + 4], headings))
+    ]
+    if len(starts) != 2 or starts[0] != 0 or starts[1] < 5 or len(children) - starts[1] < 6:
+        return []
+    form = children[-1]
+    if not isinstance(form, Tag) or form.name != "div" or not form.find("table"):
+        return []
+    return [
+        '<div class="email">' + "".join(map(str, children[:starts[1]])) + '</div>',
+        '<div class="email">' + "".join(map(str, children[starts[1]:-1])) + '</div>',
+        '<div class="form">' + str(form) + '</div>',
+    ]
+
+
 def document_fragments(source: str, part: int, question_count: int) -> tuple[list[str], str]:
-    soup = BeautifulSoup(source, "html.parser")
-    roots = [tag for tag in soup.contents if isinstance(tag, Tag) and tag.name != "br"]
-    # A five-question reading group may have multiple documents. Only split
-    # when the DOM exposes clear sibling wrappers; preserve the full group HTML
-    # for every case, including uncertain ones.
+    soup = BeautifulSoup(repaired_source(source), "html.parser")
+    for comment in soup.find_all(string=lambda text:isinstance(text, Comment)):
+        comment.extract()
     if part == 7 and question_count == 5:
-        candidates = roots
-        if len(roots) == 1 and roots[0].name == "div":
-            candidates = [tag for tag in roots[0].children if isinstance(tag, Tag) and tag.name == "div"]
-        wrappers = [tag for tag in candidates if tag.name == "div" and ("border" in tag.get("style", "") or any(tag.find(class_=name) for name in ("email", "article", "webpage", "report", "notice", "letter", "jobad")))]
-        if len(wrappers) in (2, 3) and len(wrappers) == len(candidates):
-            fragments = [clean_html(str(tag)) for tag in wrappers]
-            if visible_tokens(clean_html(source)) == [token for fragment in fragments for token in visible_tokens(fragment)]:
+        # Separators carry no document text. Never split plain paragraphs by count.
+        for separator in list(soup.find_all(["hr", "p"])):
+            if separator.name == "hr" or re.fullmatch(r"\s*[-–—_=*]{3,}\s*", separator.get_text()):
+                separator.replace_with(soup.new_tag("hr"))
+        node = soup
+        while True:
+            meaningful = [child for child in node.contents if str(child).strip() and not (isinstance(child, Tag) and child.name == "br")]
+            if len(meaningful) == 1 and isinstance(meaningful[0], Tag) and meaningful[0].name == "div":
+                node = meaningful[0]
+            else:
+                break
+        if document_repair(source) == "EMAIL_HEADERS_AND_FORM":
+            fragments = [clean_html(fragment) for fragment in reviewed_email_and_form(node)]
+            if len(fragments) == 3 and all(visible_tokens(fragment) for fragment in fragments) and (
+                visible_tokens(clean_html(str(soup))) == [token for fragment in fragments for token in visible_tokens(fragment)]
+            ):
+                return fragments, "STRUCTURAL"
+            return [], "UNSPLIT"
+        chunks: list[list] = [[]]
+        for child in node.contents:
+            if isinstance(child, Tag) and child.name == "hr":
+                if chunks[-1]: chunks.append([])
+            elif str(child).strip() and not (isinstance(child, Tag) and child.name == "br"):
+                chunks[-1].append(child)
+        chunks = [chunk for chunk in chunks if chunk]
+        if len(chunks) == 1:
+            children = chunks[0]
+            if document_repair(source) == "ARTICLE_SCHEDULE_WRAPPER":
+                if len(children) != 2 or not all(isinstance(child, Tag) and child.name == "div" for child in children):
+                    return [], "UNSPLIT"
+                sections = [child for child in children[0].contents if str(child).strip()]
+                if len(sections) != 2 or not all(isinstance(child, Tag) and child.name == "div" for child in sections):
+                    return [], "UNSPLIT"
+                article, schedule = sections
+                fragments = [
+                    clean_html('<div class="article">' + str(article) + '</div>'),
+                    clean_html('<div class="schedule">' + str(schedule) + '</div>'),
+                    clean_html(str(children[1])),
+                ]
+                if all(visible_tokens(fragment) for fragment in fragments) and (
+                    visible_tokens(clean_html(str(soup))) == [token for fragment in fragments for token in visible_tokens(fragment)]
+                ):
+                    return fragments, "STRUCTURAL"
+                return [], "UNSPLIT"
+            if len(children) in (2, 3) and all(isinstance(child, Tag) and child.name == "div" for child in children):
+                chunks = [[child] for child in children]
+            elif document_repair(source) == "DOCUMENT_TABLES":
+                if len(children)==3 and all(isinstance(child,Tag) and child.name=="table" for child in children):
+                    chunks=[[child] for child in children]
+            elif document_repair(source) == "EMAIL_TABLES":
+                chunks=[]
+                for child in children:
+                    if isinstance(child,Tag) and child.name=="table": chunks.append([])
+                    if not chunks: return [],"UNSPLIT"
+                    chunks[-1].append(child)
+        if len(chunks) in (2, 3):
+            fragments = [clean_html("".join(str(child) for child in chunk)) for chunk in chunks]
+            preserved = clean_html(str(soup))
+            if all(visible_tokens(fragment) for fragment in fragments) and visible_tokens(preserved) == [token for fragment in fragments for token in visible_tokens(fragment)]:
                 return fragments, "STRUCTURAL"
         return [], "UNSPLIT"
     return [clean_html(source)], "SINGLE"
 
 
 def magic_type(path: Path) -> tuple[str, str]:
-    head = path.open("rb").read(16)
+    with path.open("rb") as stream:
+        head = stream.read(16)
     if head.startswith(b"\x89PNG\r\n\x1a\n"):
         return "image/png", ".png"
     if head.startswith(b"RIFF") and head[8:12] == b"WEBP":
@@ -248,7 +352,11 @@ def media_catalog(raw: Path, release: Path, tests: dict[str, dict], questions: l
                     questions_in_group = groups_questions.get(row["id"], [])
                     stale = owner_type == "group" and kind == "image" and row["part"] in (3, 4) and not any(GRAPHIC_RE.search(q.get("question_text") or "") for q in questions_in_group)
                     if stale:
-                        issue(issues, "UNRESOLVED_IMAGE_REFERENCE", "UNRESOLVED", row["id"], f"No local file and no graphic question: {path.relative_to(raw)}")
+                        evidence = REVIEWED_STALE_IMAGE.get(hashlib.sha256(canonical_json(row).encode()).hexdigest())
+                        if evidence and sorted(q["question_number"] for q in questions_in_group) == [62, 63, 64]:
+                            issue(issues, "STALE_IMAGE_REFERENCE", "FIXED", row["id"], f"Verified audio-only group. Stale source reference: {source_url}. Independent comparison: {evidence}")
+                        else:
+                            issue(issues, "UNRESOLVED_IMAGE_REFERENCE", "UNRESOLVED", row["id"], f"No local file and no graphic question: {path.relative_to(raw)}")
                         continue
                     fail(f"Missing required media: {path}")
                 referenced.add(path)
@@ -275,7 +383,9 @@ def package_release(release: Path, archive: Path, root_name: str | None = None) 
     return sha256(archive)
 
 
-def build(raw: Path, release: Path, archive: Path, generated_at: str) -> dict:
+def build(raw: Path, release: Path, archive: Path, generated_at: str, overrides: Path | None = None, version: str = "2.0.0", repairs: Path | None = None) -> dict:
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version) or (overrides or repairs) and tuple(map(int,version.split('.'))) <= (2,0,0):
+        fail("Reviewed changes require a new package version after 2.0.0")
     if release.exists() or archive.exists():
         fail("Output already exists; choose a new release path/version")
     if release == raw or raw in release.parents or archive == raw or raw in archive.parents:
@@ -423,10 +533,12 @@ def build(raw: Path, release: Path, archive: Path, generated_at: str) -> dict:
             fragments, parse_status = document_fragments(html_source, part, len(members)) if html_source else ([], "NOT_APPLICABLE")
             if html_source and not html:
                 fail(f"HTML vanished after sanitizing: {row['id']}")
-            if html_source and visible_tokens(html_source) != visible_tokens(html):
+            if html_source and visible_tokens(repaired_source(html_source)) != visible_tokens(html):
                 fail(f"HTML text changed after sanitizing: {row['id']}")
             if parse_status == "UNSPLIT":
                 issue(issues, "MULTI_DOCUMENT_UNSPLIT", "UNRESOLVED", row["id"], "Complete safe group HTML retained; complete document projection unavailable")
+            elif html_source and document_repair(html_source):
+                issue(issues,"SOURCE_DOCUMENT_REPAIRED","FIXED",row["id"],document_repair(html_source))
             for ordinal, fragment in enumerate(fragments, 1):
                 documents.append({"id": f"{row['id']}:{ordinal}", "group_id": row["id"], "ordinal": ordinal, "document_type": detect_document_type(fragment), "html": fragment, "parse_status": parse_status})
             translation = common(members, "dich_nghia")
@@ -444,6 +556,7 @@ def build(raw: Path, release: Path, archive: Path, generated_at: str) -> dict:
                         fail(f"Part 6 marker missing/ambiguous: {row['id']} Q{number}")
             groups.append({"id": row["id"], "test_id": row["test_id"], "part": part, "kind": "AUDIO" if part in (3, 4) else "TEXT", "title": title, "order_index": row.get("order_index"), "difficulty_level": row.get("difficulty_level"), "question_numbers": [q["question_number"] for q in members], "transcript_en": clean(row.get("transcript")), "content_translation_vi": translation, "vocabulary_note_vi": vocabulary, "render_html": html, "source_html_sha256": hashlib.sha256(html_source.encode("utf-8")).hexdigest() if html_source else None, "document_parse_status": parse_status, "document_count": len(fragments)})
             groups[-1]["source_html"] = html_source
+            groups[-1]["source_issues"] = [{"code":i["code"],"message":i["detail"]} for i in issues if i["source_id"] == row["id"] and i["status"] == "UNRESOLVED"]
         for row in questions_raw:
             untranslated = clean(row.get("explanation_en"))
             if untranslated and not VI_RE.search(untranslated):
@@ -462,6 +575,18 @@ def build(raw: Path, release: Path, archive: Path, generated_at: str) -> dict:
         clean_subtopics = [{"id": row["id"], "topic_id": row["topic_id"], "title_en": clean(row.get("title_en")), "title_vi": clean(row.get("title_vi")), "description_en": clean(row.get("description_en")), "description_vi": clean(row.get("description_vi")), "level": row.get("level"), "order_index": row.get("order_index"), "access_level": row.get("access_level"), "is_hidden": row.get("is_hidden")} for row in active_subtopics]
         clean_banks = [{"id": row["set_id"], "name": row["set_name"], "year": row.get("year"), "order_index": row.get("order_index"), "access_level": row.get("access_level"), "source_counts": {key: row.get(key) for key in ("grammar_count", "test_count", "total_count")}} for row in banks]
         clean_levels = [{"id": str(row["level"]), "level": row["level"], "name_vi": row.get("name_vi"), "description_vi": row.get("description_vi")} for row in levels]
+        language_overrides = json.loads(overrides.read_text()) if overrides else None
+        if language_overrides:
+            apply_language_overrides(items, language_overrides)
+            write_json(release / "editorial/language_overrides.json", language_overrides)
+        reviewed_repairs = source_repairs.validate(json.loads(repairs.read_text()), "grammar-toeic") if repairs else None
+        if reviewed_repairs:
+            source_repairs.require_targets(reviewed_repairs, {"shared/items.jsonl": items, "toeic/groups.jsonl": {g["id"]: g for g in groups}, "grammar/topics.jsonl": {row["id"]: row for row in clean_topics}, "grammar/subtopics.jsonl": {row["id"]: row for row in clean_subtopics}})
+            items = {key: source_repairs.record("shared/items.jsonl", value, reviewed_repairs) for key, value in items.items()}
+            groups = [source_repairs.record("toeic/groups.jsonl", value, reviewed_repairs) for value in groups]
+            clean_topics = [source_repairs.record("grammar/topics.jsonl", value, reviewed_repairs) for value in clean_topics]
+            clean_subtopics = [source_repairs.record("grammar/subtopics.jsonl", value, reviewed_repairs) for value in clean_subtopics]
+            write_json(release / source_repairs.PATH, reviewed_repairs)
         collections_out = {
             "shared/items.jsonl": list(items.values()),
             "shared/assets.jsonl": assets,
@@ -484,13 +609,17 @@ def build(raw: Path, release: Path, archive: Path, generated_at: str) -> dict:
         report = {"status": "PASS_WITH_ISSUES", "counts": {name.removesuffix(".jsonl"): len(rows) for name, rows in collections_out.items()}, "part_counts_per_test": part_profile, "issues": sorted(issues, key=lambda row: (row["code"], row["source_id"])), "validation": {"identity_unique": True, "relations_integral": True, "test_reconstruction": True, "answers_valid": True, "html_preserved": True, "media_resolved_or_reported": True, "shared_item_equal": True}}
         # JSON object keys cannot be tuples, so expose issue summaries as rows.
         report["issue_counts"] = [{"code": code, "status": status, "count": count} for (code, status), count in sorted(collections.Counter((row["code"], row["status"]) for row in issues).items())]
+        if language_overrides: report["accepted_language_changes"] = len(language_overrides["changes"])
+        if reviewed_repairs: report["accepted_source_repairs"] = len(reviewed_repairs["repairs"])
         write_json(release / "validation_report.json", report)
         inventory = []
         for path in sorted(release.rglob("*")):
             if path.is_file():
                 rel = path.relative_to(release).as_posix()
                 inventory.append({"path": rel, "size_bytes": path.stat().st_size, "sha256": sha256(path), "records": len(collections_out[rel]) if rel in collections_out else None})
-        manifest = {"format": "lyreo.dataset-release", "manifest_schema_version": 1, "package": {"domain": "grammar-toeic", "version": "1.0.1", "schema_version": SCHEMA_VERSION, "generated_at": generated_at}, "builder": {"name": "build_grammar_toeic_release.py", "version": BUILDER_VERSION}, "source": {"root_kind": "dautoeic-archive", "files": source_inventory, "media_files": len(media_sources), "media_sha256_manifest": hashlib.sha256("\n".join(f"{source['path']} {source['sha256']}" for source in sorted(media_sources, key=lambda value: value["path"])).encode()).hexdigest()}, "files": inventory, "counts": report["counts"], "validation": {"status": report["status"], "report_path": "validation_report.json", "issue_counts": report["issue_counts"]}}
+        manifest = {"format": "lyreo.dataset-release", "manifest_schema_version": 1, "package": {"domain": "grammar-toeic", "version": version, "schema_version": SCHEMA_VERSION, "generated_at": generated_at}, "builder": {"name": "build_grammar_toeic_release.py", "version": BUILDER_VERSION}, "source": {"root_kind": "dautoeic-archive", "files": source_inventory, "media_files": len(media_sources), "media_sha256_manifest": hashlib.sha256("\n".join(f"{source['path']} {source['sha256']}" for source in sorted(media_sources, key=lambda value: value["path"])).encode()).hexdigest()}, "files": inventory, "counts": report["counts"], "validation": {"status": report["status"], "report_path": "validation_report.json", "issue_counts": report["issue_counts"]}}
+        if language_overrides: manifest["source"]["language_overrides"] = {"path":"editorial/language_overrides.json","base_manifest_sha256":language_overrides["base_manifest_sha256"]}
+        if reviewed_repairs: manifest["source"]["source_repairs"] = {"path": source_repairs.PATH, "count": len(reviewed_repairs["repairs"])}
         write_json(release / "manifest.json", manifest)
         archive_sha = package_release(release, archive, root_name=f"{manifest['package']['domain']}-{manifest['package']['version']}")
         return {"release": str(release), "archive": str(archive), "archive_sha256": archive_sha, "manifest_sha256": sha256(release / "manifest.json"), "counts": manifest["counts"], "issues": report["issue_counts"]}
@@ -506,8 +635,11 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--generated-at", default=dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat())
+    parser.add_argument("--version", default="2.0.0")
+    parser.add_argument("--overrides", type=Path, help="Explicitly reviewed, source-hash-pinned language changes")
+    parser.add_argument("--source-repairs", type=Path, help="Reviewed source corrections with exact before/after and record hashes")
     args = parser.parse_args()
-    result = build(args.raw.resolve(), args.output.resolve(), args.archive.resolve(), args.generated_at)
+    result = build(args.raw.resolve(), args.output.resolve(), args.archive.resolve(), args.generated_at, args.overrides, args.version, args.source_repairs)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

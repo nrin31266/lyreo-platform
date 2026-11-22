@@ -277,3 +277,54 @@ history, verify the consolidated checksum and complete schema, and replace only 
 original/deleted history entries with one successful V012 entry. Validate Flyway and Hibernate
 before resuming development. Preserve all application data. This one-time exception does not
 authorize automatic repair, rewriting deployed databases or changing partially applied histories.
+
+## D-032 — Sparse library drafts and pinned learner sessions (2026-11-17)
+
+Status: Accepted in the Admin library implementation plan.
+
+Keep immutable imported snapshots and allocate editorial documents only for changed/new content.
+Separate draft revision, immutable publication and visibility/access. Assessment owns shared question
+content and session snapshots; Grammar/TOEIC own membership/placement. Source IDs remain immutable
+references and catalog publications explicitly pin editorial question revisions. Session submission
+uses the pinned answer and emits completion once. Retire scaffold direct-submit HTTP paths in this
+preproduction cutover. See [editorial architecture](architecture/library-editorial.md).
+
+## D-033 — Reuse cloud media and isolate authoring files from datasets (2026-11-17)
+
+Status: Accepted; existing R2 objects were confirmed by the owner.
+
+Fresh-clone setup migrates, seeds and imports both clean releases, reusing verified content-addressed
+media already present in the configured R2 bucket. Core and importer must target the same database
+and storage. Admin starts fixed package-ID operations from server staging, through a durable job and
+fenced importer; it never accepts shell commands or arbitrary paths. Small CSV/versioned JSON files
+create drafts through domain validation and are separate from dataset release activation.
+
+E2E infrastructure is deferred under the owner's explicit allowance while transactional integration,
+component checks and real local browser flows establish this cutover. This does not declare the
+planned full cross-browser/CI E2E matrix complete. See [testing](TESTING.md).
+
+## D-034 — Source-owned bilingual senses and bounded maintenance (2026-11-18)
+
+Status: Accepted in the final library completion plan.
+
+Use the Vietnamese source sense structure for Vietnamese discovery, within one stable headword
+identity. English senses remain separately evidenced references unless correspondence is established;
+POS/order/text similarity do not prove equivalence. Preserve pronunciation record scope, exact region
+labels and source notation. Correct deterministic parser/projection losses before paid enrichment.
+
+Keep full TOEIC L&R tests only; learner Part selection does not create another catalog. Quality is a
+revision-bound report, never an imported flag or manual checkbox. Reuse Tiptap and existing UI tokens.
+The maintenance pilot alone may use DeepSeek with a durable USD 1/100-attempt ceiling and official
+price confirmation; normal app AI policy is unchanged. See [editorial architecture](architecture/library-editorial.md)
+and [data pipeline operations](DATA_PIPELINES.md).
+
+## D-035 — Consolidate the foundation schema before team onboarding (2026-11-22)
+
+**Decision.** Replace the unreleased development history with two Flyway migrations: the effective
+PostgreSQL schema and its required reference data. Fresh databases start from those two files.
+Use an empty application database and the pinned content imports after the cutover. Existing
+development databases and their history can be kept as backups. Append future migrations from `V003`.
+
+**Reason.** Team onboarding starts from a known schema and a small bootstrap. Previous schema
+iterations remain in Git. The fresh schema was compared with the final schema from the prior
+migration chain. Real lesson samples use a separate idempotent development seed linked to shared audio.

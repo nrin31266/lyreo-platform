@@ -129,14 +129,14 @@ public final class AuthoringYoutubeSource implements AuthoringSourcePort {
             SELECT audio_object_key FROM lesson_youtube_segment WHERE video_id=:id
               AND start_ms=:start AND end_ms=:end AND normalization_version='pcm16-v1'
             """, args, String.class);
-        if (!cached.isEmpty()) return cached.getFirst();
+        if (!cached.isEmpty() && storage.exists(cached.getFirst())) return cached.getFirst();
         Path work = temp();
         try {
             Path source = work.resolve("source.mka");
             var sourceKeys = jdbc.queryForList("SELECT audio_object_key FROM lesson_youtube_source "
                 + "WHERE video_id=:id", Map.of("id", videoId), String.class);
             String sourceKey = sourceKeys.isEmpty() ? null : sourceKeys.getFirst();
-            boolean ranged = sourceKey == null;
+            boolean ranged = sourceKey == null || !storage.exists(sourceKey);
             if (ranged) {
                 run(List.of(command, "--no-playlist", "--no-progress", "--max-filesize", "256M",
                     "-f", "bestaudio", "--download-sections", "*" + seconds(startMs) + "-" + seconds(endMs),
@@ -155,7 +155,9 @@ public final class AuthoringYoutubeSource implements AuthoringSourcePort {
             storage.put(key, "audio/wav", Files.readAllBytes(segment));
             jdbc.update("""
                 INSERT INTO lesson_youtube_segment(video_id,start_ms,end_ms,normalization_version,audio_object_key)
-                VALUES (:id,:start,:end,'pcm16-v1',:key) ON CONFLICT DO NOTHING
+                VALUES (:id,:start,:end,'pcm16-v1',:key)
+                ON CONFLICT (video_id,start_ms,end_ms,normalization_version)
+                DO UPDATE SET audio_object_key=EXCLUDED.audio_object_key
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource(args).addValue("key", key));
             return key;
         } catch (IOException failure) { throw unavailable(failure); }

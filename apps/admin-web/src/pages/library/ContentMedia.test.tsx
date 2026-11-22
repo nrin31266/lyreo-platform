@@ -1,0 +1,64 @@
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { I18nextProvider } from 'react-i18next';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { i18n } from '@/i18n';
+import { http } from '@/lib/api';
+import { MediaEditor, MediaPreview } from './ContentMedia';
+
+beforeEach(async () => { await i18n.changeLanguage('vi'); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+it('restricts pronunciation files to audio and verifies the server-detected MIME before assigning an asset', async () => {
+  const post = vi.spyOn(http, 'post').mockResolvedValue({ data: { id: 'asset', mimeType: 'image/png' } });
+  const change = vi.fn();
+  const client = new QueryClient();
+  const { container } = render(<QueryClientProvider client={client}><I18nextProvider i18n={i18n}><MediaEditor kind="audio" value={[]} onChange={change} /></I18nextProvider></QueryClientProvider>);
+  const input = container.querySelector('input[type="file"]')!;
+  expect(input).toHaveAttribute('accept', 'audio/mpeg,audio/wav,audio/mp4');
+  expect(await screen.findByText('Chưa chọn tệp')).toBeVisible();
+  fireEvent.change(input, { target: { files: [new File(['image'], 'picture.png', { type: 'image/png' })] } });
+  await screen.findByText('Chọn đúng loại tệp âm thanh hoặc hình ảnh được yêu cầu.');
+  expect(post).not.toHaveBeenCalled();
+  fireEvent.change(input, { target: { files: [new File(['fake audio'], 'sample.wav', { type: 'audio/wav' })] } });
+  await waitFor(() => expect(post).toHaveBeenCalledOnce());
+  await waitFor(() => expect(screen.getByText('Chọn đúng loại tệp âm thanh hoặc hình ảnh được yêu cầu.')).toBeVisible());
+  expect(change).not.toHaveBeenCalled();
+  expect(screen.getByText('sample.wav')).toBeVisible();
+  client.clear();
+});
+it('ignores uploads that finish after the editor was discarded',async()=>{
+  let resolve!: (value:unknown)=>void;
+  vi.spyOn(http,'post').mockImplementation(()=>new Promise(done=>{resolve=done;}) as never);
+  const change=vi.fn();const client=new QueryClient();
+  const view=render(<QueryClientProvider client={client}><I18nextProvider i18n={i18n}><MediaEditor kind="audio" value={[]} onChange={change} /></I18nextProvider></QueryClientProvider>);
+  fireEvent.change(view.container.querySelector('input[type="file"]')!,{target:{files:[new File(['audio'],'sample.wav',{type:'audio/wav'})]}});
+  await waitFor(()=>expect(resolve).toBeDefined());view.unmount();
+  resolve({data:{id:'late',mimeType:'audio/wav'}});
+  await new Promise(done=>setTimeout(done,0));expect(change).not.toHaveBeenCalled();client.clear();
+});
+it('removes the previous preview while the replacement asset is loading',async()=>{
+  const revoke=vi.fn();
+  vi.stubGlobal('URL',class extends URL { static createObjectURL=()=> 'blob:original'; static revokeObjectURL=revoke; });
+  vi.spyOn(http,'get').mockImplementation(url=>String(url).includes('/first/')?Promise.resolve({data:new Blob(['image'])}):new Promise(()=>{}) as never);
+  const client=new QueryClient();
+  const preview=(assetId:string)=><QueryClientProvider client={client}><I18nextProvider i18n={i18n}><MediaPreview assetId={assetId} role="image" /></I18nextProvider></QueryClientProvider>;
+  const view=render(preview('first'));
+  expect(await screen.findByRole('img')).toHaveAttribute('src','blob:original');
+  view.rerender(preview('replacement'));
+  await waitFor(()=>expect(screen.queryByRole('img')).not.toBeInTheDocument());
+  expect(revoke).toHaveBeenCalledWith('blob:original');
+  client.clear();
+});
+it('cancels an upload before it changes the draft and ignores its late response',async()=>{
+  let resolve!: (value:unknown)=>void;
+  const post=vi.spyOn(http,'post').mockImplementation(()=>new Promise(done=>{resolve=done;}) as never);
+  const change=vi.fn();const client=new QueryClient();
+  const view=render(<QueryClientProvider client={client}><I18nextProvider i18n={i18n}><MediaEditor kind="audio" value={[]} onChange={change} /></I18nextProvider></QueryClientProvider>);
+  fireEvent.change(view.container.querySelector('input[type="file"]')!,{target:{files:[new File(['audio'],'sample.wav',{type:'audio/wav'})]}});
+  fireEvent.click(await screen.findByRole('button',{name:'Hủy tải lên'}));
+  expect(post.mock.calls[0][2]?.signal?.aborted).toBe(true);
+  expect(await screen.findByText('Chưa chọn tệp')).toBeVisible();
+  await act(async()=>{resolve({data:{id:'cancelled',mimeType:'audio/wav'}});});
+  expect(change).not.toHaveBeenCalled();
+  client.clear();
+});

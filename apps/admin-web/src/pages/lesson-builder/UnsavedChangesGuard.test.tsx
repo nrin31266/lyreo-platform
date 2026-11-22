@@ -53,3 +53,29 @@ it("blocks links and browser back until dirty navigation is confirmed", async ()
   fireEvent.click(screen.getByRole("link"));
   await screen.findByText("Catalog");
 });
+it('keeps view-only query changes available while guarding navigation away from a saved workspace',async()=>{
+  vi.stubGlobal('AbortController',transferableAbortController().constructor);
+  await i18n.changeLanguage('en');
+  const confirm=vi.spyOn(window,'confirm').mockReturnValue(false);
+  const router=createMemoryRouter([{path:'/edit',element:<><UnsavedChangesGuard dirty includeSearch={false} /><Link to="?part=7">Part 7</Link><Link to="/lessons">Leave</Link></>},{path:'/lessons',element:<p>Catalog</p>}],{initialEntries:['/edit?part=1']});
+  render(<I18nextProvider i18n={i18n}><RouterProvider router={router} /></I18nextProvider>);
+  fireEvent.click(screen.getByRole('link',{name:'Part 7'}));
+  await waitFor(()=>expect(router.state.location.search).toBe('?part=7'));
+  expect(confirm).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('link',{name:'Leave'}));
+  await waitFor(()=>expect(confirm).toHaveBeenCalledOnce());
+  expect(router.state.location.pathname).toBe('/edit');
+});
+it('keeps an unsaved question open until changing the question number is confirmed',async()=>{
+  vi.stubGlobal('AbortController',transferableAbortController().constructor);
+  await i18n.changeLanguage('en');
+  const confirm=vi.spyOn(window,'confirm').mockReturnValue(false);
+  const router=createMemoryRouter([{path:'/edit',element:<><UnsavedChangesGuard dirty includeSearch /><Link to="?question=102">Question 102</Link></>}],{initialEntries:['/edit?question=101']});
+  render(<I18nextProvider i18n={i18n}><RouterProvider router={router} /></I18nextProvider>);
+  fireEvent.click(screen.getByRole('link',{name:'Question 102'}));
+  await waitFor(()=>expect(confirm).toHaveBeenCalledOnce());
+  expect(router.state.location.search).toBe('?question=101');
+  confirm.mockReturnValue(true);
+  fireEvent.click(screen.getByRole('link',{name:'Question 102'}));
+  await waitFor(()=>expect(router.state.location.search).toBe('?question=102'));
+});

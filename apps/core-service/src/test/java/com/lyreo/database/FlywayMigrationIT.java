@@ -9,10 +9,9 @@ import com.lyreo.lexicon.infrastructure.persistence.JdbcLexiconRepository;
 import com.lyreo.lexicon.api.LexiconController;
 import com.lyreo.lexicon.application.LexiconSearchService;
 import com.lyreo.lexicon.domain.LexiconSearchResult.MatchType;
-import com.lyreo.grammar.application.GrammarPracticeFilter;
-import com.lyreo.grammar.infrastructure.persistence.JdbcGrammarPracticeRepository;
-import com.lyreo.toeic.infrastructure.persistence.JdbcToeicAttemptRepository;
-import com.lyreo.toeic.infrastructure.persistence.JdbcToeicTestContentRepository;
+import com.lyreo.grammar.infrastructure.persistence.JdbcGrammarCatalogSource;
+import com.lyreo.toeic.infrastructure.persistence.JdbcToeicEditorSource;
+import com.lyreo.assessment.infrastructure.persistence.JdbcQuestionSource;
 import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.entitlement.application.internal.DefaultEntitlementService;
 import com.lyreo.entitlement.infrastructure.persistence.JdbcFeatureRepository;
@@ -25,12 +24,10 @@ import com.lyreo.gamification.infrastructure.persistence.JdbcMissionProgressRepo
 import com.lyreo.gamification.infrastructure.GamificationConfiguration;
 import com.lyreo.vocabulary.application.port.SpacedRepetitionScheduler;
 import com.lyreo.vocabulary.infrastructure.persistence.JdbcVocabularyRepository;
-import com.lyreo.toeic.application.port.ToeicAttemptRepository.ScoreSummary;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Map;
-import java.util.Set;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationInfo;
 import org.flywaydb.core.api.MigrationState;
@@ -52,7 +49,7 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Proves the database and testing foundation on fresh PostgreSQL:
  * 1. Testcontainers provisions real PostgreSQL 18 (alpine).
- * 2. Spring Boot Flyway applies the consolidated baseline and production cutover (V001..V008).
+ * 2. Spring Boot Flyway applies the schema baseline and reference data.
  * 3. Asserts migration status, essential schema objects, indexes, constraints, and reference data.
  */
 @SpringBootTest(classes = FlywayMigrationIT.TestConfig.class)
@@ -109,35 +106,15 @@ class FlywayMigrationIT {
     void verifiesConsolidatedBaselineMigrationsSucceeded() {
         MigrationInfo[] applied = flyway.info().applied();
 
-        assertThat(applied)
-            .as("Twelve consolidated migrations must be applied")
-            .hasSize(12);
+        assertThat(applied).hasSize(2).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
-        assertThat(applied[0].getState()).isEqualTo(MigrationState.SUCCESS);
 
         assertThat(applied[1].getVersion().getVersion()).isEqualTo("002");
         assertThat(applied[1].getDescription()).isEqualTo("reference data");
-        assertThat(applied[1].getState()).isEqualTo(MigrationState.SUCCESS);
-
-        assertThat(applied[2].getVersion().getVersion()).isEqualTo("003");
-        assertThat(applied[2].getDescription()).isEqualTo("runtime defaults");
-        assertThat(applied[2].getState()).isEqualTo(MigrationState.SUCCESS);
-
-        assertThat(applied[3].getVersion().getVersion()).isEqualTo("004");
-        assertThat(applied[3].getState()).isEqualTo(MigrationState.SUCCESS);
-        assertThat(applied[4].getVersion().getVersion()).isEqualTo("005");
-        assertThat(applied[4].getState()).isEqualTo(MigrationState.SUCCESS);
-        assertThat(applied[5].getVersion().getVersion()).isEqualTo("006");
-        assertThat(applied[5].getState()).isEqualTo(MigrationState.SUCCESS);
-        assertThat(applied[6].getVersion().getVersion()).isEqualTo("007");
-        assertThat(applied[6].getState()).isEqualTo(MigrationState.SUCCESS);
-        assertThat(applied[7].getVersion().getVersion()).isEqualTo("008");
-        assertThat(applied[7].getState()).isEqualTo(MigrationState.SUCCESS);
         assertThat(flyway.info().current().getVersion().getVersion())
-            .as("Current Flyway version must be 012")
-            .isEqualTo("012");
+            .isEqualTo("002");
     }
 
     @Test
@@ -161,7 +138,6 @@ class FlywayMigrationIT {
             "dataset_release",
             "dataset_import_run",
             "dataset_active_release",
-            "dataset_activation_history",
             "entitlement_feature",
             "user_entitlement_grant",
             "module_runtime_config"
@@ -319,7 +295,7 @@ class FlywayMigrationIT {
             "DAILY_VOCAB_10"
         );
 
-        // Lesson processing policy runtime config (V003)
+        // Lesson processing policy runtime config
         Integer runtimeConfigCount = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM module_runtime_config WHERE owner_module = 'lesson' AND config_key = 'processing-policy'",
             Integer.class
@@ -1122,35 +1098,51 @@ class FlywayMigrationIT {
             """, release);
 
         var named = new NamedParameterJdbcTemplate(jdbcTemplate.getDataSource());
-        var grammar = new JdbcGrammarPracticeRepository(named, new ObjectMapper());
-        var questions = grammar.findPracticeQuestions(
-            new GrammarPracticeFilter(topicCatalog, null, null, null), Set.of(), 10);
-        assertThat(questions).extracting("itemId").contains(item);
-        assertThat(grammar.findQuestion(item, Set.of())).isPresent();
+        var grammar = new JdbcGrammarCatalogSource(named);
+        var topic = grammar.find("topic", topicCatalog).orElseThrow();
+        assertThat(topic.questions()).extracting("itemId").contains(item);
+        assertThat(grammar.metadata("topic", topicCatalog).orElseThrow().questionCount()).isEqualTo(1);
+        assertThat(grammar.status("topic", topicCatalog)).isEqualTo("PUBLISHED");
+        var questions = new JdbcQuestionSource(named, new ObjectMapper());
+        assertThat(questions.find(item).orElseThrow().explanationVi()).isEqualTo("Đúng");
 
-        var toeic = new JdbcToeicAttemptRepository(named);
         UUID testCatalog = jdbcTemplate.queryForObject(
             "SELECT catalog_id FROM toeic_test_version WHERE id=?", UUID.class, testVersion);
-        assertThat(toeic.findActiveTest(testCatalog)).isPresent();
-        var content = new JdbcToeicTestContentRepository(named, new ObjectMapper())
-            .findActiveTestContent(testCatalog, testVersion).orElseThrow();
+        var toeic = new JdbcToeicEditorSource(named);
+        var content = toeic.find(testCatalog).orElseThrow();
+        assertThat(toeic.status(testCatalog)).isEqualTo("PUBLISHED");
         assertThat(content.groups()).hasSize(1);
         assertThat(content.groups().getFirst().documents()).hasSize(1);
-        assertThat(content.groups().getFirst().media().getFirst().storageObjectKey()).isEqualTo(mediaKey);
+        UUID assetId = content.groups().getFirst().media().getFirst().assetId();
+        assertThat(jdbcTemplate.queryForObject("""
+            SELECT b.storage_object_key FROM release_media_asset a
+            JOIN media_blob b ON b.sha256=a.blob_sha256 WHERE a.id=?
+            """, String.class, assetId)).isEqualTo(mediaKey);
         assertThat(content.placements()).hasSize(1);
-        assertThat(content.placements().getFirst().item().stemEn()).isNull();
-        assertThat(content.placements().getFirst().item().options().getFirst().text()).isEmpty();
-        var key = toeic.answerKey(testVersion, Set.of(placement));
-        assertThat(key).hasSize(1);
-        UUID learner = UUID.randomUUID();
+        var question = questions.find(content.placements().getFirst().itemId()).orElseThrow();
+        assertThat(question.title()).isEqualTo("Spoken question");
+        assertThat(question.options().getFirst().text()).isEqualTo("Spoken choice");
+
+        // Historical attempt tables remain usable after the pinned-session cutover.
+        UUID learner = UUID.randomUUID(), grammarAttempt = UUID.randomUUID(), attempt = UUID.randomUUID();
         jdbcTemplate.update("INSERT INTO app_user(id,keycloak_subject) VALUES(?,?)",
             learner, "smoke-" + learner);
-        UUID grammarAttempt = grammar.saveAttempt(learner, item, "A", true, Instant.now());
+        jdbcTemplate.update("""
+            INSERT INTO grammar_practice_attempt(id,learner_id,item_id,answer,correct,answered_at)
+            VALUES(?,?,?,'A',true,now())
+            """, grammarAttempt, learner, item);
         assertThat(jdbcTemplate.queryForObject(
             "SELECT count(*) FROM grammar_practice_attempt WHERE id=? AND item_id=?",
             Integer.class, grammarAttempt, item)).isEqualTo(1);
-        UUID attempt = toeic.saveCompletedAttempt(learner, testVersion, "FULL_TEST",
-            new ScoreSummary(1, 1, 0, 0, null, null), Map.of(placement, "A"), key);
+        jdbcTemplate.update("""
+            INSERT INTO toeic_attempt(id,learner_id,test_version_id,mode,status,
+                raw_listening_correct,raw_reading_correct,started_at,submitted_at)
+            VALUES(?,?,?,'FULL_TEST','COMPLETED',1,0,now(),now())
+            """, attempt, learner, testVersion);
+        jdbcTemplate.update("""
+            INSERT INTO toeic_attempt_answer(attempt_id,placement_id,test_version_id,answer,correct,answered_at)
+            VALUES(?,?,?,'A',true,now())
+            """, attempt, placement, testVersion);
         assertThat(jdbcTemplate.queryForObject(
             "SELECT count(*) FROM toeic_attempt_answer WHERE attempt_id=? AND test_version_id=?",
             Integer.class, attempt, testVersion)).isEqualTo(1);

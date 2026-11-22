@@ -4,7 +4,7 @@ Lyreo runs application source locally for debugging and hot reload. Docker devel
 
 ## First development loop
 
-Run `make init-env`, `make doctor`, and the needed dependency/setup targets from the root README. Start `make dev-infra` before Core. Run `make core`, `make ai`, `make admin`, or `make mobile` in separate terminals as needed. Mobile needs an installed Expo development build; see [Mobile](../apps/mobile/README.md). For integrated YouTube authoring, run `make setup-media`, enable acquisition in the Core local env and restart Core (see [Core](../apps/core-service/README.md#youtube-authoring-tools)). Optional data acquisition lives in [Data Import](../tools/data-import/README.md).
+Run `make init-env`, `make doctor`, and the needed dependency/setup targets from the root README. Start `make dev-infra` before Core. Run `make dev` for Core, AI and Admin in one terminal (`APPS="..."` selects services; Ctrl+C stops them, not Docker), or run `make core`, `make ai`, `make admin`, or `make mobile` in separate terminals as needed. Mobile needs an installed Expo development build; see [Mobile](../apps/mobile/README.md). For integrated YouTube authoring, run `make setup-media`, enable acquisition in the Core local env and restart Core (see [Core](../apps/core-service/README.md#youtube-authoring-tools)). Fresh-clone setup seeds reference data. Run `make setup-data` separately for the content you need. Dataset operations live in [Data Import](../tools/data-import/README.md).
 
 Mock AI and local filesystem storage are the normal development defaults. Live model runtimes and
 R2 require owner-specific configuration; full Grammar/TOEIC import integration uses the shared
@@ -29,17 +29,20 @@ SRS/unrelated speech history, accounts, AI settings, categories, channels and al
 `make db-recreate` previews **whole application DB deletion**, including imports and configuration;
 it requires the same `APPLY=1 CONFIRM=<actual_db>` and no application connections to execute.
 `make down-v` refuses volume deletion until `CONFIRM=lyreo-volumes`; that command also deletes Keycloak.
-Neither destructive command is needed for ordinary schema upgrades. Core applies appended migrations;
-V011 adds authoring titles/category translations; V012 consolidates this unreleased Admin authoring phase (content/profile metadata, continuation, diagnostics, metadata versions and job results).
-
-The one-time development consolidation and contiguous renumbering are recorded in [D-030](DECISIONS.md#d-030--consolidate-unreleased-authoring-admin-migrations-2026-11-17) and [D-031](DECISIONS.md#d-031--number-the-consolidated-admin-migration-contiguously-2026-11-17). Fresh databases apply the consolidated V012 after V011; future migrations append from V013. Only the verified local development history was aligned, preserving application data. This exception does not permit rewriting deployed migrations or partially applied old histories.
+The foundation closeout starts with `V001` for schema and `V002` for reference data. Subsequent changes
+append from `V003`. Databases from the pre-closeout 31-migration history need a fresh application
+database and a new import. Keep a backup of application data you need before resetting. [D-035](DECISIONS.md#d-035--consolidate-the-foundation-schema-before-team-onboarding-2026-11-22) records the cutover.
 
 Development defaults live in [`infra/postgres/seed/dev.sql`](../infra/postgres/seed/dev.sql).
-After Core applies migrations, run `make seed-dev` once. It adds 24 stable categories with English
+Run `make seed-dev` to migrate and bootstrap the datasource configured in Core's `.env`; it does
+not select the Compose database independently. It adds 24 stable categories with English
 names and Vietnamese translations. Rerunning skips existing IDs/names and preserves Admin edits.
 No automatic reseeding runs at startup. Large banks stay under the [import tools](DATA_PIPELINES.md).
 
-The disposable-development V007–V010 consolidation is recorded in [D-026](DECISIONS.md#d-026--admin-management-lifecycle-and-development-migration-consolidation-2026-10-26). V001–V007 form the consolidated foundation; subsequent schema changes append migrations. Databases with the former development history require the explicitly authorized application DB reset, not Flyway repair.
+`make seed-lessons` adds four YouTube lessons and one Text lesson after bootstrap. Each published
+snapshot includes transcript timing, notes and practice content for the learner API. Core's storage
+must have access to their canonical audio objects in the shared development bucket. Rerunning leaves
+existing lessons and metadata untouched.
 
 Large content datasets are imported through the [data-import tool](../tools/data-import/README.md), not Flyway seed blobs. Store raw datasets outside Git.
 

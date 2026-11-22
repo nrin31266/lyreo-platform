@@ -251,7 +251,8 @@ export function YouTubePreview({
     latest.current.onTimeChange(0);
   }, [startMs]);
   useEffect(() => {
-    player.current?.pauseVideo();setIsPlaying(false);pendingSeek.current=null;
+    // YouTube installs playback methods asynchronously, after constructing the player.
+    player.current?.pauseVideo?.();setIsPlaying(false);pendingSeek.current=null;
     setLocalLoop(false);playingSentence.current=null;
   }, [review?.context]);
   useEffect(() => {

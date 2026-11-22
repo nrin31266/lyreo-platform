@@ -28,6 +28,48 @@ LLM không generate toàn bộ dictionary.
 Ưu tiên recording thật; first use có thể fetch/normalize/cache object storage.
 Device/server TTS là fallback on-demand, không pre-generate hàng chục nghìn từ.
 
+### FR-LEX-004 — Admin dictionary workspace
+
+Admin tìm headword/form, lọc loại mục, từ loại, nội dung Việt và trạng thái biên tập.
+Một identity mục từ chứa nghĩa có ID và nguồn riêng; mặc định mở nghĩa Anh–Việt theo nhóm từ loại.
+Tra thử dùng Anh–Việt mặc định cho giao diện tiếng Việt và Anh–Anh cho các locale khác.
+Chuyển giữa hai chế độ độc lập với locale và giữ nguyên `headwordId`. Learner API trả `readingModes`
+cùng hai nguồn nghĩa khi có, để caller hiện lựa chọn và thông báo thiếu dữ liệu.
+Nghĩa Việt không cần định nghĩa Anh giả. Nghĩa Anh chưa có quan hệ tương ứng đã xác minh nằm ở
+“Tham khảo Anh–Anh”; mục chỉ có tiếng Anh vẫn tra được và ghi rõ chưa có nghĩa Việt. Không ghép
+hai nguồn theo thứ tự, POS hoặc độ giống chữ, không gọi AI khi mở mục từ.
+
+Giữ ví dụ/bản dịch, biến thể, nhóm từ loại/ngữ nguyên và attribution từ từng nguồn. Nội dung giải
+nghĩa dùng mã ngôn ngữ; đợt này chỉ biên tập EN/VI. Candidate cũ giữ provenance và lịch sử, không
+được chuyển thành verified tự động; đây không phải điều kiện để dùng các nghĩa Việt từ nguồn gốc.
+Nếu Admin liên kết một candidate, việc xác nhận tương ứng là thao tác riêng có kiểm phạm vi;
+AI chỉ tạo đề xuất/nháp, không xác minh nguồn.
+
+Phát âm nhóm theo cách đọc/trường hợp sử dụng → vùng/giọng → recording. Mỗi bản có dạng chữ,
+ký hiệu và hệ ký hiệu (IPA hoặc ký hiệu nguồn), phạm vi có căn cứ và attribution. Nhãn vùng được
+ánh xạ chính xác, giữ nhiều vùng và nhãn nguồn. Các bản ghi có cùng phiên âm và phạm vi được gom
+theo cách đọc, với vùng của từng bản ghi. Bản ghi thiếu IPA hiển thị riêng. Ghép IPA với audio
+dựa trên bản ghi nguồn cung cấp cả hai. Phạm vi từ loại dùng thông tin nguồn tường minh hoặc
+nhãn từ loại trong tên audio khớp mục nguồn. TTS chỉ theo yêu cầu có phạm vi rõ và nhãn tổng hợp.
+Learner API cung cấp nhóm để caller chọn đúng cách đọc; không xây Mobile UI trong đợt này.
+
+Identity phân biệt hoa/thường; `headwordId` và liên kết Lesson/SRS trường tồn qua release.
+CLI cài gói từ điển đã xác minh. Admin biên tập mục đã có và có thể xuất một mục để đối chiếu.
+
+### BR-LEX-003 — Editorial publication
+
+Nguồn import bất biến. Admin biên tập mục đã có, lưu bản sửa thưa và tách nháp khỏi publication
+bất biến. Mutation dùng revision và trả 409 khi stale. Công bố/phục hồi có actor,
+thời điểm; ghi chú lý do không bắt buộc. UI không yêu cầu nhập lý do khi công bố.
+Nội dung đã công bố không có nút công bố lặp; khi có sửa khác bản đang dùng thì hiện “Áp dụng thay đổi”.
+Trạng thái thay đổi được so nội dung, không suy từ số revision; reload vẫn giữ đúng trạng thái.
+Admin dùng Ẩn/Hiện trực tiếp tại dòng danh sách; không có thao tác Lưu trữ mới. Trạng thái lưu trữ
+cũ vẫn được giữ để khôi phục, không xóa dữ liệu. Thanh Lưu/Áp dụng cùng lỗi thao tác luôn bám đáy workspace.
+Áp dụng cập nhật giữ trạng thái ẩn/lưu trữ cũ, thao tác hiện lại độc lập. Gọi công bố lặp với cùng nội dung
+không tạo publication/audit mới. Phục hồi nội dung khác tạo revision mới. Ẩn/lưu trữ có thể phục hồi. Chỉ xóa nháp chưa từng
+công bố và không có tham chiếu. Learner chỉ thấy bản công bố hoặc nguồn chưa sửa, không thấy nháp.
+Đổi release phải đối soát nguồn và bản sửa theo [Data Pipelines](../DATA_PIPELINES.md).
+
 ### FR-VOC-001 — Save and review card
 
 Learner lưu lexical unit cùng optional context, review và nhận next scheduling
@@ -72,15 +114,11 @@ hay xác nhận standard usage từ việc thiếu tag, không lan nhãn sang it
 Detail giữ item/sense references, raw glosses, examples, usage tags, matched qualifier
 và pronunciation tags để client trình bày đúng context. Translation candidates giữ
 source/scope/link status; `AVAILABLE` không đồng nghĩa đã được curator xác minh.
-Auxiliary Vietnamese translation chỉ là `ITEM_CANDIDATE` khi known source POS có
-đúng một compatible item trong canonical entry. Nhiều items cùng POS, không có
-compatible item hoặc thiếu/unknown POS phải giữ `ENTRY_CANDIDATE` với item/sense
-reference null; không chọn first item hoặc map theo source order. POS đã biết
-được giữ độc lập qua nullable `sourcePos`; đây không phải verified item/sense link.
-Mỗi auxiliary source occurrence giữ identity/context riêng trong canonical data.
-`source_context` và record/sense/gloss locator chỉ phục vụ audit/enrichment nội bộ,
-không hydrate hoặc expose qua learner Detail. Public translation response chỉ thêm
-`sourcePos`; sourceMetadataJson/licenseText giữ contract hiện có.
+Nghĩa từ nguồn Việt được nhập với identity riêng, `definitions.vi`, ví dụ và metadata phát âm gốc,
+kể cả mục không có trong nguồn Anh. `definitions.en` có thể vắng. Candidate từ nguồn Anh không có
+sense relation được giữ chưa xác minh; không lấy candidate đó làm bản gốc của nghĩa Việt.
+DTO công khai có nguồn nội dung theo nghĩa và pronunciation variants; không trả storage key hoặc
+credential. Metadata nội bộ phục vụ đối soát giữ trong nguồn và bản nháp.
 Detail HTTP trả `rawGlosses` và `tags` dưới dạng array string, `examples` dưới dạng
 array object; giữ mọi thuộc tính example nguồn, kể cả null và JSON nested. Canonical JSON
 sai cú pháp hoặc sai kiểu trả lỗi server chuẩn, không được thay bằng array rỗng hay ép kiểu.

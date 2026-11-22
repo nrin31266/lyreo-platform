@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -8,9 +9,10 @@ import { adminI18nResources } from '@lyreo/i18n';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { LessonBuilderPage } from './LessonBuilderPage';
 import * as api from './lesson-builder.api';
+import * as catalog from '@/pages/lessons/catalog.api';
 import type { LessonDraft } from './lesson-builder.types';
 vi.mock('./lesson-builder.api',()=>({fetchDraft:vi.fn(),cancelChain:vi.fn(),saveChanges:vi.fn(),runLesson:vi.fn(),fetchReadiness:vi.fn(),publishLesson:vi.fn(),duplicateLesson:vi.fn(),fetchDiagnostics:vi.fn(),saveTiming:vi.fn()}));
-vi.mock('@/pages/lessons/catalog.api',async original=>({...await original<typeof import('@/pages/lessons/catalog.api')>(),fetchCategories:vi.fn().mockResolvedValue([]),fetchMetadata:vi.fn().mockResolvedValue({id:'lesson-a',title:'A lesson',categories:[],description:'',imageUrl:'',version:0})}));
+vi.mock('@/pages/lessons/catalog.api',async original=>({...await original<typeof import('@/pages/lessons/catalog.api')>(),fetchCategories:vi.fn().mockResolvedValue([]),fetchMetadata:vi.fn().mockResolvedValue({id:'lesson-a',title:'A lesson',categories:[],description:'',imageUrl:'',version:0}),saveMetadata:vi.fn()}));
 vi.mock('./AudioPreview',()=>({LessonPlayer:({review}:{review:{sentenceId:string|null}})=> <div data-testid="player" data-selected={review.sentenceId}>Player</div>}));
 vi.mock('./VoiceSelect',()=>({VoiceSelect:()=>null}));
 const original: LessonDraft={id:'lesson-a',title:'A lesson',videoId:'abcdefghijk',sourceType:'YOUTUBE',sourceReference:'source',startMs:0,endMs:10000,audioReady:true,revision:1,transcriptRevision:1,status:'CONTENT_REVIEW',timingStatus:'VALID',alignmentRequired:false,contentComplete:true,contentNeeded:false,approvedRevision:null,karaokeReviewedRevision:null,semanticRevision:null,jobs:[],sentences:[{id:'s1',text:'Hello world.',usage:'LEARN',issues:[],vocabulary:[],grammar:[],hints:[],notes:[],thoughtGroups:[],dictationEligible:true,shadowingEligible:true,dictationSelected:true,shadowingSelected:true,translation:'Xin chào.',words:[{text:'Hello',startMs:0,endMs:500,charStart:0,charEnd:5,tokenStart:0,tokenEnd:1},{text:'world',startMs:500,endMs:1000,charStart:6,charEnd:11,tokenStart:1,tokenEnd:2}]}]};
@@ -23,6 +25,15 @@ it('retains local input on save conflict and background refetch',async()=>{vi.mo
 it('saves before explicit update and states which steps will run',async()=>{await show({...structuredClone(original),alignmentRequired:true,contentComplete:false,contentNeeded:true});fireEvent.change(screen.getByRole('textbox',{name:'Sentence 1'}),{target:{value:'Hello again.'}});fireEvent.click(screen.getByRole('button',{name:'Update affected parts'}));expect(await screen.findByText(/Will run: alignment/)).toBeInTheDocument();expect(api.runLesson).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:'Start processing'}));await waitFor(()=>expect(api.runLesson).toHaveBeenCalledWith('lesson-a',2));});
 it('preview shows real blockers and does not require confirmation checkboxes',async()=>{vi.mocked(api.fetchReadiness).mockResolvedValue({ready:false,blockers:['IPA_MISSING:1']});await show();fireEvent.click(screen.getByRole('button',{name:'Preview & publish'}));expect(await screen.findByText(/IPA missing: edit manually/)).toBeInTheDocument();expect(screen.getByRole('button',{name:'Publish lesson'})).toBeDisabled();expect(screen.queryByRole('checkbox',{name:/checked/})).not.toBeInTheDocument();});
 it('publishes the current revision from a ready preview',async()=>{vi.mocked(api.publishLesson).mockResolvedValue({...original,status:'PUBLISHED',revision:2});await show();fireEvent.click(screen.getByRole('button',{name:'Preview & publish'}));fireEvent.click(await screen.findByRole('button',{name:'Publish lesson'}));await waitFor(()=>expect(api.publishLesson).toHaveBeenCalledWith('lesson-a',1));});
+it('shows published lessons without another publish action or readiness request',async()=>{
+  await show({...structuredClone(original),status:'PUBLISHED'});
+  expect(screen.queryByRole('button',{name:'Preview & publish'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Preview'}));
+  await screen.findByRole('dialog');
+  expect(screen.queryByRole('button',{name:'Publish lesson'})).not.toBeInTheDocument();
+  expect(api.fetchReadiness).not.toHaveBeenCalled();
+  expect(api.publishLesson).not.toHaveBeenCalled();
+});
 it('shows the backend failure immediately in history and renders output as text',async()=>{const job={jobId:'job1',operation:'CONTENT',status:'FAILED',errorCode:'CONTENT_PARTIAL',errorMessage:'sentence=41: translation missing',usage:[]};vi.mocked(api.fetchDiagnostics).mockResolvedValue([{payload:{output:'<script>alert(1)</script>'}}]);const {container}=await (async()=>{await show({...original,jobs:[job]});return {container:document.body};})();fireEvent.click(screen.getByRole('button',{name:/Jobs for this lesson/}));expect(await screen.findByText(/CONTENT_PARTIAL: sentence=41/)).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Debug'}));await screen.findByText(/<script>alert/);expect(container.querySelector('script')).toBeNull();});
 it('returns to a clean state when an edit is reverted',async()=>{
   await show();const text=screen.getByRole('textbox',{name:'Sentence 1'});
@@ -56,6 +67,23 @@ it('starts the transport from the first playable sentence before a row is clicke
   await show();expect(screen.getByTestId('player')).toHaveAttribute('data-selected','s1');
 });
 
+it('collects vocabulary and grammar across sentences and jumps to the source note', async () => {
+  const first = { ...original.sentences[0], vocabulary: [
+    { surface: 'Hello', explanation: 'A greeting', label: 'LEXICAL', importance: 'MEDIUM', tokenStart: 0, tokenEnd: 1 },
+    { surface: '', explanation: '', label: 'LEXICAL', importance: 'MEDIUM', tokenStart: -1, tokenEnd: -1 },
+  ] };
+  const second = { ...original.sentences[0], id: 's2', contentStale: true, grammar: [
+    { surface: 'Hello world', explanation: 'A greeting followed by an address', label: 'GRAMMAR', importance: 'MEDIUM', tokenStart: 0, tokenEnd: 2 },
+  ] };
+  await show({ ...original, sentences: [first, second] });
+  await userEvent.click(screen.getByRole('button', { name: 'Lesson notes 2' }));
+  const dialog = screen.getByRole('dialog', { name: 'Lesson notes' });
+  expect(within(dialog).getByText('A greeting')).toBeVisible();
+  expect(within(dialog).getByText('A greeting followed by an address')).toBeVisible();
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Open sentence 2' }));
+  await waitFor(() => expect(screen.getByTestId('player')).toHaveAttribute('data-selected', 's2'));
+});
+
 it('shows publication failures inside the open preview and allows retry',async()=>{
   vi.mocked(api.publishLesson).mockRejectedValue(new Error('Publication failed'));
   await show();fireEvent.click(screen.getByRole('button',{name:'Preview & publish'}));
@@ -63,4 +91,37 @@ it('shows publication failures inside the open preview and allows retry',async()
   const dialog=screen.getByRole('dialog');
   await waitFor(()=>expect(within(dialog).getByRole('alert')).toHaveTextContent('Publication failed'));
   expect(within(dialog).getByRole('button',{name:'Publish lesson'})).toBeEnabled();
+});
+it('discards transcript, selection and metadata edits without saving or reloading',async()=>{
+  await show();
+  expect(screen.queryByRole('button',{name:'Discard changes'})).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('checkbox',{name:'Shadowing'}));
+  fireEvent.change(screen.getByRole('textbox',{name:'Sentence 1'}),{target:{value:'Unsaved transcript.'}});
+  await userEvent.click(screen.getByRole('button',{name:'Lesson settings'}));
+  fireEvent.change(screen.getByRole('textbox',{name:'Title'}),{target:{value:'Unsaved title'}});
+  await userEvent.click(screen.getByRole('button',{name:'Close'}));
+  const dirty=new Event('beforeunload',{cancelable:true});window.dispatchEvent(dirty);
+  expect(dirty.defaultPrevented).toBe(true);
+  await userEvent.click(screen.getByRole('button',{name:'Discard changes'}));
+  expect(screen.getByRole('textbox',{name:'Sentence 1'})).toHaveValue('Hello world.');
+  expect(screen.getByRole('checkbox',{name:'Shadowing'})).toBeChecked();
+  expect(screen.getByRole('heading',{level:1})).toHaveTextContent('A lesson');
+  expect(screen.queryByRole('button',{name:'Discard changes'})).not.toBeInTheDocument();
+  const clean=new Event('beforeunload',{cancelable:true});window.dispatchEvent(clean);
+  expect(clean.defaultPrevented).toBe(false);
+  await userEvent.click(screen.getByRole('button',{name:'Lesson settings'}));
+  expect(screen.getByRole('textbox',{name:'Title'})).toHaveValue('A lesson');
+  expect(api.fetchDraft).toHaveBeenCalledOnce();
+  expect(catalog.fetchMetadata).toHaveBeenCalledOnce();
+  expect(catalog.saveMetadata).not.toHaveBeenCalled();
+  expect(api.saveChanges).not.toHaveBeenCalled();
+  expect(api.runLesson).not.toHaveBeenCalled();
+});
+it('disables discarding while the lesson is being processed',async()=>{
+  const client=await show();
+  fireEvent.change(screen.getByRole('textbox',{name:'Sentence 1'}),{target:{value:'Unsaved transcript.'}});
+  client.setQueryData(['authoring','lesson-a'],{...original,jobs:[{jobId:'running',operation:'ALIGN',status:'RUNNING',usage:[]}]});
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Discard changes'})).toBeDisabled());
+  expect(screen.getByRole('textbox',{name:'Sentence 1'})).toHaveValue('Unsaved transcript.');
+  client.clear();
 });

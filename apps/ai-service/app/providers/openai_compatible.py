@@ -65,13 +65,27 @@ class OpenAICompatibleProvider:
 
         if "temperature" in request.options and "temperature" not in provider_options:
             body["temperature"] = request.options["temperature"]
+        deepseek = request.provider.upper() == "DEEPSEEK"
+        thinking = request.options.get("thinking")
+        thinking_enabled = thinking == "enabled" or thinking is None and provider_options.get("reasoning_effort") != "none"
         budget = request.options.get("max_output_tokens")
         if budget is not None and not {"max_tokens", "max_completion_tokens"} & provider_options.keys():
             if not isinstance(budget, int) or isinstance(budget, bool) or budget <= 0:
                 raise ValueError("max_output_tokens must be a positive integer")
-            body["max_completion_tokens"] = budget
+            if deepseek and thinking_enabled:
+                headroom = request.options.get("reasoning_token_headroom", 0)
+                if type(headroom) is not int or not 0 <= headroom <= 8192:
+                    raise ValueError("Invalid reasoning token headroom")
+                budget += headroom
+            body["max_tokens" if deepseek else "max_completion_tokens"] = budget
         if "max_tokens" in body and "max_completion_tokens" in body:
             raise ValueError("Specify only one completion token budget")
+        if thinking is not None:
+            if not deepseek or thinking not in ("enabled", "disabled"):
+                raise ValueError("thinking is only supported for DeepSeek with enabled/disabled")
+            body["thinking"] = {"type": thinking}
+        if deepseek and "max_completion_tokens" in body:
+            body["max_tokens"] = body.pop("max_completion_tokens")
         schema = request.options.get("json_schema")
         if isinstance(schema, dict) and schema:
             name = request.options.get("response_schema") or "lyreo_response"
@@ -96,11 +110,19 @@ class OpenAICompatibleProvider:
         choice = data["choices"][0]
         content = choice["message"].get("content")
         if not isinstance(content, str) or not content.strip():
-            raise ValueError("AI completion returned no text output")
+            if request.provider.upper() != "DEEPSEEK" or choice.get("finish_reason") != "length":
+                raise ValueError("AI completion returned no text output")
+            # Core rejects the truncated completion and records even reasoning-only usage.
+            content = ""
         structured = _json_object_or_none(content)
         output: dict[str, Any] = {"content": content}
         if structured is not None:
             output["structured"] = structured
+        details = usage.get("completion_tokens_details")
+        if isinstance(details, dict):
+            reasoning = details.get("reasoning_tokens")
+            if type(reasoning) is int and reasoning >= 0:
+                output["reasoning_tokens"] = reasoning
 
         return ExecuteResponse(
             output=output,

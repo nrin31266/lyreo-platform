@@ -1,11 +1,17 @@
+import asyncio
+import logging
 import os
 
 os.environ["AI_RUNTIME_MODE"] = "mock"
 os.environ["AI_SERVICE_INTERNAL_TOKEN"] = "test-token"
 
+import httpx
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.runtime.qwen import _resolve_audio
 
 client = TestClient(app)
 AUTH = {"X-Lyreo-Internal-Token": "test-token"}
@@ -28,6 +34,29 @@ def test_health():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["runtime_mode"] == "mock"
+
+
+@pytest.mark.parametrize("upstream_status", [200, 403])
+def test_audio_download_keeps_signed_query_out_of_logs(monkeypatch, caplog, upstream_status):
+    client_type = httpx.AsyncClient
+    signature = "synthetic-signature-only-for-test"
+
+    def download(request):
+        assert request.url.params["X-Amz-Signature"] == signature
+        return httpx.Response(upstream_status, content=b"audio data")
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(
+        transport=httpx.MockTransport(download), **kwargs,
+    ))
+    monkeypatch.setattr("app.runtime.qwen._read_audio", lambda source: source)
+    url = f"https://media.example/audio?X-Amz-Signature={signature}"
+    with caplog.at_level(logging.INFO):
+        if upstream_status == 200:
+            assert asyncio.run(_resolve_audio(url)) == b"audio data"
+        else:
+            with pytest.raises(HTTPException, match="^502: Audio download failed$"):
+                asyncio.run(_resolve_audio(url))
+    assert signature not in caplog.text
 
 
 def test_internal_auth_required():
@@ -89,6 +118,10 @@ def test_mock_tts_contract_returns_inline_audio():
     output = response.json()["output"]
     assert output["audio_base64"]
     assert output["mime_type"].startswith("audio/")
+    import base64, io, wave
+    with wave.open(io.BytesIO(base64.b64decode(output["audio_base64"]))) as audio:
+        assert audio.getnframes() > 0
+        assert audio.getnchannels() == 1
 
 
 def test_gemini_interaction_helpers_accept_2026_step_schema():
@@ -239,3 +272,40 @@ def test_empty_cuda_cache_safely_handles_missing_torch(monkeypatch):
     monkeypatch.setitem(sys.modules, "torch", None)
     # Must not raise ModuleNotFoundError or any exception when torch is missing
     _empty_cuda_cache()
+
+
+def test_mock_editorial_suggestions_keep_answer_and_sense_contracts():
+    lexicon = client.post("/v1/llm/generate", headers=AUTH, json=request(
+        input={"headword": "book", "senses": [{"id": "sense-1", "definitionEn": "Written pages"}]},
+        options={"response_schema": "library_lexicon_v1"},
+    ))
+    assert lexicon.status_code == 200
+    rows = lexicon.json()["output"]["structured"]["suggestions"]
+    assert rows and all(row["senseId"] == "sense-1" for row in rows)
+    question = client.post("/v1/llm/generate", headers=AUTH, json=request(
+        prompt="SUGGEST", input={"question": {"correctOption": "A"}, "count": 2},
+        options={"response_schema": "library_question_v1"},
+    ))
+    assert question.status_code == 200
+    output = question.json()["output"]["structured"]
+    assert len(output["suggestions"]) <= 2
+    assert all(row["field"] != "correctOption" for row in output["suggestions"])
+    assert output["candidates"] == []
+
+
+def test_dictionary_mock_matches_candidates_by_scope_and_keeps_example_operation_separate():
+    source = {"senses": [{"id": "sense", "itemId": "noun", "definitionEn": "Printed pages"}],
+              "candidates": [{"id": "verb", "itemId": "verb", "wordVi": "đặt chỗ"},
+                             {"id": "noun", "itemId": None, "wordVi": "sách"}], "operation": "MATCH"}
+    payload = request(input=source, options={"response_schema": "library_lexicon_v2"})
+    result = client.post('/v1/llm/generate', headers=AUTH, json=payload)
+    assert result.status_code == 200
+    row = result.json()['output']['structured']['suggestions'][0]
+    assert row['candidateId'] == 'noun'
+    assert row['value'] == 'sách'
+    assert row['senseId'] == 'sense'
+    source['operation'] = 'EXAMPLE'
+    result = client.post('/v1/llm/generate', headers=AUTH, json=payload)
+    row = result.json()['output']['structured']['suggestions'][0]
+    assert row['field'] == 'example'
+    assert row['candidateId'] is None

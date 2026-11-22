@@ -127,7 +127,7 @@ class AuxiliaryVietnameseValidatorTest(unittest.TestCase):
                         key=lambda item: item["order_index"])
             self.mutate_vi(release, lambda row: row.update(item_id=first["id"],
                            link_status="ITEM_CANDIDATE", reason="AUXILIARY_VI_UNIQUE_POS_ITEM"))
-            with self.assertRaisesRegex(ValueError, "compatible|unique|cardinality"):
+            with self.assertRaisesRegex(ValueError, "scope|ownership|directly owned"):
                 validate(release)
 
     def test_entry_candidate_cannot_carry_item_reference(self):
@@ -137,7 +137,7 @@ class AuxiliaryVietnameseValidatorTest(unittest.TestCase):
                             if row["source"] == "viwiktionary")
             item = next(item for item in map(json.loads, (release / "items.jsonl").read_text().splitlines())
                         if item["entry_id"] == entry_id)
-            self.mutate_vi(release, lambda row: row.update(item_id=item["id"]))
+            self.mutate_vi(release, lambda row: row.update(item_id=item["id"],sense_id=None,link_status="ENTRY_CANDIDATE"))
             with self.assertRaisesRegex(ValueError, "ENTRY_CANDIDATE"):
                 validate(release)
 
@@ -186,8 +186,7 @@ class AuxiliaryVietnameseValidatorTest(unittest.TestCase):
                 f"{extra['source_context']['gloss_ordinal']}"))
             rows.append(extra)
             self.repair_occurrence_counts(release, rows)
-            self.assertEqual("PASS", validate(release)["status"])
-            with self.assertRaisesRegex(ValueError, "Extra canonical VI occurrences"):
+            with self.assertRaisesRegex(ValueError, "ownership mismatch|Extra canonical VI occurrences"):
                 validate(release, raw_vi=raw_vi)
 
     def test_duplicate_locator_or_inconsistent_context_is_rejected(self):

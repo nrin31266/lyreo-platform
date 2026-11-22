@@ -1,12 +1,17 @@
 package com.lyreo.database;
 
 import static org.assertj.core.api.Assertions.*;
+import com.lyreo.lesson.infrastructure.persistence.JdbcLessonPracticeRepository;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.*;
 import java.util.*;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 class LessonResetIT {
@@ -14,14 +19,33 @@ class LessonResetIT {
         try(var postgres=new PostgreSQLContainer("postgres:18.6-alpine")) {
             postgres.start();
             Flyway.configure().dataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword())
-                .locations("classpath:db/migration").target("010").load().migrate();
+                .locations("classpath:db/migration").load().migrate();
             try(var connection=DriverManager.getConnection(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword());var sql=connection.createStatement()) {
                 sql.execute("INSERT INTO lesson(id,title,source_type,status) VALUES('10000000-0000-0000-0000-000000000001','Old title','TEXT','DRAFT')");
-                Flyway.configure().dataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword()).locations("classpath:db/migration").load().migrate();
                 assertThat(count(sql,"lesson")).isEqualTo(1);
                 String seed=Files.readString(Path.of("../../infra/postgres/seed/dev.sql"));sql.execute(seed);
+                assertThat(count(sql,"lesson")).isEqualTo(1);
                 sql.execute("UPDATE lesson_category SET name='Custom travel',translations='{\"vi\":\"Tự sửa\"}' WHERE id='20000000-0000-0000-0000-000000000002'");
                 sql.execute(seed);assertThat(count(sql,"lesson_category")).isEqualTo(24);
+                var sampleLessons=new ResourceDatabasePopulator(new FileSystemResource("../../infra/postgres/seed/lessons.sql"));
+                sampleLessons.populate(connection);
+                assertThat(count(sql,"lesson")).isEqualTo(6);
+                assertSampleLessonProjections(sql);
+                sql.execute("UPDATE lesson_metadata SET title='Edited sample title' WHERE lesson_id='246d7560-e4a3-4807-a022-190220c7a00d'");
+                sampleLessons.populate(connection);
+                assertThat(count(sql,"lesson")).isEqualTo(6);
+                assertSampleLessonProjections(sql);
+                assertThat(scalar(sql,"SELECT title FROM lesson_metadata WHERE lesson_id='246d7560-e4a3-4807-a022-190220c7a00d'"))
+                    .isEqualTo("Edited sample title");
+                assertThatThrownBy(() -> sql.execute("UPDATE lesson_sentence SET text='Edited published sentence'"))
+                    .hasMessageContaining("Published lesson content is immutable");
+                var datasource=new DriverManagerDataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword());
+                var practice=new JdbcLessonPracticeRepository(new NamedParameterJdbcTemplate(datasource));
+                UUID summer=UUID.fromString("246d7560-e4a3-4807-a022-190220c7a00d");
+                UUID dictation=UUID.fromString(scalar(sql,"SELECT id FROM lesson_activity WHERE lesson_id='"+summer+"' AND activity_type='DICTATION'"));
+                UUID firstSentence=UUID.fromString(scalar(sql,"SELECT id FROM lesson_sentence WHERE lesson_id='"+summer+"' AND position=0"));
+                assertThat(practice.findDictationTarget(summer,dictation,firstSentence)).hasValueSatisfying(target ->
+                    assertThat(target.expectedText()).startsWith("Hey everybody"));
                 try(var result=sql.executeQuery("SELECT name,translations->>'vi' FROM lesson_category WHERE id='20000000-0000-0000-0000-000000000002'")) {
                     result.next();assertThat(result.getString(1)).isEqualTo("Custom travel");assertThat(result.getString(2)).isEqualTo("Tự sửa");
                 }
@@ -72,21 +96,19 @@ class LessonResetIT {
                       VALUES(gen_random_uuid(),'10000000-0000-0000-0000-000000000004','APPLY','SUCCEEDED',now());
                     INSERT INTO dataset_active_release(domain,release_id,activated_by)
                       VALUES('lexicon','10000000-0000-0000-0000-000000000004','reset-test');
-                    INSERT INTO dataset_activation_history(id,domain,release_id,action,activated_by)
-                      VALUES(gen_random_uuid(),'lexicon','10000000-0000-0000-0000-000000000004','ACTIVATE','reset-test');
                     INSERT INTO vocabulary_card(id,learner_id,headword_id,next_review_at)
                       VALUES(gen_random_uuid(),'10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000006',now());
                     INSERT INTO vocabulary_review(id,card_id,rating,next_due_at) SELECT gen_random_uuid(),id,'GOOD',now() FROM vocabulary_card;
                     """);
                 String reset=Files.readString(Path.of("../../infra/postgres/reset-lessons.sql"));
                 assertThatThrownBy(()->sql.execute(reset)).hasMessageContaining("active lesson jobs");sql.execute("ROLLBACK");
-                assertThat(count(sql,"lesson")).isEqualTo(1);
+                assertThat(count(sql,"lesson")).isEqualTo(6);
                 assertThat(count(sql,"lesson_job_diagnostic")).isEqualTo(1);
                 sql.execute("UPDATE background_job SET status='CANCELLED' WHERE job_type='LESSON_AUTHORING'");
                 sql.execute("UPDATE vocabulary_card SET source_context_id='10000000-0000-0000-0000-000000000001',source_context_type='LESSON'");
                 assertThatThrownBy(()->sql.execute(reset)).hasMessageContaining("Detach curriculum or vocabulary");sql.execute("ROLLBACK");
                 sql.execute("UPDATE vocabulary_card SET source_context_id=NULL");
-                List<String> kept=List.of("app_user","ai_provider","ai_capability_route","module_runtime_config","dataset_release","dataset_import_run","dataset_active_release","dataset_activation_history","lexicon_headword","lexicon_entry","assessment_item","toeic_test_catalog","toeic_test_version","grammar_topic_catalog","grammar_topic_version","vocabulary_card","vocabulary_review","lesson_category","lesson_youtube_channel","lesson_audio_source");
+                List<String> kept=List.of("app_user","ai_provider","ai_capability_route","module_runtime_config","dataset_release","dataset_import_run","dataset_active_release","lexicon_headword","lexicon_entry","assessment_item","toeic_test_catalog","toeic_test_version","grammar_topic_catalog","grammar_topic_version","vocabulary_card","vocabulary_review","lesson_category","lesson_youtube_channel","lesson_audio_source");
                 Map<String,Long> before=new HashMap<>();for(String table:kept) before.put(table,count(sql,table));
                 sql.execute(reset);
                 for(String table:kept) assertThat(count(sql,table)).as(table).isEqualTo(before.get(table));
@@ -98,6 +120,25 @@ class LessonResetIT {
             }
         }
     }
+
+    private static void assertSampleLessonProjections(Statement sql) throws SQLException {
+        assertThat(scalar(sql,"SELECT count(*) FROM lesson WHERE source_type='YOUTUBE' AND status='PUBLISHED'")).isEqualTo("4");
+        assertThat(scalar(sql,"SELECT count(*) FROM lesson WHERE source_type='TEXT' AND status='PUBLISHED'")).isEqualTo("1");
+        assertThat(count(sql,"lesson_sentence")).isEqualTo(184);
+        assertThat(count(sql,"lesson_word_timestamp")).isEqualTo(2650);
+        assertThat(count(sql,"lesson_annotation")).isEqualTo(184);
+        assertThat(count(sql,"sentence_pronunciation")).isEqualTo(184);
+        assertThat(count(sql,"lesson_activity")).isEqualTo(15);
+        assertThat(count(sql,"lesson_activity_sentence")).isEqualTo(552);
+        assertThat(count(sql,"lesson_category_membership")).isEqualTo(5);
+        assertThat(scalar(sql,"SELECT sum(jsonb_array_length(document)) FROM lesson_authoring WHERE published_at IS NOT NULL"))
+            .isEqualTo("184");
+    }
+
+    private static String scalar(Statement sql,String query) throws SQLException {
+        try(var result=sql.executeQuery(query)) {result.next();return result.getString(1);}
+    }
+
     private static long count(Statement sql,String table) throws SQLException {
         try(var result=sql.executeQuery("SELECT count(*) FROM "+table)) {result.next();return result.getLong(1);}
     }

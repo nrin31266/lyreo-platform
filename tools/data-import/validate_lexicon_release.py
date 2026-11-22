@@ -20,6 +20,7 @@ import math
 import tarfile
 import unicodedata
 import uuid
+import source_repairs
 from collections import Counter
 from pathlib import Path
 
@@ -31,7 +32,7 @@ from lexicon_vi_context import (
     SENSE_CONTEXT_FIELDS,
 )
 
-SUPPORTED_SCHEMAS = frozenset({"1.0.0", "1.1.0"})
+SUPPORTED_SCHEMAS = frozenset({"1.0.0", "1.1.0", "2.0.0"})
 CONTEXT_KEYS = frozenset({"record_line", "record_context", "sense_ordinal", "sense_context", "gloss_ordinal"})
 VI_REASONS = frozenset({"AUXILIARY_VI_UNIQUE_POS_ITEM", "AUXILIARY_VI_AMBIGUOUS_POS_ITEMS",
                         "AUXILIARY_VI_NO_COMPATIBLE_POS_ITEM", "AUXILIARY_VI_UNKNOWN_POS"})
@@ -151,13 +152,15 @@ def _context(row: dict, checksum: str) -> tuple[int, int, int]:
 
 
 def _verify_raw_vi(raw_vi: Path, source: dict, entries: set[str], actual: dict,
-                   report: dict) -> dict:
+                   report: dict, repaired_senses: dict | None = None) -> dict:
     require(raw_vi.is_file(), f"Raw VI source absent: {raw_vi}")
     require(sha256_file(raw_vi) == source.get("auxiliary_vi_sha256"), "Raw VI source SHA mismatch")
     inventory = {level: {kind: Counter() for kind in ("preserved", "omitted", "unknown")}
                  for level in ("record", "sense", "example")}
     counters = Counter()
     remaining = set(actual)
+    repaired_senses = repaired_senses or {}
+    remaining_repairs = set(repaired_senses)
 
     def inventory_fields(value: dict, level: str, kept: frozenset, omitted: frozenset) -> None:
         for key in value:
@@ -183,6 +186,10 @@ def _verify_raw_vi(raw_vi: Path, source: dict, entries: set[str], actual: dict,
             require(isinstance(senses, list), "Invalid raw VI senses array")
             for sense_ordinal, sense in enumerate(senses, 1):
                 require(isinstance(sense, dict), "Invalid raw VI sense object")
+                repair_locator = (line_number, sense_ordinal)
+                if repair_locator in repaired_senses:
+                    require(repaired_senses[repair_locator]["examples"] == (sense.get("examples") or []), "Reviewed example baseline differs from immutable raw source")
+                    remaining_repairs.remove(repair_locator)
                 inventory_fields(sense, "sense", SENSE_CONTEXT_FIELDS, frozenset())
                 counters["viwiktionary_total_raw_senses"] += 1
                 glosses = sense.get("glosses") or []
@@ -221,6 +228,7 @@ def _verify_raw_vi(raw_vi: Path, source: dict, entries: set[str], actual: dict,
                             f"Raw VI entry/gloss mismatch: {locator}")
                     remaining.remove(locator)
                     counters["viwiktionary_emitted_records"] += 1
+    require(not remaining_repairs, "Repaired sense is absent from immutable raw source")
     require(not remaining, f"Extra canonical VI occurrences: {len(remaining)}")
     reconciliation = report["translation_source_reconciliation"]
     for key in ("viwiktionary_total_raw_senses", "viwiktionary_senses_without_glosses",
@@ -248,9 +256,19 @@ def validate(root: Path, archive: Path | None = None, raw_en: Path | None = None
     require(bool(version), "Package version missing in manifest")
     schema = pkg.get("schema_version")
     require(schema in SUPPORTED_SCHEMAS, f"Unsupported Lexicon schema: {schema}")
-    strict = schema == "1.1.0"
+    strict = schema in ("1.1.0", "2.0.0")
+    baseline = schema == "2.0.0"
 
     source = manifest.get("source", {})
+    repair_meta = source.get("source_repairs")
+    reviewed_repairs = None
+    repaired_senses = {}
+    repair_ids = set()
+    if repair_meta:
+        require(repair_meta["path"] == source_repairs.PATH, "Unexpected source repair path")
+        reviewed_repairs = source_repairs.validate(json.loads((root / source_repairs.PATH).read_text()), "lexicon")
+        require(repair_meta["count"] == len(reviewed_repairs["repairs"]), "Source repair count differs")
+        repair_ids = {repair["id"] for repair in reviewed_repairs["repairs"]}
     source_files = source.get("files")
     require(isinstance(source_files, list) and bool(source_files), "Source files inventory missing")
     source_by_path: dict[str, dict] = {}
@@ -356,6 +374,11 @@ def validate(root: Path, archive: Path | None = None, raw_en: Path | None = None
             require(bool(sid), f"Missing sense id on line {idx}")
             require(sid not in sense_ids, f"Duplicate sense id: {sid}")
             sense_ids.add(sid)
+            if sid in repair_ids:
+                original = source_repairs.record("senses.jsonl", row, reviewed_repairs, reverse=True)
+                context = original.get("source_context", {})
+                require(context.get("source") == "viwiktionary" and context.get("source_sha256") == source.get("auxiliary_vi_sha256"), "Reviewed examples require an identified VI source sense")
+                repaired_senses[(context["record_line"], context["sense_ordinal"])] = original
 
             eid = row.get("entry_id")
             iid = row.get("item_id")
@@ -371,7 +394,7 @@ def validate(root: Path, archive: Path | None = None, raw_en: Path | None = None
             if status == "AVAILABLE":
                 available_senses += 1
                 require(bool(row.get("translation_vi")), f"Sense {sid} marked AVAILABLE but missing translation_vi")
-                require(bool(row.get("matched_qualifier")), f"Sense {sid} marked AVAILABLE without matched_qualifier")
+                require(baseline and row.get("source_context", {}).get("source") == "viwiktionary" or bool(row.get("matched_qualifier")), f"Sense {sid} marked AVAILABLE without matched_qualifier")
             else:
                 missing_senses += 1
                 require(row.get("translation_vi") is None, f"Sense {sid} marked MISSING but has translation_vi")
@@ -488,18 +511,26 @@ def validate(root: Path, archive: Path | None = None, raw_en: Path | None = None
                     require(row.get("source_scope") == "viwiktionary_gloss"
                             and row.get("source_sense_qualifier") is None,
                             f"Invalid auxiliary VI origin scope in {tid}")
-                    count = compatible_counts[(eid, source_pos)] if source_pos else 0
-                    expected_reason = ("AUXILIARY_VI_UNKNOWN_POS" if source_pos is None else
-                                       "AUXILIARY_VI_UNIQUE_POS_ITEM" if count == 1 else
-                                       "AUXILIARY_VI_AMBIGUOUS_POS_ITEMS" if count > 1 else
-                                       "AUXILIARY_VI_NO_COMPATIBLE_POS_ITEM")
-                    require((link_status == "ITEM_CANDIDATE") == (source_pos is not None and count == 1),
-                            f"VI compatible item cardinality requires unique POS candidate or entry fallback: {tid}")
-                    require(link_status in ("ITEM_CANDIDATE", "ENTRY_CANDIDATE") and sid is None,
-                            f"Invalid auxiliary VI candidate status: {tid}")
-                    if iid:
-                        require(item_parents[iid] == (eid, source_pos), f"VI item/POS mismatch: {tid}")
-                    require(row.get("reason") == expected_reason, f"VI reason disagrees with compatible cardinality: {tid}")
+                    if baseline:
+                        require(link_status == "DIRECT_SENSE" and sid is not None, f"VI source sense must be directly owned: {tid}")
+                        expected_item = str(uuid.uuid5(uuid.NAMESPACE_URL, f"lyreo:lexicon:vi:{source['auxiliary_vi_sha256']}:{locator[0]}:item:0"))
+                        expected_sense = str(uuid.uuid5(uuid.NAMESPACE_URL, f"lyreo:lexicon:vi:{source['auxiliary_vi_sha256']}:{locator[0]}:sense:{locator[1]}"))
+                        require(iid == expected_item and sid == expected_sense, f"VI source ownership mismatch: {tid}")
+                        require(row.get("reason") == "SOURCE_SENSE", f"Invalid VI source reason: {tid}")
+                        expected_reason = "SOURCE_SENSE"
+                    else:
+                        count = compatible_counts[(eid, source_pos)] if source_pos else 0
+                        expected_reason = ("AUXILIARY_VI_UNKNOWN_POS" if source_pos is None else
+                                           "AUXILIARY_VI_UNIQUE_POS_ITEM" if count == 1 else
+                                           "AUXILIARY_VI_AMBIGUOUS_POS_ITEMS" if count > 1 else
+                                           "AUXILIARY_VI_NO_COMPATIBLE_POS_ITEM")
+                        require((link_status == "ITEM_CANDIDATE") == (source_pos is not None and count == 1),
+                                f"VI compatible item cardinality requires unique POS candidate or entry fallback: {tid}")
+                        require(link_status in ("ITEM_CANDIDATE", "ENTRY_CANDIDATE") and sid is None,
+                                f"Invalid auxiliary VI candidate status: {tid}")
+                        if iid:
+                            require(item_parents[iid] == (eid, source_pos), f"VI item/POS mismatch: {tid}")
+                        require(row.get("reason") == expected_reason, f"VI reason disagrees with compatible cardinality: {tid}")
                     vi_reasons[expected_reason] += 1
                 else:
                     require(row.get("source_context") is None,
@@ -520,6 +551,9 @@ def validate(root: Path, archive: Path | None = None, raw_en: Path | None = None
     report_file = root / report_rel_path
     require(report_file.is_file(), f"Validation report file missing: {report_file}")
     report = load_json(report_file.read_text(encoding="utf-8"))
+    if reviewed_repairs:
+        source_repairs.require_targets(reviewed_repairs, {"senses.jsonl": sense_ids})
+        require(report.get("accepted_source_repairs") == len(reviewed_repairs["repairs"]), "Source repair report count differs")
     require(report.get("status") == "PASS", f"Validation report status is not PASS: {report.get('status')}")
     collection_counts = dict(zip(("entries.jsonl", "items.jsonl", "senses.jsonl", "forms.jsonl",
                                   "pronunciations.jsonl", "translations.jsonl"),
@@ -533,7 +567,7 @@ def validate(root: Path, archive: Path | None = None, raw_en: Path | None = None
         f"Source rows difference unreconciled: {src_rec.get('difference_unreconciled')}",
     )
     require(
-        src_rec.get("source_rows_english") == len(item_ids),
+        src_rec.get("source_rows_english") + (src_rec.get("source_rows_vietnamese", 0) if baseline else 0) == len(item_ids),
         f"Item count mismatch with English source rows: {src_rec.get('source_rows_english')} vs {len(item_ids)}",
     )
 
@@ -587,7 +621,7 @@ def validate(root: Path, archive: Path | None = None, raw_en: Path | None = None
     vi_source_verification = None
     if raw_vi:
         require(strict, "RAW VI occurrence verification requires schema 1.1.0")
-        vi_source_verification = _verify_raw_vi(raw_vi, source, entry_ids, vi_occurrences, report)
+        vi_source_verification = _verify_raw_vi(raw_vi, source, entry_ids, vi_occurrences, report, repaired_senses)
 
     # 4. Validate Archive (if supplied)
     archive_hash = None

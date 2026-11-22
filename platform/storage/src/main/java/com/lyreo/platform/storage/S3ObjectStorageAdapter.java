@@ -41,7 +41,8 @@ public final class S3ObjectStorageAdapter implements ObjectStoragePort {
     @Override
     public boolean exists(String objectKey) {
         try {
-            client.headObject(software.amazon.awssdk.services.s3.model.HeadObjectRequest.builder().bucket(bucket).key(objectKey).build());
+            client.headObject(software.amazon.awssdk.services.s3.model.HeadObjectRequest.builder().bucket(bucket).key(objectKey)
+                .overrideConfiguration(options->options.apiCallTimeout(Duration.ofSeconds(5)).apiCallAttemptTimeout(Duration.ofSeconds(3))).build());
             return true;
         } catch(software.amazon.awssdk.services.s3.model.S3Exception failure) {
             if(failure.statusCode()==404) return false;

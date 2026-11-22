@@ -12,7 +12,7 @@ from types import SimpleNamespace
 TOOLS_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS_DIR))
 
-from clean_import_common import ReleasePackage, insert_values, scoped_id  # noqa: E402
+from clean_import_common import ReleasePackage, ensure_single_install, insert_values, scoped_id  # noqa: E402
 from import_clean_grammar_toeic import (  # noqa: E402
     access_fields,
     asset_row,
@@ -29,6 +29,23 @@ from import_clean_lexicon import reconcile_translation_provenance  # noqa: E402
 
 
 class CleanImporterTest(unittest.TestCase):
+    def test_single_install_rejects_a_different_completed_release(self):
+        class Database:
+            def execute(self, query, params):
+                return SimpleNamespace(fetchone=lambda: (uuid.uuid4(), "2.0.0", "b" * 64))
+
+        package = self.package(Path("."), domain="grammar-toeic", counts={})
+        with self.assertRaisesRegex(ValueError, "already installed"):
+            ensure_single_install(Database(), package)
+
+    def test_single_install_allows_empty_database(self):
+        class Database:
+            def execute(self, query, params):
+                return SimpleNamespace(fetchone=lambda: None)
+
+        package = self.package(Path("."), domain="lexicon", counts={})
+        ensure_single_install(Database(), package)
+
     def test_wide_translation_batches_respect_postgresql_parameter_limit(self):
         class Cursor:
             received = []

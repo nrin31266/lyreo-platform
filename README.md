@@ -23,17 +23,37 @@ Start task-specific reading at [docs/README.md](docs/README.md). [AGENTS.md](AGE
 Use the versions in `.java-version`, `.nvmrc`, and `package.json#packageManager`, plus Docker Compose and `uv` for Python projects. `make doctor` reports local readiness. The Maven Wrapper is included.
 
 ```bash
+make init-env
+# Configure release URLs and the team's R2 credentials in the ignored local env files.
+# Set STORAGE_MODE=r2 in both apps/core-service/.env and tools/data-import/.env.
 make setup
 ```
 
-Setup creates owner-specific local `.env` files, syncs dependencies, starts PostgreSQL/Keycloak, and seeds the development realm. The versioned Grammar/TOEIC clean release is optional: run `make data-fetch` when needed, or use `WITH_DATA=1 make setup` to fetch it during setup after dependencies are ready. Fetching verifies files on disk; importing requires an explicit APPLY, with an optional activation flag described in the [Data Import guide](tools/data-import/README.md). Application source runs on the host; start each process in its own terminal:
+Setup creates local environment files, syncs dependencies, starts PostgreSQL and Keycloak, and
+runs the development bootstrap and Flyway migrations. Content installation is optional:
 
 ```bash
+make setup-data DATASET=lexicon        # Dictionary
+make setup-data DATASET=grammar-toeic  # Grammar and TOEIC L&R
+make setup-data                       # Both packages
+```
+
+The second and third commands verify or reuse the shared R2 media if both environments select R2.
+See the [Data Import guide](tools/data-import/README.md).
+Application source runs on the host. With `make dev-infra` running, start Core, AI and Admin in one
+terminal with prefixed logs, or start each process in its own terminal:
+
+```bash
+make dev                      # core + ai + admin; APPS="core ai admin mobile" to choose
 make core
 make ai
 make admin
 make mobile
 ```
+
+`make dev` keeps each service's reload behavior. Ctrl+C or closing the terminal stops all of them;
+Docker infrastructure keeps running until `make down`. Run `make mobile` separately when you need
+Expo's interactive keys.
 
 Local login details: [Development accounts](docs/ACCOUNT.md).
 
@@ -51,8 +71,10 @@ See [Core development](apps/core-service/README.md#local-run-and-verification) f
 | `make dev-infra`, `make keycloak-seed` | Run local PostgreSQL/Keycloak and seed the realm |
 | `make db-shell`, `make db-reset` | Inspect DB or preview lesson-only reset; [scope and confirmation](docs/DEVELOPMENT.md) |
 | `make db-recreate`, `make down-v` | Guarded destructive DB/volume operations; see the same guide |
-| `make seed-dev` | Add six default categories from `infra/postgres/seed/dev.sql` without overwriting edits |
-| `make data-check`, `make data-fetch` | Verify or acquire the optional clean Grammar/TOEIC release |
+| `make migrate`, `make seed-dev` | Apply schema and add reference categories without overwriting edits |
+| `make seed-lessons` | Add five real example lessons when the shared lesson audio is available |
+| `make setup-data`, `make data-storage-check` | Import both releases or check media storage alignment |
+| `make data-check`, `make data-fetch` | Verify or acquire the clean Grammar/TOEIC release |
 | `make setup-media` | Install the Core YouTube downloader; FFmpeg/ffprobe required on the host |
 | `make validate`, `make check` | Offline guards or full verification |
 | `make validate-docs`, `make validate-repo`, `make test-tooling` | Target repository policy checks |

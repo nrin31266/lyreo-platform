@@ -1,0 +1,24 @@
+{
+  "21b55f340d46d13a119a0c97223b05a1b2dfcfde48a0674358aefa6a89a16592": {
+    "source_id": "8868aa81-a1b1-473e-8330-58721ed2ab26",
+    "repair": "TRAILING_BRE"
+  },
+  "97758fccbd480441bd83ea1467b4a8328c7e1a02b0705c4f3f139566b8d18d3b": {
+    "source_id": "99e12c48-ebbd-4303-ad3b-e0a54dd101e7",
+    "repair": "EMAIL_TABLES"
+  },
+  "3403ec40ca963679a2ad6b88381ca6df3207025d6305f23021a86cdcade7970d": {
+    "source_id": "c4aea850-a5fa-4d6f-995d-835d29876bd0",
+    "repair": "DOCUMENT_TABLES"
+  },
+  "33fd654dfd7bf1f9676f522b3774164158127006df8c6a98a0da9d5372fe8acd": {
+    "source_id": "1140ed20-3755-451b-88d4-85149ac73381",
+    "repair": "ARTICLE_SCHEDULE_WRAPPER",
+    "evidence": "2020 Test 6 Q191-195 names three documents; raw HTML nests a titled schedule and its table in the article wrapper. Independent comparison: https://990english.com/toeic-lr-tests/ets-toeic-2020-lr-test-6/"
+  },
+  "f170fbdb52e774fa520399691e7aff5015d31cc9fb22f74329da8ccfc33cb719": {
+    "source_id": "428e81cd-4331-4327-a918-8f9304b92538",
+    "repair": "EMAIL_HEADERS_AND_FORM",
+    "evidence": "2026 Test 1 Q191-195 contains two complete emails followed by a distinct order form. The two horizontal rules separate headers from bodies, not documents. Independent comparison: https://www.scribd.com/document/1010652502/Ets-2026-Rc-Edit"
+  }
+}

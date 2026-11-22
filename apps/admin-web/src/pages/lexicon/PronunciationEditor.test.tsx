@@ -1,0 +1,24 @@
+import { cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { I18nextProvider } from 'react-i18next';
+import { afterEach, expect, it, vi } from 'vitest';
+import { i18n } from '@/i18n';
+import type { Document, LexiconDraft } from '../library/library.types';
+import { PronunciationEditor } from './PronunciationEditor';
+afterEach(cleanup);
+it('keeps IPA-only and audio-only source records separate and loads audio only on request', async () => {
+  await i18n.changeLanguage('en');
+  const cache = new QueryClient();
+  const draft: LexiconDraft = { title: 'book', type: 'WORD', headwordId: null, sourceMetadataJson: null, licenseText: null, items: [{ id: 'noun', partOfSpeech: 'noun', posTitle: null, etymologyText: null }, { id: 'verb', partOfSpeech: 'verb', posTitle: null, etymologyText: null }], senses: [], forms: [], translations: [], pronunciations: [{ id: 'verb-ipa', itemId: 'verb', accent: 'US', ipa: '/bʊk/', audioUrl: null, assetId: null, tags: [] }, { id: 'ipa', itemId: 'noun', accent: 'US', ipa: '/bʊk/', audioUrl: null, assetId: null, tags: [] }, { id: 'audio', itemId: 'noun', accent: 'US', ipa: null, audioUrl: 'https://example.test/book.ogg', assetId: null, tags: [] }] };
+  const document: Document<LexiconDraft> = { id: 'word', revision: 2, status: 'DRAFT', publicationId: null, hasUnpublishedChanges: true, draft, updatedAt: null, updatedBy: null };
+  render(<QueryClientProvider client={cache}><I18nextProvider i18n={i18n}><PronunciationEditor value={draft} document={document} dirty={false} onChange={vi.fn()} adopt={vi.fn()} /></I18nextProvider></QueryClientProvider>);
+  expect(screen.getAllByText('No recording supplied')).toHaveLength(1);
+  const player = globalThis.document.querySelector('audio')!;
+  expect(player).not.toHaveAttribute('src');
+  const play = vi.spyOn(player, 'play').mockResolvedValue();
+  await userEvent.click(screen.getByRole('button', { name: 'Play pronunciation' }));
+  expect(player).toHaveAttribute('src', 'https://example.test/book.ogg');
+  expect(play).toHaveBeenCalledOnce();
+  cache.clear();
+});

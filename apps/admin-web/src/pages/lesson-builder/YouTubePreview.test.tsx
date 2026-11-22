@@ -10,6 +10,25 @@ afterEach(() => {
   delete window.YT;
   vi.useRealTimers();
 });
+it('can switch to preview before YouTube has installed its playback methods', async () => {
+  vi.useFakeTimers();
+  const pause=vi.fn();let readyPlayer=()=>{};
+  window.YT={Player:class {
+    pauseVideo:()=>void=undefined!;
+    constructor(_host:HTMLElement,options:any) { readyPlayer=()=>{this.pauseVideo=pause;options.events.onReady();}; }
+    destroy(){} getCurrentTime(){return 0;} getPlayerState(){return -1;}
+    playVideo(){} setPlaybackRate(){} seekTo(){}
+  }};
+  const props={videoId:'abcdefghijk',startMs:0,endMs:10000,sentences:[],seek:null,onTimeChange:vi.fn()};
+  const draw=(context:string)=><I18nextProvider i18n={i18n}><TooltipProvider><YouTubePreview {...props} review={{sentenceId:null,context,onSentenceChange:vi.fn()}} /></TooltipProvider></I18nextProvider>;
+  const view=render(draw('studio'));
+  await act(async()=>{});
+  view.rerender(draw('preview'));
+  expect(pause).not.toHaveBeenCalled();
+  await act(async()=>{readyPlayer();});
+  view.rerender(draw('studio'));
+  expect(pause).toHaveBeenCalledTimes(1);
+});
 it('moves the existing playback controls into the shared dock without duplicating them', async () => {
   const host=document.createElement('div');document.body.append(host);
   const view=render(<I18nextProvider i18n={i18n}><TooltipProvider>

@@ -3,7 +3,6 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthCallbackPage, ProtectedRoute } from "@/app/auth";
 import { AdminLayout } from "@/app/layout/AdminLayout";
 import { CurriculumPage } from "@/pages/curriculum/CurriculumPage";
-import { LexiconPage } from "@/pages/lexicon/LexiconPage";
 import { OverviewPage } from "@/pages/overview/OverviewPage";
 
 const AiSettingsPage = lazy(() =>
@@ -25,6 +24,13 @@ const LessonBuilderPage = lazy(() =>
 );
 
 const OrganizationPage = lazy(() => import("@/pages/lessons/OrganizationPage").then(m => ({default: m.OrganizationPage})));
+const LexiconPage = lazy(() => import("@/pages/lexicon/LexiconPage").then(m => ({ default: m.LexiconPage })));
+const LexiconDetailPage = lazy(() => import("@/pages/lexicon/LexiconDetailPage").then(m => ({ default: m.LexiconDetailPage })));
+const GrammarPage = lazy(() => import("@/pages/grammar/GrammarPage").then(m => ({ default: m.GrammarPage })));
+const GrammarDetailPage = lazy(() => import("@/pages/grammar/GrammarPage").then(m => ({ default: m.GrammarDetailPage })));
+const QuestionDetailPage = lazy(() => import("@/pages/library/QuestionEditor").then(m => ({ default: m.QuestionDetailPage })));
+const ToeicPage = lazy(() => import("@/pages/toeic/ToeicPage").then(m => ({ default: m.ToeicPage })));
+const ToeicDetailPage = lazy(() => import("@/pages/toeic/ToeicPage").then(m => ({ default: m.ToeicDetailPage })));
 const LessonDetailPage = lazy(() =>
   import("@/pages/lessons/LessonDetailPage").then((m) => ({
     default: m.LessonDetailPage,
@@ -59,6 +65,13 @@ export function AppRouter() {
         <Route path="settings/ai" element={<AiSettingsPage />} />
         <Route path="curriculum" element={<CurriculumPage />} />
         <Route path="lexicon" element={<LexiconPage />} />
+        <Route path="lexicon/:id" element={<LexiconDetailPage />} />
+        <Route path="grammar" element={<GrammarPage />} />
+        <Route path="grammar/:kind" element={<GrammarPage />} />
+        <Route path="grammar/questions/:id" element={<QuestionDetailPage />} />
+        <Route path="grammar/:kind/:id" element={<GrammarDetailPage />} />
+        <Route path="toeic" element={<ToeicPage />} />
+        <Route path="toeic/:id" element={<ToeicDetailPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

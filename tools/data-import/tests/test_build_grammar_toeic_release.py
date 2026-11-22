@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import sys
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from build_grammar_toeic_release import (  # noqa: E402
     clean_html,
+    detect_document_type,
     document_fragments,
     item_from_grammar,
     item_from_toeic,
@@ -16,7 +19,7 @@ from build_grammar_toeic_release import (  # noqa: E402
     validate_item,
     visible_tokens,
 )
-from validate_grammar_toeic_release import validate_membership_hierarchy  # noqa: E402
+from validate_grammar_toeic_release import table_layout, validate_membership_hierarchy  # noqa: E402
 
 
 class ReleaseContentTest(unittest.TestCase):
@@ -79,16 +82,67 @@ class ReleaseContentTest(unittest.TestCase):
         self.assertNotIn("href", output)
         self.assertNotIn("<script", output)
 
-    def test_ambiguous_multi_document_keeps_group_fallback(self):
+    def test_explicit_separators_split_without_losing_text(self):
         source = "<div><p>One</p><hr><p>Two</p><hr><p>Three</p></div>"
         fragments, status = document_fragments(source, 7, 5)
-        self.assertEqual(([], "UNSPLIT"), (fragments, status))
+        self.assertEqual("STRUCTURAL", status)
+        self.assertEqual(3, len(fragments))
         self.assertEqual(["One", "Two", "Three"], [part for part in ["One", "Two", "Three"] if part in clean_html(source)])
+
+    def test_styleless_documents_and_decorative_paragraph_separator(self):
+        fragments, status = document_fragments('<div class="email"><table><tr><td>First</td></tr></table></div><p>-----</p><div>Second</div>', 7, 5)
+        self.assertEqual((2, "STRUCTURAL"), (len(fragments), status))
+        self.assertIn("<table>", fragments[0])
+        self.assertEqual(([], "UNSPLIT"), document_fragments('<p>One</p><p>Two</p>', 7, 5))
+
+    def test_literal_email_address_survives_sanitization(self):
+        source = '<p>To: Alex <alex@example.com></p><p>From: Sam &lt;sam@example.com&gt;</p>'
+        html = clean_html(source)
+        self.assertIn('&lt;alex@example.com&gt;', html)
+        self.assertIn('&lt;sam@example.com&gt;', html)
+        self.assertEqual(html, clean_html(html))
+
+    def test_duplicated_attribute_quotes_keep_table_spans_and_text(self):
+        source = '<table><tr><td colspan=""4"" style=""text-align: right"">Total</td><td>$224.00</td></tr></table>'
+        html = clean_html(source)
+        self.assertIn('colspan="4"', html)
+        self.assertIn('text-align: right', html)
+        self.assertEqual(['Total', '$', '224', '.', '00'], visible_tokens(html))
+        self.assertEqual(html, clean_html(html))
 
     def test_structural_split_with_trailing_text_keeps_complete_group_fallback(self):
         source = '<div style="border: 1px solid black">First</div><div style="border: 1px solid black">Second</div>tail'
         self.assertEqual(([], "UNSPLIT"), document_fragments(source, 7, 5))
         self.assertIn("tail", clean_html(source))
+
+    def test_reviewed_article_schedule_split_preserves_text_and_table(self):
+        source = ('<div class="article"><div><h3>Article</h3><p>Road work</p></div>'
+                  '<div><h3>Schedule</h3><table><tr><td colspan="2">Monday</td></tr></table></div></div>'
+                  '<div class="email"><p>Mail</p></div>')
+        repairs = {hashlib.sha256(source.encode()).hexdigest(): {"repair": "ARTICLE_SCHEDULE_WRAPPER"}}
+        self.assertEqual(2, len(document_fragments(source, 7, 5)[0]))
+        with patch.dict("build_grammar_toeic_release.DOCUMENT_REPAIRS", repairs):
+            fragments, status = document_fragments(source, 7, 5)
+            self.assertEqual("STRUCTURAL", status)
+            self.assertEqual(["article", "schedule", "email"], [detect_document_type(fragment) for fragment in fragments])
+            self.assertEqual(visible_tokens(source), [token for fragment in fragments for token in visible_tokens(fragment)])
+            self.assertEqual(table_layout(source), [table for fragment in fragments for table in table_layout(fragment)])
+            self.assertEqual(2, len(document_fragments(source.replace("Monday", "Friday"), 7, 5)[0]))
+
+    def test_reviewed_email_dividers_keep_each_header_with_its_body(self):
+        source = ('<div><p>To: A</p><p>From: B</p><p>Date: Monday</p><p>Subject: Q</p><hr>'
+                  '<p>Question</p><br><p>To: B</p><p>From: A</p><p>Date: Tuesday</p>'
+                  '<p>Subject: Re: Q</p><hr><p>Reply</p><br>'
+                  '<div><h3>Form</h3><table><tr><td>Order</td></tr></table></div></div>')
+        repairs = {hashlib.sha256(source.encode()).hexdigest(): {"repair": "EMAIL_HEADERS_AND_FORM"}}
+        with patch.dict("build_grammar_toeic_release.DOCUMENT_REPAIRS", repairs):
+            fragments, status = document_fragments(source, 7, 5)
+        self.assertEqual("STRUCTURAL", status)
+        self.assertEqual(["email", "email", "form"], [detect_document_type(fragment) for fragment in fragments])
+        self.assertIn("Question", fragments[0])
+        self.assertIn("Reply", fragments[1])
+        self.assertEqual(visible_tokens(source), [token for fragment in fragments for token in visible_tokens(fragment)])
+        self.assertEqual(table_layout(source), [table for fragment in fragments for table in table_layout(fragment)])
 
     def test_identical_media_files_share_one_asset_across_tests(self):
         with tempfile.TemporaryDirectory() as temp:

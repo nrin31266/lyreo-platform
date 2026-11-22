@@ -1,16 +1,16 @@
-.PHONY: help init-env doctor setup setup-media deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset db-recreate seed-dev keycloak-seed down core ai admin mobile \
+.PHONY: help init-env doctor setup setup-media deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset db-recreate seed-dev seed-lessons keycloak-seed down dev core ai admin mobile \
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
         ai-local clean-cache clean \
         test-java verify-java test-ai test-data-import test-tooling test-frontend typecheck build-web validate-docs validate-repo validate check prod-config verify-prod-env down-v \
-        import-clean-lexicon import-clean-grammar-toeic
+        import-clean-lexicon import-clean-grammar-toeic migrate setup-data data-storage-check data-ai-pilot
 
 help:
 	@printf '%s\n' \
 	  'Lyreo common commands:' \
 	  '' \
 	  'Setup' \
-	  '  make setup                       First-clone setup: env + deps + PostgreSQL/Keycloak bootstrap' \
+	  '  make setup                       First-clone setup: env + deps + infrastructure + migrations + reference seed' \
 	  '  make init-env                    Copy/synchronize local .env files' \
 	  '  make doctor                      Inspect local toolchain/env/data readiness' \
 	  '  make setup-media                 Install the Core YouTube metadata/audio downloader' \
@@ -18,6 +18,7 @@ help:
 	  '  make deps-java                   Compile and install internal Java artifacts required by Core into local Maven cache' \
 	  '' \
 	  'Run' \
+	  '  make dev                         Run Core + AI + Admin in one terminal (APPS="core ai admin mobile" to choose); Ctrl+C stops all' \
 	  '  make core                        Run Core; rebuild/restart after saved Java/resources change' \
 	  '  make ai                          Run FastAPI locally' \
 	  '  make ai-local                    Run FastAPI locally with local Qwen/Kokoro weights' \
@@ -25,19 +26,23 @@ help:
 	  '  make mobile                      Run Expo Metro bundler (requires Dev Build installed on device/emulator)' \
 	  '' \
 	  'Data' \
+	  '  make setup-data [DATASET=...]     Install lexicon, grammar-toeic or both packages (all)' \
+	  '  make data-storage-check          Check Core and importer use the same media storage' \
+	  '  make data-ai-pilot ARGS=--execute Run the bounded maintenance pilot (default: dry-run)' \
 	  '  make data-fetch                  Download/verify the versioned Grammar+TOEIC clean release' \
 	  '  make data-check                  Verify the installed Grammar+TOEIC clean release' \
 	  '  make lexicon-fetch               Download/verify the versioned Lexicon clean release' \
 	  '  make lexicon-check               Verify the installed Lexicon clean release' \
-	  '  make import-clean-lexicon        Validate/dry-run the Lexicon release (ARGS="--apply --activate --activated-by operator" to write)' \
-	  '  make import-clean-grammar-toeic  Validate/dry-run the Grammar+TOEIC release (ARGS="--apply --activate --activated-by operator" to write)' \
+	  '  make import-clean-lexicon        Validate/dry-run the pinned Lexicon release (ARGS="--apply" to install once)' \
+	  '  make import-clean-grammar-toeic  Validate/dry-run the pinned Grammar+TOEIC release (ARGS="--apply" to install once)' \
 	  '' \
 	  'Infrastructure' \
 	  '  make dev-infra                   Start PostgreSQL + Keycloak only' \
 	  '  make db-shell                    Open psql inside PostgreSQL container against Lyreo dev DB' \
 	  '  make db-reset                    Preview lesson-only reset; keeps imported banks and configuration' \
 	  '  make db-recreate                 Preview destructive whole application database recreation' \
-	  '  make seed-dev                    Seed local default categories after Core migrations' \
+	  '  make seed-dev                    Migrate and seed reference categories in the configured database' \
+	  '  make migrate                     Apply Flyway without starting HTTP or workers' \
 	  '  make down-v CONFIRM=lyreo-volumes Delete ALL volumes, including imports and Keycloak' \
 	  '  make keycloak-seed               Verify realm/client/roles and seed dev users' \
 	  '' \
@@ -70,7 +75,7 @@ help:
 	  '  make dev-config                  Validate compose.dev.yml syntax/resolution' \
 	  '  make prod-config                 Validate compose.prod.yml syntax/resolution' \
 	  '' \
-	  'Clean release download is opt-in: make data-fetch, or WITH_DATA=1 make setup.' \
+	  'make setup prepares the application; run make setup-data when you need content.' \
 	  '' \
 	  'Android first-time: make android-check -> make android-emulator-create -> make android-emulator -> make mobile-android-install -> make mobile' \
 	  'iOS first-time:     make mobile-ios-device-register -> make mobile-ios-build -> install IPA from EAS URL -> make mobile'
@@ -99,6 +104,9 @@ import-clean-lexicon:
 import-clean-grammar-toeic:
 	./tools/data-import/scripts/import-clean-grammar-toeic.sh $(ARGS)
 
+data-ai-pilot:
+	./scripts/data-ai-pilot.sh $(ARGS)
+
 deps-java:
 	./mvnw -B -pl apps/core-service -am -DskipTests -DskipITs install
 
@@ -117,11 +125,9 @@ setup:
 	$(MAKE) init-env
 	$(MAKE) doctor
 	$(MAKE) deps
-	@if [ "$${WITH_DATA:-0}" = "1" ]; then \
-		$(MAKE) data-fetch; \
-	fi
 	$(MAKE) dev-infra
 	$(MAKE) keycloak-seed
+	$(MAKE) seed-dev
 	@printf '%s\n' \
 	  'Lyreo local dependencies are ready.' \
 	  'Open separate terminals for: make core, make ai, make admin, make mobile.'
@@ -141,8 +147,21 @@ db-reset:
 db-recreate:
 	./scripts/db-reset.sh --database
 
-seed-dev:
-	docker compose --env-file infra/docker/.env -f compose.dev.yml exec -T postgres sh -c 'exec psql -X -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infra/postgres/seed/dev.sql
+seed-dev: deps-java
+	@set -a; . ./apps/core-service/.env; set +a; ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup -Dspring-boot.run.arguments="--seed-dev \"$(CURDIR)/infra/postgres/seed/dev.sql\""
+
+seed-lessons: seed-dev
+	@set -a; . ./apps/core-service/.env; set +a; ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup -Dspring-boot.run.arguments="--seed-dev \"$(CURDIR)/infra/postgres/seed/lessons.sql\""
+
+migrate: deps-java
+	@set -a; . ./apps/core-service/.env; set +a; ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup
+
+setup-data: export DATASET ?= all
+setup-data:
+	./scripts/setup-data.sh "$$DATASET"
+
+data-storage-check:
+	./scripts/check-data-storage.sh
 
 keycloak-seed:
 	set -a; . ./infra/keycloak/.env; set +a; ./infra/keycloak/scripts/bootstrap-keycloak.sh; ./infra/keycloak/scripts/seed-dev-users.sh
@@ -154,6 +173,10 @@ down-v:
 	@test "$(CONFIRM)" = "lyreo-volumes" || { echo "Refusing volume deletion: use CONFIRM=lyreo-volumes. This removes application data AND Keycloak." >&2; exit 1; }
 	docker compose --env-file infra/docker/.env -f compose.dev.yml down -v
 	
+# Prefixed logs in one terminal; Docker infra stays separate (make dev-infra / make down).
+dev:
+	@./scripts/dev.sh
+
 core:
 	@set -a; . ./apps/core-service/.env; set +a; python3 scripts/core_dev.py
 

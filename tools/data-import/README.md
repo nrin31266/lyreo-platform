@@ -1,245 +1,244 @@
 # Lyreo Data Import
 
-Large/reference datasets are **not Flyway migrations** and are **not committed** to this repo.
-Flyway owns schema + tiny stable reference rows; importer tools own large mutable datasets.
+Large/reference datasets stay outside Git. Flyway owns schema and small reference defaults;
+importers verify and install the pinned content packages. See the
+[release format](RELEASE_FORMAT.md) and [data pipeline contract](../../docs/DATA_PIPELINES.md).
 
-## Setup
+## First clone
 
-From the repository root, initialize env files first:
+Run `make setup` to prepare the application and seed development reference data. Then choose
+the content to install:
 
 ```bash
-make init-env
+make setup-data DATASET=lexicon
+make setup-data DATASET=grammar-toeic
+make setup-data
 ```
 
-`tools/data-import/.env` controls the Grammar/TOEIC clean release version, archive URL and SHA-256,
-installation path, importer database access, and R2 credentials for Grammar/TOEIC APPLY. The uploaded release URL
-is intentionally blank until the archive is available on Google Drive. Fill it in, then run:
+Each command checks the target database, verifies or fetches the selected package from the pins
+in [`.env.example`](.env.example), then installs it once. Grammar/TOEIC also checks
+media storage alignment with Core. Keep the target credentials and any local archive overrides
+in the ignored importer env. Reruns preserve existing rows and reject a different package for an
+installed domain. Use the CLI reports and catalog quality checks to inspect issues.
+
+### Drive access
+
+See [Drive handoff](DRIVE_HANDOFF.md) for the exact archives and environment settings used when moving the packages.
+
+The pinned URLs may point to a `lyreo.archive-parts.v1` JSON transport index. Fetch verifies each
+part and the reassembled archive, then validates package checksums before installation. The
+downloader fetches up to four remote parts concurrently and assembles them in index order.
+Splitting changes transport only; package bytes and archive SHA stay identical.
+
+For private files, install rclone from its official distribution, authorize a Drive remote with an
+account that already has access, and set `DATA_DRIVE_REMOTE` to its name (without the colon) in the
+importer env. Use a private OAuth client when a shared rclone client is rate limited. Tokens remain
+in rclone's local credential store, never in the repository, package or command examples. An empty
+remote uses the public Drive download endpoint. Private releases require account authorization.
+No fetch command modifies sharing permissions.
+
+A local archive path or `file://` URL supports offline setup. Relative paths resolve from
+`tools/data-import/`. Fetch/check reuses valid installed releases, never overwrites another version,
+and rejects archive path traversal/symlinks and incorrect checksums. Use the fetch script's `--force`
+only to replace a damaged installation of the selected version.
 
 ```bash
+make lexicon-fetch
+make lexicon-check
 make data-fetch
 make data-check
 ```
 
-`make data-fetch` checks an installed release first. If missing, it downloads the pinned archive,
-checks its SHA-256, safely extracts one release root, and runs the domain validator before installing
-under `.data/releases/grammar-toeic/1.0.1/`. `make data-check` verifies the installed release
-without downloading. Both commands leave valid existing releases untouched. To replace a damaged
-installation after fixing the URL and SHA, run `./tools/data-import/scripts/fetch-data.sh --force`.
-Other package versions live beside `1.0.1`; the fetcher never overwrites a different version.
+## Storage
 
-To include the release in first-clone setup, use `WITH_DATA=1 make setup`. Setup installs Python
-dependencies before it fetches. Raw Grammar/TOEIC source is not part of normal team setup.
+Full team integration uses each developer's PostgreSQL database and the configured shared R2
+bucket. Keep credentials in ignored env files. Select `STORAGE_MODE=r2` in Core and importer;
+`make data-storage-check` checks they agree. Isolated tests can use `STORAGE_MODE=local` with the
+same resolved `LOCAL_STORAGE_ROOT`. There is no fallback to a different storage target.
 
-## Release configuration and Google Drive upload
+Grammar/TOEIC files use `media/sha256/{prefix}/{sha256}`. APPLY verifies size and SHA-256 metadata,
+or hashes object bytes if metadata is absent. Matching keys are reused; missing keys are uploaded;
+mismatching objects fail without overwrite. ETag is not a SHA-256. A fresh developer database still
+needs migration/import even when all 4,875 media already exist in R2. Lexicon recordings remain
+attributed external references; import does not download or synthesize the dictionary audio.
 
-The canonical archive ready for upload is `.data/releases/grammar-toeic-1.0.1.tar.gz`. Upload that
-single file to Google Drive and share it as a downloadable file. In `tools/data-import/.env`, set:
-
-```dotenv
-GRAMMAR_TOEIC_RELEASE_VERSION=1.0.1
-GRAMMAR_TOEIC_RELEASE_SCHEMA_VERSION=1.0.0
-GRAMMAR_TOEIC_RELEASE_DIR=../../.data/releases/grammar-toeic/1.0.1
-GRAMMAR_TOEIC_RELEASE_URL=https://drive.google.com/file/d/YOUR_FILE_ID/view
-GRAMMAR_TOEIC_RELEASE_SHA256=95f4bb9471e7b7b07f17ccec21a4434e25c18c9adf3dd3b28829eebe21c5adf0
-```
-
-The URL may instead be a `file://` URL or a local archive path for offline verification; relative
-local paths resolve from `tools/data-import/`. Google
-Drive file links use ephemeral `uvx gdown`; other HTTP(S) links use `curl`. The SHA pin is mandatory
-for download. Do not put private credentials or a source archive URL into `.env.example`.
-
-## Clean Grammar/TOEIC release (offline builder)
-
-Maintainers may rebuild a future clean package from immutable raw input at `.data/datasets/toeic/`.
-`build_grammar_toeic_release.py` prepares a self-contained package;
-`validate_grammar_toeic_release.py` checks content, relations, checksums, and raw-source
-preservation. Neither tool writes the production database or uploads media. See the
-[release envelope convention](RELEASE_FORMAT.md) for versioning and manifest rules. Raw input stays
-under `.data/datasets/`; package versions live under Git-ignored `.data/releases/`.
-
-From the repo root, after `uv sync --locked --extra dev` in `tools/data-import`:
+## CLI import
 
 ```bash
-tools/data-import/.venv/bin/python tools/data-import/build_grammar_toeic_release.py \
-  --raw .data/datasets/toeic \
-  --output .data/releases/grammar-toeic/1.0.2 \
-  --archive .data/releases/grammar-toeic-1.0.2.tar.gz \
-  --generated-at 2026-09-25T15:44:28Z
-
-tools/data-import/.venv/bin/python tools/data-import/validate_grammar_toeic_release.py \
-  --release .data/releases/grammar-toeic/1.0.2 \
-  --raw .data/datasets/toeic \
-  --archive .data/releases/grammar-toeic-1.0.2.tar.gz \
-  --report .data/releases/grammar-toeic/1.0.2-verification.json
-```
-
-Change the builder's package version before building `1.0.2`; the example paths alone do not
-change manifest metadata. Pass the same `--generated-at` when checking reproducibility. Package
-version and clean schema version are separate fields; the schema version changes only when the
-record contract changes.
-
-## Clean release PostgreSQL import
-
-The production importers read only validated clean release directories. Default invocation runs
-the domain validator and reports a dry-run plan without opening PostgreSQL or object storage. The
-Lexicon importer streams all six canonical JSONL files in bounded batches; it does not filter entries
-by Vietnamese translation coverage. Grammar/TOEIC import preserves all active clean collections and
-records exact counts for `quarantine/` and `source_only/` collections it skips.
-
-```bash
-# From the repository root; --release is optional when *_RELEASE_DIR is set in .env.
-tools/data-import/scripts/import-clean-lexicon.sh [--release .data/releases/lexicon/1.0.1]
-tools/data-import/scripts/import-clean-grammar-toeic.sh [--release .data/releases/grammar-toeic/1.0.1]
-
-# APPLY, with optional activation after count and hierarchy reconciliation.
-tools/data-import/scripts/import-clean-lexicon.sh --apply --batch-size 1000
-tools/data-import/scripts/import-clean-grammar-toeic.sh --apply --batch-size 500
-tools/data-import/scripts/import-clean-lexicon.sh --apply --activate --activated-by operator
-tools/data-import/scripts/import-clean-grammar-toeic.sh --apply --rollback --activated-by operator
-
-# Change the active release later, after revalidating an already imported package.
-tools/data-import/scripts/import-clean-lexicon.sh --activate-only --activated-by operator
-tools/data-import/scripts/import-clean-grammar-toeic.sh --rollback-only --activated-by operator
-```
-
-The equivalent root targets are `make import-clean-lexicon` and
-`make import-clean-grammar-toeic`; pass CLI options with `ARGS="..."`.
-
-For full local integration, each developer uses their own PostgreSQL database and credentials in
-their ignored `tools/data-import/.env`, while the team shares the Cloudflare R2 `lyreo-dev`
-bucket. Keep real credentials out of Git and command examples. Core can still use its local
-filesystem storage mode for lightweight development; this does not replace R2 for a
-Grammar/TOEIC APPLY. Lexicon APPLY does not upload media to R2.
-
-```bash
+# Validation/dry-run: no database or storage writes.
+make import-clean-lexicon
 make import-clean-grammar-toeic
-make import-clean-grammar-toeic ARGS="--apply --activate --activated-by local-dev --batch-size 500"
+
+# Install once.
+make import-clean-lexicon ARGS="--apply --batch-size 1000"
+make import-clean-grammar-toeic ARGS="--apply --batch-size 500"
 ```
 
-Both importers require `DATABASE_URL` for APPLY. Grammar/TOEIC APPLY also requires `R2_ENDPOINT`,
-`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET`; `R2_REGION` defaults to `auto`.
-Each media file is rehashed before
-upload and stored under `media/sha256/{prefix}/{sha256}`. Existing content-addressed objects are
-verified by size and SHA-256 metadata (or streamed byte hash when metadata is absent) and reused.
-An identical APPLY inserts no duplicate rows or media objects. Presigned URLs are never written
-to PostgreSQL.
+Importers require PostgreSQL `DATABASE_URL` for APPLY, with bounded transactions and advisory locks.
+Partial retries reuse stable package IDs. Completed reruns check the existing snapshot and
+counts without inserting duplicates. Reports include collection counts and media uploads/reuse.
+Source snapshot triggers protect installed rows. Catalog policy, drafts and publication stay in
+the Admin editorial workflow, and past learner sessions retain their snapshots.
 
-The clean validator runs as a separate preflight process before writes. Each database batch is a
-bounded transaction, so a failed APPLY can be retried with the same manifest checksum and stable
-release-scoped IDs. Lexicon reruns after a successful APPLY skip the bulk insert once validation,
-counts, and hierarchy pass; partial retries use no-op conflicts. Final reconciliation rechecks all
-release table counts and parent relationships before marking APPLY successful. Once a release has a
-successful APPLY, database triggers reject new or changed snapshot rows. The first successful
-release for a domain confirms its source-seeded catalog policy. New catalog identities in later
-releases remain `DRAFT`/`PROVISIONAL`; known catalog policy stays under runtime ownership.
-An interrupted `RUNNING` attempt for the same release is marked `FAILED` when a retry acquires
-the domain import lock, preserving the earlier checkpoint in the audit table.
+## Maintainer rebuilds
 
-`--activate` and `--rollback` require `--apply`; standalone `--activate-only` and `--rollback-only`
-are for completed releases and recheck checksum, successful run, and row counts. Lexicon
-pronunciation audio URLs remain source provenance; no audio files are fetched.
-
-## Legacy raw scripts (maintainers only)
-
-The existing `import_grammar.py` and `import_toeic.py` read source exports under
-`GRAMMAR_TOEIC_RAW_DIR` or an explicit `--data-dir`. They do not read the clean release. Keep raw
-files only for release engineering and legacy diagnostics; `make data-fetch` never downloads them.
-
-## Global Lexicon
-
-The Lexicon v1 clean release is an offline, separate package. Its canonical maintainer-only inputs
-are `.data/datasets/lexicon/raw-wiktextract-data.jsonl.gz` (English Wiktionary dump dated
-2026-09-02; SHA-256 `5ab411b8859490789d0d002074cc029569648f901db940c0ab10e709932e1632`)
-and `.data/datasets/lexicon/vi-extract.jsonl.gz` (optional Vietnamese Wiktionary auxiliary dump
-dated 2026-09-01; SHA-256 `10e62bccdf3d85fc9e7472c1f85b2149602f97c75177b09523f4762c57ef7d3d`).
-The builder checks these pins by default. Keep raw data and SQLite staging outside Git under
-`.data/`; normal `lexicon-fetch` and `lexicon-check` use only the clean release.
-
-From the repository root, after `uv sync --locked --extra dev` in `tools/data-import`, build and
-validate the pinned v1 release with the project Python 3.12 environment (Unicode database 15.0.0):
+Raw source under `.data/datasets/` is immutable maintainer input. Normal setup downloads clean
+packages only. Use the locked Python 3.12 environment in `tools/data-import/.venv`.
 
 ```bash
 tools/data-import/.venv/bin/python tools/data-import/build_lexicon_release.py \
   --raw-en .data/datasets/lexicon/raw-wiktextract-data.jsonl.gz \
   --raw-vi .data/datasets/lexicon/vi-extract.jsonl.gz \
-  --output .data/builds/lexicon/1.0.1 \
-  --archive .data/builds/lexicon-1.0.1.tar.gz \
-  --staging-dir .data/tmp \
-  --generated-at 2026-10-13T16:21:52Z
+  --output .data/builds/lexicon/2.0.0 \
+  --archive .data/builds/lexicon-2.0.0.tar.gz --staging-dir .data/tmp \
+  --generated-at 2026-11-18T00:00:00Z
 
 tools/data-import/.venv/bin/python tools/data-import/validate_lexicon_release.py \
-  --release .data/builds/lexicon/1.0.1 \
+  --release .data/builds/lexicon/2.0.0 \
   --raw-en .data/datasets/lexicon/raw-wiktextract-data.jsonl.gz \
   --raw-vi .data/datasets/lexicon/vi-extract.jsonl.gz \
-  --archive .data/builds/lexicon-1.0.1.tar.gz \
-  --report .data/builds/lexicon-1.0.1-verification.json
+  --archive .data/builds/lexicon-2.0.0.tar.gz --report .data/builds/lexicon/verification.json
+
+tools/data-import/.venv/bin/python tools/data-import/build_grammar_toeic_release.py \
+  --raw .data/datasets/toeic --output .data/builds/grammar-toeic/2.0.0 \
+  --archive .data/builds/grammar-toeic-2.0.0.tar.gz --generated-at 2026-11-18T00:00:00Z
+
+tools/data-import/.venv/bin/python tools/data-import/validate_grammar_toeic_release.py \
+  --release .data/builds/grammar-toeic/2.0.0 --raw .data/datasets/toeic \
+  --archive .data/builds/grammar-toeic-2.0.0.tar.gz --report .data/builds/grammar-toeic/verification.json
 ```
 
-The builder refuses existing output paths; use new paths for a rebuild. Reuse the same
-`--generated-at` with unchanged inputs and builder when checking byte-for-byte reproducibility.
-Package/builder version is `1.0.1`, canonical schema is `1.1.0`; immutable `1.0.0`
-remains supported for rollback. The release directory contains `manifest.json`,
-`validation_report.json`, `LICENSE`, and ID-sorted `entries.jsonl`, `items.jsonl`, `senses.jsonl`,
-`forms.jsonl`, `pronunciations.jsonl`, and `translations.jsonl`. The archive has one
-`lexicon-1.0.1/` root. `manifest.json` records source filenames, byte sizes, checksums, and dates;
-`LICENSE` carries attribution for both Wiktionary editions and a CC BY-SA 4.0 notice.
-Pronunciations reference external audio URLs; the
-archive contains no audio files. Preserve source and license provenance when distributing or
-importing the release.
+Builders reject existing output paths. Version metadata must match the intended release; path names
+alone do not change it. Preserve the same `--generated-at` for reproducibility checks. Validate with
+raw source, upload to the designated team folder, then verify the downloaded archive SHA and clean
+install before pinning new `.env.example` defaults. Keep the raw inputs, the pinned archives and the
+review evidence. Remove duplicate downloads, split caches and intermediate builds after verification.
+Dataset and credential files stay outside Git. Team setup uses the content archives.
 
-Translations in `translations.jsonl` carry a `link_status`. `DIRECT_SENSE` and
-`QUALIFIER_MATCH` have a `sense_id`; the latter is a deterministic qualifier match, not proof of
-semantic accuracy. `ITEM_CANDIDATE` and `ENTRY_CANDIDATE` are unresolved candidates at the named
-scope. Auxiliary VI only selects an item when known source POS has exactly one compatible
-English item. Otherwise retain an entry candidate and source POS, without arbitrary first-item
-or ordinal mapping. Each source occurrence has its own ID and selected internal provenance;
-duplicate text is not deduplicated across occurrences. Learner Detail adds `sourcePos` only,
-and never hydrates/returns `source_context`. See the [canonical schema](RELEASE_FORMAT.md#lexicon-clean-schema-110)
-for the allowlist, locator and publication verifier. Do not present candidates as sense translations.
-Senses without a sense-linked translation
-retain `translation_status=MISSING`, even if a candidate exists.
-Canonical entry IDs are designed to remain stable across snapshots based on case-preserving headword identity,
-but this is best effort. Duplicate lexical blocks use source-order `item_seq`; their item IDs are
-deterministic within a snapshot and may change if upstream order changes. The importer preserves
-package IDs but creates release-scoped PostgreSQL/API IDs; lifetime `headwordId` stays stable.
+### Lexicon v2
 
-The full pinned build measured about 594 MB peak RSS with SQLite staging; plan for under 750 MB
-peak RSS, at least 2 GB RAM, and at least 10 GB free disk on a maintainer machine. The builder is
-intended to stream the raw inputs with bounded memory.
+One case-sensitive English headword identity holds source-owned VI and EN senses. VI meanings and
+examples do not require a matching English sense. EN meanings are reference content unless a
+separate evidence-backed relation exists. Legacy flat translations remain candidates, not verified
+sense matches. Runtime `headwordId` preserves Lesson/SRS identity; source snapshot IDs are
+release-scoped. Package sense IDs/provenance retain each source occurrence.
 
-For a team member with `tools/data-import/.env` configured, the clean release commands are:
+Pronunciation metadata distinguishes source notation from IPA, exact region labels from usage scope,
+and variants from recordings. An audio/notation relation requires the same source record or explicit
+editorial evidence; matching accent alone is insufficient. Unknown use remains explicit. Recording
+attribution/source links stay intact. See the [schema contract](RELEASE_FORMAT.md#lexicon-clean-schema-200).
+
+### Grammar/TOEIC v2
+
+The builder restores combined question/options translations and parses multiple-document passages
+with text/table/order preservation. Ambiguous source repairs are pinned by source hash in
+`toeic_document_repairs.json`. Runtime quality is separate from the immutable source issue report.
+The 2019 Test 5 questions 62–64 source references a nonexistent image. The independent copy uses
+audio alone for exactly those three questions and shows the graphic with questions 65–67. The builder
+records the obsolete reference as a source correction only for the reviewed raw row.
+[Part 3 comparison](https://zenlishtoeic.vn/stm-quizzes/part-3-test-5-2019/)
+The Admin publication validator keeps unresolved required-source issues blocking.
+
+## Bounded DeepSeek maintenance
+
+Prepare a deterministic gap inventory before paid execution:
 
 ```bash
-make lexicon-fetch
-make lexicon-check
+tools/data-import/.venv/bin/python tools/data-import/prepare_maintenance.py \
+  --grammar .data/releases/grammar-toeic/2.0.0 --lexicon .data/releases/lexicon/2.0.0 \
+  --output .data/maintenance
+make data-ai-pilot
+# Read today's official model prices, then explicitly execute within the durable limit:
+DATA_MAINTENANCE_PRICING_CONFIRMED_ON=YYYY-MM-DD make data-ai-pilot ARGS=--execute
 ```
 
-`LEXICON_RELEASE_URL` points to the published Drive archive. The version, schema version,
-installation directory, URL, and archive SHA-256 are pinned in `.env.example`. Maintainers
-pass raw input paths explicitly to the builder as shown above. The older
-`import_lexicon.py` reads raw source exports; use `import-clean-lexicon.sh` for production imports.
+Set `DEEPSEEK_KEY` in the operator shell or copy the [root template](../../.env.example) to `.env`
+and set it there. Core owns prompt, schema, allowed fields, cache and durable reservations; FastAPI executes.
+Results remain proposals. Failures keep cost reservations and are not retried automatically. The
+[AI requirement](../../docs/requirements/ai.md#br-ai-006--bounded-library-maintenance-pilot) owns the
+accepted spending/review policy. Regular app routes retain their free-only policy.
 
-For publication, build twice in separate output directories with the same timestamp and
-compare canonical files, manifest and archive SHA before upload. Upload the single versioned
-archive to the existing Lexicon Google Drive release folder and make it downloadable, following
-the Google Drive workflow above. Never overwrite an earlier published version. Set the new
-`LEXICON_RELEASE_VERSION`, `SCHEMA_VERSION`, `URL`, `SHA256` and installation `DIR` in the
-ignored local `.env`, then run `make lexicon-fetch` into a fresh installation path. Builder
-outputs under `.data/builds/` are separate so an already-installed shortcut cannot bypass
-download-back verification. Import the fetched `.data/releases/lexicon/<version>` package,
-not the builder output. Reconcile inactive first; explicit local/dev activation and rollback
-use the importer commands above. Keep all old snapshots and package paths intact.
+The command uses DeepSeek Flash with high thinking and an 8,192-token combined reasoning/final
+output ceiling. Confirm the current [official pricing](https://api-docs.deepseek.com/quick_start/pricing/)
+and [thinking contract](https://api-docs.deepseek.com/guides/thinking_mode/) before execution. Resume
+uses canonical input/context/model/prompt hashes across JVM processes. Keep the original pilot input
+for a cache check; write a new inventory to a separate output directory instead of replacing it.
+`candidates.jsonl` contains actual field gaps, while existing Grammar explanations are optional
+quality reviews. Part 1 explanations without photograph input are counted for visual review and
+excluded from this text-only capability.
 
-## Import observability
+To audit the final queue, add `--final` to the preparation command and set
+`DATA_MAINTENANCE_INPUT` to its `final.jsonl` and `DATA_MAINTENANCE_OUTPUT` to a review file.
+`make data-ai-pilot ARGS=--batch` prints the queue and reservation estimate. Execute the sample
+with `ARGS='--batch --sample --execute'`, then run the full queue with `ARGS='--batch --execute'`
+after review. Both execute modes require the pricing confirmation date. A rate limit stops new
+requests and exports completed results. A subsequent batch command reuses the saved results and
+the existing reservations for requests rejected with HTTP 429. When resuming with a smaller
+queue, set `DATA_MAINTENANCE_BUDGET_USD` to the cumulative ceiling for that model, including its
+existing ledger reservations. Set `DATA_MAINTENANCE_AI_URL` to target a separate maintenance runtime.
 
-Every clean-release APPLY creates a `dataset_import_run` with the release checksum, status, exact
-manifest and database counts, intentionally skipped collection counts, and hierarchy-orphan probes.
-Lexicon also compares every translation's source POS and internal context with canonical values,
-including zero-write reruns of completed snapshots; mismatches fail reconciliation.
-Insert statements split at PostgreSQL's bind-parameter limit while preserving the requested
-batch transaction boundary, so wider provenance rows remain safe with larger batch sizes.
-Raw datasets/releases remain outside Git. Failed large imports stay visible with an error message
-and can be retried using the same validated release.
+For a provider fallback, set `DATA_MAINTENANCE_MODEL` to `GEMINI_FLASH_LITE`,
+`GEMINI_31_FLASH_LITE`, or `GROQ_GPT_OSS`. Set `GEMINI_API_KEY` or `GROQ_API_KEY` in the operator
+shell or copy the [research template](../research/.env.example) to `tools/research/.env`.
+Set `DATA_MAINTENANCE_PRICING_CONFIRMED_ON` and
+`DATA_MAINTENANCE_BUDGET_USD` explicitly. Reservations assume paid token prices because model
+listing does not identify the account's billing tier. Run one model at a time with the same
+input queue and a separate output file. The next model skips unchanged work already completed
+under the same prompt version, while its own ledger records that model and its usage.
 
-Dataset storage/download location does not affect AI token cost. AI cost is created by actual
-provider/model capability calls, not by whether source/result bytes live on local disk or R2.
+After checking complete source context, record explicit decisions in an ignored JSON file:
+
+```json
+{
+  "format": "lyreo.maintenance-review.v1",
+  "reviewer": "reviewer-name",
+  "reviewed_at": "2026-11-18T00:00:00Z",
+  "accepted": [
+    {"fingerprint": "successful-work-sha256", "targetId": "item-id", "field": "explanation_vi", "reason": "Checked against the complete transcript, options and source answer"}
+  ]
+}
+```
+
+Build a new Grammar/TOEIC version from accepted language changes:
+
+```bash
+tools/data-import/.venv/bin/python tools/data-import/maintenance_overrides.py \
+  --results .data/maintenance/pilot-results.json --decisions .data/maintenance/review-decisions.json \
+  --release .data/releases/grammar-toeic/2.0.0 --output .data/maintenance/reviewed-language-overrides.json
+tools/data-import/.venv/bin/python tools/data-import/build_grammar_toeic_release.py \
+  --raw .data/datasets/toeic --output .data/releases/grammar-toeic/2.0.1 \
+  --archive .data/releases/grammar-toeic-2.0.1.tar.gz --version 2.0.1 \
+  --overrides .data/maintenance/reviewed-language-overrides.json
+tools/data-import/.venv/bin/python tools/data-import/validate_grammar_toeic_release.py \
+  --release .data/releases/grammar-toeic/2.0.1 --raw .data/datasets/toeic \
+  --archive .data/releases/grammar-toeic-2.0.1.tar.gz
+```
+
+The review tool accepts only proposed language fields from successful scoped work. It pins the
+whole original item hash, preserves absent versus explicit-null fields, and adds field provenance.
+Validation reverses only those changes, checks protected source content, and can independently
+reconstruct the baseline from raw source. It does not accept answer, option, passage or media edits.
+The [recorded pilot](../../docs/DATA_PIPELINES.md#reviewed-language-maintenance-2026-11-18) describes
+the accepted subset and remaining limitations; the offline review tool currently owns Grammar/TOEIC,
+not Dictionary sense changes.
+
+## Reviewed source wording repairs
+
+Final v2 rebuilds also accept a narrow manual source repair bundle with `--source-repairs`.
+Grammar/TOEIC 2.0.2 combines the twenty reviewed pilot explanations with three directly
+verified source corrections; Lexicon 2.0.1 corrects one example and its rendering offsets.
+The package keeps exact before/after text, row hashes and review evidence in
+`editorial/source_repairs.json`. Original raw text and old releases remain available.
+
+For a maintainer rebuild, pass the original accepted `editorial/language_overrides.json`
+with `--overrides` for Grammar/TOEIC, plus the corresponding package's `--source-repairs`
+bundle and an explicit `--version`. Lexicon accepts `--version` and `--source-repairs` as well.
+Use the source package's `generated_at` and the same builder when checking reproducibility;
+write to a new output directory. Run the independent validator with raw input and archive
+after every rebuild. Normal `make setup-data` consumes the effective package directly and
+needs neither repair tooling nor raw corpus.
+
+## Legacy raw scripts
+
+`import_lexicon.py`, `import_grammar.py` and `import_toeic.py` remain maintainer diagnostics.
+Team setup uses the clean package importers.
