@@ -31,11 +31,11 @@ class AuthoringContentTest {
         var lesson = new AuthoringLesson();
         lesson.sentences = java.util.stream.IntStream.range(0,100)
             .mapToObj(i -> new AuthoringSentence(UUID.randomUUID(), "word ".repeat(15), "LEARN")).toList();
-        assertThat(AuthoringContent.vocabularyLimit(lesson)).isEqualTo(15);
-        assertThat(AuthoringContent.grammarLimit(lesson)).isEqualTo(6);
+        assertThat(AuthoringContent.vocabularyLimit(lesson)).isEqualTo(20);
+        assertThat(AuthoringContent.grammarLimit(lesson)).isEqualTo(9);
         lesson.sentences = List.of(new AuthoringSentence(UUID.randomUUID(), "word ".repeat(10000), "LEARN"));
-        assertThat(AuthoringContent.vocabularyLimit(lesson)).isEqualTo(100);
-        assertThat(AuthoringContent.grammarLimit(lesson)).isEqualTo(40);
+        assertThat(AuthoringContent.vocabularyLimit(lesson)).isEqualTo(134);
+        assertThat(AuthoringContent.grammarLimit(lesson)).isEqualTo(58);
         lesson.options=new AuthoringOptions(Set.of(),Set.of("LEXICAL","GRAMMAR"),"vi-VN","CUSTOM",7,2,"DISABLED","US");
         assertThat(AuthoringContent.vocabularyLimit(lesson)).isEqualTo(7);
         assertThat(AuthoringContent.grammarLimit(lesson)).isEqualTo(2);

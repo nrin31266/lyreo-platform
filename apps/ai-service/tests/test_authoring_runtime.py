@@ -470,3 +470,18 @@ def test_deepseek_truncation_without_text_keeps_billable_usage(monkeypatch):
     assert result.metadata['finish_reason'] == 'length'
     assert result.output == {'content': '', 'reasoning_tokens': 8192}
     assert result.usage == {'input_tokens': 10, 'output_tokens': 8192}
+
+
+def test_deepseek_lesson_keeps_default_thinking_with_bounded_headroom(monkeypatch):
+    async def post(self, url, **kwargs):
+        body = kwargs['json']
+        assert body['max_tokens'] == 256 + 2048
+        assert 'max_completion_tokens' not in body and 'thinking' not in body
+        return httpx.Response(200, request=httpx.Request('POST', url), json={
+            'choices': [{'message': {'content': '{"v": [], "g": []}'}, 'finish_reason': 'stop'}],
+        })
+    monkeypatch.setattr(httpx.AsyncClient, 'post', post)
+    req = request(options={'max_output_tokens': 256, 'reasoning_token_headroom': 2048})
+    req.provider = 'DEEPSEEK'
+    result = asyncio.run(OpenAICompatibleProvider('https://api.deepseek.com').complete(req, 'test-only'))
+    assert result.output['structured'] == {'v': [], 'g': []}

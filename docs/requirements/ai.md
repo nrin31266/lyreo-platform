@@ -32,8 +32,9 @@ multimodal judging qua capability endpoints; không có Lesson/Curriculum/Reward
 
 ### FR-AI-002 — Configurable routing and fallback
 
-Admin có thể cấu hình provider, model string, enabled state, priority/fallback và
-rate/cost policy theo capability. Model name không khóa vào Java enum.
+Admin có thể cấu hình provider, model, trạng thái và ưu tiên theo capability. Core thử route đang
+bật theo số ưu tiên tăng dần. Nếu trùng số, sắp theo mã provider rồi model. Khi lỗi cho phép,
+Core thử route tiếp theo và ghi nhận lượt chuyển trong audit.
 
 ### BR-AI-002 — Routing time and audit snapshot
 
@@ -58,7 +59,7 @@ Qwen ASR/alignment. SaaS provider routing độc lập với runtime mode; Exter
 ### FR-AI-005 — Configured paid providers
 
 DeepSeek là provider LLM thông thường. Admin nhập key qua màn hình provider, bật kết nối,
-chọn model và đặt priority/fallback trong route `GENERAL_LLM` như các provider khác.
+chọn model và đặt ưu tiên trong route `GENERAL_LLM` như các provider khác.
 Core mã hóa key, chỉ chuyển credential qua gateway phía server và ghi provider/model thực tế
 vào audit. DeepSeek không được bật ngầm hoặc gọi khi provider chưa enabled.
 
@@ -71,7 +72,7 @@ queryable result và workflow checkpoint ở PostgreSQL. Cancellation được k
 
 ### US-AI-001 — Quản lý route provider
 
-Là Admin, tôi muốn cấu hình provider/model/fallback theo capability mà không lộ credential.
+Là Admin, tôi muốn cấu hình provider, model và độ ưu tiên theo capability mà vẫn giữ kín credential.
 
 #### AC-AI-001 — Credential write/read
 

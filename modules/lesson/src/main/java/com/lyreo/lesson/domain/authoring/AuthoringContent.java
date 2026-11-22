@@ -17,22 +17,31 @@ public final class AuthoringContent {
         return result;
     }
     public static int vocabularyLimit(AuthoringLesson lesson) {
-        return "CUSTOM".equals(lesson.options.density()) ? lesson.options.vocabularyLimit() : (words(lesson)+99)/100;
+        return "CUSTOM".equals(lesson.options.density()) ? lesson.options.vocabularyLimit() : (words(lesson)+74)/75;
     }
     public static int grammarLimit(AuthoringLesson lesson) {
-        return "CUSTOM".equals(lesson.options.density()) ? lesson.options.grammarLimit() : (words(lesson)+249)/250;
+        return "CUSTOM".equals(lesson.options.density()) ? lesson.options.grammarLimit() : (words(lesson)+174)/175;
     }
     public static int words(AuthoringLesson lesson) {
         return lesson.sentences.stream().mapToInt(s -> AuthoringText.tokens(s.text).size()).sum();
     }
     public static String key(AuthoringLesson lesson, int index, String feature) {
-        String text = lesson.sentences.get(index).text;
+        var sentence = lesson.sentences.get(index);
+        String text = sentence.text;
+        boolean manual = sentence.manualFields.contains(feature);
         String context = "IPA".equals(feature) ? lesson.options.accent() : lesson.options.locale()+"|"
             +(index>0 ? lesson.sentences.get(index-1).text : "")+"|"
             +(index+1<lesson.sentences.size() ? lesson.sentences.get(index+1).text : "");
-        if ("LEXICAL".equals(feature)) context += "|"+vocabularyLimit(lesson);
-        if ("GRAMMAR".equals(feature)) context += "|"+grammarLimit(lesson);
-        return hash((Set.of("DICTATION","SHADOWING").contains(feature)?"keep-v2|":"IPA".equals(feature)?"ipa-display-v1|":"content-v1|")+feature+"|"+context+"|"+text);
+        // Keep existing manual fingerprints valid when only the generation policy changes.
+        boolean manualAuto = manual && "AUTO".equals(lesson.options.density());
+        if ("LEXICAL".equals(feature)) context += "|"+(manualAuto ? (words(lesson)+99)/100 : vocabularyLimit(lesson));
+        if ("GRAMMAR".equals(feature)) context += "|"+(manualAuto ? (words(lesson)+249)/250 : grammarLimit(lesson));
+        String version = switch (feature) {
+            case "DICTATION", "SHADOWING" -> "keep-v2";
+            case "IPA" -> manual ? "ipa-display-v1" : "ipa-display-v2";
+            default -> "content-v1";
+        };
+        return hash(version+"|"+feature+"|"+context+"|"+text);
     }
     public static String hash(String value) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }

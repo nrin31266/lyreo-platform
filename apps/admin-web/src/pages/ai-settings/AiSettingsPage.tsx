@@ -627,22 +627,8 @@ export function AiSettingsPage() {
                           <TableCell>{r.model || "—"}</TableCell>
                           <TableCell>{r.priority}</TableCell>
                           <TableCell>
-                            <Badge
-                              variant={
-                                !r.enabled
-                                  ? "secondary"
-                                  : r.is_fallback
-                                    ? "outline"
-                                    : "default"
-                              }
-                            >
-                              {t(
-                                !r.enabled
-                                  ? "aiSettings.disabled"
-                                  : r.is_fallback
-                                    ? "aiSettings.table.fallback"
-                                    : "aiSettings.primaryRoute",
-                              )}
+                            <Badge variant={r.enabled ? "default" : "secondary"}>
+                              {t(r.enabled ? "aiSettings.enabled" : "aiSettings.disabled")}
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -813,29 +799,25 @@ export function AiSettingsPage() {
                   disabled={routeSave.isPending}
                   {...routeForm.register("priority", { valueAsNumber: true })}
                   aria-invalid={!!routeForm.formState.errors.priority}
+                  aria-describedby="route-priority-help"
                 />
+                <p id="route-priority-help" className="text-sm text-muted-foreground">
+                  {t("aiSettings.priorityHelp")}
+                </p>
                 <FieldError>
                   {routeForm.formState.errors.priority &&
                     t("catalog.invalidField")}
                 </FieldError>
               </Field>
-              {(["fallback", "enabled"] as const).map((key) => (
-                <Field key={key} orientation="horizontal">
-                  <FieldLabel htmlFor={`route-${key}`}>
-                    {t(
-                      key === "fallback"
-                        ? "aiSettings.table.fallback"
-                        : "aiSettings.fields.enabled",
-                    )}
-                  </FieldLabel>
-                  <Switch
-                    id={`route-${key}`}
-                    disabled={routeSave.isPending}
-                    checked={routeForm.watch(key)}
-                    onCheckedChange={(v) => routeForm.setValue(key, v)}
-                  />
-                </Field>
-              ))}
+              <Field orientation="horizontal">
+                <FieldLabel htmlFor="route-enabled">{t("aiSettings.fields.enabled")}</FieldLabel>
+                <Switch
+                  id="route-enabled"
+                  disabled={routeSave.isPending}
+                  checked={routeForm.watch("enabled")}
+                  onCheckedChange={(v) => routeForm.setValue("enabled", v)}
+                />
+              </Field>
             </FieldGroup>
             <CatalogError error={routeSave.error} />
             <DialogFooter className="mt-5">

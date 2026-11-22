@@ -48,7 +48,7 @@ public final class JdbcAiAdminRepository implements AiAdminRepository {
                    r.is_fallback, r.enabled
               FROM ai_capability_route r
               JOIN ai_provider p ON p.id = r.provider_id
-             ORDER BY r.capability, r.priority
+             ORDER BY r.capability, r.priority, p.code, r.model, r.id
             """,
             Map.of(),
             (rs, rowNum) -> new RouteSummary(

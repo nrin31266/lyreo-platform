@@ -65,20 +65,27 @@ class OpenAICompatibleProvider:
 
         if "temperature" in request.options and "temperature" not in provider_options:
             body["temperature"] = request.options["temperature"]
+        deepseek = request.provider.upper() == "DEEPSEEK"
+        thinking = request.options.get("thinking")
+        thinking_enabled = thinking == "enabled" or thinking is None and provider_options.get("reasoning_effort") != "none"
         budget = request.options.get("max_output_tokens")
         if budget is not None and not {"max_tokens", "max_completion_tokens"} & provider_options.keys():
             if not isinstance(budget, int) or isinstance(budget, bool) or budget <= 0:
                 raise ValueError("max_output_tokens must be a positive integer")
-            body["max_completion_tokens"] = budget
+            if deepseek and thinking_enabled:
+                headroom = request.options.get("reasoning_token_headroom", 0)
+                if type(headroom) is not int or not 0 <= headroom <= 8192:
+                    raise ValueError("Invalid reasoning token headroom")
+                budget += headroom
+            body["max_tokens" if deepseek else "max_completion_tokens"] = budget
         if "max_tokens" in body and "max_completion_tokens" in body:
             raise ValueError("Specify only one completion token budget")
-        thinking = request.options.get("thinking")
         if thinking is not None:
-            if request.provider.upper() != "DEEPSEEK" or thinking not in ("enabled", "disabled"):
+            if not deepseek or thinking not in ("enabled", "disabled"):
                 raise ValueError("thinking is only supported for DeepSeek with enabled/disabled")
             body["thinking"] = {"type": thinking}
-            if "max_completion_tokens" in body:
-                body["max_tokens"] = body.pop("max_completion_tokens")
+        if deepseek and "max_completion_tokens" in body:
+            body["max_tokens"] = body.pop("max_completion_tokens")
         schema = request.options.get("json_schema")
         if isinstance(schema, dict) and schema:
             name = request.options.get("response_schema") or "lyreo_response"

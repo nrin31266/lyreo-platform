@@ -60,7 +60,7 @@ public class AuthoringJobCommitter {
                 switch(feature) {
                     case "TRANSLATION" -> target.translation=source.translation;
                     case "IPA" -> {target.ipaRaw=source.ipaRaw;target.ipaDisplayVersion=source.ipaDisplayVersion;target.ipa=source.ipa;target.ipaAccent=source.ipaAccent;
-                        target.ipaVersion=source.ipaVersion;target.ipaNeedsReview=source.ipaNeedsReview;}
+                        target.ipaVersion=source.ipaVersion;target.ipaNeedsReview=source.ipaNeedsReview;target.ipaReviewIssues=source.ipaReviewIssues;}
                     case "LEXICAL" -> target.vocabulary=source.vocabulary;
                     case "GRAMMAR" -> target.grammar=source.grammar;
                     case "DICTATION" -> {target.dictationSelected=source.dictationSelected;target.dictationEligible=!target.words.isEmpty();}

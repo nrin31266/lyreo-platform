@@ -1,9 +1,9 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createInstance } from 'i18next';
 import { I18nextProvider, initReactI18next } from 'react-i18next';
 import { adminI18nResources } from '@lyreo/i18n';
-import { AnnotatedTranscript, ClozePreview, contentSpan, defaultContentOptions, SentenceContentEditor } from './ContentEditor';
+import { AnnotatedTranscript, ClozePreview, contentSpan, defaultContentOptions, LessonNotes, SentenceContentEditor } from './ContentEditor';
 import type { AuthoringSentence } from './lesson-builder.types';
 afterEach(cleanup);
 const sentence: AuthoringSentence = { id:'s1',text:'We don’t give up; don’t give up.',usage:'LEARN',words:[],issues:[],vocabulary:[],grammar:[],hints:[],notes:[],thoughtGroups:[],dictationEligible:true,shadowingEligible:true,dictationSelected:false,shadowingSelected:false,translation:'Đừng bỏ cuộc.',ipa:'reference',ipaNeedsReview:true,cloze:{easy:[2],medium:[2,5],version:'cloze-v1',text:'We don’t give up; don’t give up.'} };
@@ -20,6 +20,35 @@ it('shows translation and activities directly, emits edits without saving or rev
  expect(screen.queryByText('Pronunciation checked')).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:/save/i})).not.toBeInTheDocument();
  fireEvent.change(screen.getByRole('textbox',{name:'Translation'}),{target:{value:'Bản sửa'}});expect(change).toHaveBeenCalledWith({translation:'Bản sửa'});
  fireEvent.click(screen.getByRole('checkbox',{name:'Shadowing'}));expect(change).toHaveBeenCalledWith({shadowingSelected:true});
+});
+it('shows the exact IPA issue and lets the editor dismiss it after reviewing',async()=>{
+ const change=vi.fn();
+ await provider(<SentenceContentEditor sentence={{...sentence,ipaRaw:'original IPA',ipaAccent:'UK',
+   ipaReviewIssues:[{start:3,end:8,surface:'don’t',code:'MULTIPLE_READINGS'}]}}
+   options={defaultContentOptions} disabled={false} showIpa onChange={change}/>);
+ expect(screen.getByText('Reference IPA · UK')).toBeVisible();
+ expect(screen.getByText(/don’t ·/)).toBeVisible();
+ fireEvent.click(screen.getByText('Raw eSpeak output'));
+ expect(screen.getByText('original IPA')).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'Mark IPA as reviewed'}));
+ expect(change).toHaveBeenCalledWith({ipaNeedsReview:false});
+});
+it('counts saved AI and manual notes separately and opens the original sentence',async()=>{
+ const jump=vi.fn();
+ const note={surface:'give up',explanation:'Stop trying',label:'LEXICAL',importance:'MEDIUM' as const,tokenStart:2,tokenEnd:4};
+ const draft={status:'CONTENT_REVIEW' as const,vocabularyBudget:9,grammarBudget:4,sentences:[
+   {...sentence,vocabulary:[note]}, {...sentence,id:'s2',manualFields:['LEXICAL'],vocabulary:[note]},
+ ]};
+ await provider(<LessonNotes draft={draft} onJump={jump}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Lesson notes 2'}));
+ expect(screen.getByText('AI: 1 of 9 · Edited manually: 1')).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'Open sentence 2'}));
+ await waitFor(()=>expect(jump).toHaveBeenCalledWith('s2'));
+ cleanup();
+ await provider(<LessonNotes draft={{...draft,status:'PUBLISHED'}} onJump={jump}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Lesson notes 2'}));
+ expect(screen.getByText('AI: 1 · Edited manually: 1')).toBeVisible();
+ expect(screen.queryByText('AI: 1 of 9 · Edited manually: 1')).not.toBeInTheDocument();
 });
 it('manual cloze additions keep the easy level within medium',async()=>{
  const change=vi.fn();await provider(<ClozePreview sentence={sentence} level="easy" editable onChange={change}/>);

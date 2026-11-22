@@ -158,6 +158,7 @@ public class LessonAuthoringService {
                 if(old.text.equals(sentence.text)) {sentence.contentKeys=new HashMap<>(old.contentKeys);sentence.cefrSuggestion=old.cefrSuggestion;sentence.contentTypeSuggestion=old.contentTypeSuggestion;}
                 sentence.ipaRaw=old.ipaRaw;sentence.ipaDisplayVersion=old.ipaDisplayVersion;sentence.contentWarnings=new ArrayList<>(old.contentWarnings);sentence.exclusions=new HashMap<>(old.exclusions);sentence.cloze=old.cloze;sentence.clozeManual=old.clozeManual;
                 sentence.ipa=old.ipa;sentence.ipaAccent=old.ipaAccent;sentence.ipaVersion=old.ipaVersion;sentence.ipaNeedsReview=old.ipaNeedsReview;
+                if(old.text.equals(sentence.text)) sentence.ipaReviewIssues=old.ipaReviewIssues;
                 if(old.text.equals(sentence.text)) {sentence.words=old.words;sentence.sourceWords=old.sourceWords;sentence.timingSource=old.timingSource;}
             }
             next.add(sentence);length+=item.text().length();
@@ -316,6 +317,7 @@ public class LessonAuthoringService {
             if(AuthoringContent.features(lesson.options).contains("IPA") || input.ipa()!=null) {
                 require(input.ipa()!=null && !input.ipa().isBlank() && input.ipa().length()<=30000,"Provide reference IPA");
                 sentence.ipa=input.ipa();sentence.ipaAccent=lesson.options.accent();sentence.ipaVersion="manual";sentence.ipaNeedsReview=input.ipaNeedsReview();fields.add("IPA");
+                if(!sentence.ipaNeedsReview) sentence.ipaReviewIssues=List.of();
             }
         }
         AuthoringContent.validateAnnotations(sentence,input.vocabulary(),100);

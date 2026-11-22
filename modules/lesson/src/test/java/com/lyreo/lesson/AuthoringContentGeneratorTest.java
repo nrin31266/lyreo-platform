@@ -80,6 +80,29 @@ class AuthoringContentGeneratorTest {
         assertThat(lesson.sentences.getLast().translation).isEqualTo("Hai");
         verify(ai,times(1)).execute(any(),anyString(),anyMap(),anyMap());
     }
+    @Test void autoDensityUsesTheNewWholeLessonCaps() {
+        lesson.sentences=List.of(new AuthoringSentence(UUID.randomUUID(),"word ".repeat(663),"LEARN"));
+        assertThat(AuthoringContent.vocabularyLimit(lesson)).isEqualTo(9);
+        assertThat(AuthoringContent.grammarLimit(lesson)).isEqualTo(4);
+    }
+    @Test void resumedBatchCanUseUnusedEarlierCapacityAndKeepsManualNotes() {
+        lesson.options=new AuthoringOptions(Set.of(),Set.of("LEXICAL"),"vi-VN","CUSTOM",2,0,"DISABLED","US");
+        var first=lesson.sentences.getFirst();
+        first.contentKeys.put("LEXICAL",AuthoringContent.key(lesson,0,"LEXICAL"));
+        var last=lesson.sentences.getLast();
+        when(ai.execute(any(),anyString(),anyMap(),anyMap())).thenReturn(result(Map.of("structured",Map.of("v",
+            List.of(List.of(2,"feels better","khỏe hơn"),List.of(2,"now","bây giờ"),List.of(2,"She","cô ấy"))))));
+        generator.generate(job,input,lesson,context);
+        assertThat(first.vocabulary).isEmpty();
+        assertThat(last.vocabulary).extracting(AuthoringSentence.Annotation::surface).containsExactly("feels better","now");
+        verify(ai).execute(any(),argThat(prompt->prompt.contains("at most 2 notes") && prompt.contains("Allowed IDs in this batch: [2]")),anyMap(),anyMap());
+
+        first.vocabulary=List.of(AuthoringContent.annotation(first,"gave up","từ bỏ",1,"LEXICAL"));
+        first.manualFields.add("LEXICAL");
+        generator.generate(job,input,lesson,context);
+        assertThat(first.vocabulary).extracting(AuthoringSentence.Annotation::surface).containsExactly("gave up");
+        verify(committer,times(1)).contentCheckpoint(eq(job),eq(input),eq(lesson),eq(List.of(1)),eq(Set.of("LEXICAL")));
+    }
     @Test void truncationSplitsOnlyFailedBatch() {
         when(ai.execute(any(),anyString(),anyMap(),anyMap()))
             .thenThrow(new AiExecutionException("truncated",false,"AI_OUTPUT_INCOMPLETE"))

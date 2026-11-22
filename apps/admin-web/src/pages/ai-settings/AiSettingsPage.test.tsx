@@ -191,7 +191,8 @@ describe("AI settings", () => {
     fireEvent.change(screen.getByLabelText("Priority"), {
       target: { value: "2" },
     });
-    fireEvent.click(screen.getByRole("switch", { name: "Fallback" }));
+    expect(screen.queryByRole("switch", { name: "Fallback" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Priority")).toHaveAccessibleDescription(/Lowest number runs first/);
     fireEvent.click(screen.getByRole("button", { name: "Save model" }));
     await waitFor(() =>
       expect(api.saveAiRoute).toHaveBeenCalledWith(
@@ -200,7 +201,7 @@ describe("AI settings", () => {
           providerCode: "GROQ",
           model: "test-model",
           priority: 2,
-          fallback: true,
+          fallback: false,
           enabled: true,
         },
         expect.anything(),

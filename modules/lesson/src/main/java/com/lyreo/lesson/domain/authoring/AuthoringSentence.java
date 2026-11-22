@@ -23,6 +23,7 @@ public final class AuthoringSentence {
     public String ipaAccent;
     public String ipaVersion;
     public boolean ipaNeedsReview;
+    public List<IpaReviewIssue> ipaReviewIssues = List.of();
     public UUID id;
     public String text;
     public String usage = "LEARN";
@@ -66,6 +67,7 @@ public final class AuthoringSentence {
     }
     public record Word(String text, long startMs, long endMs, int charStart, int charEnd,
                        int tokenStart, int tokenEnd) {}
+    public record IpaReviewIssue(String code, int start, int end, String surface) {}
     public record Annotation(int tokenStart, int tokenEnd, String surface, String label,
                              String explanation, String importance, String canonicalForm, UUID headwordId) {}
     public record Hint(int tokenStart, int tokenEnd, String text, String kind) {

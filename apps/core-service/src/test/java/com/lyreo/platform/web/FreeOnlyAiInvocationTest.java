@@ -88,6 +88,25 @@ class FreeOnlyAiInvocationTest {
         assertThat(command.getValue().credential()).isEqualTo("encrypted-key");
     }
 
+    @Test void deepSeekCanFallBackToGeminiWithoutAStoredFallbackFlag() {
+        when(routes.findEnabledRoutes(AiCapability.GENERAL_LLM)).thenReturn(List.of(
+            new AiRoute(UUID.randomUUID(),"DEEPSEEK","deepseek-flash",AiCapability.GENERAL_LLM,1,false),
+            new AiRoute(UUID.randomUUID(),"GEMINI","gemini-3.5-flash-lite",AiCapability.GENERAL_LLM,2,false)));
+        var service=new AiInvocationService(new AiRouter(routes),routes,gateway,audit,Set.of("GEMINI"));
+        var expected=new AiExecutionResult(UUID.randomUUID(),"GEMINI","gemini-3.5-flash-lite",Map.of(),2,2,1);
+        when(gateway.execute(any())).thenThrow(new AiExecutionException("rate limited",true,"AI_HTTP_429")).thenReturn(expected);
+        assertThat(service.execute(AiCapability.GENERAL_LLM,"test",Map.of(),Map.of())).isSameAs(expected);
+        var attempts=org.mockito.ArgumentCaptor.forClass(AiExecutionCommand.class);
+        verify(gateway,times(2)).execute(attempts.capture());
+        assertThat(attempts.getAllValues()).extracting(AiExecutionCommand::provider).containsExactly("DEEPSEEK","GEMINI");
+
+        clearInvocations(gateway);
+        when(gateway.execute(any())).thenThrow(new AiExecutionException("bad request",false,"AI_HTTP_400"));
+        assertThatThrownBy(()->service.execute(AiCapability.GENERAL_LLM,"test",Map.of(),Map.of()))
+            .isInstanceOfSatisfying(AiExecutionException.class, e -> assertThat(e.errorCode()).isEqualTo("AI_HTTP_400"));
+        verify(gateway).execute(argThat(command -> command.provider().equals("DEEPSEEK")));
+    }
+
     @Test void refusesOversizedGroqFallbackWithoutChangingContextOrSendingRequest() {
         when(routes.findEnabledRoutes(AiCapability.GENERAL_LLM)).thenReturn(List.of(
             new AiRoute(UUID.randomUUID(), "GROQ", "openai/gpt-oss-120b", AiCapability.GENERAL_LLM, 10, false)));

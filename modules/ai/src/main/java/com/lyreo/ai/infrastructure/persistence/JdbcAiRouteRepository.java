@@ -28,7 +28,7 @@ public final class JdbcAiRouteRepository implements AiRouteRepository {
              WHERE r.capability = :capability
                AND r.enabled = TRUE
                AND p.enabled = TRUE
-             ORDER BY r.priority
+             ORDER BY r.priority, p.code, r.model, r.id
             """, Map.of("capability", capability.name()), (rs, rowNum) -> new AiRoute(
                 rs.getObject("provider_id", UUID.class),
                 rs.getString("provider_code"),
