@@ -6,3 +6,8 @@ springdoc:
     enabled: ${SPRINGDOC_API_DOCS_ENABLED:true}
   swagger-ui:
     enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:true}
+
+lyreo:
+  lesson:
+    timing:
+      reuse-draft: ${LESSON_TIMING_REUSE_DRAFT:true}

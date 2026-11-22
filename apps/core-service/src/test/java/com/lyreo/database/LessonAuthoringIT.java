@@ -390,6 +390,18 @@ class LessonAuthoringIT {
         assertThat(saved.approvedRevision).isNull();assertThat(saved.karaokeReviewedRevision).isNull();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_authoring_job WHERE lesson_id=? AND operation='ALIGN'",Long.class,output.id)).isEqualTo(1L);
     }
+    @Test void validatedSttTimingSkipsAutomaticAlignmentButStillRequiresReview() throws Exception {
+        var accepted=service.create("Reuse timing","https://www.youtube.com/watch?v=abcdefghijk",0,5000);
+        run(accepted);
+        var draft=service.get(accepted.lessonId());
+        assertThat(draft.timingStatus).isEqualTo("DRAFT_VALID");
+        assertThat(draft.alignmentRequired).isFalse();
+        assertThat(draft.jobs.stream().map(AuthoringLesson.Job::operation)).doesNotContain("ALIGN");
+        assertThat(draft.approvedRevision).isNull();
+        assertThat(draft.karaokeReviewedRevision).isNull();
+        verify(ai,never()).execute(eq(AiCapability.ALIGNMENT),anyString(),anyMap(),anyMap());
+    }
+
     @Test void initialAlignmentIsAtomicRecoverableAndNeverApprovesTranscript() throws Exception {
         service.setReuseDraftTiming(false);
         var accepted=service.create("Automatic alignment","https://www.youtube.com/watch?v=abcdefghijk",0,5000);

@@ -18,7 +18,7 @@ are owned by [Lesson Build](../features/lesson-build.md); see also
 Baseline và verification evidence status: cập nhật sau repo cleanup pass (2026-09-14).
 Automated local suites đã chạy exit 0 cho toàn bộ:
 - Maven reactor test (`./mvnw -B test`): ArchitectureTest, Core HTTP/OpenAPI contracts, và các unit tests thuộc module (STATUS: PASS);
-- AI capability runtime (`make test-ai`): mock API endpoints, Kokoro TTS runtime, voices catalog, Qwen async locking (STATUS: PASS);
+- AI capability runtime (`make test-ai`): mock API endpoints, WhisperX runtime contract, Kokoro TTS runtime, voices catalog (STATUS: PASS);
 - Data importer runtime (`make test-data-import`): Grammar, Lexicon, TOEIC import logic (STATUS: PASS);
 - Tooling offline validators & tests (`make test-tooling`): repository invariants and docs validation (STATUS: PASS);
 - Frontend verification: TypeScript typecheck (`pnpm typecheck`) và Vite build (`pnpm build`) (STATUS: PASS).

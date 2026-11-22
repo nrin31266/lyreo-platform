@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Profile;
 
 /**
  * Deterministic local route bootstrap so a fresh developer database can build lessons without
- * downloading Qwen or configuring paid/free-tier credentials first.
+ * downloading speech models or configuring paid/free-tier credentials first.
  */
 @Profile("dev")
 public final class DevAiBootstrap implements ApplicationRunner {
@@ -30,7 +30,7 @@ public final class DevAiBootstrap implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        if (!admin.providers().isEmpty()) return;
+        if (admin.providers().stream().anyMatch(provider -> provider.configured() || "DEV_MOCK".equals(provider.code()))) return;
         admin.saveProvider(
             "DEV_MOCK",
             "Lyreo development mock",
@@ -39,7 +39,7 @@ public final class DevAiBootstrap implements ApplicationRunner {
             true
         );
         for (String capability : CAPABILITIES) {
-            admin.saveRoute(capability, "DEV_MOCK", "mock", 10, false, true);
+            admin.saveRoute(capability, "DEV_MOCK", "mock", 0, false, true);
         }
     }
 }

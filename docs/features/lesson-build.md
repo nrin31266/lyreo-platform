@@ -288,7 +288,7 @@ Core media setup/doctor checks own the downloader on the Core host.
 ## Live local checkpoint — 2026-10-26
 
 A real OIDC session used Listening Time 0–120s, unrestricted local source acknowledgement,
-Whisper Turbo (2190ms), dedicated Qwen alignment (15202ms), and Gemini semantic generation.
+Whisper Turbo (2190ms), dedicated WhisperX alignment, and Gemini semantic generation.
 Split/merge retained identity, edits survived refresh, a stale revision returned 409, and Learn,
 Watch-only and Skip persisted. The official YouTube iframe played real media; sentence seek,
 Skip, end pause and observed-group karaoke highlighting passed. A second real 60–90s draft verified nonzero source offset: expected seek 60.44s, observed 60.994s;
@@ -343,21 +343,21 @@ remains available with its lease/cancellation fencing. Transcript preparation ac
 reusing normalized cached audio. YouTube is the sole playback clock. Source selection never enables publication rights.
 
 Core retains raw STT timing evidence and reports coverage/interval issues separately from missing
-output. `LESSON_TIMING_REUSE_DRAFT` defaults to false pending human quality acceptance. Enabling it
-permits validated, lexically unchanged timing reuse; invalid/stale timing still requires alignment.
+output. Development defaults to reusing validated STT word timing for lexically unchanged text.
+Other profiles require opt-in with `LESSON_TIMING_REUSE_DRAFT=true`. Invalid or stale timing still requires alignment.
 Both routes require karaoke confirmation. Existing immutable atomic publication and candidate
 membership guards remain in force.
 
 The reproducible scorer is `tools/research/benchmark_lesson_timing.py`; the credential-free
 [quality report](../../tools/research/lesson-timing-quality-2026-10-26.json) compares retained Groq and
-Qwen runs using the same transcript at 2/5/10 minutes. Human word references and listening approval
+WhisperX runs using the same transcript at 2/5/10 minutes. Human word references and listening approval
 are absent, so the report explicitly cannot certify karaoke quality. Historical evidence above is
 preserved and is not verification of this subsequent implementation.
 
 The [range measurement](../../tools/research/lesson-source-range-2026-10-26.json) downloaded 11:00–11:30
 from a 20-minute source in 2.444 seconds: FFmpeg reported 589,824 bytes read versus 316,837 output
 bytes. Full socket/TLS/metadata overhead is unmeasured. A separate 60–180-second sample returned
-Groq timestamps in 2.461 seconds and Qwen alignment through the existing local service in 1.217
+Groq timestamps in 2.461 seconds and WhisperX alignment through the existing local service in 1.217
 seconds; model loading state was not independently measured. The quality report includes this
 offset sample, but no human boundary reference or listening approval is claimed.
 
@@ -383,7 +383,7 @@ not inspect. Inspection and range selection do not download audio or start infer
 is deferred; there is no rights checkbox or attestation flag in the API. Workflow submissions for
 Transcript, Timing and Content are grouped in the one persistent action bar.
 
-The desktop workflow was rechecked with local Qwen transcription/alignment and Groq semantic
+The desktop workflow was rechecked with local WhisperX transcription/alignment and Groq semantic
 generation on a 20-second source range. Fixture `084bca30-47e7-4242-b125-5bffc808226b` was
 created and published through Admin; reload returned PUBLISHED with six sentences and three
 selected sentences per activity. This is an automated internal fixture, not human language-quality approval.
@@ -425,9 +425,9 @@ counts and review hints across runs. This was present in provider output, not in
 [Groq supports word and segment timestamps](https://console.groq.com/docs/speech-to-text), but these
 describe recognized text, not forced alignment of subsequent editorial changes.
 
-Local Qwen STT took 19.65 s and did not repeat this fragment. Its subsequent alignment took 10.88 s;
+Local WhisperX STT took 19.65 s and did not repeat this fragment. Its subsequent alignment took 10.88 s;
 all 58 sentence timings passed the production mapping/validation code, including 8 sentences with
 observed word groups. The 53-sentence Groq snapshot, with only the confirmed repeat hidden in the
 diagnostic copy, aligned in 1.08 s plus a single 0.08 s anchored recovery for `Bye.`; all 52 visible
 sentences then passed validation, also with 8 grouped sentences. Sequential runs include different model load/warm states, so these times are diagnostic, not a
-speed comparison. Neither result constitutes human karaoke approval or a cross-corpus accuracy comparison. Provider selection is explicit in [AI routing configuration](../CONFIGURATION.md#local-speech-recognition-for-authoring); this one clip is not a cross-corpus accuracy claim.
+speed comparison. Neither result constitutes human karaoke approval or a cross-corpus accuracy comparison. Provider selection is explicit in [AI routing configuration](../CONFIGURATION.md#development-ai-defaults); this one clip is not a cross-corpus accuracy claim.

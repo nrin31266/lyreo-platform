@@ -9,7 +9,7 @@ export function splitSentence(sentences: TranscriptSentence[], index: number, of
     { editorKey: crypto.randomUUID(), text: right, usage: sentence.usage, ...(sentence.hidden != null ? { hidden: sentence.hidden } : {}) }, ...sentences.slice(index + 1)];
 }
 
-export function mergeSentence(sentences: TranscriptSentence[], index: number): TranscriptSentence[] {
+export function mergeSentence<T extends TranscriptSentence>(sentences: T[], index: number): T[] {
   if (index >= sentences.length - 1) return sentences;
   const first = sentences[index];
   const second = sentences[index + 1];

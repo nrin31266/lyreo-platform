@@ -36,13 +36,19 @@ database and a new import. Keep a backup of application data you need before res
 Development defaults live in [`infra/postgres/seed/dev.sql`](../infra/postgres/seed/dev.sql).
 Run `make seed-dev` to migrate and bootstrap the datasource configured in Core's `.env`; it does
 not select the Compose database independently. It adds 24 stable categories with English
-names and Vietnamese translations. Rerunning skips existing IDs/names and preserves Admin edits.
+names and Vietnamese translations, plus [development AI defaults](CONFIGURATION.md#development-ai-defaults).
+Rerunning preserves existing categories, providers, credentials and routes.
 No automatic reseeding runs at startup. Large banks stay under the [import tools](DATA_PIPELINES.md).
 
-`make seed-lessons` adds four YouTube lessons and one Text lesson after bootstrap. Each published
-snapshot includes transcript timing, notes and practice content for the learner API. Core's storage
-must have access to their canonical audio objects in the shared development bucket. Rerunning leaves
-existing lessons and metadata untouched.
+`make seed-lessons` adds six YouTube lessons and one Text lesson after bootstrap. The two song
+lessons use short, timed excerpts and link to the original YouTube videos. The published snapshots
+include transcript timing and practice content for the learner API. Core needs access to the
+canonical audio objects in the shared development bucket. Rerunning preserves existing lessons
+and metadata.
+
+If a local full-song snapshot is available, put it at `.data/lesson-export/lessons-with-songs.sql`
+before the first sample seed. `make seed-lessons` uses it automatically. Set `LESSON_SEED_FILE`
+to select a different SQL snapshot. Keep full-song snapshots out of Git.
 
 Large content datasets are imported through the [data-import tool](../tools/data-import/README.md), not Flyway seed blobs. Store raw datasets outside Git.
 

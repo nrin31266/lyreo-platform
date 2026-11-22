@@ -2,11 +2,10 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
-# Root env is operator-only; never copy its provider key into app/client env files.
+# Use explicit operator credentials or optional research settings.
 set -a
 source apps/core-service/.env
-if [[ -f .env ]]; then source .env; fi
-if [[ -f tools/research/.env && ${DATA_MAINTENANCE_MODEL:-DEEPSEEK} != DEEPSEEK ]]; then
+if [[ -f tools/research/.env ]]; then
   source tools/research/.env
 fi
 set +a

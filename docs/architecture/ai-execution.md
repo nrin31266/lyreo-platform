@@ -26,7 +26,7 @@ storage authority remains outside AI.
 
 ## Runtime and routing
 
-`mock` is deterministic dev/CI capability execution; `local` lazy-loads Qwen ASR/ForcedAligner.
+`mock` is deterministic dev/CI capability execution; `local` lazy-loads WhisperX STT and English forced alignment.
 `LOCAL_KOKORO` is the local TTS runtime (lazy-loaded, chunked deterministically, WAV output);
 voice discovery (`/v1/tts/voices`) is static metadata and never loads the model, so the Prep
 Tool never hard-codes voices. External providers are Core route choices, not a third

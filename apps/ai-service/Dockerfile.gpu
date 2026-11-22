@@ -1,4 +1,4 @@
-# GPU image is separate so ordinary developers/CI never download CUDA/Qwen dependencies.
+# GPU image is separate so ordinary developers/CI never download CUDA/WhisperX dependencies.
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
 
 RUN apt-get update \
@@ -8,7 +8,7 @@ RUN apt-get update \
 WORKDIR /app
 RUN python3.12 -m pip install --break-system-packages --no-cache-dir uv
 COPY apps/ai-service/pyproject.toml apps/ai-service/uv.lock ./
-RUN uv sync --locked --python python3.12 --extra qwen --no-dev --no-install-project
+RUN uv sync --locked --python python3.12 --extra whisperx --no-dev --no-install-project
 
 COPY apps/ai-service/app ./app
 ENV PATH="/app/.venv/bin:$PATH"

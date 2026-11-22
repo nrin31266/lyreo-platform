@@ -31,38 +31,30 @@ class GroqProvider:
         if isinstance(language, str) and language.lower().startswith('english'):
             language = 'en'
 
+        if isinstance(audio_url, str) and audio_url.startswith('file://'):
+            path = Path(unquote(urlparse(audio_url).path))
+            audio_part = {'file': (path.name or 'audio.bin', path.read_bytes(), 'application/octet-stream')}
+        elif audio_url:
+            # A text part lets HTTPX make multipart without relaying the audio bytes.
+            audio_part = {'url': (None, audio_url)}
+        elif audio_base64:
+            audio_part = {'file': ('audio.wav', base64.b64decode(audio_base64), 'application/octet-stream')}
+        else:
+            raise ValueError('Groq STT requires input.audio_url or input.audio_base64')
+
         async with httpx.AsyncClient(timeout=180) as client:
-            if isinstance(audio_url, str) and audio_url.startswith('file://'):
-                path = Path(unquote(urlparse(audio_url).path))
-                raw = path.read_bytes()
-                response = await _multipart_transcription(
-                    client, self.base_url, self._auth(credential), model, language,
-                    raw, path.name or 'audio.bin', want_timestamps
-                )
-            elif audio_url:
-                # R2 presigned URL avoids a useless Core -> FastAPI -> Groq relay.
-                body = {
-                    'url': audio_url,
+            response = await client.post(
+                f'{self.base_url}/audio/transcriptions',
+                headers=self._auth(credential),
+                data={
                     'model': model,
                     'language': language,
                     'response_format': 'verbose_json' if want_timestamps else 'json',
-                    'temperature': 0,
-                }
-                if want_timestamps:
-                    body['timestamp_granularities'] = ['word', 'segment']
-                response = await client.post(
-                    f'{self.base_url}/audio/transcriptions',
-                    headers={**self._auth(credential), 'Content-Type': 'application/json'},
-                    json=body,
-                )
-            elif audio_base64:
-                raw = base64.b64decode(audio_base64)
-                response = await _multipart_transcription(
-                    client, self.base_url, self._auth(credential), model, language,
-                    raw, 'audio.wav', want_timestamps
-                )
-            else:
-                raise ValueError('Groq STT requires input.audio_url or input.audio_base64')
+                    'temperature': '0',
+                    **({'timestamp_granularities[]': ['word', 'segment']} if want_timestamps else {}),
+                },
+                files=audio_part,
+            )
             response.raise_for_status()
             data = response.json()
 
@@ -119,30 +111,6 @@ class GroqProvider:
             },
             metadata={'provider': 'GROQ', 'model': request.model, 'voice': voice},
         )
-
-
-async def _multipart_transcription(
-    client: httpx.AsyncClient,
-    base_url: str,
-    headers: dict[str, str],
-    model: str,
-    language: str,
-    raw: bytes,
-    filename: str,
-    want_timestamps: bool,
-) -> httpx.Response:
-    return await client.post(
-        f'{base_url}/audio/transcriptions',
-        headers=headers,
-        data={
-            'model': model,
-            'language': language,
-            'response_format': 'verbose_json' if want_timestamps else 'json',
-            'temperature': '0',
-            **({'timestamp_granularities[]': ['word', 'segment']} if want_timestamps else {}),
-        },
-        files={'file': (filename, raw, 'application/octet-stream')},
-    )
 
 
 def _timestamp_ms(value) -> int:

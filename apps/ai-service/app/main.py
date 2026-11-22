@@ -17,7 +17,7 @@ from .runtime.kokoro import KokoroRuntime
 from .runtime.mock import MockRuntime
 from .runtime.nlp import LightweightNlpRuntime
 from .runtime.ipa import IpaRuntime
-from .runtime.qwen import QwenRuntime
+from .runtime.whisperx import WhisperXRuntime
 from .schemas import ExecuteRequest, ExecuteResponse, HealthResponse
 from .security import verify_internal_token
 
@@ -26,7 +26,7 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 
 cfg = settings()
 mock = MockRuntime()
-qwen = QwenRuntime(cfg)
+whisperx = WhisperXRuntime(cfg)
 kokoro = KokoroRuntime(cfg)
 nlp_runtime = LightweightNlpRuntime()
 groq = GroqProvider(cfg.groq_base_url)
@@ -119,8 +119,8 @@ async def stt(
     if is_mock():
         return await mock.stt(req)
     provider = req.provider.upper()
-    if provider in {'QWEN', 'QWEN3', 'QWEN3_ASR', 'LOCAL_QWEN'}:
-        return await qwen.stt(req)
+    if provider == 'LOCAL_WHISPERX':
+        return await whisperx.stt(req)
     if provider == 'GROQ':
         return await groq.transcribe(req, _require_provider_credential(x_lyreo_provider_credential))
     raise HTTPException(501, f'STT provider {req.provider} is not implemented')
@@ -131,8 +131,8 @@ async def align(req: ExecuteRequest):
     if is_mock():
         return await mock.align(req)
     provider = req.provider.upper()
-    if provider in {'QWEN', 'QWEN3', 'QWEN3_FORCED_ALIGNER', 'LOCAL_QWEN'}:
-        return await qwen.align(req)
+    if provider == 'LOCAL_WHISPERX':
+        return await whisperx.align(req)
     raise HTTPException(501, f'Alignment provider {req.provider} is not implemented')
 
 

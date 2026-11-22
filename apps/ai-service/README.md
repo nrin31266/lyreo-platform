@@ -13,34 +13,30 @@ uv run uvicorn app.main:app --reload --port 8000
 uv run --locked --extra dev python -m pytest
 ```
 
-`mock` mode is the normal deterministic development/CI runtime and needs no GPU or paid provider. For local Qwen inference, sync the `qwen` extra and select the local runtime as described in `.env.example`. Kokoro TTS uses its separate `kokoro` extra and system phonemization dependency. Model weights are cached locally and never committed.
+`mock` is the deterministic development and CI runtime. For real inference, run `make ai-local`
+from the repo root. It syncs the WhisperX and Kokoro extras and exposes the installed CUDA libraries
+to CTranslate2. NVIDIA CUDA is the default. Set `WHISPERX_DEVICE=cpu` on hosts without it.
+Kokoro uses the `espeak-ng` system package and runs on CPU by default.
 
-`make ai-local` runs one reload-enabled development worker. Qwen models load lazily and
-stay cached in the process: the last-used model stays on the configured device, while the
-other stays in CPU RAM with its original dtype. Switching STT/alignment transfers weights
-between RAM and GPU instead of rebuilding the model from disk. Only one Qwen model uses
-the GPU at a time. Kokoro defaults to CPU and shares one model across US/UK pipelines.
-Local inference calls are serialized within each runtime, including when a cancelled
-request's worker is still finishing. CPU math threads default to two; environment keys
-and the single-item Qwen batch default are documented in `.env.example`.
-
-Stopping/restarting the service, including an automatic `--reload` after Python edits,
-clears the **in-memory** models. Downloaded weights remain in the Hugging Face disk cache;
-the next call loads them into memory again without downloading cached weights. To keep
-models warm while working on Python files, launch the same local command without `--reload`.
+WhisperX loads `small.en` for STT and English wav2vec2 for alignment on demand. A single worker
+serializes the two operations and moves model weights back to CPU between requests. STT uses
+batch size 1 on a 4 GB GPU. The first run downloads weights, the voice activity detector and
+the English sentence tokenizer. Restarts clear loaded models and retain download caches.
 
 Internal capability calls require the service token. FastAPI does not persist provider credentials or business records. Do not log incoming credentials. Use authorized media references for large audio; storage ownership remains outside this process.
 
 ## Lesson authoring execution contract
 
-STT returns `text`, `timestamps` (`index`, `word`, `start_ms`, `end_ms`) and coarse `segments` (`text`, `start_ms`, `end_ms`). All times are milliseconds relative to the supplied audio. Groq requests word and segment granularities; local Qwen processes sequential windows of at most 115 seconds on the measured 4 GB worker. Fixed ASR boundaries require transcript review for seam errors.
-`options.allow_alignment=false` defers Qwen forced alignment even if `timestamps=true`; Core uses
-this during preparation so approved text is aligned once later. Native provider timestamps remain available.
+STT returns `text`, `timestamps` and coarse `segments` with millisecond anchors relative to the
+supplied audio. WhisperX uses voice activity detection for STT segment anchors. If VAD finds no
+speech, the runtime retries full-audio Whisper in 30-second windows, which covers music and heavily
+mixed speech while keeping usable segment boundaries. Core saves the anchors before scheduling
+dedicated alignment. Groq can return both segment and word timestamps.
 
-Alignment accepts `input.audio_url`, the complete approved `input.text` and optional `input.segments` with the same millisecond anchors. For audio over 120 seconds, anchors are mandatory. Segments must cover text in order, not overlap, and fit 120 seconds including up to 500 ms padding inside neighboring anchors. The runtime never proportionally distributes text or invents word duration. Qwen may end a positive
-word at the model frame covering the audio boundary: only that final straddling frame is clipped to
-the actual sample duration using the loaded model precision. Other invalid intervals remain invalid.
-Core validates normalized output and owns approval. Research probes capture native output separately.
+Alignment accepts `input.audio_url`, the approved `input.text` and optional `input.segments`.
+Audio longer than 120 seconds requires anchors. The anchors must cover the text in order and fit
+120 seconds per window including padding. The runtime returns observed word intervals. Core checks
+coverage, order and overlap before using those intervals for karaoke.
 
 LLM options accept concrete `json_schema`, symbolic `response_schema`, `max_output_tokens` and `temperature`. Gemini also accepts `thinking_level`; Groq accepts the existing allowlisted `provider_options` such as `reasoning_effort` and `max_completion_tokens`. Concrete Groq schemas use strict structured output. Missing usage is omitted, not reported as zero. Completion status/finish reason is returned as metadata so Core can reject incomplete generations. Upstream 429 preserves status and `Retry-After` for resumable jobs without exposing provider error bodies.
 

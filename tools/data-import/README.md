@@ -157,8 +157,9 @@ make data-ai-pilot
 DATA_MAINTENANCE_PRICING_CONFIRMED_ON=YYYY-MM-DD make data-ai-pilot ARGS=--execute
 ```
 
-Set `DEEPSEEK_KEY` in the operator shell or copy the [root template](../../.env.example) to `.env`
-and set it there. Core owns prompt, schema, allowed fields, cache and durable reservations; FastAPI executes.
+For explicit paid DeepSeek runs, supply `DEEPSEEK_KEY` through the operator shell. Use the
+[research template](../research/.env.example) for optional maintenance settings. Core owns the prompt,
+schema, allowed fields, cache and durable reservations. FastAPI executes the request.
 Results remain proposals. Failures keep cost reservations and are not retried automatically. The
 [AI requirement](../../docs/requirements/ai.md#br-ai-006--bounded-library-maintenance-pilot) owns the
 accepted spending/review policy. Regular app routes retain their free-only policy.
@@ -183,8 +184,8 @@ queue, set `DATA_MAINTENANCE_BUDGET_USD` to the cumulative ceiling for that mode
 existing ledger reservations. Set `DATA_MAINTENANCE_AI_URL` to target a separate maintenance runtime.
 
 For a provider fallback, set `DATA_MAINTENANCE_MODEL` to `GEMINI_FLASH_LITE`,
-`GEMINI_31_FLASH_LITE`, or `GROQ_GPT_OSS`. Set `GEMINI_API_KEY` or `GROQ_API_KEY` in the operator
-shell or copy the [research template](../research/.env.example) to `tools/research/.env`.
+`GEMINI_31_FLASH_LITE`, or `GROQ_GPT_OSS`. Supply `GEMINI_API_KEY` or `GROQ_API_KEY` in the operator
+shell for the chosen provider.
 Set `DATA_MAINTENANCE_PRICING_CONFIRMED_ON` and
 `DATA_MAINTENANCE_BUDGET_USD` explicitly. Reservations assume paid token prices because model
 listing does not identify the account's billing tier. Run one model at a time with the same

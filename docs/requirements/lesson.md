@@ -156,8 +156,9 @@ The timing-reuse policy remains explicit. Legacy hidden draft rows participate i
 explicit saves/successful alignment normalize flags, GET never writes, and published data retains its semantics.
 
 One sentence list exposes direct transcript/translation edits, observed time bounds, playback,
-independent activity choices, highlighted notes and an optional global IPA display. Split/merge is
-in the sentence menu; timing uses the existing interval editor. Text/voice changes stale audio;
+independent activity choices, highlighted notes and an optional global IPA display. Each row has
+direct actions to split at the transcript caret between words and merge with the next sentence.
+Timing uses the existing interval editor. Text/voice changes stale audio;
 other lexical edits stale dependent timing/content. Saving, typing, blur, options changes and opening
 pages never invoke AI. Update affected parts explains the next capabilities before explicit execution.
 Global Save changes and Ctrl/Cmd+S persist the batch atomically. Conflicts/network errors preserve

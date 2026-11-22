@@ -76,18 +76,15 @@ const presets = {
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
   },
   DEEPSEEK: { displayName: "DeepSeek", baseUrl: "https://api.deepseek.com" },
-  QWEN: { displayName: "Qwen · Local", baseUrl: "" },
+  LOCAL_WHISPERX: { displayName: "WhisperX · Local", baseUrl: "" },
+  LOCAL_KOKORO: { displayName: "Kokoro · Local", baseUrl: "" },
   LOCAL_NLP: { displayName: "NLP · Local", baseUrl: "" },
 };
 const isLocal = (code: string) =>
   [
-    "LOCAL_QWEN",
+    "LOCAL_WHISPERX",
     "LOCAL_NLP",
     "LOCAL_KOKORO",
-    "QWEN",
-    "QWEN3",
-    "QWEN3_ASR",
-    "QWEN3_FORCED_ALIGNER",
     "KOKORO",
   ].includes(code);
 const capabilities = [
@@ -243,13 +240,19 @@ export function AiSettingsPage() {
     );
     setRouteOpen(true);
   }
-  const visibleProviders = providers.filter(
-    (p) => showInactive || p.enabled || p.configured,
+  const routes = routesQuery.data ?? [];
+  const waitingForKey = new Set(
+    providers.filter((p) =>
+      p.code in presets && !isLocal(p.code) && !p.configured &&
+      routes.some((route) => route.provider === p.code && route.enabled),
+    ).map((p) => p.code),
   );
-  const visibleRoutes = (routesQuery.data ?? []).filter(
-    (r) =>
-      showInactive ||
-      (r.enabled && providers.some((p) => p.code === r.provider && p.enabled)),
+  const visibleProviders = providers.filter((p) =>
+    showInactive || p.enabled || p.configured || waitingForKey.has(p.code),
+  );
+  const activeProviders = new Set(providers.filter((p) => p.enabled).map((p) => p.code));
+  const visibleRoutes = routes.filter((r) =>
+    showInactive || (r.enabled && (activeProviders.has(r.provider) || waitingForKey.has(r.provider))),
   );
   const selected = providers.find((p) => p.code === form.watch("providerCode"));
   const local = isLocal(form.watch("providerCode"));
@@ -373,11 +376,13 @@ export function AiSettingsPage() {
                                 }
                               >
                                 {t(
-                                  !p.enabled
-                                    ? "aiSettings.disabled"
-                                    : p.configured || isLocal(p.code)
-                                      ? "aiSettings.enabled"
-                                      : "aiSettings.notConfigured",
+                                  waitingForKey.has(p.code)
+                                    ? "aiSettings.notConfigured"
+                                    : !p.enabled
+                                      ? "aiSettings.disabled"
+                                      : p.configured || isLocal(p.code)
+                                        ? "aiSettings.enabled"
+                                        : "aiSettings.notConfigured",
                                 )}
                               </Badge>
                             </TableCell>
@@ -616,38 +621,44 @@ export function AiSettingsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {visibleRoutes.map((r) => (
-                        <TableRow key={r.id}>
-                          <TableCell>
-                            {t(`aiSettings.capabilities.${r.capability}`, {
-                              defaultValue: r.capability,
-                            })}
-                          </TableCell>
-                          <TableCell>{r.provider}</TableCell>
-                          <TableCell>{r.model || "—"}</TableCell>
-                          <TableCell>{r.priority}</TableCell>
-                          <TableCell>
-                            <Badge variant={r.enabled ? "default" : "secondary"}>
-                              {t(r.enabled ? "aiSettings.enabled" : "aiSettings.disabled")}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={t("aiSettings.editRoute", {
-                                name: r.model,
+                      {visibleRoutes.map((r) => {
+                        const enabled = r.enabled && activeProviders.has(r.provider) && !waitingForKey.has(r.provider);
+                        const status = r.enabled && waitingForKey.has(r.provider)
+                          ? "notConfigured"
+                          : enabled ? "enabled" : "disabled";
+                        return (
+                          <TableRow key={r.id}>
+                            <TableCell>
+                              {t(`aiSettings.capabilities.${r.capability}`, {
+                                defaultValue: r.capability,
                               })}
-                              title={t("aiSettings.editRoute", {
-                                name: r.model,
-                              })}
-                              onClick={() => editRoute(r)}
-                            >
-                              <Pencil />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                            </TableCell>
+                            <TableCell>{r.provider}</TableCell>
+                            <TableCell>{r.model || "—"}</TableCell>
+                            <TableCell>{r.priority}</TableCell>
+                            <TableCell>
+                              <Badge variant={enabled ? "default" : "secondary"}>
+                                {t(`aiSettings.${status}`)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={t("aiSettings.editRoute", {
+                                  name: r.model,
+                                })}
+                                title={t("aiSettings.editRoute", {
+                                  name: r.model,
+                                })}
+                                onClick={() => editRoute(r)}
+                              >
+                                <Pencil />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 ) : (

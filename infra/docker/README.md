@@ -84,7 +84,7 @@ Yêu cầu NVIDIA Container Toolkit/GPU compatible. Không dùng override này c
 
 - `infra/docker/.env`: Compose/Postgres/Keycloak topology interpolation.
 - `apps/core-service/.env`: Spring runtime secrets/config.
-- `apps/ai-service/.env`: FastAPI/Qwen runtime.
+- `apps/ai-service/.env`: FastAPI/WhisperX runtime.
 - frontend `.env`: public metadata only.
 
 Không gom tất cả vào root `.env`.

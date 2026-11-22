@@ -94,6 +94,21 @@ function show(path = "/settings/ai") {
   );
 }
 describe("AI settings", () => {
+  it("shows a seeded provider awaiting a key and its inactive route", async () => {
+    vi.mocked(api.fetchAiProviders).mockResolvedValue([{
+      id: "deepseek", code: "DEEPSEEK", display_name: "DeepSeek",
+      enabled: false, configured: false, connection_status: "UNKNOWN",
+    }]);
+    vi.mocked(api.fetchAiRoutes).mockResolvedValue([{
+      id: "seeded", provider: "DEEPSEEK", model: "deepseek-flash", capability: "GENERAL_LLM",
+      priority: 1, enabled: true, is_fallback: false,
+    }]);
+    show();
+    await userEvent.click(await screen.findByRole("button", { name: "Edit DeepSeek" }));
+    expect(screen.getByLabelText("New API key")).toHaveValue("");
+    await userEvent.click(screen.getByRole("tab", { name: "AI routing" }));
+    expect(await screen.findByRole("row", { name: /deepseek-flash.*not configured/i })).toBeVisible();
+  });
   it("shows DeepSeek as a standard provider and allows routing", async () => {
     const providers = await api.fetchAiProviders();
     vi.mocked(api.fetchAiProviders).mockResolvedValue([

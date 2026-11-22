@@ -119,8 +119,8 @@ class LessonAuthoringJobHandlerTest {
         var next=new AuthoringSentence(UUID.randomUUID(),"English daily.","LEARN");
         next.coarseStartMs=250L;next.coarseEndMs=500L;lesson.sentences=List.of(sentence,next);
         when(ai.execute(eq(AiCapability.ALIGNMENT),anyString(),anyMap(),anyMap()))
-            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"QWEN","test",Map.of("words",initial),1,1,10))
-            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"QWEN","test",Map.of("words",List.of(
+            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"LOCAL_WHISPERX","test",Map.of("words",initial),1,1,10))
+            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"LOCAL_WHISPERX","test",Map.of("words",List.of(
                 Map.of("text","English","start_ms",300,"end_ms",350),
                 Map.of("text","daily","start_ms",350,"end_ms",450))),1,1,10));
         handler.execute(job,context);
@@ -152,7 +152,7 @@ class LessonAuthoringJobHandlerTest {
         when(storage.createDownloadUrl(anyString(),any())).thenReturn(java.net.URI.create("http://storage/test.wav"));
         when(repository.jobInput(job.id())).thenReturn(new AuthoringRepository.JobInput(lesson.id,"ALIGN",1,false));
         when(ai.execute(eq(AiCapability.ALIGNMENT),anyString(),anyMap(),anyMap()))
-            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"QWEN","test",Map.of("words",words),1,1,10));
+            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"LOCAL_WHISPERX","test",Map.of("words",words),1,1,10));
     }
     @Test void alignsEverySentenceIncludingLegacyHiddenText() throws Exception {
         alignment(List.of(Map.of("text","We","start_ms",0,"end_ms",100),

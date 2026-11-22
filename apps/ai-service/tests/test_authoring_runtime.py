@@ -1,17 +1,15 @@
 import asyncio
+import base64
 import json
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from fastapi import HTTPException
 
-from app.config import Settings
 from app.providers.gemini import GeminiProvider, _interaction_usage
 from app.providers.groq import GroqProvider
 from app.providers.openai_compatible import OpenAICompatibleProvider
-from app.runtime.qwen import QwenRuntime, _alignment_windows, _alignment_word, _audio_windows
+from app.runtime.audio import alignment_windows
 from app.schemas import ExecuteRequest
 
 
@@ -30,87 +28,20 @@ def request(**overrides):
     return ExecuteRequest(invocation_id='authoring-test', provider='GROQ', model='model', **overrides)
 
 
-@pytest.mark.parametrize('operation', ['stt', 'align'])
-def test_qwen_downloads_http_audio_before_normalizing(monkeypatch, operation):
-    runtime = QwenRuntime(Settings(_env_file=None))
-    client_type = httpx.AsyncClient
-
-    async def fetch(req):
-        assert req.url.query == b'X-Amz-Signature=a%2Fb'
-        assert req.extensions['timeout']['connect'] == 5
-        return httpx.Response(200, content=b'audio data')
-
-    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: client_type(
-        transport=httpx.MockTransport(fetch), **kwargs,
-    ))
-    read_audio = Mock(return_value=Waveform(1600))
-    monkeypatch.setattr('app.runtime.qwen._read_audio', read_audio)
-    runtime._load_asr = AsyncMock(return_value=SimpleNamespace(transcribe=Mock(return_value=[
-        SimpleNamespace(text='First window.'),
-    ])))
-    runtime._load_aligner = AsyncMock(return_value=SimpleNamespace(align=Mock(return_value=[
-        SimpleNamespace(text='Hi', start_time=0, end_time=.05),
-    ])))
-    asyncio.run(getattr(runtime, operation)(request(input={
-        'audio_url': 'https://media.example/audio?X-Amz-Signature=a%2Fb', 'text': 'Hi',
-    })))
-    read_audio.assert_called_once_with(b'audio data')
-
-
-def test_qwen_sanitizes_audio_fetch_timeout(monkeypatch):
-    runtime = QwenRuntime(Settings(_env_file=None))
-    client_type = httpx.AsyncClient
-
-    async def stall(req):
-        raise httpx.ConnectTimeout('connect failure with signed URL', request=req)
-
-    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: client_type(
-        transport=httpx.MockTransport(stall), **kwargs,
-    ))
-    read_audio = Mock()
-    monkeypatch.setattr('app.runtime.qwen._read_audio', read_audio)
-    with pytest.raises(HTTPException, match='^504: Audio download timed out$'):
-        asyncio.run(runtime.stt(request(input={'audio_url': 'https://media.example/audio?token=secret'})))
-    read_audio.assert_not_called()
-
-
-def test_asr_windows_preserve_every_sample_and_bound_gpu_input():
-    audio = Waveform(300 * 16_000 + 1)
-    windows = _audio_windows(audio)
-    assert [start for start, _ in windows] == [0, 115 * 16_000, 230 * 16_000]
-    assert sum(len(window) for _, window in windows) == len(audio)
-    assert all(len(window) <= 115 * 16_000 for _, window in windows)
-
-
-def test_alignment_accepts_only_terminal_frame_rounding_and_never_pads_audio():
-    audio = Waveform(19_979 * 16)
-    segments = [{'text': 'hello', 'start_ms': 160, 'end_ms': 20_000}]
-    start, window, text = _alignment_windows(audio, 'hello', segments, timestamp_precision_ms=80)[0]
-    assert start + len(window) == len(audio)
-    assert text == 'hello'
-    assert segments[0]['end_ms'] == 20_000
-    for invalid in (
-        [{'text': 'hello', 'start_ms': 160, 'end_ms': 20_080}],
-        [{'text': 'hello', 'start_ms': 19_980, 'end_ms': 20_000}],
-    ):
-        with pytest.raises(ValueError, match='in-bounds'):
-            _alignment_windows(audio, 'hello', invalid, timestamp_precision_ms=80)
-
-
 def test_alignment_requires_real_anchors_for_long_input():
     with pytest.raises(ValueError, match='requires anchored'):
-        _alignment_windows(Waveform(121 * 16_000), 'hello', None)
+        alignment_windows(Waveform(121 * 16_000), 'hello', None)
     with pytest.raises(ValueError, match='complete approved transcript'):
-        _alignment_windows(Waveform(10 * 16_000), 'hello world', [
+        alignment_windows(Waveform(10 * 16_000), 'hello world', [
             {'text': 'hello', 'start_ms': 0, 'end_ms': 1000},
         ])
     with pytest.raises(ValueError, match='ordered non-overlapping'):
-        _alignment_windows(Waveform(10 * 16_000), 'hello world', [
+        alignment_windows(Waveform(10 * 16_000), 'hello world', [
             {'text': 'hello', 'start_ms': 0, 'end_ms': 2000},
             {'text': 'world', 'start_ms': 1000, 'end_ms': 3000},
         ])
     with pytest.raises(ValueError, match='at most 120 seconds'):
-        _alignment_windows(Waveform(125 * 16_000), 'hello', [
+        alignment_windows(Waveform(125 * 16_000), 'hello', [
             {'text': 'hello', 'start_ms': 0, 'end_ms': 121000},
         ])
 
@@ -121,7 +52,7 @@ def test_alignment_requires_real_anchors_for_long_input():
     (1000, 120500, 125000),
 ])
 def test_alignment_padding_stays_within_budget_when_silent_windows_are_absent(start_ms, end_ms, duration_ms):
-    windows = _alignment_windows(Waveform(duration_ms * 16), 'hello', [
+    windows = alignment_windows(Waveform(duration_ms * 16), 'hello', [
         {'text': 'hello', 'start_ms': start_ms, 'end_ms': end_ms},
     ])
     start, window, text = windows[0]
@@ -131,55 +62,14 @@ def test_alignment_padding_stays_within_budget_when_silent_windows_are_absent(st
     assert text == 'hello'
 
 
-def test_alignment_offsets_windows_and_preserves_raw_invalid_times(monkeypatch):
-    runtime = QwenRuntime(Settings(_env_file=None))
-    monkeypatch.setattr('app.runtime.qwen._read_audio', lambda _: Waveform(200 * 16_000))
-    align = Mock(side_effect=[
-        [SimpleNamespace(items=[SimpleNamespace(text='hello', start_time=0.2, end_time=0.4)])],
-        [SimpleNamespace(items=[SimpleNamespace(text='world', start_time=0.5, end_time=0.5)])],
-    ])
-    runtime._load_aligner = AsyncMock(return_value=SimpleNamespace(align=align))
-    result = asyncio.run(runtime.align(request(input={
-        'audio_url': 'file:///unused.wav', 'text': 'hello world', 'segments': [
-            {'text': 'hello', 'start_ms': 1000, 'end_ms': 2000},
-            {'text': 'world', 'start_ms': 150000, 'end_ms': 151000},
-        ],
-    })))
-    assert result.output['words'] == [
-        {'index': 0, 'word': 'hello', 'start_ms': 700, 'end_ms': 900},
-        {'index': 1, 'word': 'world', 'start_ms': 150000, 'end_ms': 150000},
+def test_alignment_windows_split_the_shared_padding_gap_without_cutting_anchors():
+    segments = [
+        {'text': 'hello', 'start_ms': 1000, 'end_ms': 2000},
+        {'text': 'world', 'start_ms': 2321, 'end_ms': 3200},
     ]
-    assert all(len(call.kwargs['audio'][0]) <= 120 * 16_000 for call in align.call_args_list)
-
-
-def test_qwen_asr_chunks_before_inference_and_returns_global_segment_anchors(monkeypatch):
-    runtime = QwenRuntime(Settings(_env_file=None))
-    monkeypatch.setattr('app.runtime.qwen._read_audio', lambda _: Waveform(125 * 16_000))
-    transcribe = Mock(side_effect=[
-        [SimpleNamespace(text='First window.')], [SimpleNamespace(text='Second window.')],
-    ])
-    runtime._load_asr = AsyncMock(return_value=SimpleNamespace(transcribe=transcribe))
-    runtime._align_words = AsyncMock(return_value=[{'index': 0, 'word': 'First', 'start_ms': 20, 'end_ms': 100}])
-    output = asyncio.run(runtime.stt(request(
-        input={'audio_url': 'file:///unused.wav'}, options={'timestamps': True},
-    ))).output
-    assert output['text'] == 'First window. Second window.'
-    assert output['segments'] == [
-        {'text': 'First window.', 'start_ms': 0, 'end_ms': 115000},
-        {'text': 'Second window.', 'start_ms': 115000, 'end_ms': 125000},
-    ]
-    assert transcribe.call_count == 2
-    assert runtime._align_words.await_count == 1
-
-
-def test_alignment_millisecond_values_are_not_multiplied_again():
-    assert _alignment_word({'word': 'Hi', 'start_ms': 500, 'end_ms': 800}) == {
-        'word': 'Hi', 'start_ms': 500, 'end_ms': 800,
-    }
-    assert _alignment_word({'text': 'Hi', 'start_time': .5, 'end_time': .8})['start_ms'] == 500
-    for malformed in ({'word': 'Hi'}, {'word': 'Hi', 'start_time': float('nan'), 'end_time': 1}):
-        with pytest.raises(ValueError):
-            _alignment_word(malformed)
+    first, second = alignment_windows(Waveform(5000 * 16), 'hello world', segments)
+    seam = ((2000 + 2321) // 2) * 16
+    assert first[0] + len(first[1]) == second[0] == seam
 
 
 def test_gemini_real_usage_and_generation_contract():
@@ -243,13 +133,30 @@ def test_groq_strict_schema_budget_usage_and_truncation_metadata(monkeypatch):
     assert result.usage == {}
 
 
-def test_groq_multipart_requests_both_granularities_and_normalizes_segments(monkeypatch, tmp_path):
+@pytest.mark.parametrize('source', ['signed_url', 'local_file', 'base64'])
+def test_groq_multipart_requests_both_granularities_and_normalizes_segments(monkeypatch, tmp_path, source):
     audio = tmp_path / 'audio.wav'
     audio.write_bytes(b'placeholder')
+    signed_url = 'https://media.example.invalid/audio.wav?signature=test&expires=600'
+    inputs = {
+        'signed_url': {'audio_url': signed_url},
+        'local_file': {'audio_url': audio.as_uri()},
+        'base64': {'audio_base64': base64.b64encode(audio.read_bytes()).decode()},
+    }
 
     def handler(req):
+        assert req.method == 'POST' and req.url.path == '/audio/transcriptions'
+        assert req.headers['content-type'].startswith('multipart/form-data; boundary=')
+        assert b'name="model"\r\n\r\nmodel' in req.content
+        assert b'name="response_format"\r\n\r\nverbose_json' in req.content
         assert b'name="timestamp_granularities[]"\r\n\r\nword' in req.content
         assert b'name="timestamp_granularities[]"\r\n\r\nsegment' in req.content
+        if source == 'signed_url':
+            assert b'name="url"\r\n\r\n' + signed_url.encode() in req.content
+            assert b'name="file"' not in req.content
+        else:
+            assert b'name="file"; filename="audio.wav"' in req.content
+            assert b'name="url"' not in req.content
         return httpx.Response(200, json={
             'text': 'Hello.', 'duration': 1.5,
             'words': [{'word': 'Hello.', 'start': .2, 'end': .8}],
@@ -258,7 +165,7 @@ def test_groq_multipart_requests_both_granularities_and_normalizes_segments(monk
 
     install_transport(monkeypatch, handler)
     output = asyncio.run(GroqProvider('https://example.invalid').transcribe(request(
-        input={'audio_url': audio.as_uri()}, options={'timestamps': True},
+        input=inputs[source], options={'timestamps': True},
     ), 'test-credential')).output
     assert output['timestamps'][0]['start_ms'] == 200
     assert output['segments'] == [{'text': 'Hello.', 'start_ms': 100, 'end_ms': 1200}]
@@ -406,33 +313,6 @@ def test_provider_config_errors_keep_nonretryable_classification(monkeypatch, up
     }, json=request(input={'audio_url': 'https://example.invalid/audio.wav'}).model_dump())
     assert response.status_code == upstream_status
     assert 'private' not in response.text
-
-
-def test_alignment_only_bounds_a_small_quantized_audio_end_without_hiding_bad_intervals():
-    from app.runtime.qwen import _bound_alignment_word
-    word = {'word':'all', 'start_ms':45440, 'end_ms':45840}
-    assert _bound_alignment_word(word, 45837, 80)['end_ms'] == 45837
-    assert word['end_ms'] == 45840
-    for invalid in [
-        {'word':'all','start_ms':45440,'end_ms':46000},
-        {'word':'all','start_ms':45440,'end_ms':45890},
-        {'word':'all','start_ms':45840,'end_ms':45840},
-        {'word':'all','start_ms':-80,'end_ms':80},
-    ]:
-        assert _bound_alignment_word(invalid,45837,80) == invalid
-    assert _bound_alignment_word(word,45837,0) == word
-
-
-def test_stt_can_defer_forced_alignment_until_the_caller_confirms_text(monkeypatch):
-    runtime = QwenRuntime(Settings(_env_file=None))
-    monkeypatch.setattr('app.runtime.qwen._read_audio',lambda _: Waveform(120*16000))
-    transcribe = Mock(return_value=[SimpleNamespace(text='Some words.')])
-    runtime._load_asr = AsyncMock(return_value=SimpleNamespace(transcribe=transcribe))
-    runtime._align_words = AsyncMock()
-    result = asyncio.run(runtime.stt(request(input={'audio_url':'file:///unused.wav'},options={'timestamps':True,'allow_alignment':False})))
-    runtime._align_words.assert_not_awaited()
-    assert result.output['timestamps'] == []
-    assert max(s['end_ms']-s['start_ms'] for s in result.output['segments']) <= 115000
 
 
 @pytest.mark.parametrize('thinking', ['enabled', 'disabled'])

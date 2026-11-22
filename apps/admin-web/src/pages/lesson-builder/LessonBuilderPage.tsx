@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { RiPlayLine, RiTimeLine, RiMoreLine, RiSettings3Line, RiLoader4Line, RiHistoryLine, RiArrowGoBackLine } from '@remixicon/react';
+import { RiPlayLine, RiTimeLine, RiMoreLine, RiSettings3Line, RiLoader4Line, RiHistoryLine, RiArrowGoBackLine, RiScissorsCutLine, RiGitMergeLine } from '@remixicon/react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
@@ -23,6 +23,7 @@ import { LessonPlayer } from './AudioPreview';
 import { VoiceSelect } from './VoiceSelect';
 import { TimingEditor } from './TimingEditor';
 import { TranscriptList } from './TranscriptList';
+import { mergeSentence } from './authoring-editor';
 import { UnsavedChangesGuard } from './UnsavedChangesGuard';
 import { createPlaybackClock, PlaybackWords } from './playback-clock';
 import { activeJob, useCodeLabel } from './AuthoringJobProgress';
@@ -46,6 +47,7 @@ function LessonEditorPage({ lessonId }: { lessonId: string }) {
   const [dirty, setDirty] = useState<Set<string>>(new Set()), dirtyRef = useRef(new Set<string>());
   const [editorEpoch, setEditorEpoch] = useState(0);
   const [busy, setBusy] = useState(false), busyRef = useRef(false), [error, setError] = useState('');
+  const [splitErrorId, setSplitErrorId] = useState<string | null>(null);
   const [settings, setSettings] = useState(false), [history, setHistory] = useState(false), [preview, setPreview] = useState(false);
   const [confirm, setConfirm] = useState<'run' | 'delete'>('run'), [confirmOpen, setConfirmOpen] = useState(false), [readiness, setReadiness] = useState<string[]>([]);
   const [mode, setMode] = useState<'view' | 'DICTATION' | 'SHADOWING'>('view'), [level, setLevel] = useState<'easy' | 'medium' | 'full'>('easy');
@@ -61,6 +63,7 @@ function LessonEditorPage({ lessonId }: { lessonId: string }) {
   const query = useQuery({ queryKey: ['authoring', lessonId], queryFn: ({ signal }) => authoring.fetchDraft(lessonId, signal), refetchInterval: q => q.state.data?.jobs.some(activeJob) ? connection === 'connected' ? 5000 : 2500 : false });
   const accept = useCallback((next: LessonDraft) => {
     persisted.current = next; latest.current = next; setDraft(next); dirtyRef.current = new Set(); setDirty(new Set()); setUndoSelection(undefined);
+    setSplitErrorId(null);
     client.setQueryData(['authoring', lessonId], next);
   }, [client, lessonId]);
   useEffect(() => {
@@ -118,7 +121,7 @@ function LessonEditorPage({ lessonId }: { lessonId: string }) {
     const restored={...structuredClone(persisted.current),jobs:draft?.jobs ?? persisted.current.jobs};
     latest.current=restored;setDraft(restored);dirtyRef.current=new Set();setDirty(new Set());form.reset();
     setUndoSelection(undefined);setClozeEditing(false);setMode('view');setLevel('easy');setActiveId(null);
-    setPreview(false);setReadiness([]);setConfirmOpen(false);setSettings(false);setError('');setEditorEpoch(value=>value+1);
+    setPreview(false);setReadiness([]);setConfirmOpen(false);setSettings(false);setError('');setSplitErrorId(null);setEditorEpoch(value=>value+1);
   }
   function play(id: string, atMs?: number) { const row = latest.current?.sentences.find(s => s.id === id); const at = atMs ?? row?.words[0]?.startMs ?? row?.previewStartMs; if (at == null) return; setActiveId(id); setSeek({ atMs: at, sequence: Date.now(), play: true }); }
   async function openPreview() { await save(); if (!published) { const status = await authoring.fetchReadiness(lessonId); setReadiness(status.blockers); } setPreview(true); }
@@ -129,12 +132,26 @@ function LessonEditorPage({ lessonId }: { lessonId: string }) {
     const rows = draft.sentences.map(row => ({ ...row, [field]: choice === 'all' ? !!row.words.length : choice === 'none' ? false : !!row.words.length && !row.exclusions?.[activity] }));
     rows.forEach(row => mark(row.id)); changeDraft({ sentences: rows }, '_selection');
   }
-  function split(index: number) {
-    const row = latest.current!.sentences[index], text = row.text, raw = window.prompt(t('finish.splitPrompt'), String(Math.floor(text.length / 2)));
-    if (raw == null) return; const at = Number(raw); if (!Number.isInteger(at) || at < 1 || at >= text.length || !/\s/.test(text[at - 1] + text[at])) { setError(t('finish.splitBoundary')); return; }
-    const left = text.slice(0, at).trim(), right = text.slice(at).trim(); if (!left || !right) return;
-    const newRow = { ...row, id: `new:${crypto.randomUUID()}`, text: right, words: [], translation: null, ipa: null, vocabulary: [], grammar: [], cloze: undefined, clozeManual: false };
-    const rows = [...latest.current!.sentences]; rows.splice(index, 1, { ...row, text: left }, newRow); changeDraft({ sentences: rows }, '_transcript');
+  function split(index: number, button: HTMLButtonElement) {
+    const input = button.closest('article')?.querySelector<HTMLTextAreaElement>('.studio-transcript-input');
+    if (!input) return;
+    const rows = [...latest.current!.sentences];
+    const row = rows[index], text = row.text, at = input.selectionStart;
+    const left = text.slice(0, at).trim(), right = text.slice(at).trim();
+    if (at !== input.selectionEnd || !left || !right || !/\s/.test(text.slice(at - 1, at + 1))) {
+      input.focus();
+      setSplitErrorId(row.id);
+      return;
+    }
+    const newRow: AuthoringSentence = {
+      id: `new:${crypto.randomUUID()}`, text: right, usage: row.usage, hidden: row.hidden,
+      words: [], issues: [], vocabulary: [], grammar: [], hints: [], notes: [], thoughtGroups: [],
+      dictationEligible: false, shadowingEligible: false, dictationSelected: false, shadowingSelected: false,
+    };
+    rows.splice(index, 1, { ...row, text: left }, newRow);
+    pause();
+    setSplitErrorId(null);
+    changeDraft({ sentences: rows }, '_transcript');
   }
   useEffect(() => { const element=studioRef.current; if(!element) return; const update=()=>element.style.setProperty('--studio-left', `${element.getBoundingClientRect().left}px`); if(typeof ResizeObserver === 'undefined') return; const observer=new ResizeObserver(update); observer.observe(element); update(); return ()=>observer.disconnect(); },[!!draft]);
   if (query.isPending && !draft) return <LessonEditorSkeleton />;
@@ -155,9 +172,30 @@ function LessonEditorPage({ lessonId }: { lessonId: string }) {
       {showIpa && <p className="studio-help">{t('finish.ipaHelp', { accent: options.accent })}</p>}
       <div className="studio-bulk">{(['DICTATION', 'SHADOWING'] as const).filter(a => options.activities.includes(a)).map(activity => <DropdownMenu key={activity}><DropdownMenuTrigger asChild><Button variant="outline" size="sm" disabled={blocked}>{t(`contentAuthoring.${activity}`)} · {draft.sentences.filter(row => row[activity === 'DICTATION' ? 'dictationSelected' : 'shadowingSelected']).length}</Button></DropdownMenuTrigger><DropdownMenuContent>{(['all', 'none', 'suggested'] as const).map(choice => <DropdownMenuItem key={choice} onSelect={() => bulk(activity, choice)}>{t(`finish.${choice}`)}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>)}{undoSelection && <Button size="sm" variant="ghost" disabled={blocked} onClick={() => { changeDraft({ sentences: latest.current!.sentences.map(row => ({ ...row, [undoSelection.field]: undoSelection.values.get(row.id) ?? row[undoSelection.field] })) }, '_selection'); setUndoSelection(undefined); }}>{t('finish.undo')}</Button>}{clozeEditing && <><Button size="sm" variant={level === 'easy' ? 'secondary' : 'ghost'} onClick={() => setLevel('easy')}>{t('finish.easy')}</Button><Button size="sm" variant={level === 'medium' ? 'secondary' : 'ghost'} onClick={() => setLevel('medium')}>{t('finish.medium')}</Button></>}</div>
       </>}
-      <TimingEditor key={editorEpoch} onPlay={play} onPause={pause} revision={draft.revision} disabled={blocked || hasChanges} durationMs={draft.endMs - draft.startMs} onSave={async (id, words, revision) => perform(async () => { accept(await authoring.saveTiming(lessonId, revision, id, words)); })}>{editTiming => <TranscriptList sentences={draft.sentences} visibleRows={draft.sentences.map((_, i) => i)} filtered={false} pageScroll scrollToId={activeId} scrollRequest={noteJump} className="studio-sentences">{(sentence, index) => <article className="studio-sentence" data-active={activeId === sentence.id} key={sentence.id || `new-${index}`}><div className="studio-sentence-heading"><span>{index + 1}</span><span>{sentence.words.length ? `${timecode(sentence.words[0].startMs)} – ${timecode(sentence.words.at(-1)!.endMs)}` : t('finish.timingMissing')}</span>{sentence.contentStale && <Badge variant="warning">{t('contentAuthoring.stale')}</Badge>}<div><Button size="icon-sm" variant="ghost" aria-label={t('lessonAuthoring.seek')} disabled={!available || !sentence.words.length || dirty.has('_transcript')} onClick={() => play(sentence.id)}><RiPlayLine /></Button><Button size="icon-sm" variant="ghost" aria-label={t('authoringUi.editTiming')} title={hasChanges ? t('finish.saveBeforeTiming') : t('authoringUi.editTiming')} disabled={blocked || hasChanges || !sentence.words.length} onClick={() => editTiming(sentence)}><RiTimeLine /></Button><DropdownMenu><DropdownMenuTrigger asChild><Button size="icon-sm" variant="ghost" aria-label={t('catalog.actions')} disabled={blocked}><RiMoreLine /></Button></DropdownMenuTrigger><DropdownMenuContent><DropdownMenuItem onSelect={() => split(index)}>{t('lessonAuthoring.split')}</DropdownMenuItem><DropdownMenuItem disabled={index === draft.sentences.length - 1} onSelect={() => { const rows = [...draft.sentences]; rows.splice(index, 2, { ...sentence, text: `${sentence.text} ${rows[index + 1].text}` }); changeDraft({ sentences: rows }, '_transcript'); }}>{t('lessonAuthoring.merge')}</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div></div>
+      <TimingEditor key={editorEpoch} onPlay={play} onPause={pause} revision={draft.revision} disabled={blocked || hasChanges} durationMs={draft.endMs - draft.startMs} onSave={async (id, words, revision) => perform(async () => { accept(await authoring.saveTiming(lessonId, revision, id, words)); })}>{editTiming => <TranscriptList sentences={draft.sentences} visibleRows={draft.sentences.map((_, i) => i)} filtered={false} pageScroll scrollToId={activeId} scrollRequest={noteJump} className="studio-sentences">{(sentence, index) => <article className="studio-sentence" data-active={activeId === sentence.id} key={sentence.id || `new-${index}`}><div className="studio-sentence-heading"><span>{index + 1}</span><span>{sentence.words.length ? `${timecode(sentence.words[0].startMs)} – ${timecode(sentence.words.at(-1)!.endMs)}` : t('finish.timingMissing')}</span>{sentence.contentStale && <Badge variant="warning">{t('contentAuthoring.stale')}</Badge>}<div><Button size="icon-sm" variant="ghost" aria-label={t('lessonAuthoring.seek')} disabled={!available || !sentence.words.length} onClick={() => play(sentence.id)}><RiPlayLine /></Button><Button size="icon-sm" variant="ghost" aria-label={t('authoringUi.editTiming')} title={hasChanges ? t('finish.saveBeforeTiming') : t('authoringUi.editTiming')} disabled={blocked || hasChanges || !sentence.words.length} onClick={() => editTiming(sentence)}><RiTimeLine /></Button>
+      <Button size="icon-sm" variant="ghost" aria-label={t('lessonAuthoring.split')} tooltip={t('lessonAuthoring.split')} disabled={blocked}
+        onClick={event => split(index, event.currentTarget)}><RiScissorsCutLine aria-hidden="true" /></Button>
+      <Button size="icon-sm" variant="ghost" aria-label={t('lessonAuthoring.merge')} tooltip={t('lessonAuthoring.merge')} disabled={blocked || index === draft.sentences.length - 1}
+        onClick={() => {
+          pause();
+          setSplitErrorId(null);
+          changeDraft({ sentences: mergeSentence(latest.current!.sentences, index) }, '_transcript');
+        }}><RiGitMergeLine aria-hidden="true" /></Button>
+      </div></div>
       {activeId === sentence.id && !dirty.has('_transcript') && <div className="studio-karaoke"><PlaybackWords timing clock={clock} sentence={sentence} onSeek={atMs => play(sentence.id, atMs)} /></div>}
-      <Textarea rows={1} className="studio-transcript-input" aria-label={t('lessonAuthoring.sentence', { number: index + 1 })} value={sentence.text} disabled={blocked} onChange={e => { if (sentence.id) changeSentence(sentence.id, { text: e.target.value }, false); else { const rows = [...draft.sentences]; rows[index] = { ...sentence, text: e.target.value }; changeDraft({ sentences: rows }, '_transcript'); } }} />
+      <Textarea rows={1} className="studio-transcript-input" aria-label={t('lessonAuthoring.sentence', { number: index + 1 })}
+        aria-describedby={splitErrorId === sentence.id ? `split-help-${index}` : undefined}
+        value={sentence.text} disabled={blocked}
+        onChange={event => {
+          if (splitErrorId === sentence.id) setSplitErrorId(null);
+          if (sentence.id) changeSentence(sentence.id, { text: event.target.value }, false);
+          else {
+            const rows = [...draft.sentences];
+            rows[index] = { ...sentence, text: event.target.value };
+            changeDraft({ sentences: rows }, '_transcript');
+          }
+        }} />
+      {splitErrorId === sentence.id && <p id={`split-help-${index}`} role="alert" className="mb-2 text-sm text-destructive">{t('finish.splitBoundary')}</p>}
       {!!(sentence.vocabulary.length + sentence.grammar.length) && <AnnotatedTranscript sentence={sentence} />}
       {sentence.contentStale && !!sentence.manualFields?.length && <Button size="sm" variant="outline" disabled={blocked || dirty.has('_transcript')} onClick={()=>mark(sentence.id)}>{t('finish.keepManual')}</Button>}
       <SentenceContentEditor sentence={sentence} options={options} disabled={blocked || !sentence.id || dirty.has('_transcript')} showIpa={showIpa} onChange={value => changeSentence(sentence.id, value)} />

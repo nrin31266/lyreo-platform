@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+umask 077
 
 # Copy templates only when the developer has not created a local file yet.
 copy_if_missing() {
@@ -13,7 +14,7 @@ copy_if_missing() {
   fi
 }
 
-# Runtime secrets stay with their executable. Root .env is reserved for operator maintenance.
+# Local configuration lives with each executable.
 for example in \
   "$ROOT/infra/docker/.env.example" \
   "$ROOT/infra/keycloak/.env.example" \
@@ -68,6 +69,13 @@ KC_ADMIN=$(get_env "$DOCKER_ENV" KEYCLOAK_ADMIN)
 KC_PASSWORD=$(get_env "$DOCKER_ENV" KEYCLOAK_ADMIN_PASSWORD)
 set_env "$KC_ENV" KEYCLOAK_ADMIN "${KC_ADMIN:-admin}"
 set_env "$KC_ENV" KEYCLOAK_ADMIN_PASSWORD "${KC_PASSWORD:-admin-local-change-me}"
+
+# Upgrade only the previous public dev default. Keep any custom seed passwords.
+for key in KEYCLOAK_SEED_ADMIN_PASSWORD KEYCLOAK_SEED_LEARNER_PASSWORD; do
+  if [[ "$(get_env "$KC_ENV" "$key")" == 'Password123!ChangeMe' ]]; then
+    set_env "$KC_ENV" "$key" "$(get_env "$KC_ENV.example" "$key")"
+  fi
+done
 
 # Resolve local PostgreSQL connection settings from the compose environment so custom host ports work.
 DB_NAME=$(get_env "$DOCKER_ENV" POSTGRES_DB)
