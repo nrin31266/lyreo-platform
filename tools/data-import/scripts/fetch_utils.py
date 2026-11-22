@@ -97,6 +97,34 @@ def download_archive(url: str, target: Path) -> None:
         raise ValueError("Reassembled archive checksum mismatch")
 
 
+def stage_verified_archive(
+    release_dir: Path, url: str, expected_sha256: str, target: Path
+) -> None:
+    domain = release_dir.parent.name
+    prefix = domain.upper().replace("-", "_") + "_RELEASE_"
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+        raise ValueError(f"{prefix}SHA256 must be the full 64-character archive checksum")
+
+    canonical = release_dir.parent.parent / f"{domain}-{release_dir.name}.tar.gz"
+    explicit_local = bool(url) and urlparse(url).scheme in ("", "file")
+    use_canonical = not explicit_local and (canonical.exists() or canonical.is_symlink())
+    if use_canonical:
+        if not canonical.is_file():
+            raise ValueError(f"Local archive is not a readable file: {canonical}")
+        shutil.copyfile(canonical, target)
+    elif url:
+        download_archive(url, target)
+    else:
+        raise ValueError(f"{prefix}URL is empty and no local archive found at {canonical}")
+
+    actual_sha256 = sha256_file(target)
+    if actual_sha256 != expected_sha256:
+        location = f" ({canonical})" if use_canonical else ""
+        raise ValueError(
+            f"Release archive SHA-256 mismatch{location}: expected {expected_sha256}, got {actual_sha256}"
+        )
+
+
 def archive_root(archive: Path, expected_roots: set[str]) -> str:
     with tarfile.open(archive, "r:gz") as stream:
         members = stream.getmembers()

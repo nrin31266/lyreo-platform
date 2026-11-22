@@ -3,21 +3,18 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
-from urllib.parse import unquote, urlparse
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from fetch_utils import archive_root as util_archive_root, download_archive, safe_extract_archive, sha256_file
+from fetch_utils import archive_root as util_archive_root, safe_extract_archive, stage_verified_archive
 from validate_grammar_toeic_release import validate  # noqa: E402
 
 
@@ -54,14 +51,6 @@ def config_from_env(env: dict[str, str]) -> Config:
         release_dir=release_dir,
         workspace=workspace,
     )
-
-
-def sha256(path: Path) -> str:
-    return sha256_file(path)
-
-
-def download(url: str, target: Path) -> None:
-    download_archive(url, target)
 
 
 def archive_root(archive: Path, version: str) -> str:
@@ -107,18 +96,11 @@ def run(config: Config, check: bool = False, force: bool = False) -> None:
             if not force:
                 print(f"OK   Grammar/TOEIC release {config.version} already installed: {target}")
                 return
-    if not config.url:
-        raise ValueError("GRAMMAR_TOEIC_RELEASE_URL is empty; set it to the uploaded clean archive URL")
-    if not re.fullmatch(r"[0-9a-f]{64}", config.archive_sha256):
-        raise ValueError("GRAMMAR_TOEIC_RELEASE_SHA256 must be the full 64-character archive checksum")
     config.workspace.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="run.", dir=config.workspace) as temp:
         work = Path(temp)
         archive = work / "release.tar.gz"
-        download(config.url, archive)
-        actual_hash = sha256(archive)
-        if actual_hash != config.archive_sha256:
-            raise ValueError(f"Release archive SHA-256 mismatch: expected {config.archive_sha256}, got {actual_hash}")
+        stage_verified_archive(target, config.url, config.archive_sha256, archive)
         extracted = extract(archive, work / "extracted", config.version)
         verify_release(config, extracted, archive)
         target.parent.mkdir(parents=True, exist_ok=True)
