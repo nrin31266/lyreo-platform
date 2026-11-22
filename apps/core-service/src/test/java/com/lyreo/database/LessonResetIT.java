@@ -14,14 +14,18 @@ class LessonResetIT {
         try(var postgres=new PostgreSQLContainer("postgres:18.6-alpine")) {
             postgres.start();
             Flyway.configure().dataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword())
-                .locations("classpath:db/migration").target("010").load().migrate();
+                .locations("classpath:db/migration").load().migrate();
             try(var connection=DriverManager.getConnection(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword());var sql=connection.createStatement()) {
                 sql.execute("INSERT INTO lesson(id,title,source_type,status) VALUES('10000000-0000-0000-0000-000000000001','Old title','TEXT','DRAFT')");
-                Flyway.configure().dataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword()).locations("classpath:db/migration").load().migrate();
                 assertThat(count(sql,"lesson")).isEqualTo(1);
                 String seed=Files.readString(Path.of("../../infra/postgres/seed/dev.sql"));sql.execute(seed);
                 sql.execute("UPDATE lesson_category SET name='Custom travel',translations='{\"vi\":\"Tự sửa\"}' WHERE id='20000000-0000-0000-0000-000000000002'");
                 sql.execute(seed);assertThat(count(sql,"lesson_category")).isEqualTo(24);
+                String sampleLessons=Files.readString(Path.of("../../infra/postgres/seed/lessons.sql"));
+                sql.execute(sampleLessons);
+                assertThat(count(sql,"lesson")).isEqualTo(6);
+                sql.execute(sampleLessons);
+                assertThat(count(sql,"lesson")).isEqualTo(6);
                 try(var result=sql.executeQuery("SELECT name,translations->>'vi' FROM lesson_category WHERE id='20000000-0000-0000-0000-000000000002'")) {
                     result.next();assertThat(result.getString(1)).isEqualTo("Custom travel");assertThat(result.getString(2)).isEqualTo("Tự sửa");
                 }

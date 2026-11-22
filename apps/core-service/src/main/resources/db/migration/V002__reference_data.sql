@@ -17,3 +17,19 @@ INSERT INTO mission_definition(id, code, title, metric, target, diamond_reward, 
     ('10000000-0000-0000-0000-000000000003', 'DAILY_TOEIC', 'Hoàn thành 1 TOEIC drill', 'TOEIC_DRILL_COMPLETED', 1, 4, 'DAILY', true),
     ('10000000-0000-0000-0000-000000000004', 'DAILY_GRAMMAR_5', 'Làm 5 câu ngữ pháp', 'GRAMMAR_ANSWER', 5, 2, 'DAILY', true)
 ON CONFLICT (code) DO NOTHING;
+
+-- Safe product defaults. Lesson creator can request a subset/choice only inside this policy.
+-- The owning module defines typed schema/defaults in code; this table stores admin-tunable policy documents.
+INSERT INTO module_runtime_config(owner_module, config_key, schema_version, config_json)
+VALUES (
+    'lesson',
+    'processing-policy',
+    1,
+    '{
+      "allowedActivities": ["DICTATION", "SHADOWING", "VOCABULARY_PRACTICE", "GRAMMAR_PRACTICE"],
+      "allowedAnnotations": ["TRANSLATION", "LEXICAL", "GRAMMAR", "ENTITY_HINTS", "DICTATION_HINTS", "SENTENCE_IPA", "THOUGHT_GROUPS", "LEARNING_TIPS"],
+      "allowedPronunciationStrategies": ["DISABLED", "ON_DEMAND", "PREGENERATE"],
+      "allowedAccents": ["US", "UK"]
+    }'::jsonb
+)
+ON CONFLICT(owner_module, config_key) DO NOTHING;

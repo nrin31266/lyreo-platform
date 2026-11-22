@@ -365,10 +365,10 @@
     "note": "This workspace is for Lyreo content managers and administrators."
   },
   "catalog": {
-    "lessons": "Lessons",
+    "lessons": "Real-world lessons",
     "categories": "Categories",
     "channels": "Source channels",
-    "description": "Organize content and continue where you left off.",
+    "description": "Create English practice lessons from YouTube, text, or audio files.",
     "navigation": "Content management",
     "retry": "Retry",
     "search": "Search lesson titles",
@@ -524,7 +524,7 @@
     "operations": "Operations",
     "configuration": "Configuration",
     "overview": "Overview",
-    "lessons": "Lessons",
+    "lessons": "Real-world lessons",
     "lessonList": "Lesson list",
     "createLesson": "Create lesson",
     "categories": "Categories",
@@ -764,22 +764,22 @@
     "text": {
       "title": "Draft a Text lesson with AI",
       "returnStep": "Choose a lesson, paste only its English block into Text, optionally enter its suggested title, then save and generate speech.",
-      "prompt": "ROLE: SINGLE-NARRATOR LISTENING MATERIALS EDITOR\nWrite original English-learning material for Lyreo's Text tab.\n\nCLARIFY IF MISSING\n- What situation or subject does the learner want to practise, and for what purpose?\n- What CEFR level, A1–C2, and American/British usage?\n- What maximum word count, and any vocabulary or grammar to practise?\nAsk only for missing details. Give concrete examples when I am unsure rather than turning the exchange into a lengthy form.\n\nEDITORIAL REQUIREMENTS\nText uses one Kokoro voice throughout. Use a monologue, one-viewpoint story, description or explanation. Do not write multi-role dialogue or A/B labels expecting automatic voice switching. If I need separate speakers, suggest an actual recording in Audio or YouTube, or ask whether a single-person retelling would work.\nExample: a café-ordering lesson can describe one customer's experience while practising how to order.\nGive each passage one main idea and a coherent thread. For A1/A2, use common words, short sentences and concrete ideas; B1/B2 allows natural linking and expressions; C1/C2 allows nuance without making it hard through obscure words. CEFR is an editorial target, not certification.\nUse natural spoken sentences, correct grammar and full punctuation. Choose numbers, abbreviations and proper names carefully. Stay within the agreed word limit; Text accepts up to 10,000 characters and generated audio must be no longer than 10 minutes. Word count only gives an estimate of duration. If the brief is too long, ask to narrow it rather than silently dropping ideas.\n\nRESULT FORMAT FOR EACH LESSON\nEnglish title: [Short, specific name]\nTitle meaning: [Plain-language explanation]\nIntroduction: [2–3 sentences about context, content and the listening skill]\n```text\n[Complete English passage to copy into Text]\n```\nNote: [Target CEFR; estimated word count; check duration after generating audio.]\nInside the copy block, include only spoken English, without a title, speaker labels, translation, exercises, IPA or timestamps. I can enter the suggested title separately in Lyreo."
+      "prompt": "Text uses one Kokoro voice. Write original level-appropriate English as a story from one viewpoint, monologue, description or explanation. For multiple speakers, suggest YouTube/Audio or rework as one narrator. Keep spoken phrasing natural and punctuation clear; use numbers and names judiciously. Respect the word limit, 10,000 characters and 10 minutes of generated audio. Word count only estimates duration.\nGive an English title, its meaning, a short introduction, CEFR and word count. Put the full English reading in a separate text code block without speaker labels, exercises, translation, IPA or timestamps.\nTitle meaning: briefly explain what each option is about."
     },
     "youtube": {
       "title": "Find a YouTube video with AI",
       "returnStep": "Paste the video URL into YouTube, select Search, then choose up to 10 minutes in Lyreo.",
-      "prompt": "ROLE: ENGLISH-LEARNING VIDEO CURATOR\nFind real videos for listening, dictation or shadowing in Lyreo's YouTube tab.\n\nCLARIFY IF MISSING\n- What subject/situation and skill should it support?\n- What CEFR level, A1–C2, preferred American/British/any accent, and single speaker or conversation?\n- How long should the lesson segment be, and how many sources should I compare?\nA lesson segment is up to 10 minutes; the full video may be longer. Ask only for missing details.\n\nSELECTION AND EVIDENCE\nWith web browsing, open each video page before shortlisting it. Prefer relevant material, continuous English speech, little competing music and suitable difficulty. For conversation, find sources that actually have several speakers.\nDistinguish reading a page/metadata from accessing its audio. Assess accent, clarity or segment content only with evidence; otherwise mark “needs a listening check”. Level and suitability are estimates.\nPreserve real titles, channels and URLs. Never invent video IDs, duration, captions or timestamps. Suggest mm:ss–mm:ss ranges only with timed content to verify against, and identify the evidence.\nIf you cannot browse, say so and give ideas with specific search queries. Do not describe them as found videos. If too few sources can be verified, report the actual count and shortfall.\n\nRESULT FORMAT FOR EACH SOURCE\n1. Original title and channel.\n2. The title meaning in plain language.\n3. A grounded summary and listening goal, labelling inferences from metadata.\n4. A direct URL such as https://www.youtube.com/watch?v=VIDEO_ID.\n5. Verified details, remaining listening checks and an evidence-based segment suggestion if available.\nEnd with a preferred choice and brief reason when evidence permits. Guide me to listen, paste the URL into Lyreo, select Search and choose a segment. Lyreo also checks embedding/playback; do not guarantee a link will work in the app."
+      "prompt": "Find videos for listening, dictation or shadowing. Open each video if browsing is available. Give the exact title and channel, direct watch URL, content and evidence. If relying on metadata, mark “listen to verify”; do not guess accent, clarity, captions or embeddability. Suggest mm:ss–mm:ss only with timed evidence. Lyreo accepts segments of up to 10 minutes; the source may be longer. If verified options are insufficient, say so and provide search queries. End with inspecting the URL and selecting a segment in Lyreo.\nTitle meaning: briefly explain what each option is about.\nDirect URL: https://www.youtube.com/watch?v=VIDEO_ID."
     },
     "audio": {
       "title": "Prepare an Audio source with AI",
       "returnStep": "Upload an MP3/WAV/M4A in Audio and choose a segment. If the AI only writes a script, use Text to generate Kokoro speech.",
-      "prompt": "ROLE: ENGLISH LISTENING-SOURCE EDITOR\nHelp prepare a source for Lyreo's Audio tab using a realistic route to an audio file.\n\nCLARIFY IF MISSING\n- Do I have a file, want an existing recording, or need a script to record/synthesize? What topic and learning goal?\n- What CEFR level, A1–C2, preferred accent and number of speakers?\n- What segment length and number of options? For a script, ask for a word limit and how it will be recorded.\nAsk only what is missing and offer concrete situations if I lack ideas.\n\nFOLLOW THE SOURCE ROUTE\nExisting file: explain uploading to Lyreo, listening and selecting a segment. Do not require me to send you the file merely to explain the UI. Assess content, accent or duration only when you can access the audio; otherwise identify what has not been checked.\nFind a recording: with browsing, prefer official sources offering MP3/WAV/M4A downloads. Open the page and check the download route, distinguishing a landing page from a file URL. Report file size, format or duration only when verified. If you cannot browse, give search queries without invented download links. Recommend Lyreo's YouTube tab for a video source.\nWrite a recording script: use original, natural English within the target level and word limit. Role labels can help humans or a confirmed multi-voice tool divide lines. For Lyreo Text/Kokoro, use one narrator because Text does not assign separate character voices. Clarify the recording route before drafting a full script if unknown.\nCreate a file only after script approval and with an actual export tool. If there is no audio-file tool, say so and provide a script; for one narrator, point to Text/Kokoro. Text or an invented link is not a generated audio file.\n\nLIMITS AND RESULTS\nMP3/WAV/M4A files are limited to 30 MiB and source duration to 2 hours. Each lesson selects a segment of up to 10 minutes, defaulting to up to the first 2 minutes. Audio accepts uploaded files. Check actual file size/duration; word count is only an estimate. Propose adjustments when needed and preserve the original source.\nEach option needs its original or proposed title (label which), title meaning, 1–2 sentence summary, listening goal and verification status. Provide a checked source/download route or explicitly mark it unverified.\nIntroduce each script with its title, meaning and context before a single text code block containing only the spoken English. Keep recording instructions and notes outside the block. End with a next step that is possible in Lyreo."
+      "prompt": "Establish whether I have a file, need a recording, or want a script. For my file, explain upload, preview and range selection. To find a recording, prefer an official download page, distinguish it from the file URL and verify the link. Without browsing, give search queries and mark sources unverified. Use the YouTube tab for YouTube sources.\nFor a script, write original English suited to CEFR, word limit and recording method. Use roles only with separate readers or multi-voice tools; use one narrator for Text/Kokoro. Put the reading in a separate text block. Create a file only after approval and with a real export tool.\nUpload MP3/WAV/M4A up to 30 MiB and two hours. Select up to 10 minutes, initially up to the first two minutes. Confirm format, length, size and content only when verified. End with a practical next step in Lyreo.\nTitle meaning: briefly explain what each option is about."
     },
-    "request": "WORKING APPROACH\nDiscuss preferences and explain results in English unless I request another language. Keep lesson passages/scripts in English. Begin with my learning needs, without asking me to select a working mode. Reuse details I already supplied and ask only what is missing, with at most three short questions in one turn.\n\n1. UNDERSTAND THE BRIEF\nUse the source-specific questions below to clarify topic, level and length. Explain CEFR A1–C2 in plain language if needed. If I have no topic, offer at least 10 distinct, concrete ideas with names and one-sentence descriptions so I can choose or combine them. Do not repeat answered questions.\n\n2. HELP ME CHOOSE\nOnce the brief is clear, offer the number of options I request; if unspecified, suggest 5 and allow me to change it. Give each a number, title, title meaning, short summary, listening goal and estimated level. Explain what makes the options different.\nIf I am exploring, wait for me to select one or several options before drafting complete lessons. If my brief is clear and I ask you to write immediately, proceed. Accept requests to draft all; if they cannot fit in one response, state the completed count and what remains.\n\n3. DELIVER USABLE RESULTS\nIntroduce each lesson's name, meaning and context before its content. Keep English copy blocks separate from explanations and notes. Distinguish verified source facts from inferences. Report a shortfall instead of inventing links or facts to meet the requested quantity.\nBefore replying, check suitability, source limits, accuracy and output format. Present only useful final results, not internal reasoning.",
+    "request": "Help me prepare English-learning material in Lyreo. Discuss in English unless asked otherwise. Ask at most three short questions at a time, only about missing topic, goal, CEFR, accent or length. Explain CEFR briefly if needed.\nIf I have no topic, suggest 10 one-line ideas. Once you have enough context, give the requested number of options or default to five. For each, give a title, its meaning, a summary, listening goal and estimated CEFR. Wait for my choice while exploring. If the brief is clear and I ask for immediate delivery, produce it. Put the copy-ready English in its own block.",
     "sourceLabel": "Prompt type",
     "sourceHelp": "Independent of the lesson source open underneath.",
-    "randomNote": "OPTIONAL DISCOVERY\nAt the end of your first reply, add one brief line: “You can also ask for ‘5 random lesson ideas’ to explore new topics.” This is an optional suggestion, not a required question.\nWhen I explicitly ask you to choose ideas, use the requested quantity and preserve known goals/level. If I delegate everything with no details, briefly state defaults of 5 A2 suggestions, about 150 words for Text or 1–2 minute listening segments. Show explained options to choose from; draft them all only when requested."
+    "randomNote": "For random suggestions, retain known preferences. If I leave decisions to you, default to five A2 options of about 150 words for Text or 1–2 listening minutes."
   },
   "twoStep": {
     "inspectSentence": "Review sentence {{number}}",
@@ -1658,9 +1658,18 @@
     "lookupPreview": "Try lookup",
     "editMeanings": "Edit meanings",
     "readingMode": "Dictionary language",
-    "mode": { "vi": "English–Vietnamese", "en": "English–English" },
-    "missing": { "vi": "This entry has no Vietnamese meaning yet.", "en": "This entry has no English definition yet." },
-    "showMode": { "vi": "Show Vietnamese meanings", "en": "Show English definitions" },
+    "mode": {
+      "vi": "English–Vietnamese",
+      "en": "English–English"
+    },
+    "missing": {
+      "vi": "This entry has no Vietnamese meaning yet.",
+      "en": "This entry has no English definition yet."
+    },
+    "showMode": {
+      "vi": "Show Vietnamese meanings",
+      "en": "Show English definitions"
+    },
     "candidates": "Source translation candidates",
     "candidatesHelp": "Use the source candidates to translate this meaning. Applying a candidate changes the draft; translation verification is a separate step.",
     "noCandidates": "No unassigned candidates are available for this meaning. You can translate manually or ask AI.",
@@ -1732,7 +1741,8 @@
     "chooseCandidate": "Choose a source translation",
     "differentPos": "The source part of speech differs from this meaning. Check its context before applying.",
     "examplesCount": "Examples ({{count}})",
-    "accents": {"Southern-England": "Southern England",
+    "accents": {
+      "Southern-England": "Southern England",
       "general": "No specific region",
       "US": "US",
       "UK": "UK"

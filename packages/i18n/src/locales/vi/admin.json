@@ -365,10 +365,10 @@
     "note": "Không gian dành cho người biên soạn nội dung và quản trị viên Lyreo."
   },
   "catalog": {
-    "lessons": "Bài học",
+    "lessons": "Bài học thực tế",
     "categories": "Danh mục",
     "channels": "Kênh nguồn",
-    "description": "Biên tập, phân loại và tiếp tục công việc từ nơi đã lưu.",
+    "description": "Tạo bài luyện tiếng Anh từ YouTube, văn bản hoặc tệp âm thanh.",
     "navigation": "Quản lí nội dung",
     "retry": "Thử lại",
     "search": "Tìm theo tiêu đề bài học",
@@ -524,7 +524,7 @@
     "operations": "Vận hành",
     "configuration": "Cấu hình",
     "overview": "Tổng quan",
-    "lessons": "Bài học",
+    "lessons": "Bài học thực tế",
     "lessonList": "Danh sách bài học",
     "createLesson": "Tạo bài học",
     "categories": "Danh mục",
@@ -764,22 +764,22 @@
     "text": {
       "title": "Soạn bài Text với AI",
       "returnStep": "Chọn bài, copy riêng phần tiếng Anh vào Văn bản; có thể nhập tiêu đề gợi ý rồi lưu nháp và tạo giọng.",
-      "prompt": "VAI TRÒ: BIÊN TẬP VIÊN BÀI NGHE MỘT NGƯỜI ĐỌC\nSoạn học liệu tiếng Anh gốc để sử dụng trong tab Text của Lyreo.\n\nCẦN LÀM RÕ\n- Người học muốn thực hành tình huống hay kiến thức gì, nhằm mục tiêu nào?\n- Trình độ CEFR A1–C2 và cách diễn đạt Mỹ/Anh mong muốn?\n- Độ dài tối đa tính bằng từ; có từ vựng hoặc cấu trúc nào cần luyện?\nChỉ hỏi phần còn thiếu. Khi tôi chưa biết chọn, đưa ví dụ dễ hình dung; đừng biến cuộc trao đổi thành một biểu mẫu dài.\n\nYÊU CẦU BIÊN TẬP\nText dùng một giọng Kokoro xuyên suốt. Chọn chuyện kể một góc nhìn, độc thoại, mô tả hoặc giải thích. Không viết hội thoại nhiều vai hay gắn nhãn A/B rồi kỳ vọng hệ thống đổi giọng. Nếu tôi cần hai giọng riêng, đề nghị dùng bản thu thật ở Audio hoặc YouTube, hoặc hỏi tôi có muốn chuyển ý tưởng thành lời kể của một người.\nVí dụ: bài về gọi món ở quán cà phê có thể kể trải nghiệm của một khách hàng, với mục tiêu nghe hiểu cách gọi đồ.\nMỗi bài có một ý chính và mạch nội dung rõ. A1/A2 dùng từ phổ biến, câu ngắn, ý cụ thể; B1/B2 có liên kết và cách diễn đạt tự nhiên; C1/C2 có sắc thái nhưng không cố làm khó bằng từ hiếm. CEFR là định hướng biên tập, không phải chứng nhận.\nViết câu tự nhiên khi đọc thành tiếng, đúng ngữ pháp và dấu câu. Dùng số, viết tắt và tên riêng có chọn lọc. Giữ giới hạn từ đã thống nhất; Text tối đa 10.000 ký tự và audio tạo ra tối đa 10 phút. Số từ chỉ giúp ước tính thời lượng. Nếu đề bài quá dài, đề nghị thu hẹp trước thay vì âm thầm cắt ý.\n\nKHUÔN KẾT QUẢ CHO TỪNG BÀI\nTiêu đề tiếng Anh: [Tên ngắn, cụ thể]\nÝ nghĩa tiêu đề: [Dịch hoặc giải thích bằng tiếng Việt]\nGiới thiệu: [2–3 câu về bối cảnh, nội dung và kỹ năng sẽ luyện]\n```text\n[Bài tiếng Anh hoàn chỉnh để copy vào Text]\n```\nGhi chú: [Mục tiêu CEFR; số từ ước tính; cần kiểm tra thời lượng sau khi tạo audio.]\nTrong khối copy chỉ có lời đọc tiếng Anh, không có tiêu đề, nhãn người nói, bản dịch, bài tập, IPA hoặc timestamp. Tôi có thể nhập tiêu đề được gợi ý vào trường tiêu đề của Lyreo."
+      "prompt": "Văn bản dùng một giọng Kokoro. Viết tiếng Anh gốc theo trình độ và giới hạn từ: truyện một góc nhìn, độc thoại, mô tả hoặc giải thích. Nếu cần nhiều người nói, gợi ý YouTube/Âm thanh hoặc chuyển thành lời kể. Dùng câu đọc tự nhiên, dấu câu rõ, cân nhắc số và tên. Tối đa 10.000 ký tự và 10 phút audio; số từ chỉ là ước tính.\nTrả tiêu đề tiếng Anh, ý nghĩa, giới thiệu ngắn và CEFR/số từ. Sau tiêu đề và giới thiệu, để riêng toàn bộ lời đọc trong khối mã text. Khối này chỉ chứa tiếng Anh, không có nhãn vai, bài tập, bản dịch, IPA hay mốc thời gian.\nÝ nghĩa tiêu đề: giải thích ngắn bằng tiếng Việt cho mỗi phương án."
     },
     "youtube": {
       "title": "Tìm video YouTube với AI",
       "returnStep": "Dán URL video vào YouTube, bấm Tìm rồi tự chọn đoạn tối đa 10 phút trong Lyreo.",
-      "prompt": "VAI TRÒ: NGƯỜI TUYỂN CHỌN VIDEO HỌC TIẾNG ANH\nTìm video thật để luyện nghe, chép chính tả hoặc nói theo trong tab YouTube của Lyreo.\n\nCẦN LÀM RÕ\n- Chủ đề/tình huống và kỹ năng muốn luyện?\n- Trình độ CEFR A1–C2, giọng Mỹ/Anh/bất kỳ và sở thích một người nói hay hội thoại?\n- Độ dài đoạn học và số nguồn muốn xem để chọn?\nMột bài lấy tối đa 10 phút; video nguồn có thể dài hơn. Chỉ hỏi thông tin còn thiếu.\n\nTIÊU CHÍ CHỌN VÀ KIỂM CHỨNG\nKhi có duyệt web, mở trang từng video trước khi đưa vào danh sách. Ưu tiên nội dung sát mục tiêu, lời nói liền mạch, ít nhạc lấn giọng và độ khó phù hợp. Với yêu cầu hội thoại, tìm nguồn thực sự có nhiều người nói.\nPhân biệt việc đọc trang/metadata với việc nghe được âm thanh. Chỉ nhận xét giọng, độ rõ hoặc nội dung đoạn khi đã truy cập được bằng chứng; nếu chỉ đọc được trang, ghi “cần nghe thử”. Trình độ và độ phù hợp là ước lượng.\nGiữ đúng tên video, kênh và URL; không bịa video ID, thời lượng, phụ đề hoặc mốc thời gian. Chỉ gợi ý đoạn mm:ss–mm:ss khi có nội dung kèm thời gian để đối chiếu, và nêu căn cứ.\nNếu không duyệt web được, nói rõ và cung cấp ý tưởng kèm truy vấn tìm kiếm cụ thể. Không trình bày chúng như những video đã tìm thấy. Nếu chưa đủ nguồn đã xác minh, báo số lượng thực và phần còn thiếu.\n\nKHUÔN KẾT QUẢ CHO TỪNG NGUỒN\n1. Tên gốc và kênh.\n2. Giải thích ý nghĩa tiêu đề bằng tiếng Việt.\n3. Tóm tắt nội dung và mục tiêu luyện nghe; đánh dấu nếu chỉ suy từ metadata.\n4. URL trực tiếp dạng https://www.youtube.com/watch?v=VIDEO_ID.\n5. Thông tin đã xác minh, phần còn cần nghe thử và đoạn gợi ý nếu có căn cứ.\nKết thúc bằng một lựa chọn ưu tiên cùng lý do ngắn khi có đủ bằng chứng. Hướng dẫn tôi nghe thử, dán URL vào Lyreo, bấm Tìm rồi chọn đoạn. Lyreo còn kiểm tra khả năng nhúng/phát; không bảo đảm một link chắc chắn dùng được trong app."
+      "prompt": "Tìm video để luyện nghe, chép chính tả hoặc nói theo. Cho mỗi nguồn, ghi tên chính xác, kênh, URL watch trực tiếp, nội dung và điểm đã xác minh. Mở từng video khi có thể. Nếu chỉ có metadata, nói “cần nghe thử”; đừng đoán giọng, độ rõ, phụ đề hoặc khả năng nhúng. Chỉ đề xuất mốc mm:ss–mm:ss có bằng chứng; đoạn bài tối đa 10 phút, video có thể dài hơn. Nếu thiếu nguồn đã kiểm, báo rõ và đưa truy vấn tìm kiếm. Kết thúc bằng cách tìm URL trong Lyreo và chọn đoạn.\nÝ nghĩa tiêu đề: giải thích ngắn bằng tiếng Việt cho mỗi phương án.\nURL trực tiếp: https://www.youtube.com/watch?v=VIDEO_ID."
     },
     "audio": {
       "title": "Chuẩn bị nguồn Audio với AI",
       "returnStep": "Upload file MP3/WAV/M4A ở Audio rồi chọn đoạn. Nếu AI chỉ soạn lời đọc, dùng Text để tạo giọng Kokoro.",
-      "prompt": "VAI TRÒ: BIÊN TẬP VIÊN NGUỒN AUDIO HỌC TIẾNG ANH\nGiúp chuẩn bị nguồn cho tab Audio của Lyreo, phù hợp với cách có file thực tế.\n\nCẦN LÀM RÕ\n- Tôi đã có file, muốn tìm bản thu hay cần kịch bản để thu/tạo giọng? Chủ đề và mục tiêu học là gì?\n- Trình độ CEFR A1–C2, giọng mong muốn và số người nói?\n- Độ dài đoạn học và số phương án? Nếu cần kịch bản, hỏi giới hạn từ và cách định thu.\nChỉ hỏi điều chưa rõ; đưa các tình huống cụ thể nếu tôi chưa có ý tưởng.\n\nTHỰC HIỆN THEO NGUỒN\nCó file: hướng dẫn upload vào Lyreo, nghe thử và chọn đoạn. Không yêu cầu tôi gửi file cho bạn chỉ để giải thích thao tác. Chỉ nhận xét nội dung, giọng và thời lượng nếu thực sự truy cập được audio; nếu không, nêu rõ điều chưa kiểm tra.\nTìm bản thu: khi có duyệt web, ưu tiên trang nguồn chính thức có chức năng tải MP3/WAV/M4A. Mở trang và kiểm tra đường tải; phân biệt trang giới thiệu với URL file. Chỉ công bố dung lượng, định dạng hoặc thời lượng khi đã kiểm tra. Nếu không duyệt web được, cung cấp truy vấn tìm kiếm; không bịa link tải. Nguồn là video YouTube thì hướng dẫn dùng tab YouTube.\nSoạn để thu: viết tiếng Anh gốc, tự nhiên, đúng trình độ và giới hạn từ. Có thể chia vai cho người thật hoặc công cụ nhiều giọng khi cách thu đã được xác nhận. Nếu dùng Text/Kokoro của Lyreo, soạn một người kể vì Text không tự tạo giọng riêng cho từng nhân vật. Chưa rõ cách thu thì hỏi trước khi soạn đầy đủ.\nChỉ tạo file sau khi tôi duyệt kịch bản và khi có công cụ xuất audio thực sự. Nếu không có công cụ tạo file, nói rõ và đưa kịch bản để thu; với một người đọc, hướng dẫn dùng Text/Kokoro. Văn bản hay một link tưởng tượng không phải file audio đã tạo.\n\nGIỚI HẠN VÀ KẾT QUẢ\nFile MP3/WAV/M4A tối đa 30 MiB; nguồn tối đa 2 giờ. Mỗi bài chọn một đoạn tối đa 10 phút, mặc định tối đa 2 phút đầu. Audio nhận file upload. Thời lượng và dung lượng cần kiểm tra từ file; số từ chỉ là ước tính. Nếu không vừa giới hạn, đề nghị điều chỉnh và giữ nguyên bản nguồn.\nMỗi phương án cần tên gốc hoặc tiêu đề đề xuất (ghi rõ), ý nghĩa tiêu đề, tóm tắt 1–2 câu, mục tiêu nghe và trạng thái xác minh. Nguồn tải phải có trang/đường tải kiểm tra được, hoặc được đánh dấu chưa xác minh.\nKhi trả kịch bản, giới thiệu từng bài bằng tiêu đề, ý nghĩa và bối cảnh trước một khối mã loại text chỉ chứa lời tiếng Anh. Đặt hướng dẫn thu và các ghi chú ngoài khối. Luôn kết thúc bằng bước tiếp theo thực hiện được trong Lyreo."
+      "prompt": "Xác định tôi đã có file, muốn tìm bản thu hay cần kịch bản. Có file: hướng dẫn tải lên, nghe và chọn đoạn. Tìm bản thu: ưu tiên trang chính thức hỗ trợ tải hợp lệ, kiểm URL và phân biệt trang với link file; nếu thiếu trình duyệt, cho truy vấn và ghi chưa kiểm. Nếu nguồn là YouTube, dùng tab YouTube.\nSoạn kịch bản: dùng tiếng Anh gốc theo CEFR, số từ và cách thu. Có thể chia vai nếu có người thu hoặc công cụ nhiều giọng. Với Kokoro, dùng một người đọc trong tab Văn bản. Trả lời đọc trong khối text riêng; chỉ tạo file sau khi duyệt và khi có công cụ xuất.\nMP3/WAV/M4A tối đa 30 MiB, nguồn tối đa 2 giờ; đoạn học tối đa 10 phút, mặc định tối đa 2 phút đầu. Chỉ xác nhận định dạng, độ dài, dung lượng và nội dung khi có bằng chứng. Kết thúc bằng một bước làm được trong Lyreo.\nÝ nghĩa tiêu đề: giải thích ngắn bằng tiếng Việt cho mỗi phương án."
     },
-    "request": "CÁCH LÀM VIỆC\nTrao đổi và giải thích bằng tiếng Việt; giữ nội dung bài học bằng tiếng Anh. Ưu tiên nhu cầu cụ thể của tôi. Tận dụng thông tin đã có và chỉ hỏi phần còn thiếu, tối đa ba câu hỏi ngắn trong một lượt. Bắt đầu bằng việc tìm hiểu mục tiêu học, không yêu cầu tôi chọn chế độ làm việc.\n\n1. HIỂU NHU CẦU\nDùng các câu hỏi chuyên biệt bên dưới để làm rõ chủ đề, trình độ và độ dài. Giải thích CEFR A1–C2 bằng ngôn ngữ đơn giản nếu tôi chưa biết. Nếu tôi chưa có chủ đề, đưa ít nhất 10 ý tưởng cụ thể, đa dạng, mỗi ý có tên và một câu mô tả; để tôi chọn hoặc kết hợp. Không hỏi lặp lại điều tôi đã trả lời.\n\n2. GIÚP TÔI CHỌN\nKhi đã đủ thông tin, đưa số phương án tôi yêu cầu; nếu chưa nêu số lượng, gợi ý 5 phương án và cho phép đổi. Mỗi mục cần có số thứ tự, tiêu đề, ý nghĩa tiêu đề, tóm tắt ngắn, mục tiêu luyện nghe và trình độ ước lượng. Ghi rõ từng bài khác nhau ở điểm nào để tôi dễ quyết định.\nNếu tôi đang khám phá, chờ tôi chọn một hay nhiều mục trước khi soạn bài đầy đủ. Nếu tôi đã đưa đề bài rõ và yêu cầu viết ngay, thực hiện ngay. Chấp nhận yêu cầu soạn tất cả; nếu không thể trả đủ trong một lượt, báo rõ số bài đã đưa và phần còn lại.\n\n3. TRẢ KẾT QUẢ DỄ DÙNG\nGiới thiệu tên bài, ý nghĩa và bối cảnh trước nội dung. Đặt phần tiếng Anh cần copy trong khối riêng; giải thích và ghi chú ở ngoài khối. Với nguồn tìm kiếm, phân biệt thông tin đã xác minh với suy đoán. Báo thiếu nguồn nếu chưa đủ bằng chứng, không tạo link hay thông tin giả để đủ số lượng.\nTrước khi trả, tự rà soát độ phù hợp, giới hạn nguồn, tính chính xác và định dạng. Chỉ trình bày kết quả cần cho tôi, không trình bày suy luận nội bộ.",
+    "request": "Giúp tôi chuẩn bị bài tiếng Anh trong Lyreo. Trao đổi bằng tiếng Việt, giữ lời đọc bằng tiếng Anh. Chỉ hỏi phần còn thiếu về chủ đề, mục tiêu, CEFR, giọng và độ dài, tối đa 3 câu mỗi lượt. Giải thích CEFR ngắn nếu cần.\nNếu tôi chưa có chủ đề, gợi ý 10 ý tưởng một dòng. Khi đủ thông tin, đưa số phương án tôi chọn hoặc mặc định 5. Mỗi mục có tên, ý nghĩa tiêu đề, nội dung, mục tiêu nghe và CEFR ước tính. Chờ tôi chọn nếu đang khám phá. Nếu đề bài rõ và tôi yêu cầu làm ngay, làm ngay. Giữ ghi chú ngoài khối tiếng Anh dễ copy.",
     "sourceLabel": "Loại prompt",
     "sourceHelp": "Chọn độc lập với nguồn bài đang mở bên dưới.",
-    "randomNote": "GỢI Ý THÊM\nỞ cuối phản hồi đầu tiên, thêm một câu ngắn: “Bạn cũng có thể nhắn ‘gợi ý ngẫu nhiên 5 bài’ nếu muốn khám phá chủ đề mới.” Đây là lựa chọn phụ, không phải câu hỏi bắt buộc.\nKhi tôi chủ động nhờ chọn ý tưởng, đề xuất số lượng đã yêu cầu, giữ trình độ và mục tiêu đã biết. Nếu tôi giao toàn quyền mà chưa nêu gì, thông báo ngắn mặc định 5 gợi ý A2, khoảng 150 từ cho Text hoặc đoạn nghe 1–2 phút. Đưa danh sách có giải thích để tôi chọn; chỉ soạn toàn bộ khi tôi yêu cầu."
+    "randomNote": "Khi tôi yêu cầu gợi ý ngẫu nhiên, giữ tiêu chí đã biết. Nếu tôi giao toàn quyền, mặc định 5 gợi ý A2, khoảng 150 từ cho Văn bản hoặc 1–2 phút nghe."
   },
   "twoStep": {
     "inspectSentence": "Xem câu {{number}}",
@@ -1658,9 +1658,18 @@
     "lookupPreview": "Tra thử",
     "editMeanings": "Biên tập nghĩa",
     "readingMode": "Ngôn ngữ giải nghĩa",
-    "mode": { "vi": "Anh–Việt", "en": "Anh–Anh" },
-    "missing": { "vi": "Mục từ này chưa có nghĩa tiếng Việt.", "en": "Mục từ này chưa có định nghĩa tiếng Anh." },
-    "showMode": { "vi": "Xem nghĩa tiếng Việt", "en": "Xem định nghĩa tiếng Anh" },
+    "mode": {
+      "vi": "Anh–Việt",
+      "en": "Anh–Anh"
+    },
+    "missing": {
+      "vi": "Mục từ này chưa có nghĩa tiếng Việt.",
+      "en": "Mục từ này chưa có định nghĩa tiếng Anh."
+    },
+    "showMode": {
+      "vi": "Xem nghĩa tiếng Việt",
+      "en": "Xem định nghĩa tiếng Anh"
+    },
     "candidates": "Bản dịch ứng viên từ nguồn",
     "candidatesHelp": "Dùng ứng viên từ nguồn để dịch đúng nghĩa đang chọn. Áp dụng chỉ sửa bản nháp; duyệt bản dịch là bước riêng.",
     "noCandidates": "Không còn ứng viên chưa gán phù hợp với nghĩa này. Bạn có thể dịch thủ công hoặc nhờ AI.",
@@ -1732,7 +1741,8 @@
     "chooseCandidate": "Chọn bản dịch từ nguồn",
     "differentPos": "Từ loại trong nguồn khác nghĩa đang chọn. Đối chiếu ngữ cảnh trước khi áp dụng.",
     "examplesCount": "Ví dụ ({{count}})",
-    "accents": {"Southern-England": "Miền Nam nước Anh",
+    "accents": {
+      "Southern-England": "Miền Nam nước Anh",
       "general": "Không xác định vùng",
       "US": "Mỹ",
       "UK": "Anh"

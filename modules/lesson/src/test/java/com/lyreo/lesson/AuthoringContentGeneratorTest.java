@@ -95,7 +95,7 @@ class AuthoringContentGeneratorTest {
         generator.generate(job,input,lesson,context);
         assertThat(first.vocabulary).isEmpty();
         assertThat(last.vocabulary).extracting(AuthoringSentence.Annotation::surface).containsExactly("feels better","now");
-        verify(ai).execute(any(),argThat(prompt->prompt.contains("at most 2 notes") && prompt.contains("Allowed IDs in this batch: [2]")),anyMap(),anyMap());
+        verify(ai).execute(any(),argThat(prompt->prompt.contains("at most 2 notes") && prompt.contains("2|She feels better now.")),anyMap(),anyMap());
 
         first.vocabulary=List.of(AuthoringContent.annotation(first,"gave up","từ bỏ",1,"LEXICAL"));
         first.manualFields.add("LEXICAL");
@@ -160,8 +160,8 @@ class AuthoringContentGeneratorTest {
 
         assertThatThrownBy(()->generator.generate(job,input,lesson,context)).hasMessageContaining("sentence=2: missing translation");
 
-        verify(ai).execute(any(),argThat(prompt->prompt.contains("Use the exact ID before |")
-            && prompt.contains("Allowed IDs in this batch: [2]") && prompt.contains("2|She feels better now.")),anyMap(),anyMap());
+        verify(ai).execute(any(),argThat(prompt->prompt.contains("Copy IDs before | unchanged")
+            && !prompt.contains("1|She gave up smoking.") && prompt.contains("2|She feels better now.")),anyMap(),anyMap());
         assertThat(first.translation).isEqualTo("Một");
         assertThat(lesson.sentences.getLast().translation).isNull();
     }

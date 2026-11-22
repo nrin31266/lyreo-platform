@@ -49,7 +49,7 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Proves the database and testing foundation on fresh PostgreSQL:
  * 1. Testcontainers provisions real PostgreSQL 18 (alpine).
- * 2. Spring Boot Flyway applies the consolidated baseline and production cutover (V001..V008).
+ * 2. Spring Boot Flyway applies the schema baseline and reference data.
  * 3. Asserts migration status, essential schema objects, indexes, constraints, and reference data.
  */
 @SpringBootTest(classes = FlywayMigrationIT.TestConfig.class)
@@ -106,35 +106,15 @@ class FlywayMigrationIT {
     void verifiesConsolidatedBaselineMigrationsSucceeded() {
         MigrationInfo[] applied = flyway.info().applied();
 
-        assertThat(applied)
-            .as("All append-only migrations must be applied")
-            .hasSize(31);
+        assertThat(applied).hasSize(2).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
-        assertThat(applied[0].getState()).isEqualTo(MigrationState.SUCCESS);
 
         assertThat(applied[1].getVersion().getVersion()).isEqualTo("002");
         assertThat(applied[1].getDescription()).isEqualTo("reference data");
-        assertThat(applied[1].getState()).isEqualTo(MigrationState.SUCCESS);
-
-        assertThat(applied[2].getVersion().getVersion()).isEqualTo("003");
-        assertThat(applied[2].getDescription()).isEqualTo("runtime defaults");
-        assertThat(applied[2].getState()).isEqualTo(MigrationState.SUCCESS);
-
-        assertThat(applied[3].getVersion().getVersion()).isEqualTo("004");
-        assertThat(applied[3].getState()).isEqualTo(MigrationState.SUCCESS);
-        assertThat(applied[4].getVersion().getVersion()).isEqualTo("005");
-        assertThat(applied[4].getState()).isEqualTo(MigrationState.SUCCESS);
-        assertThat(applied[5].getVersion().getVersion()).isEqualTo("006");
-        assertThat(applied[5].getState()).isEqualTo(MigrationState.SUCCESS);
-        assertThat(applied[6].getVersion().getVersion()).isEqualTo("007");
-        assertThat(applied[6].getState()).isEqualTo(MigrationState.SUCCESS);
-        assertThat(applied[7].getVersion().getVersion()).isEqualTo("008");
-        assertThat(applied[7].getState()).isEqualTo(MigrationState.SUCCESS);
         assertThat(flyway.info().current().getVersion().getVersion())
-            .as("Current Flyway version must be 031")
-            .isEqualTo("031");
+            .isEqualTo("002");
     }
 
     @Test
@@ -315,7 +295,7 @@ class FlywayMigrationIT {
             "DAILY_VOCAB_10"
         );
 
-        // Lesson processing policy runtime config (V003)
+        // Lesson processing policy runtime config
         Integer runtimeConfigCount = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM module_runtime_config WHERE owner_module = 'lesson' AND config_key = 'processing-policy'",
             Integer.class

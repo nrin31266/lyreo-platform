@@ -72,6 +72,7 @@ See [Core development](apps/core-service/README.md#local-run-and-verification) f
 | `make db-shell`, `make db-reset` | Inspect DB or preview lesson-only reset; [scope and confirmation](docs/DEVELOPMENT.md) |
 | `make db-recreate`, `make down-v` | Guarded destructive DB/volume operations; see the same guide |
 | `make migrate`, `make seed-dev` | Apply schema and add reference categories without overwriting edits |
+| `make seed-lessons` | Add five real example lessons when the shared lesson audio is available |
 | `make setup-data`, `make data-storage-check` | Import both releases or check media storage alignment |
 | `make data-check`, `make data-fetch` | Verify or acquire the clean Grammar/TOEIC release |
 | `make setup-media` | Install the Core YouTube downloader; FFmpeg/ffprobe required on the host |

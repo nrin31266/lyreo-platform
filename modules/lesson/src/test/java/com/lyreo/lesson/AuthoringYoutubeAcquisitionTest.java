@@ -81,6 +81,7 @@ class AuthoringYoutubeAcquisitionTest {
             return new ObjectStoragePort.StoredObject(key, stored.get(key).length, "fixture");
         });
         when(storage.get(anyString())).thenAnswer(call -> new ByteArrayInputStream(stored.get(call.getArgument(0))));
+        when(storage.exists(anyString())).thenAnswer(call -> stored.containsKey(call.getArgument(0)));
     }
 
     @Test void inspectsCachesSourceAndNormalizesSelectedRangesOnce(@TempDir Path work) throws Exception {
@@ -113,6 +114,11 @@ class AuthoringYoutubeAcquisitionTest {
         assertThat(Files.readAllLines(work.resolve("ranges.log"))).containsExactly("*0.500-1.500", "*2.000-3.500");
         verify(storage, never()).put(eq("sources/youtube/" + VIDEO_ID + "/original.m4a"), eq("audio/mp4"), any());
         verify(storage, times(2)).put(startsWith("sources/youtube/" + VIDEO_ID + "/segments/"), eq("audio/wav"), any());
+
+        stored.remove(first);
+        assertThat(source.prepare(URL, VIDEO_ID, 500, 1_500)).isEqualTo(first);
+        assertThat(stored.get(first)).isNotEmpty();
+        assertThat(Files.readAllLines(calls)).containsExactly("metadata", "audio", "audio", "audio");
     }
 
     @Test void reportsDownloaderFailuresAndMissingToolWithoutLeakingOutput() throws Exception {

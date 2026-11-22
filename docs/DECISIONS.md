@@ -317,3 +317,14 @@ revision-bound report, never an imported flag or manual checkbox. Reuse Tiptap a
 The maintenance pilot alone may use DeepSeek with a durable USD 1/100-attempt ceiling and official
 price confirmation; normal app AI policy is unchanged. See [editorial architecture](architecture/library-editorial.md)
 and [data pipeline operations](DATA_PIPELINES.md).
+
+## D-035 — Consolidate the foundation schema before team onboarding (2026-11-22)
+
+**Decision.** Replace the unreleased development history with two Flyway migrations: the effective
+PostgreSQL schema and its required reference data. Fresh databases start from those two files.
+Use an empty application database and the pinned content imports after the cutover. Existing
+development databases and their history can be kept as backups. Append future migrations from `V003`.
+
+**Reason.** Team onboarding starts from a known schema and a small bootstrap. Previous schema
+iterations remain in Git. The fresh schema was compared with the final schema from the prior
+migration chain. Real lesson samples use a separate idempotent development seed linked to shared audio.

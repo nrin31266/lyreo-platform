@@ -1,4 +1,4 @@
-.PHONY: help init-env doctor setup setup-media deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset db-recreate seed-dev keycloak-seed down dev core ai admin mobile \
+.PHONY: help init-env doctor setup setup-media deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset db-recreate seed-dev seed-lessons keycloak-seed down dev core ai admin mobile \
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
         ai-local clean-cache clean \
@@ -149,6 +149,9 @@ db-recreate:
 
 seed-dev: deps-java
 	@set -a; . ./apps/core-service/.env; set +a; ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup -Dspring-boot.run.arguments="--seed-dev \"$(CURDIR)/infra/postgres/seed/dev.sql\""
+
+seed-lessons: seed-dev
+	@set -a; . ./apps/core-service/.env; set +a; ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup -Dspring-boot.run.arguments="--seed-dev \"$(CURDIR)/infra/postgres/seed/lessons.sql\""
 
 migrate: deps-java
 	@set -a; . ./apps/core-service/.env; set +a; ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup
