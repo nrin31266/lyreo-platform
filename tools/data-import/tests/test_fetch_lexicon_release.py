@@ -15,9 +15,9 @@ from fetch_lexicon_release import (  # noqa: E402
     config_from_env,
     extract,
     run,
-    sha256,
     verify_release,
 )
+from fetch_utils import sha256_file  # noqa: E402
 
 
 def make_archive(path: Path, members: list[tuple[str, bytes, str]]) -> None:
@@ -89,7 +89,7 @@ def test_local_archive_installs_once_and_check_is_repeatable(tmp_path: Path) -> 
     archive = tmp_path / "source.tar.gz"
     make_archive(archive, [("lexicon-1.0.0/manifest.json", b"{}", "file")])
     installed = tmp_path / "releases/lexicon/1.0.0"
-    config = Config("1.0.0", "1.0.0", archive.as_uri(), sha256(archive), installed, tmp_path / "dataset-fetch")
+    config = Config("1.0.0", "1.0.0", archive.as_uri(), sha256_file(archive), installed, tmp_path / "dataset-fetch")
     with mock.patch("fetch_lexicon_release.verify_release") as verify:
         run(config)
         run(config)

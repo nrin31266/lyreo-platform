@@ -3,14 +3,16 @@ from __future__ import annotations
 import io
 import sys
 import tarfile
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from fetch_release import Config, archive_root, config_from_env, extract, run, sha256, verify_release  # noqa: E402
+import fetch_lexicon_release  # noqa: E402
+import fetch_release  # noqa: E402
+from fetch_release import Config, archive_root, config_from_env, extract, run, verify_release  # noqa: E402
+from fetch_utils import sha256_file  # noqa: E402
 
 
 def make_archive(path: Path, members: list[tuple[str, bytes, str]]) -> None:
@@ -96,10 +98,72 @@ def test_local_archive_installs_once_and_check_is_repeatable(tmp_path: Path) -> 
     archive = tmp_path / "source.tar.gz"
     make_archive(archive, [("grammar-toeic-1.0.1/manifest.json", b"{}", "file")])
     installed = tmp_path / "releases/grammar-toeic/1.0.1"
-    config = Config("1.0.1", "1.0.1", archive.as_uri(), sha256(archive), installed, tmp_path / "dataset-fetch")
+    config = Config("1.0.1", "1.0.1", archive.as_uri(), sha256_file(archive), installed, tmp_path / "dataset-fetch")
     with mock.patch("fetch_release.verify_release") as verify:
         run(config)
         run(config)
         run(config, check=True)
     assert (installed / "manifest.json").read_bytes() == b"{}"
     assert verify.call_count == 3
+
+
+@pytest.fixture(params=[
+    (fetch_release, "grammar-toeic"),
+    (fetch_lexicon_release, "lexicon"),
+], ids=["grammar-toeic", "lexicon"])
+def canonical_archive_case(tmp_path: Path, request: pytest.FixtureRequest):
+    fetcher, domain = request.param
+    release = tmp_path / "releases" / domain / "1.0.1"
+    canonical = release.parent.parent / f"{domain}-1.0.1.tar.gz"
+    canonical.parent.mkdir()
+    return fetcher, domain, release, canonical
+
+
+@pytest.mark.parametrize("url", ["", "https://example.invalid/release.tar.gz"])
+def test_fetch_reuses_canonical_local_archive(tmp_path: Path, canonical_archive_case, url: str) -> None:
+    fetcher, domain, release, canonical = canonical_archive_case
+    make_archive(canonical, [(f"{domain}-1.0.1/manifest.json", b"{}", "file")])
+    config = fetcher.Config("1.0.1", "1.0.1", url, sha256_file(canonical), release, tmp_path / "dataset-fetch")
+    with mock.patch.object(fetcher, "verify_release"), mock.patch("fetch_utils.download_archive") as download:
+        fetcher.run(config)
+    assert (release / "manifest.json").read_bytes() == b"{}"
+    download.assert_not_called()
+
+
+def test_tampered_canonical_archive_stops_before_extraction(tmp_path: Path, canonical_archive_case) -> None:
+    fetcher, _, release, canonical = canonical_archive_case
+    canonical.write_bytes(b"corrupt archive")
+    url = "https://example.invalid/release.tar.gz"
+    config = fetcher.Config("1.0.1", "1.0.1", url, "0" * 64, release, tmp_path / "dataset-fetch")
+    with mock.patch.object(fetcher, "extract") as extract_archive, mock.patch("fetch_utils.download_archive") as download:
+        with pytest.raises(ValueError, match="SHA-256 mismatch"):
+            fetcher.run(config)
+    extract_archive.assert_not_called()
+    download.assert_not_called()
+    assert not release.exists()
+
+
+def test_explicit_file_url_overrides_canonical_archive(tmp_path: Path, canonical_archive_case) -> None:
+    fetcher, domain, release, canonical = canonical_archive_case
+    canonical.write_bytes(b"corrupt archive")
+    explicit = tmp_path / "chosen-release.tar.gz"
+    make_archive(explicit, [(f"{domain}-1.0.1/manifest.json", b"{}", "file")])
+    config = fetcher.Config(
+        "1.0.1", "1.0.1", explicit.as_uri(), sha256_file(explicit), release, tmp_path / "dataset-fetch"
+    )
+    with mock.patch.object(fetcher, "verify_release"):
+        fetcher.run(config)
+    assert (release / "manifest.json").read_bytes() == b"{}"
+
+
+def test_missing_canonical_archive_uses_remote_source(tmp_path: Path, canonical_archive_case) -> None:
+    fetcher, domain, release, _ = canonical_archive_case
+    remote = tmp_path / "remote-release.tar.gz"
+    make_archive(remote, [(f"{domain}-1.0.1/manifest.json", b"{}", "file")])
+    url = "https://example.invalid/release.tar.gz"
+    config = fetcher.Config("1.0.1", "1.0.1", url, sha256_file(remote), release, tmp_path / "dataset-fetch")
+    with mock.patch.object(fetcher, "verify_release"), mock.patch("fetch_utils.download_archive") as download:
+        download.side_effect = lambda _url, target: target.write_bytes(remote.read_bytes())
+        fetcher.run(config)
+    download.assert_called_once_with(url, mock.ANY)
+    assert (release / "manifest.json").read_bytes() == b"{}"

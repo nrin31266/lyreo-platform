@@ -37,10 +37,15 @@ in rclone's local credential store, never in the repository, package or command 
 remote uses the public Drive download endpoint. Private releases require account authorization.
 No fetch command modifies sharing permissions.
 
-A local archive path or `file://` URL supports offline setup. Relative paths resolve from
-`tools/data-import/`. Fetch/check reuses valid installed releases, never overwrites another version,
-and rejects archive path traversal/symlinks and incorrect checksums. Use the fetch script's `--force`
-only to replace a damaged installation of the selected version.
+Fetch first reuses a valid installed release. To reinstall after clearing the extracted copy, keep
+`lexicon-<version>.tar.gz` and `grammar-toeic-<version>.tar.gz` in `.data/releases/`, next to their
+respective domain directories. Fetch verifies the local archive against the pinned SHA-256 and
+uses the configured remote URL only when the local archive is absent. A damaged local archive
+fails verification and must be removed or replaced before fetching again.
+
+An explicit local archive path or `file://` release URL takes precedence over the default archive
+location. Relative paths resolve from `tools/data-import/`. Fetch validates archive members and
+package checksums. Use `--force` to replace a damaged installation of the selected version.
 
 ```bash
 make lexicon-fetch
