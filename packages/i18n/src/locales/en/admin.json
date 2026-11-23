@@ -1002,9 +1002,8 @@
     "guideLanguage": "Guide language",
     "vietnameseGuide": "Tiếng Việt",
     "englishGuide": "English",
-    "editedRecording": "Excerpt from the example word",
-    "title": "American English IPA chart",
-    "intro": "Choose a symbol to hear the sound followed by an example word. Some consonants sound very short on their own.",
+    "title": "English IPA chart · 44 sounds",
+    "intro": "Choose a symbol to hear the sound and an example word. British English notation from",
     "group": {
       "consonants": "Consonants",
       "vowels": "Vowels",
@@ -1016,9 +1015,11 @@
     "playExample": "Hear {{word}}",
     "playSequence": "Hear sound → word",
     "playSound": "Hear sound /{{sound}}/",
-    "playError": "Could not play the example. Try again.",
+    "playError": "Could not play the example. Try again or open the source.",
     "exampleSource": "Word recording",
-    "soundSource": "Sound demonstration"
+    "referenceSource": "IELTS Fighter · British IPA",
+    "noReference": "No IELTS Fighter sample for /{{sound}}/.",
+    "watchBbc": "Hear the BBC example"
   },
   "pronunciationPilot": {
     "title": "Test pronunciation",
@@ -1068,7 +1069,6 @@
     "listenToPhoneme": "Sound to listen to again",
     "noIssues": "Assessed · no issues detected",
     "reviewIssues": "Words to review · {{count}}",
-    "explanation": {"NONE": "No pronunciation issue was detected for this word.", "MISPRONUNCIATION": "The assessment flagged how this word was pronounced.", "OMISSION": "The assessment did not detect this word from the reference.", "INSERTION": "The assessment detected this extra word in your recording."},
     "status": {
       "QUEUED": "Waiting to assess",
       "RUNNING": "Assessing pronunciation…",

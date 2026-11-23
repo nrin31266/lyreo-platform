@@ -1002,9 +1002,8 @@
     "guideLanguage": "Ngôn ngữ hướng dẫn",
     "vietnameseGuide": "Tiếng Việt",
     "englishGuide": "English",
-    "editedRecording": "Trích từ bản đọc từ ví dụ",
-    "title": "Bảng phiên âm tiếng Anh Mỹ",
-    "intro": "Chọn ký hiệu để nghe âm mẫu rồi nghe từ ví dụ. Một số phụ âm rất ngắn khi nghe riêng.",
+    "title": "Bảng phiên âm tiếng Anh · 44 âm",
+    "intro": "Chọn ký hiệu để nghe âm mẫu và từ ví dụ. Ký hiệu Anh–Anh theo",
     "group": {
       "consonants": "Phụ âm",
       "vowels": "Nguyên âm",
@@ -1016,9 +1015,11 @@
     "playExample": "Nghe từ {{word}}",
     "playSequence": "Nghe âm → từ ví dụ",
     "playSound": "Nghe âm mẫu /{{sound}}/",
-    "playError": "Không phát được audio mẫu. Hãy thử lại.",
+    "playError": "Không phát được audio mẫu. Bạn có thể thử lại hoặc mở nguồn.",
     "exampleSource": "Nguồn ghi âm từ",
-    "soundSource": "Nguồn ghi âm minh họa"
+    "referenceSource": "IELTS Fighter · IPA Anh–Anh",
+    "noReference": "Bảng IELTS Fighter chưa có mẫu cho /{{sound}}/.",
+    "watchBbc": "Nghe mẫu trên BBC"
   },
   "pronunciationPilot": {
     "title": "Thử chấm phát âm",
@@ -1068,7 +1069,6 @@
     "listenToPhoneme": "Âm nên nghe lại",
     "noIssues": "Đã chấm · không phát hiện lỗi",
     "reviewIssues": "{{count}} từ cần xem lại",
-    "explanation": {"NONE": "Chưa phát hiện lỗi phát âm ở từ này.", "MISPRONUNCIATION": "Kết quả chấm đánh dấu cách phát âm của từ này.", "OMISSION": "Kết quả chấm không nhận ra từ này trong bản thu.", "INSERTION": "Kết quả chấm nhận ra từ này ngoài câu mẫu."},
     "status": {
       "QUEUED": "Đang chờ chấm",
       "RUNNING": "Đang chấm phát âm…",

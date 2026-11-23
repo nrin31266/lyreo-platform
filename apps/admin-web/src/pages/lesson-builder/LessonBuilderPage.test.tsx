@@ -161,11 +161,12 @@ it('tests the selected sentence in place and submits its saved revision', async 
     await userEvent.click(results.getByRole('button', { name: /Review “Hello”/ }));
     expect(results.getByRole('button', { name: 'Review /h/' })).toBeVisible();
     expect(results.getByRole('button', { name: 'Hear sound /h/' })).toBeVisible();
-    expect(results.getByRole('button', { name: 'Hear hat' })).toBeVisible();
+    expect(results.getByRole('button', { name: 'Hear hot' })).toBeVisible();
     expect(results.getByRole('button', { name: 'Hear sound → word' })).toBeVisible();
-    expect(results.getByRole('link', { name: /Rachel’s English/ })).toBeVisible();
+    await userEvent.click(results.getByText('How to say it', { selector: 'summary' }));
+    expect(results.getByRole('link', { name: /BBC Learning English/ })).toBeVisible();
     await userEvent.click(results.getByRole('button', { name: 'Tiếng Việt' }));
-    expect(results.getByRole('link', { name: /Dan Hauer/ })).toBeVisible();
+    expect(results.getByRole('link', { name: 'IELTS Fighter · Bảng IPA 44 âm' })).toBeVisible();
     expect(results.getByRole('link', { name: 'IPA chart' })).toHaveAttribute('href', '/phonetics?sound=h');
     await userEvent.keyboard('{Escape}');
     await userEvent.click(await preview.findByRole('button', { name: 'Words to review · 1' }));

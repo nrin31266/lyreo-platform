@@ -1,63 +1,79 @@
 import audioCredits from './ipa-audio.json';
 
-export type IpaExample = { ipa: string; word: string; transcription: string };
-export const ipaGroups = {
-  consonants: [
-    { ipa: 'p', word: 'pen', transcription: 'pɛn' },
-    { ipa: 'b', word: 'bee', transcription: 'bi' },
-    { ipa: 't', word: 'tea', transcription: 'ti' },
-    { ipa: 'd', word: 'dog', transcription: 'dɔɡ' },
-    { ipa: 'k', word: 'cat', transcription: 'kæt' },
-    { ipa: 'ɡ', word: 'go', transcription: 'ɡoʊ' },
-    { ipa: 'tʃ', word: 'chair', transcription: 'tʃɛɹ' },
-    { ipa: 'dʒ', word: 'judge', transcription: 'dʒʌdʒ' },
-    { ipa: 'f', word: 'fish', transcription: 'fɪʃ' },
-    { ipa: 'v', word: 'van', transcription: 'væn' },
-    { ipa: 'θ', word: 'thin', transcription: 'θɪn' },
-    { ipa: 'ð', word: 'this', transcription: 'ðɪs' },
-    { ipa: 's', word: 'sun', transcription: 'sʌn' },
-    { ipa: 'z', word: 'zoo', transcription: 'zu' },
-    { ipa: 'ʃ', word: 'shoe', transcription: 'ʃu' },
-    { ipa: 'ʒ', word: 'vision', transcription: 'ˈvɪʒən' },
-    { ipa: 'm', word: 'man', transcription: 'mæn' },
-    { ipa: 'n', word: 'no', transcription: 'noʊ' },
-    { ipa: 'ŋ', word: 'ring', transcription: 'ɹɪŋ' },
-    { ipa: 'h', word: 'hat', transcription: 'hæt' },
-    { ipa: 'l', word: 'light', transcription: 'laɪt' },
-    { ipa: 'ɹ', word: 'red', transcription: 'ɹɛd' },
-    { ipa: 'j', word: 'yes', transcription: 'jɛs' },
-    { ipa: 'w', word: 'we', transcription: 'wi' },
-  ],
+export const ieltsFighterIpa = 'https://ielts-fighter.com/tin-tuc/bang-phien-am-tieng-anh-ipa_mt1567386908.html';
+const ieltsFighterAudio = 'https://st.ielts-fighter.com/src/ielts-fighter/2019/09/09/';
+export const bbcSoundsOfEnglish = 'https://www.youtube.com/watch?v=QxQUapA-2w4';
+const bbcCureLesson = 'https://www.youtube.com/watch?v=nHSqluHrD-U';
+
+export type IpaExample = { ipa: string; word: string; transcription: string; bbcStart: number } &
+  ({ soundFile: string; lessonUrl?: never } | { soundFile?: never; lessonUrl: string });
+
+export const ipaGroups: Record<'vowels' | 'diphthongs' | 'consonants', IpaExample[]> = {
   vowels: [
-    { ipa: 'i', word: 'see', transcription: 'si' },
-    { ipa: 'ɪ', word: 'sit', transcription: 'sɪt' },
-    { ipa: 'ɛ', word: 'bed', transcription: 'bɛd' },
-    { ipa: 'æ', word: 'cat', transcription: 'kæt' },
-    { ipa: 'ɑ', word: 'father', transcription: 'ˈfɑðɚ' },
-    { ipa: 'ɔ', word: 'north', transcription: 'nɔɹθ' },
-    { ipa: 'ʊ', word: 'book', transcription: 'bʊk' },
-    { ipa: 'u', word: 'moon', transcription: 'mun' },
-    { ipa: 'ʌ', word: 'cup', transcription: 'kʌp' },
-    { ipa: 'ə', word: 'about', transcription: 'əˈbaʊt' },
-    { ipa: 'ɝ', word: 'bird', transcription: 'bɝd' },
-    { ipa: 'ɚ', word: 'teacher', transcription: 'ˈtitʃɚ' },
+    { ipa: 'ɪ', word: 'kid', transcription: 'kɪd', bbcStart: 131, soundFile: 'i ngắn.mp3' },
+    { ipa: 'iː', word: 'sea', transcription: 'siː', bbcStart: 0, soundFile: 'i dài.mp3' },
+    { ipa: 'e', word: 'bed', transcription: 'bed', bbcStart: 345, soundFile: 'e.mp3' },
+    { ipa: 'ə', word: 'banana', transcription: 'bəˈnɑːnə', bbcStart: 455, soundFile: 'ơ ngắn.mp3' },
+    { ipa: 'ɜː', word: 'birthday', transcription: 'ˈbɜːθdeɪ', bbcStart: 696, soundFile: 'ơ dài.mp3' },
+    { ipa: 'ʊ', word: 'good', transcription: 'ɡʊd', bbcStart: 251, soundFile: 'u ngắn.mp3' },
+    { ipa: 'uː', word: 'goose', transcription: 'ɡuːs', bbcStart: 292, soundFile: 'u dài.mp3' },
+    { ipa: 'ɒ', word: 'hot', transcription: 'hɒt', bbcStart: 996, soundFile: 'o ngắn.mp3' },
+    { ipa: 'ɔː', word: 'law', transcription: 'lɔː', bbcStart: 750, soundFile: 'o dài.mp3' },
+    { ipa: 'ʌ', word: 'love', transcription: 'lʌv', bbcStart: 846, soundFile: 'a ngắn.mp3' },
+    { ipa: 'ɑː', word: 'father', transcription: 'ˈfɑːðə', bbcStart: 957, soundFile: 'a dài.mp3' },
+    { ipa: 'æ', word: 'bad', transcription: 'bæd', bbcStart: 800, soundFile: 'ae.mp3' },
   ],
   diphthongs: [
-    { ipa: 'eɪ', word: 'day', transcription: 'deɪ' },
-    { ipa: 'aɪ', word: 'my', transcription: 'maɪ' },
-    { ipa: 'ɔɪ', word: 'boy', transcription: 'bɔɪ' },
-    { ipa: 'oʊ', word: 'go', transcription: 'ɡoʊ' },
-    { ipa: 'aʊ', word: 'now', transcription: 'naʊ' },
+    { ipa: 'ɪə', word: 'near', transcription: 'nɪə', bbcStart: 1036, soundFile: 'ie.mp3' },
+    { ipa: 'eə', word: 'hair', transcription: 'heə', bbcStart: 1423, soundFile: 'ea.mp3' },
+    { ipa: 'eɪ', word: 'day', transcription: 'deɪ', bbcStart: 1103, soundFile: 'ei.mp3' },
+    { ipa: 'ɔɪ', word: 'boy', transcription: 'bɔɪ', bbcStart: 1259, soundFile: 'oi.mp3' },
+    { ipa: 'aɪ', word: 'try', transcription: 'traɪ', bbcStart: 1526, soundFile: 'aɪ.mp3' },
+    { ipa: 'əʊ', word: 'coat', transcription: 'kəʊt', bbcStart: 1313, soundFile: 'əʊ.mp3' },
+    { ipa: 'aʊ', word: 'mouth', transcription: 'maʊθ', bbcStart: 1586, soundFile: 'aʊ.mp3' },
+    { ipa: 'ʊə', word: 'tour', transcription: 'tʊə', bbcStart: 1205, lessonUrl: bbcCureLesson },
   ],
-} satisfies Record<string, IpaExample[]>;
+  consonants: [
+    { ipa: 'p', word: 'pen', transcription: 'pen', bbcStart: 1723, soundFile: 'p.mp3' },
+    { ipa: 'b', word: 'back', transcription: 'bæk', bbcStart: 1860, soundFile: 'b.mp3' },
+    { ipa: 't', word: 'tea', transcription: 'tiː', bbcStart: 1994, soundFile: 't.mp3' },
+    { ipa: 'd', word: 'day', transcription: 'deɪ', bbcStart: 2124, soundFile: 'd.mp3' },
+    { ipa: 'tʃ', word: 'match', transcription: 'mætʃ', bbcStart: 2249, soundFile: 't∫.mp3' },
+    { ipa: 'dʒ', word: 'age', transcription: 'eɪdʒ', bbcStart: 2354, soundFile: 'dʒ.mp3' },
+    { ipa: 'k', word: 'key', transcription: 'kiː', bbcStart: 2459, soundFile: 'k.mp3' },
+    { ipa: 'ɡ', word: 'get', transcription: 'ɡet', bbcStart: 2579, soundFile: 'g.mp3' },
+    { ipa: 'f', word: 'fat', transcription: 'fæt', bbcStart: 2684, soundFile: 'f.mp3' },
+    { ipa: 'v', word: 'move', transcription: 'muːv', bbcStart: 2780, soundFile: 'v.mp3' },
+    { ipa: 'ð', word: 'this', transcription: 'ðɪs', bbcStart: 3041, soundFile: 'ð.mp3' },
+    { ipa: 'θ', word: 'thin', transcription: 'θɪn', bbcStart: 2970, soundFile: 'θ.mp3' },
+    { ipa: 's', word: 'soon', transcription: 'suːn', bbcStart: 3113, soundFile: 's.mp3' },
+    { ipa: 'z', word: 'buzz', transcription: 'bʌz', bbcStart: 3209, soundFile: 'z.mp3' },
+    { ipa: 'ʃ', word: 'ship', transcription: 'ʃɪp', bbcStart: 3305, soundFile: '∫.mp3' },
+    { ipa: 'ʒ', word: 'vision', transcription: 'ˈvɪʒən', bbcStart: 3462, soundFile: 'ʒ.mp3' },
+    { ipa: 'm', word: 'mean', transcription: 'miːn', bbcStart: 3506, soundFile: 'm.mp3' },
+    { ipa: 'n', word: 'nice', transcription: 'naɪs', bbcStart: 3625, soundFile: 'n.mp3' },
+    { ipa: 'ŋ', word: 'ring', transcription: 'rɪŋ', bbcStart: 3750, soundFile: 'η.mp3' },
+    { ipa: 'h', word: 'hot', transcription: 'hɒt', bbcStart: 3879, soundFile: 'h.mp3' },
+    { ipa: 'l', word: 'light', transcription: 'laɪt', bbcStart: 3945, soundFile: 'l.mp3' },
+    { ipa: 'r', word: 'right', transcription: 'raɪt', bbcStart: 4160, soundFile: 'r.mp3' },
+    { ipa: 'w', word: 'wet', transcription: 'wet', bbcStart: 4367, soundFile: 'w.mp3' },
+    { ipa: 'j', word: 'yes', transcription: 'jes', bbcStart: 4490, soundFile: 'j.mp3' },
+  ],
+};
 
-const aliases: Record<string, string> = { r: 'ɹ', g: 'ɡ', 'ɹ̠': 'ɹ', 'ʧ': 'tʃ', 'ʤ': 'dʒ', 't͡ʃ': 'tʃ', 'd͡ʒ': 'dʒ' };
+const aliases: Record<string, string> = {
+  'i': 'iː', 'u': 'uː', 'ɛ': 'e', 'ɑ': 'ɑː', 'ɔ': 'ɔː', 'oʊ': 'əʊ',
+  'ɹ': 'r', 'ɹ̠': 'r', 'g': 'ɡ', 'ʧ': 'tʃ', 'ʤ': 'dʒ', 't͡ʃ': 'tʃ', 'd͡ʒ': 'dʒ',
+  '∫': 'ʃ', 't∫': 'tʃ', 'η': 'ŋ',
+};
 const examples = Object.values(ipaGroups).flat();
 export function ipaExample(symbol: string): IpaExample | undefined {
-  return examples.find(example => example.ipa === (aliases[symbol] ?? symbol));
+  const key = symbol.trim().replace(/:/g, 'ː');
+  return examples.find(example => example.ipa === (aliases[key] ?? key));
 }
 
-export const ipaSoundId = (sound: string) =>
-  'sound-' + Array.from(sound, character => character.codePointAt(0)!.toString(16)).join('-');
+export function ipaSoundUrl(example: IpaExample) {
+  return example.soundFile && ieltsFighterAudio + encodeURIComponent(example.soundFile);
+}
 
-export const ipaAudioCredits: Record<string, { source: string; author: string; license: string; licenseUrl?: string; edited?: boolean }> = audioCredits;
+export const ipaAudioCredits: Record<string, { source: string; author: string; license: string; licenseUrl?: string }> = audioCredits;
