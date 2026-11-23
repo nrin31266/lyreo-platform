@@ -150,7 +150,7 @@ db-recreate:
 seed-dev: deps-java
 	@set -a; . ./apps/core-service/.env; set +a; ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup -Dspring-boot.run.arguments="--seed-dev \"$(CURDIR)/infra/postgres/seed/dev.sql\""
 
-LESSON_SEED_FILE ?= $(or $(wildcard $(CURDIR)/.data/lesson-export/lessons-with-songs.sql),$(CURDIR)/infra/postgres/seed/lessons.sql)
+LESSON_SEED_FILE ?= $(CURDIR)/infra/postgres/seed/lessons.sql
 seed-lessons: seed-dev
 	@set -a; . ./apps/core-service/.env; set +a; ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup -Dspring-boot.run.arguments="--seed-dev \"$(abspath $(LESSON_SEED_FILE))\""
 

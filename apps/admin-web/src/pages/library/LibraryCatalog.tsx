@@ -38,7 +38,8 @@ export function LibraryList({ endpoint, route, title, extra }: { endpoint: strin
   }
   const params = new URLSearchParams({ q: query, size: lexicon ? search.get('take') || '30' : '30', page: String(page) });
   if (lexicon) for (const key of ['after', 'before', 'tail', 'skip']) if (search.get(key) && !(lexicon && key === 'status' && search.get(key) === 'EDITED')) params.set(key, search.get(key)!);
-  const filterKeys = ['status', 'year', 'type', 'translation', 'pos', 'access', 'quality', 'difficulty', 'parentId'];
+  const filterKeys = ['status', 'year', 'type', 'translation', 'pos', 'access', 'quality', 'difficulty'];
+  if (kind === 'subtopic') filterKeys.push('parentId');
   for (const key of filterKeys) if (search.get(key) && !(lexicon && key === 'status' && search.get(key) === 'EDITED')) params.set(lexicon && key === 'status' ? 'state' : key, search.get(key)!);
   const list = useQuery({ queryKey: ['library', endpoint, params.toString()], queryFn: async ({ signal }) => {
     if (!lexicon) return api<CatalogPage<Summary>>(`${endpoint}/page?${params}`, { signal });

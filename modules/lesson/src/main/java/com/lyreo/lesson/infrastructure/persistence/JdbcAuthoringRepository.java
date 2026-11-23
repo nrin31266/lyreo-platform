@@ -8,6 +8,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -32,12 +33,13 @@ public final class JdbcAuthoringRepository implements AuthoringRepository {
         lesson.jobs = jdbc.query("SELECT * FROM lesson_authoring_job WHERE lesson_id=:id",
             Map.of("id",id), (rs,n) -> {
                 UUID jobId=rs.getObject("job_id",UUID.class);
-                var job=jobs.findById(jobId).orElseThrow();
+                var job=jobs.findById(jobId).orElse(null);
+                if (job == null) return null;
                 return new AuthoringLesson.Job(jobId,rs.getString("operation"),job.status().name(),job.currentStep(),
                     job.progressPercent(),job.errorMessage(),job.errorCode(),job.nextRetryAt(),mapper.readValue(rs.getString("usage_json"),
                     mapper.getTypeFactory().constructCollectionType(List.class,AuthoringLesson.Invocation.class)),job.createdAt(),job.startedAt(),job.finishedAt(),
                     job.attemptCount(),rs.getString("result_json")==null?null:mapper.readValue(rs.getString("result_json"),com.lyreo.lesson.domain.authoring.AuthoringJobResult.class));
-            }).stream().sorted(java.util.Comparator.comparing(AuthoringLesson.Job::createdAt).thenComparing(AuthoringLesson.Job::jobId)).toList();
+            }).stream().filter(Objects::nonNull).sorted(java.util.Comparator.comparing(AuthoringLesson.Job::createdAt).thenComparing(AuthoringLesson.Job::jobId)).toList();
         return Optional.of(lesson);
     }
     private AuthoringLesson read(ResultSet rs,int row) throws SQLException {
