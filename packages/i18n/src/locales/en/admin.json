@@ -999,9 +999,6 @@
   },
   "phonetics": {
     "howTo": "How to say it",
-    "guideLanguage": "Guide language",
-    "vietnameseGuide": "Tiếng Việt",
-    "englishGuide": "English",
     "title": "English IPA chart · 44 sounds",
     "intro": "Choose a symbol to hear the sound and an example word. British English notation from",
     "group": {
@@ -1012,7 +1009,7 @@
     "sample": "Sound example",
     "selectSound": "Hear /{{sound}}/ then {{word}}",
     "selectSymbol": "Review /{{sound}}/",
-    "playExample": "Hear {{word}}",
+    "playExample": "Hear {{word}} /{{transcription}}/",
     "playSequence": "Hear sound → word",
     "playSound": "Hear sound /{{sound}}/",
     "playError": "Could not play the example. Try again or open the source.",
@@ -1067,6 +1064,8 @@
     "noWordAudio": "No matching segment in your recording.",
     "noWordTiming": "Playback timing is unavailable for this word.",
     "listenToPhoneme": "Sound to listen to again",
+    "playHeardPhoneme": "Listen to your /{{text}}/",
+    "azureRaw": "Azure raw response",
     "noIssues": "Assessed · no issues detected",
     "reviewIssues": "Words to review · {{count}}",
     "status": {

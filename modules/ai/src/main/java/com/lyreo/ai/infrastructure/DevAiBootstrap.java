@@ -19,6 +19,7 @@ public final class DevAiBootstrap implements ApplicationRunner {
         "NLP",
         "GENERAL_LLM",
         "REASONING_LLM",
+        "PRONUNCIATION_ASSESSMENT",
         "PRONUNCIATION_JUDGE"
     );
 

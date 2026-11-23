@@ -139,6 +139,7 @@ it('tests the selected sentence in place and submits its saved revision', async 
       result: {
         outcome: 'SCORED', durationMs: 1000, transcript: 'Hello',
         scores: { overall: 80, accuracy: 90, fluency: 90, completeness: 50 },
+        providerRaw: { provider: 'AZURE_SPEECH', recognition: 'CONTINUOUS', utterances: [{ result: { NBest: [] } }] },
         words: [
           { text: 'Hello', referenceIndex: 0, error: 'NONE', startMs: 0, endMs: 400,
             phonemes: [{ ipa: 'h', accuracy: 82, startMs: null, endMs: null }] },
@@ -151,6 +152,7 @@ it('tests the selected sentence in place and submits its saved revision', async 
     expect(results.queryByRole('tab')).not.toBeInTheDocument();
     expect(results.getByText('Overall')).toBeVisible();
     expect(results.getByText('Completeness')).toBeVisible();
+    expect(results.getByText('Azure raw response')).toBeVisible();
     expect(results.getByRole('button', { name: /Review “Hello”/ })).toBeInTheDocument();
     const missingWord = results.getByRole('button', { name: /Review “world”.*Missing/ });
     missingWord.focus();
@@ -161,12 +163,12 @@ it('tests the selected sentence in place and submits its saved revision', async 
     await userEvent.click(results.getByRole('button', { name: /Review “Hello”/ }));
     expect(results.getByRole('button', { name: 'Review /h/' })).toBeVisible();
     expect(results.getByRole('button', { name: 'Hear sound /h/' })).toBeVisible();
-    expect(results.getByRole('button', { name: 'Hear hot' })).toBeVisible();
+    expect(results.getByRole('button', { name: 'Hear hot /hɒt/' })).toBeVisible();
     expect(results.getByRole('button', { name: 'Hear sound → word' })).toBeVisible();
     await userEvent.click(results.getByText('How to say it', { selector: 'summary' }));
-    expect(results.getByRole('link', { name: /BBC Learning English/ })).toBeVisible();
-    await userEvent.click(results.getByRole('button', { name: 'Tiếng Việt' }));
-    expect(results.getByRole('link', { name: 'IELTS Fighter · Bảng IPA 44 âm' })).toBeVisible();
+    expect(results.queryByRole('link', { name: /BBC Learning English|IELTS Fighter/ })).not.toBeInTheDocument();
+    expect(results.queryByRole('button', { name: 'Tiếng Việt' })).not.toBeInTheDocument();
+    expect(results.queryByRole('link', { name: /BBC Learning English|IELTS Fighter/ })).not.toBeInTheDocument();
     expect(results.getByRole('link', { name: 'IPA chart' })).toHaveAttribute('href', '/phonetics?sound=h');
     await userEvent.keyboard('{Escape}');
     await userEvent.click(await preview.findByRole('button', { name: 'Words to review · 1' }));

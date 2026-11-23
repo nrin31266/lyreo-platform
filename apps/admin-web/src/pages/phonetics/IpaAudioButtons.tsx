@@ -31,7 +31,7 @@ export function IpaAudioButtons({ example, audio, beforePlay }: {
     <div className="flex flex-wrap gap-2">
       {listen('sequence', t('phonetics.playSequence'))}
       {listen('sound', t('phonetics.playSound', { sound: ipa }))}
-      {listen('word', t('phonetics.playExample', { word }))}
+      {listen('word', t('phonetics.playExample', { word, transcription: example.transcription }))}
     </div>
     {audio.failed && <p role="alert" className="text-sm text-destructive">{t('phonetics.playError')}</p>}
   </>;

@@ -27,6 +27,7 @@ class DevAiBootstrapTest {
         new DevAiBootstrap(admin).run(null);
         verify(admin).saveProvider("DEV_MOCK", "Lyreo development mock", null, null, true);
         verify(admin).saveRoute("STT", "DEV_MOCK", "mock", 0, false, true);
+        verify(admin).saveRoute("PRONUNCIATION_ASSESSMENT", "DEV_MOCK", "mock", 0, false, true);
     }
 
     @Test void explicitBootstrapSkipsExistingCredentials() {

@@ -1,5 +1,6 @@
 import audioCredits from './ipa-audio.json';
 
+export const internationalIpaChart = 'https://www.internationalphoneticassociation.org/IPAcharts/IPA_charts_TI/IPA_charts_TI.html';
 export const ieltsFighterIpa = 'https://ielts-fighter.com/tin-tuc/bang-phien-am-tieng-anh-ipa_mt1567386908.html';
 const ieltsFighterAudio = 'https://st.ielts-fighter.com/src/ielts-fighter/2019/09/09/';
 export const bbcSoundsOfEnglish = 'https://www.youtube.com/watch?v=QxQUapA-2w4';

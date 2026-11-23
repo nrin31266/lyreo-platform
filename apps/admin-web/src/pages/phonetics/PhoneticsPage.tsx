@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { cn } from 'cn';
-import { ieltsFighterIpa, ipaAudioCredits, ipaExample, ipaGroups } from './ipa';
+import { internationalIpaChart, ieltsFighterIpa, ipaAudioCredits, ipaExample, ipaGroups } from './ipa';
 import { IpaGuide } from './IpaGuide';
 import { IpaAudioButtons } from './IpaAudioButtons';
 import { useIpaAudio } from './useIpaAudio';
@@ -11,13 +11,14 @@ export function PhoneticsPage() {
   const [params, setParams] = useSearchParams();
   const selected = ipaExample(params.get('sound') ?? '') ?? ipaExample('ŋ')!;
   const audio = useIpaAudio();
-  const credit = ipaAudioCredits[selected.word];
+  const credit = ipaAudioCredits[selected.word as keyof typeof ipaAudioCredits];
 
   return <section className="mx-auto grid w-full max-w-7xl gap-6">
     <header className="grid gap-1">
       <h1 className="text-2xl font-semibold">{t('phonetics.title')}</h1>
       <p className="max-w-2xl text-sm text-muted-foreground">{t('phonetics.intro')} <a href={ieltsFighterIpa}
-        target="_blank" rel="noreferrer" className="underline underline-offset-2">IELTS Fighter</a></p>
+        target="_blank" rel="noreferrer" className="underline underline-offset-2">IELTS Fighter</a>{' · '}<a href={internationalIpaChart}
+        target="_blank" rel="noreferrer" className="underline underline-offset-2">International IPA chart</a></p>
     </header>
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(270px,31%)]">
       <div className="grid gap-6">

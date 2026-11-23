@@ -44,6 +44,9 @@ def test_continuous_results_use_global_time_and_align_repeated_words():
     assert result.scores.fluency == 86
     assert result.scores.completeness == 75
     assert result.scores.prosody is None
+    assert result.providerRaw['provider'] == 'AZURE_SPEECH'
+    assert result.providerRaw['recognition'] == 'CONTINUOUS'
+    assert result.providerRaw['utterances'][0]['result']['NBest']
     assert normalize([], ['word'], 1000).scores.overall is None
 
 
@@ -77,6 +80,7 @@ async def test_multipart_contract_and_silence(monkeypatch):
     assert response.json()['schemaVersion'] == 1
     assert response.json()['outcome'] == 'SCORED'
     assert response.json()['words'][-1]['endMs'] == 800
+    assert response.json()['providerRaw']['provider'] == 'AZURE_SPEECH'
 
 
 @pytest.mark.asyncio

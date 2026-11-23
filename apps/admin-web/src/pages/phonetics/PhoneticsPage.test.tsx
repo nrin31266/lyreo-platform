@@ -7,7 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 import { adminI18nResources } from '@lyreo/i18n';
 import { PhoneticsPage } from './PhoneticsPage';
-import { ieltsFighterIpa, ipaAudioCredits, ipaExample, ipaGroups, ipaSoundUrl } from './ipa';
+import { internationalIpaChart, ipaAudioCredits, ipaExample, ipaGroups, ipaSoundUrl } from './ipa';
 import { ipaGuides } from './ipa-guides';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -52,16 +52,15 @@ it('opens the linked sound, plays its two distinct recordings, and switches guid
     <MemoryRouter initialEntries={['/phonetics?sound=%C5%8B']}><PhoneticsPage /></MemoryRouter>
   </I18nextProvider>);
   const sample = within(screen.getByRole('complementary', { name: 'Sound example' }));
-  const soundUrl = ipaSoundUrl(ipaExample('ŋ')!);
   await userEvent.click(sample.getByRole('button', { name: 'Hear sound /ŋ/' }));
-  await userEvent.click(sample.getByRole('button', { name: 'Hear ring' }));
-  expect(sources[0]).toBe(soundUrl);
+  await userEvent.click(sample.getByRole('button', { name: 'Hear ring /rɪŋ/' }));
+  expect(sources[0]).toBe(ipaSoundUrl(ipaExample('ŋ')!));
   expect(new URL(sources[1]).pathname).toBe('/ipa/ring.ogg');
   const sequence = sample.getByRole('button', { name: 'Hear sound → word' });
   await userEvent.click(sequence);
   fireEvent.ended(players[2]);
   expect(players[3]).toBe(players[2]);
-  expect(sources[2]).toBe(soundUrl);
+  expect(sources[2]).toBe(ipaSoundUrl(ipaExample('ŋ')!));
   expect(new URL(sources[3]).pathname).toBe('/ipa/ring.ogg');
   fireEvent.ended(players[3]);
   expect(sequence).toHaveAttribute('aria-pressed', 'false');
@@ -72,11 +71,10 @@ it('opens the linked sound, plays its two distinct recordings, and switches guid
   expect(sample.getByRole('link', { name: /BBC Learning English/ })).toHaveAttribute(
     'href', 'https://www.youtube.com/watch?v=QxQUapA-2w4&t=3750s',
   );
-  await userEvent.click(sample.getByRole('button', { name: 'Tiếng Việt' }));
-  expect(sample.getByText(/giữ đầu lưỡi thấp/i)).toHaveAttribute('lang', 'vi');
-  expect(sample.getByRole('link', { name: /IELTS Fighter/ })).toHaveAttribute(
-    'href', ieltsFighterIpa,
-  );
+  expect(sample.queryByRole('button', { name: 'Tiếng Việt' })).not.toBeInTheDocument();
+  expect(sample.getByText(/keep the tongue tip low/i)).toHaveAttribute('lang', 'en');
+  expect(sample.queryByRole('link', { name: /IELTS Fighter/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'International IPA chart' })).toHaveAttribute('href', internationalIpaChart);
   await userEvent.click(screen.getByRole('button', { name: 'Review /ʊə/' }));
   expect(sample.queryByRole('button', { name: 'Hear sound /ʊə/' })).not.toBeInTheDocument();
   expect(sample.getByRole('link', { name: 'Hear the BBC example' })).toHaveAttribute(

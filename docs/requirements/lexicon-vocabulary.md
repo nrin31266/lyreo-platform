@@ -58,12 +58,13 @@ CLI cài gói từ điển đã xác minh. Admin biên tập mục đã có và 
 
 ### FR-LEX-005 — Admin IPA chart
 
-Kho ngôn ngữ có bảng 44 âm theo [IELTS Fighter](https://ielts-fighter.com/tin-tuc/bang-phien-am-tieng-anh-ipa_mt1567386908.html).
-Admin có thể phát MP3 mẫu trực tiếp từ nguồn, nghe từ ví dụ có ghi nguồn và giấy phép, hoặc phát
-âm rồi đến từ bằng một nút. Tệp /ʊə/ trùng tệp /uː/ ở nguồn nên mục này mở
-[bài mẫu /ʊə/ của BBC](https://www.youtube.com/watch?v=nHSqluHrD-U).
+Kho ngôn ngữ có bảng 44 âm theo [IELTS Fighter](https://ielts-fighter.com/tin-tuc/bang-phien-am-tieng-anh-ipa_mt1567386908.html),
+đối chiếu với [bảng IPA tương tác chính thức](https://www.internationalphoneticassociation.org/IPAcharts/IPA_charts_TI/IPA_charts_TI.html).
+Audio âm riêng dùng 44 MP3 tương ứng trong bài IELTS Fighter. Từ ví dụ dùng các bản ghi Commons
+có giấy phép và tác giả riêng. Admin có thể phát âm rồi đến từ bằng một nút. Mục /ʊə/ mở
+[bài mẫu /ʊə/ của BBC](https://www.youtube.com/watch?v=nHSqluHrD-U) vì tệp IELTS Fighter của mục này trùng tệp /uː/.
 Mỗi mục có hướng dẫn khẩu hình tiếng Việt và tiếng Anh. Ký hiệu và âm mẫu theo bảng Anh–Anh.
-Dialog chấm phát âm ghi rõ nguồn mẫu. Ký hiệu trong kết quả và điểm của Azure vẫn theo `en-US`.
+Dialog chấm phát âm giữ phần hướng dẫn gọn và mở bảng IPA đầy đủ ở Kho ngôn ngữ. Ký hiệu trong kết quả và điểm của Azure vẫn theo `en-US`.
 
 ### BR-LEX-003 — Editorial publication
 

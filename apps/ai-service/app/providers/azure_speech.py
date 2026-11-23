@@ -62,6 +62,7 @@ class Assessment(BaseModel):
     transcript: str | None = None
     scores: Scores = Field(default_factory=Scores)
     words: list[Word] = Field(default_factory=list)
+    providerRaw: dict | None = None
 
 
 @dataclass
@@ -155,11 +156,26 @@ def normalize(utterances: list[Utterance], reference: list[str], duration_ms: in
     if accuracy is not None and fluency is not None:
         lowest, middle, highest = sorted((accuracy, fluency, completeness))
         overall = 0.6 * lowest + 0.2 * middle + 0.2 * highest
+    provider_raw = {
+        'provider': 'AZURE_SPEECH',
+        'language': 'en-US',
+        'recognition': 'CONTINUOUS',
+        'utterances': [
+            {
+                'offset': item.offset,
+                'duration': item.duration,
+                'text': item.text,
+                'result': item.detail,
+            }
+            for item in utterances
+        ],
+    }
     return Assessment(
         outcome='SCORED', durationMs=duration_ms,
         transcript=' '.join(item.text for item in utterances if item.text) or None,
         scores=Scores(overall=overall, accuracy=accuracy, fluency=fluency, completeness=completeness),
         words=words,
+        providerRaw=provider_raw,
     )
 
 

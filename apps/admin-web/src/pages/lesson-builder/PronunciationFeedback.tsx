@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
-import { ieltsFighterIpa, ipaExample } from '@/pages/phonetics/ipa';
+import { ipaExample } from '@/pages/phonetics/ipa';
 import { IpaAudioButtons } from '@/pages/phonetics/IpaAudioButtons';
 import { IpaGuide } from '@/pages/phonetics/IpaGuide';
 import type { useIpaAudio } from '@/pages/phonetics/useIpaAudio';
@@ -80,7 +80,7 @@ function IssueBadge({ error, count }: { error: Issue; count?: number }) {
 export function wordPlaybackRange(span: PronunciationSpan, durationMs: number) {
   const { startMs, endMs } = span;
   if (startMs === null || endMs === null || startMs < 0 || endMs <= startMs || endMs > durationMs) return undefined;
-  return { start: Math.max(0, startMs - 100) / 1000, end: Math.min(durationMs, endMs + 150) / 1000 };
+  return { start: Math.max(0, startMs - 15) / 1000, end: Math.min(durationMs, endMs + 25) / 1000 };
 }
 
 type Result = NonNullable<PronunciationAttempt['result']>;
@@ -195,7 +195,7 @@ export function PronunciationFeedback({ referenceText, result, activeWord, loade
                   className={cn(flagged && 'border-warning bg-warning/10 text-warning hover:bg-warning/15')}
                   title={flagged ? t('pronunciationPilot.listenToPhoneme') : undefined}
                   aria-description={flagged ? t('pronunciationPilot.listenToPhoneme') : undefined}
-                  aria-label={playable ? t('pronunciationPilot.play', { text: phoneme.ipa })
+                  aria-label={playable ? t('pronunciationPilot.playHeardPhoneme', { text: phoneme.ipa })
                     : t('phonetics.selectSymbol', { sound: phoneme.ipa })}
                   aria-pressed={soundIndex === index}
                   onClick={() => {
@@ -212,16 +212,11 @@ export function PronunciationFeedback({ referenceText, result, activeWord, loade
           </ul>
         </div>
         {example ? <div className="grid gap-2 rounded-md bg-muted/50 p-2.5">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-            <span lang="en-GB" className="font-medium">{example.word} /{example.transcription}/</span>
-            <a href={ieltsFighterIpa} target="_blank" rel="noreferrer"
-              className="text-xs text-muted-foreground underline underline-offset-2">{t('phonetics.referenceSource')}</a>
-          </div>
           <IpaAudioButtons example={example} audio={sampleAudio} beforePlay={beforeSample} />
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <details className="min-w-0 flex-1 text-sm">
               <summary className="cursor-pointer font-medium">{t('phonetics.howTo')}</summary>
-              <div className="pt-2"><IpaGuide example={example} hideHeading /></div>
+              <div className="pt-2"><IpaGuide example={example} hideHeading hideSource /></div>
             </details>
             <Link to={`/phonetics?sound=${encodeURIComponent(example.ipa)}`} target="_blank" rel="noopener"
               className="text-xs text-primary underline underline-offset-2">{t('navigation.phonetics')}</Link>
@@ -229,9 +224,13 @@ export function PronunciationFeedback({ referenceText, result, activeWord, loade
         </div> : <p className="text-sm text-muted-foreground">{t('phonetics.noReference', { sound })}</p>}
       </div>}
     </div>}
-    {transcript && <details className="text-sm">
-      <summary className="cursor-pointer font-medium">{t('pronunciationPilot.heard')}</summary>
-      <p lang="en" className="mt-1 wrap-anywhere text-muted-foreground">{transcript}</p>
+    {transcript && <div className="grid gap-1 text-sm">
+      <h3 className="font-medium">{t('pronunciationPilot.heard')}</h3>
+      <p lang="en" className="wrap-anywhere text-muted-foreground">{transcript}</p>
+    </div>}
+    {result.providerRaw && <details className="text-sm">
+      <summary className="cursor-pointer font-medium">{t('pronunciationPilot.azureRaw')}</summary>
+      <pre className="mt-1 max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2 text-xs">{JSON.stringify(result.providerRaw, null, 2)}</pre>
     </details>}
   </div>;
 }
