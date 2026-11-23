@@ -58,13 +58,12 @@ CLI cài gói từ điển đã xác minh. Admin biên tập mục đã có và 
 
 ### FR-LEX-005 — Admin IPA chart
 
-Kho ngôn ngữ có bảng phiên âm tiếng Anh Mỹ cho Admin. Mỗi ký hiệu có bản nghe âm riêng,
-một từ ví dụ ghi âm, IPA của từ và hướng dẫn đặt khẩu hình bằng tiếng Việt và tiếng Anh.
-Admin có thể nghe từng phần hoặc phát lần lượt âm rồi đến từ bằng một nút. Hướng dẫn liên kết bài học
-theo âm của [Rachel’s English](https://rachelsenglish.com/pronunciation-compilation-2/) và
-[Dan Hauer](https://www.youtube.com/playlist?list=PL7YqrWXed1abz3FwdKMZEwclWMZ2cMHio).
-Trang hiển thị nguồn và giấy phép từng bản ghi Commons. Mẫu âm trích từ từ ví dụ để giữ cách đọc
-của cùng người nói. Mẫu /ɔ/ dùng bản ghi riêng để nghe âm ngoài ngữ cảnh /ɹ/ của từ north.
+Kho ngôn ngữ có bảng 44 âm theo [IELTS Fighter](https://ielts-fighter.com/tin-tuc/bang-phien-am-tieng-anh-ipa_mt1567386908.html).
+Admin có thể phát MP3 mẫu trực tiếp từ nguồn, nghe từ ví dụ có ghi nguồn và giấy phép, hoặc phát
+âm rồi đến từ bằng một nút. Tệp /ʊə/ trùng tệp /uː/ ở nguồn nên mục này mở
+[bài mẫu /ʊə/ của BBC](https://www.youtube.com/watch?v=nHSqluHrD-U).
+Mỗi mục có hướng dẫn khẩu hình tiếng Việt và tiếng Anh. Ký hiệu và âm mẫu theo bảng Anh–Anh.
+Dialog chấm phát âm ghi rõ nguồn mẫu. Ký hiệu trong kết quả và điểm của Azure vẫn theo `en-US`.
 
 ### BR-LEX-003 — Editorial publication
 

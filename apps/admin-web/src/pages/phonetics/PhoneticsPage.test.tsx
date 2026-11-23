@@ -7,24 +7,34 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 import { adminI18nResources } from '@lyreo/i18n';
 import { PhoneticsPage } from './PhoneticsPage';
-import { ipaAudioCredits, ipaExample, ipaGroups, ipaSoundId } from './ipa';
+import { ieltsFighterIpa, ipaAudioCredits, ipaExample, ipaGroups, ipaSoundUrl } from './ipa';
 import { ipaGuides } from './ipa-guides';
-import { ipaGuideSources } from './ipa-guide-sources';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-it('ships an attributed recording for the sound and its example, with both guides', () => {
-  for (const { ipa, word } of Object.values(ipaGroups).flat()) {
+it('covers all 44 symbols and keeps the duplicate /ʊə/ recording out of playback', () => {
+  const examples = Object.values(ipaGroups).flat();
+  expect(ipaGroups.vowels).toHaveLength(12);
+  expect(ipaGroups.diphthongs).toHaveLength(8);
+  expect(ipaGroups.consonants).toHaveLength(24);
+  expect(new Set(examples.map(example => example.ipa)).size).toBe(44);
+  for (const example of examples) {
+    const { ipa, word } = example;
     expect(ipaGuides[ipa]).toEqual({ en: expect.any(String), vi: expect.any(String) });
-    expect(ipaGuideSources[ipa][1]).toMatch(/^[A-Za-z0-9_-]{11}$/);
-    if (ipa !== 'ɔ') expect(ipaAudioCredits[ipaSoundId(ipa)].source).toBe(ipaAudioCredits[word].source);
-    for (const id of [word, ipaSoundId(ipa)]) {
-      expect(ipaAudioCredits[id].source).toMatch(/^https:\/\//);
-      expect(ipaAudioCredits[id].author).toBeTruthy();
-      expect(readFileSync(`public/ipa/${id}.ogg`).subarray(0, 4).toString()).toBe('OggS');
+    if (example.lessonUrl) {
+      expect(ipa).toBe('ʊə');
+      expect(ipaSoundUrl(example)).toBeUndefined();
+    } else {
+      expect(new URL(ipaSoundUrl(example)!).hostname).toBe('st.ielts-fighter.com');
+      expect(ipaAudioCredits[word].source).toMatch(/^https:\/\//);
+      expect(ipaAudioCredits[word].author).toBeTruthy();
+      expect(readFileSync(`public/ipa/${word}.ogg`).subarray(0, 4).toString()).toBe('OggS');
     }
   }
-  expect(ipaExample('ɹ̠')?.ipa).toBe('ɹ');
+  expect(ipaExample('ɹ̠')?.ipa).toBe('r');
+  expect(ipaExample('i:')?.ipa).toBe('iː');
+  expect(ipaExample('oʊ')?.ipa).toBe('əʊ');
+  expect(ipaExample('ɝ')).toBeUndefined();
   expect(ipaExample('unknown')).toBeUndefined();
 });
 
@@ -42,26 +52,34 @@ it('opens the linked sound, plays its two distinct recordings, and switches guid
     <MemoryRouter initialEntries={['/phonetics?sound=%C5%8B']}><PhoneticsPage /></MemoryRouter>
   </I18nextProvider>);
   const sample = within(screen.getByRole('complementary', { name: 'Sound example' }));
+  const soundUrl = ipaSoundUrl(ipaExample('ŋ')!);
   await userEvent.click(sample.getByRole('button', { name: 'Hear sound /ŋ/' }));
   await userEvent.click(sample.getByRole('button', { name: 'Hear ring' }));
-  expect(sources.map(src => new URL(src).pathname)).toEqual(['/ipa/sound-14b.ogg', '/ipa/ring.ogg']);
+  expect(sources[0]).toBe(soundUrl);
+  expect(new URL(sources[1]).pathname).toBe('/ipa/ring.ogg');
   const sequence = sample.getByRole('button', { name: 'Hear sound → word' });
   await userEvent.click(sequence);
   fireEvent.ended(players[2]);
   expect(players[3]).toBe(players[2]);
-  expect(sources.slice(-2).map(src => new URL(src).pathname)).toEqual(['/ipa/sound-14b.ogg', '/ipa/ring.ogg']);
+  expect(sources[2]).toBe(soundUrl);
+  expect(new URL(sources[3]).pathname).toBe('/ipa/ring.ogg');
   fireEvent.ended(players[3]);
   expect(sequence).toHaveAttribute('aria-pressed', 'false');
   await userEvent.click(sequence);
   await userEvent.click(sequence);
   fireEvent.ended(players[4]);
   expect(sources).toHaveLength(5);
-  expect(sample.getByRole('link', { name: /Rachel’s English/ })).toHaveAttribute(
-    'href', 'https://rachelsenglish.com/english-pronounce-ng-consonant/',
+  expect(sample.getByRole('link', { name: /BBC Learning English/ })).toHaveAttribute(
+    'href', 'https://www.youtube.com/watch?v=QxQUapA-2w4&t=3750s',
   );
   await userEvent.click(sample.getByRole('button', { name: 'Tiếng Việt' }));
   expect(sample.getByText(/giữ đầu lưỡi thấp/i)).toHaveAttribute('lang', 'vi');
-  expect(sample.getByRole('link', { name: /Dan Hauer/ })).toHaveAttribute(
-    'href', 'https://www.youtube.com/watch?v=wnxutoJOLoQ',
+  expect(sample.getByRole('link', { name: /IELTS Fighter/ })).toHaveAttribute(
+    'href', ieltsFighterIpa,
+  );
+  await userEvent.click(screen.getByRole('button', { name: 'Review /ʊə/' }));
+  expect(sample.queryByRole('button', { name: 'Hear sound /ʊə/' })).not.toBeInTheDocument();
+  expect(sample.getByRole('link', { name: 'Hear the BBC example' })).toHaveAttribute(
+    'href', 'https://www.youtube.com/watch?v=nHSqluHrD-U',
   );
 });

@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { ipaAudioCredits } from './ipa';
+import { ipaAudioCredits, ipaSoundUrl, type IpaExample } from './ipa';
+
+export type IpaPlayback = 'sequence' | 'sound' | 'word';
+export const ipaPlaybackKey = (ipa: string, playback: IpaPlayback) => `${ipa}/${playback}`;
 
 export function useIpaAudio() {
   const audio = useRef<HTMLAudioElement>(null);
@@ -16,10 +19,13 @@ export function useIpaAudio() {
     setFailed(false);
   }
 
-  function toggle(id: string, word?: string) {
-    const key = ipaPlaybackKey(id, word);
+  function toggle(example: IpaExample, playback: IpaPlayback) {
+    const key = ipaPlaybackKey(example.ipa, playback);
     stop();
-    if (playing === key || !ipaAudioCredits[id] || (word && !ipaAudioCredits[word])) return;
+    if (playing === key) return;
+    const word = ipaAudioCredits[example.word] && `${import.meta.env.BASE_URL}ipa/${example.word}.ogg`;
+    const first = playback === 'word' ? word : ipaSoundUrl(example);
+    if (!first || (playback === 'sequence' && !word)) return;
     const player = new Audio();
     audio.current = player;
     setPlaying(key);
@@ -29,20 +35,18 @@ export function useIpaAudio() {
       setFailed(error);
     }
     function play(next: string) {
-      player.src = `${import.meta.env.BASE_URL}ipa/${next}.ogg`;
+      player.src = next;
       void player.play().catch(() => finish(true));
     }
     player.onended = () => {
       if (audio.current !== player) return;
-      if (!word) { finish(); return; }
+      if (playback !== 'sequence') { finish(); return; }
       player.onended = () => finish();
       play(word);
     };
     player.onerror = () => finish(true);
-    play(id);
+    play(first);
   }
 
   return { playing, failed, stop, toggle };
 }
-
-export const ipaPlaybackKey = (id: string, word?: string) => word ? `${id}/${word}` : id;

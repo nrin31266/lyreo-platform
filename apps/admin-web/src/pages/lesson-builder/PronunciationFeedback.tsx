@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
-import { ipaExample } from '@/pages/phonetics/ipa';
+import { ieltsFighterIpa, ipaExample } from '@/pages/phonetics/ipa';
 import { IpaAudioButtons } from '@/pages/phonetics/IpaAudioButtons';
 import { IpaGuide } from '@/pages/phonetics/IpaGuide';
 import type { useIpaAudio } from '@/pages/phonetics/useIpaAudio';
@@ -48,9 +48,9 @@ export function markedReference(referenceText: string, words: PronunciationWord[
 
 const errorStyle = {
   NONE: '',
-  MISPRONUNCIATION: 'bg-destructive/10 underline decoration-destructive decoration-2 underline-offset-4',
-  OMISSION: 'border border-dashed border-warning/60 bg-warning/10',
-  INSERTION: 'border border-dotted border-primary/60 bg-primary/10',
+  MISPRONUNCIATION: 'bg-destructive/15 underline decoration-destructive decoration-2 underline-offset-4',
+  OMISSION: 'border border-dashed border-warning bg-warning/15',
+  INSERTION: 'border border-dotted border-primary bg-primary/15',
 };
 const errorIcon = {
   MISPRONUNCIATION: RiErrorWarningLine,
@@ -87,10 +87,10 @@ type Result = NonNullable<PronunciationAttempt['result']>;
 const issueTypes = ['MISPRONUNCIATION', 'OMISSION', 'INSERTION'] as const;
 
 const scoreStyles = {
-  overall: 'border-primary/65 bg-primary/5 text-primary',
-  accuracy: 'border-warning/65 bg-warning/5 text-warning',
-  fluency: 'border-success/65 bg-success/5 text-success',
-  completeness: 'border-violet-500/65 bg-violet-500/5 text-violet-700 dark:text-violet-300',
+  overall: 'bg-primary/5 text-primary',
+  accuracy: 'bg-warning/5 text-warning',
+  fluency: 'bg-success/5 text-success',
+  completeness: 'bg-violet-500/5 text-violet-700 dark:text-violet-300',
 };
 
 export function PronunciationFeedback({ referenceText, result, activeWord, loaded, play, pause, sampleAudio, beforeSample }: {
@@ -104,14 +104,17 @@ export function PronunciationFeedback({ referenceText, result, activeWord, loade
   beforeSample: () => void;
 }) {
   const { t } = useTranslation('admin');
-  const [selection, setSelection] = useState<{ word: number; sound?: string }>();
+  const [selection, setSelection] = useState<{ word: number; sound?: number }>();
   const { words, durationMs, scores, transcript } = result;
   const parts = markedReference(referenceText, words);
   const firstIssue = words.findIndex(word => word.error !== 'NONE');
   const selectedIndex = selection?.word ?? firstIssue;
   const selected = words[selectedIndex];
   const phonemes = [...(selected?.phonemes ?? [])].sort((a, b) => (a.accuracy ?? Infinity) - (b.accuracy ?? Infinity));
-  const example = ipaExample(selection?.sound ?? phonemes[0]?.ipa ?? '');
+  const soundIndex = selection?.sound ?? 0;
+  const sound = phonemes[soundIndex]?.ipa;
+  const example = sound && ipaExample(sound);
+  const selectedRange = selected && wordPlaybackRange(selected, durationMs);
 
   function inspect(word: PronunciationWord, index: number) {
     setSelection({ word: index });
@@ -140,82 +143,95 @@ export function PronunciationFeedback({ referenceText, result, activeWord, loade
     </button>;
   }
 
-  return <div className="grid min-w-0 gap-4">
+  return <div className="grid min-w-0 gap-3">
     <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {(['overall', 'accuracy', 'fluency', 'completeness'] as const).map(metric => <div key={metric}
-        className={cn('rounded-b-md border-t-2 px-2.5 py-2', scoreStyles[metric])}>
+        className={cn('rounded-md px-2.5 py-2', scoreStyles[metric])}>
         <dt className="text-sm text-foreground">{t(`pronunciationPilot.score.${metric}`)}</dt>
         <dd className="text-xl leading-tight font-semibold tabular-nums">{scores[metric] == null ? '—' : Math.round(scores[metric])}</dd>
       </div>)}
     </dl>
-    <div className="grid gap-2">
-      <h3 className="font-medium">{t('pronunciationPilot.wordReview')}</h3>
-      {parts ? <p className="text-lg leading-[2.1] wrap-anywhere">{parts.map((part, index) =>
-        <span key={index}>{part.wordIndex == null ? part.text : markedWord(part.wordIndex, part.text)}</span>)}</p>
-        : <>
-          <p lang="en" className="text-lg leading-relaxed wrap-anywhere">{referenceText}</p>
-          {words.length > 0 && <ul className="flex flex-wrap gap-2">{words.map((word, index) =>
-            <li key={index}>{markedWord(index, word.text)}</li>)}</ul>}
-        </>}
-      <div className="flex flex-wrap gap-1.5">
+    <div className="grid gap-1.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <h3 className="font-medium">{t('pronunciationPilot.wordReview')}</h3>
         {firstIssue < 0 && words.length > 0 && <Badge variant="success">{t('pronunciationPilot.noIssues')}</Badge>}
         {issueTypes.map(error => {
           const count = words.filter(word => word.error === error).length;
           return count > 0 && <IssueBadge key={error} error={error} count={count} />;
         })}
       </div>
+      {parts ? <p className="text-lg leading-[1.9] wrap-anywhere">{parts.map((part, index) =>
+        <span key={index}>{part.wordIndex == null ? part.text : markedWord(part.wordIndex, part.text)}</span>)}</p>
+        : <>
+          <p lang="en" className="text-lg leading-relaxed wrap-anywhere">{referenceText}</p>
+          {words.length > 0 && <ul className="flex flex-wrap gap-2">{words.map((word, index) =>
+            <li key={index}>{markedWord(index, word.text)}</li>)}</ul>}
+        </>}
     </div>
-    {selected && <div className="grid min-w-0 gap-3 rounded-lg border p-3">
-      <div className="grid gap-1" role="status">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+    {selected && <div className="grid min-w-0 gap-2 rounded-lg border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div role="status" className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <strong lang="en" className="text-lg wrap-anywhere">{selected.text}</strong>
           {selected.error === 'NONE' ? <span>{t('pronunciationPilot.word.NONE')}</span> : <IssueBadge error={selected.error} />}
           {selected.accuracy != null && <span className="text-muted-foreground tabular-nums">{Math.round(selected.accuracy)}/100</span>}
         </div>
-        <p className="text-muted-foreground">{t(`pronunciationPilot.explanation.${selected.error}`)}</p>
+        {selected.error !== 'OMISSION' && selectedRange && selected.startMs != null && selected.endMs != null &&
+          <Button size="sm" variant="outline" disabled={!loaded} aria-label={t('pronunciationPilot.play', { text: selected.text })}
+            title={`${timecode(selected.startMs)} – ${timecode(selected.endMs)}`}
+            onClick={() => play(selected)}><RiPlayLine aria-hidden="true" />{t('pronunciationPilot.playWord')}</Button>}
       </div>
-      {selected.error === 'OMISSION' ? <p>{t('pronunciationPilot.noWordAudio')}</p>
-        : wordPlaybackRange(selected, durationMs) && selected.startMs != null && selected.endMs != null
-          ? <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" disabled={!loaded} aria-label={t('pronunciationPilot.play', { text: selected.text })}
-              onClick={() => play(selected)}><RiPlayLine aria-hidden="true" />{t('pronunciationPilot.playWord')}</Button>
-            <span className="text-xs tabular-nums text-muted-foreground">{timecode(selected.startMs)} – {timecode(selected.endMs)}</span>
-          </div> : <p>{t('pronunciationPilot.noWordTiming')}</p>}
-      {phonemes.length > 0 && <div className="grid gap-2 border-t pt-2">
-        <h4 className="font-medium">{t('pronunciationPilot.phonemes')}</h4>
-        <ul className="flex flex-wrap gap-2">
-          {phonemes.map((phoneme, index) => <li key={index} className="grid content-start justify-items-start gap-1">
-            <Button size="sm" variant={(selection?.sound ?? phonemes[0]?.ipa) === phoneme.ipa ? 'secondary' : 'outline'}
-              aria-label={loaded && wordPlaybackRange(phoneme, durationMs)
-                ? t('pronunciationPilot.play', { text: phoneme.ipa })
-                : t('phonetics.selectSymbol', { sound: phoneme.ipa })}
-              aria-pressed={(selection?.sound ?? phonemes[0]?.ipa) === phoneme.ipa}
-              onClick={() => {
-                setSelection({ word: selectedIndex, sound: phoneme.ipa });
-                if (loaded && wordPlaybackRange(phoneme, durationMs)) play(phoneme);
-                else pause();
-              }}>
-              {wordPlaybackRange(phoneme, durationMs) && loaded && <RiPlayLine aria-hidden="true" />}
-              /{phoneme.ipa}/ · {phoneme.accuracy ?? '—'}
-            </Button>
-            {index === 0 && phoneme.accuracy != null && selected.error === 'MISPRONUNCIATION' &&
-              <span className="text-xs font-medium text-warning">{t('pronunciationPilot.listenToPhoneme')}</span>}
-          </li>)}
-        </ul>
-        {example && <div className="grid gap-3 rounded-md bg-muted/50 p-3">
+      {(selected.error === 'OMISSION' || !selectedRange) && <p className="text-sm text-muted-foreground">
+        {t(selected.error === 'OMISSION' ? 'pronunciationPilot.noWordAudio' : 'pronunciationPilot.noWordTiming')}
+      </p>}
+      {phonemes.length > 0 && <div className="grid gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h4 className="text-sm font-medium">{t('pronunciationPilot.phonemes')}</h4>
+          <ul className="flex flex-wrap gap-1.5">
+            {phonemes.map((phoneme, index) => {
+              const playable = loaded && Boolean(wordPlaybackRange(phoneme, durationMs));
+              const flagged = index === 0 && phoneme.accuracy != null && selected.error === 'MISPRONUNCIATION';
+              return <li key={index}>
+                <Button size="sm" variant={soundIndex === index ? 'secondary' : 'outline'}
+                  className={cn(flagged && 'border-warning bg-warning/10 text-warning hover:bg-warning/15')}
+                  title={flagged ? t('pronunciationPilot.listenToPhoneme') : undefined}
+                  aria-description={flagged ? t('pronunciationPilot.listenToPhoneme') : undefined}
+                  aria-label={playable ? t('pronunciationPilot.play', { text: phoneme.ipa })
+                    : t('phonetics.selectSymbol', { sound: phoneme.ipa })}
+                  aria-pressed={soundIndex === index}
+                  onClick={() => {
+                    setSelection({ word: selectedIndex, sound: index });
+                    if (playable) play(phoneme);
+                    else pause();
+                  }}>
+                  {flagged && <RiErrorWarningLine aria-hidden="true" />}
+                  {playable && <RiPlayLine aria-hidden="true" />}
+                  /{phoneme.ipa}/ · {phoneme.accuracy ?? '—'}
+                </Button>
+              </li>;
+            })}
+          </ul>
+        </div>
+        {example ? <div className="grid gap-2 rounded-md bg-muted/50 p-2.5">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <span lang="en-GB" className="font-medium">{example.word} /{example.transcription}/</span>
+            <a href={ieltsFighterIpa} target="_blank" rel="noreferrer"
+              className="text-xs text-muted-foreground underline underline-offset-2">{t('phonetics.referenceSource')}</a>
+          </div>
           <IpaAudioButtons example={example} audio={sampleAudio} beforePlay={beforeSample} />
-          <div className="flex flex-wrap items-center gap-2">
-            <span lang="en" className="text-muted-foreground">{example.word} /{example.transcription}/</span>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <details className="min-w-0 flex-1 text-sm">
+              <summary className="cursor-pointer font-medium">{t('phonetics.howTo')}</summary>
+              <div className="pt-2"><IpaGuide example={example} hideHeading /></div>
+            </details>
             <Link to={`/phonetics?sound=${encodeURIComponent(example.ipa)}`} target="_blank" rel="noopener"
               className="text-xs text-primary underline underline-offset-2">{t('navigation.phonetics')}</Link>
           </div>
-          <IpaGuide sound={example.ipa} />
-        </div>}
+        </div> : <p className="text-sm text-muted-foreground">{t('phonetics.noReference', { sound })}</p>}
       </div>}
     </div>}
-    {transcript && <div className="grid gap-1">
-      <h3 className="font-medium">{t('pronunciationPilot.heard')}</h3>
-      <p lang="en" className="wrap-anywhere text-muted-foreground">{transcript}</p>
-    </div>}
+    {transcript && <details className="text-sm">
+      <summary className="cursor-pointer font-medium">{t('pronunciationPilot.heard')}</summary>
+      <p lang="en" className="mt-1 wrap-anywhere text-muted-foreground">{transcript}</p>
+    </details>}
   </div>;
 }

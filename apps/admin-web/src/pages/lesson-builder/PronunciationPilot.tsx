@@ -312,19 +312,19 @@ export function PronunciationPilot({ lessonId, sentence, referenceClock, referen
 
   return <>
     {(!scored || canPlayReference) && <div role="group" aria-label={t('pronunciationPilot.referenceGroup')}
-      className="grid gap-2 rounded-lg border bg-muted/30 p-3">
-      <Button size="sm" variant="outline" className="justify-self-start" disabled={!canPlayReference}
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-muted/30 px-3 py-2">
+      <Button size="sm" variant="outline" disabled={!canPlayReference}
         onClick={() => referencePlaying ? pauseReference() : listenToReference()}>
         {referencePlaying ? <RiPauseLine aria-hidden="true" /> : <RiPlayLine aria-hidden="true" />}
         {t(referencePlaying ? 'pronunciationPilot.pauseReference' : 'pronunciationPilot.reference')}
       </Button>
-      <div lang="en" className="studio-karaoke text-base wrap-anywhere">
+      {(!scored || referencePlaying) && <div lang="en" className="studio-karaoke min-w-0 flex-1 basis-64 text-base wrap-anywhere">
         {canPlayReference && sentence.words.length > 0
           ? <PlaybackWords timing clock={referenceClock} sentence={sentence} onSeek={listenToReference} />
           : oldRevision?.referenceText ?? sentence.text}
-      </div>
+      </div>}
     </div>}
-    <section aria-labelledby={`${inputId}-panel`} className="flex min-w-0 flex-col gap-4">
+    <section aria-labelledby={`${inputId}-panel`} className="flex min-w-0 flex-col gap-3">
     <h2 id={`${inputId}-panel`} aria-live="polite" className="font-semibold">
       {t(result ? 'pronunciationPilot.results' : 'pronunciationPilot.recording')}
     </h2>
@@ -338,21 +338,19 @@ export function PronunciationPilot({ lessonId, sentence, referenceClock, referen
     {!accepted && current && limits.isPending && <LoadingStatus placeholder>{t('pronunciationPilot.loadingLimits')}</LoadingStatus>}
     {!accepted && current && limits.isError && <p role="alert">{limits.error.message} <Button size="sm" variant="link" onClick={() => void limits.refetch()}>{t('pronunciationPilot.retry')}</Button></p>}
     {localControls && <>
-      <p className="text-muted-foreground">{t('pronunciationPilot.limit', { seconds: limits.data.maxDurationSeconds })}</p>
-      <div className="grid gap-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant={isRecording ? 'destructive' : 'outline'} disabled={requestingMic || sending} onClick={() => {
-            if (isRecording) capture.current?.stop();
-            else void record();
-          }}>
-            {isRecording ? <RiStopLine aria-hidden="true" /> : <RiMicLine aria-hidden="true" />}
-            {t(isRecording ? 'pronunciationPilot.stop' : 'pronunciationPilot.record')}
-          </Button>
-          {isRecording && <time className="tabular-nums">{t('pronunciationPilot.remaining', { seconds: remaining })}</time>}
-        </div>
-        <div className="flex min-w-0 max-w-md flex-col gap-1">
-          <label htmlFor={inputId}>{t('pronunciationPilot.upload')}</label>
-          <Input id={inputId} type="file" accept=".webm,.ogg,.opus,.m4a,.mp4,.wav,.mp3,audio/*"
+      <p className="text-sm text-muted-foreground">{t('pronunciationPilot.limit', { seconds: limits.data.maxDurationSeconds })}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant={isRecording ? 'destructive' : 'outline'} disabled={requestingMic || sending} onClick={() => {
+          if (isRecording) capture.current?.stop();
+          else void record();
+        }}>
+          {isRecording ? <RiStopLine aria-hidden="true" /> : <RiMicLine aria-hidden="true" />}
+          {t(isRecording ? 'pronunciationPilot.stop' : 'pronunciationPilot.record')}
+        </Button>
+        {isRecording && <time className="tabular-nums">{t('pronunciationPilot.remaining', { seconds: remaining })}</time>}
+        <div className="min-w-0 flex-1 basis-44">
+          <label htmlFor={inputId} className="sr-only">{t('pronunciationPilot.upload')}</label>
+          <Input id={inputId} type="file" className="h-8 max-w-xs" accept=".webm,.ogg,.opus,.m4a,.mp4,.wav,.mp3,audio/*"
             disabled={isRecording || requestingMic || sending} onChange={event => {
               const file = event.currentTarget.files?.[0];
               if (file) selectFile(file);
@@ -360,11 +358,11 @@ export function PronunciationPilot({ lessonId, sentence, referenceClock, referen
             }} />
         </div>
       </div>
-      {upload && !isRecording && <div className="grid gap-3 border-t pt-4">
-        <p className="break-all font-medium">{upload.file.name}</p>
+      {upload && !isRecording && <div className="grid gap-2 border-t pt-2">
+        <p className="truncate text-sm font-medium" title={upload.file.name}>{upload.file.name}</p>
         {uploadUrl ? <AudioPlayer ref={uploadPlayer} src={uploadUrl} aria-label={t('pronunciationPilot.recordingPreview')}
           onPlay={pauseReference} /> : <LoadingStatus>{t('pronunciationPilot.preparingAudio')}</LoadingStatus>}
-        <Button className="justify-self-start" disabled={requestingMic || sending} onClick={() => { uploadPlayer.current?.pause(); void send(); }}>
+        <Button size="sm" className="justify-self-start" disabled={requestingMic || sending} onClick={() => { uploadPlayer.current?.pause(); void send(); }}>
           {sending && <RiLoader4Line aria-hidden="true" className="motion-safe:animate-spin" />}
           {t(sending ? 'pronunciationPilot.sending' : 'pronunciationPilot.submit')}
         </Button></div>}
