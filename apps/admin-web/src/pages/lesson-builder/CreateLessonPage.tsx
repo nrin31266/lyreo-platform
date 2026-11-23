@@ -156,7 +156,7 @@ function CreateYouTubePage({ onDirtyChange, onBusyChange }: { onDirtyChange: (di
       const next = await authoring.inspectSource(reference, request.signal);
       if (version !== inspectionVersion.current) return;
       setInspection(next);
-      setPreferEnglishCaptions(!!next.englishCaptions);
+      setPreferEnglishCaptions(next.englishCaptions?.automatic === false);
       const [start, end] = defaultRange(next.durationMs, env.youtubeAutoSelectMaxMinutes);
       setStartMs(start);
       setEndMs(end);
@@ -353,7 +353,9 @@ function CreateYouTubePage({ onDirtyChange, onBusyChange }: { onDirtyChange: (di
                     disabled={!!captionFile || readingCaption || createMutation.isPending}
                     aria-describedby="source-caption-status"
                     onCheckedChange={value => setPreferEnglishCaptions(value === true)} />
-                  <FieldLabel htmlFor="prefer-english-captions">{t("captions.preferEnglish")}</FieldLabel>
+                  <FieldLabel htmlFor="prefer-english-captions">
+                    {t(track.automatic ? "captions.useAutomaticTrack" : "captions.useManualTrack")}
+                  </FieldLabel>
                 </div>}
                 <FieldLabel htmlFor="caption-file">{t("captions.upload")}</FieldLabel>
                 <Input id="caption-file" ref={captionInput} type="file" accept=".srt,.vtt"

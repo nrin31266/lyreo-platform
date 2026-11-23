@@ -12,6 +12,8 @@ import tools.jackson.databind.ObjectMapper;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.MultipartBodyBuilder;
 
 /** HTTP adapter from Java AI routing to the private FastAPI capability service. */
 public final class FastApiAiExecutionGateway implements AiExecutionGateway {
@@ -34,11 +36,13 @@ public final class FastApiAiExecutionGateway implements AiExecutionGateway {
             case ALIGNMENT -> "/v1/align";
             case TTS -> "/v1/tts";
             case NLP -> "/v1/nlp/analyze";
+            case PRONUNCIATION_ASSESSMENT -> "/v1/speech/pronunciation-assessment";
             case PRONUNCIATION_JUDGE -> "/v1/multimodal/judge";
             case GENERAL_LLM, REASONING_LLM -> "/v1/llm/generate";
         };
 
-        Map<String, Object> body = Map.of(
+        Object body = command.capability() == AiCapability.PRONUNCIATION_ASSESSMENT
+            ? assessmentBody(command) : Map.of(
             "invocation_id", command.invocationId().toString(),
             "provider", command.provider(),
             "model", command.model(),
@@ -137,6 +141,14 @@ public final class FastApiAiExecutionGateway implements AiExecutionGateway {
                 failure
             );
         }
+    }
+
+    private Object assessmentBody(AiExecutionCommand command) {
+        var multipart = new MultipartBodyBuilder();
+        multipart.part("referenceText", command.input().get("referenceText"));
+        multipart.part("audio", command.input().get("audio"), MediaType.parseMediaType("audio/wav"))
+            .filename("assessment.wav");
+        return multipart.build();
     }
 
     private static long elapsedMs(long startNanos) {

@@ -94,7 +94,8 @@ class LessonAuthoringIT {
         var track=new AuthoringSourcePort.CaptionTrack("en",automatic);
         when(source.inspect(url)).thenReturn(new AuthoringSourcePort.SourceInfo("abcdefghijk","Reference",10_000,true,null,track));
         when(source.englishCaptions("abcdefghijk",track,2000,5000)).thenReturn(List.of(
-            new AuthoringSourcePort.CaptionLine("We learn.",100,600),
+            new AuthoringSourcePort.CaptionLine("We",100,300),
+            new AuthoringSourcePort.CaptionLine("learn.",300,600),
             new AuthoringSourcePort.CaptionLine("Practice helps.",700,1200)));
 
         var accepted=service.create("Captions",url,2000,5000,null,true,null);
@@ -102,8 +103,11 @@ class LessonAuthoringIT {
         var draft=service.get(accepted.lessonId());
 
         assertThat(draft.timingEvidence).containsEntry("transcriptSource",automatic?"YOUTUBE_EN_AUTOMATIC":"YOUTUBE_EN_MANUAL");
-        assertThat(draft.sentences).extracting(row->row.text).containsExactly("We learn.","Practice helps.");
-        assertThat(draft.sentences).extracting(row->row.coarseStartMs).containsExactly(100L,700L);
+        assertThat(draft.sentences).extracting(row->row.text)
+            .containsExactlyElementsOf(automatic ? List.of("We learn.","Practice helps.") : List.of("We","learn.","Practice helps."));
+        assertThat(draft.sentences).extracting(row->row.coarseStartMs)
+            .containsExactlyElementsOf(automatic ? List.of(100L,700L) : List.of(100L,300L,700L));
+        assertThat((List<?>)draft.timingEvidence.get("segments")).hasSize(3);
         assertThat(draft.sentences).allSatisfy(row->assertThat(row.words).isEmpty());
         assertThat(draft.timingStatus).isEqualTo("MISSING");
         verify(ai,never()).execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap());

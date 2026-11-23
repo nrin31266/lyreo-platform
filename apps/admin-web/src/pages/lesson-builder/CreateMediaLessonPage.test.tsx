@@ -289,13 +289,17 @@ it.each([
   fireEvent.change(screen.getByLabelText('YouTube URL'), { target: { value: 'https://www.youtube.com/watch?v=abcdefghijk' } });
   expect(authoring.inspectSource).not.toHaveBeenCalled();
   expect(await screen.findByText(message)).toBeVisible();
-  const prefer = screen.queryByRole('checkbox', { name: 'Prefer English captions' });
-  if (englishCaptions) expect(prefer).toBeChecked();
-  else expect(prefer).not.toBeInTheDocument();
+  const prefer = screen.queryByRole('checkbox', {
+    name: englishCaptions?.automatic ? 'Use auto-generated English captions' : 'Use publisher-provided English captions',
+  });
+  const useCaptionsByDefault = englishCaptions?.automatic === false;
+  if (!englishCaptions) expect(prefer).not.toBeInTheDocument();
+  else if (useCaptionsByDefault) expect(prefer).toBeChecked();
+  else expect(prefer).not.toBeChecked();
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'YouTube lesson' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create lesson' }));
   await screen.findByRole('heading', { name: 'Editor' });
-  expect(vi.mocked(authoring.createDraft).mock.calls[0][0].preferEnglishCaptions).toBe(!!englishCaptions);
+  expect(vi.mocked(authoring.createDraft).mock.calls[0][0].preferEnglishCaptions).toBe(useCaptionsByDefault);
 });
 
 it.each([null, { language: 'en', automatic: false }])('applies a locally supplied caption file with online track %j', async englishCaptions => {
@@ -312,7 +316,7 @@ it.each([null, { language: 'en', automatic: false }])('applies a locally supplie
   Object.defineProperty(file, 'text', { value: async () => captions });
   await userEvent.upload(upload, file);
   expect(await screen.findByText('The uploaded file takes priority over YouTube captions.')).toBeVisible();
-  const prefer = screen.queryByRole('checkbox', { name: 'Prefer English captions' });
+  const prefer = screen.queryByRole('checkbox', { name: 'Use publisher-provided English captions' });
   if (englishCaptions) expect(prefer).toBeDisabled();
   else {
     expect(prefer).not.toBeInTheDocument();
@@ -371,7 +375,7 @@ it('ignores incomplete URLs and protects the latest inspection from a stale resp
   expect(authoring.inspectSource).toHaveBeenCalledTimes(2);
 
   await act(async () => resolveOld({ ...source, videoId: 'abcdefghijk', englishCaptions: { language: 'en', automatic: false } }));
-  expect(screen.queryByRole('checkbox', { name: 'Prefer English captions' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('checkbox', { name: /Use .* English captions/ })).not.toBeInTheDocument();
 });
 
 it('retries a failed source check and allows opting out of the discovered track', async () => {
@@ -385,7 +389,7 @@ it('retries a failed source check and allows opting out of the discovered track'
   showCreateRoute(['/lessons/new']);
   fireEvent.change(screen.getByLabelText('YouTube URL'), { target: { value: 'https://www.youtube.com/shorts/abcdefghijk' } });
   await userEvent.click(await screen.findByRole('button', { name: 'Retry' }));
-  const prefer = await screen.findByRole('checkbox', { name: 'Prefer English captions' });
+  const prefer = await screen.findByRole('checkbox', { name: 'Use publisher-provided English captions' });
   expect(prefer).toBeChecked();
   await userEvent.click(prefer);
   fireEvent.click(screen.getByRole('button', { name: 'Create lesson' }));

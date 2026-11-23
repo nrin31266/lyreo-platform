@@ -28,6 +28,7 @@ const LearnersPage = lazy(() => import("@/pages/learners/LearnersPage").then(m =
 const LearnerDetailPage = lazy(() => import("@/pages/learners/LearnersPage").then(m => ({ default: m.LearnerDetailPage })));
 const LexiconPage = lazy(() => import("@/pages/lexicon/LexiconPage").then(m => ({ default: m.LexiconPage })));
 const LexiconDetailPage = lazy(() => import("@/pages/lexicon/LexiconDetailPage").then(m => ({ default: m.LexiconDetailPage })));
+const PhoneticsPage = lazy(() => import("@/pages/phonetics/PhoneticsPage").then(m => ({ default: m.PhoneticsPage })));
 const GrammarPage = lazy(() => import("@/pages/grammar/GrammarPage").then(m => ({ default: m.GrammarPage })));
 const GrammarDetailPage = lazy(() => import("@/pages/grammar/GrammarPage").then(m => ({ default: m.GrammarDetailPage })));
 const QuestionDetailPage = lazy(() => import("@/pages/library/QuestionEditor").then(m => ({ default: m.QuestionDetailPage })));
@@ -70,6 +71,7 @@ export function AppRouter() {
         <Route path="curriculum" element={<CurriculumPage />} />
         <Route path="lexicon" element={<LexiconPage />} />
         <Route path="lexicon/:id" element={<LexiconDetailPage />} />
+        <Route path="phonetics" element={<PhoneticsPage />} />
         <Route path="grammar" element={<GrammarPage />} />
         <Route path="grammar/:kind" element={<GrammarPage />} />
         <Route path="grammar/questions/:id" element={<QuestionDetailPage />} />

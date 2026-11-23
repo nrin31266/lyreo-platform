@@ -6,6 +6,7 @@ import com.lyreo.lesson.domain.authoring.AuthoringText;
 import com.lyreo.lesson.application.authoring.LessonAuthoringService;
 import com.lyreo.lesson.domain.authoring.AuthoringLesson;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -30,6 +31,25 @@ class AuthoringTextTest {
     @Test void splitsQuotesAbbreviationsAndDecimalNumbers() {
         assertThat(AuthoringText.split("Dr. Brown said, \"It costs 2.5 dollars.\" Is that right? Yes!"))
             .extracting(s->s.text).containsExactly("Dr. Brown said, \"It costs 2.5 dollars.\"","Is that right?","Yes!");
+    }
+    @Test void rejoinsAutomaticCaptionFragmentsAtSentencePunctuationAndRetainsSourceWindows() {
+        var cues = List.of(sentence("Welcome to this A2"), sentence("English lesson. I hope"),
+            sentence("you're ready. Today we start"));
+        Map<String,Object> evidence = Map.of("segments", List.of(
+            Map.of("text", cues.get(0).text, "start_ms", 0L, "end_ms", 1000L),
+            Map.of("text", cues.get(1).text, "start_ms", 1000L, "end_ms", 2000L),
+            Map.of("text", cues.get(2).text, "start_ms", 2000L, "end_ms", 3000L)));
+        var rows = AuthoringText.joinCaptionCues(cues, evidence);
+        assertThat(rows).extracting(row -> row.text).containsExactly(
+            "Welcome to this A2 English lesson.", "I hope you're ready.", "Today we start");
+        assertThat(rows).extracting(row -> row.coarseStartMs).containsExactly(0L, 1000L, 2000L);
+        var draft = new AuthoringLesson();
+        draft.endMs = 3000;
+        draft.sentences = rows;
+        draft.timingEvidence = evidence;
+        assertThat(LessonAuthoringService.alignmentSegments(draft)).isEqualTo(evidence.get("segments"));
+        var unpunctuated = List.of(sentence("welcome to this"), sentence("English lesson"));
+        assertThat(AuthoringText.joinCaptionCues(unpunctuated, Map.of())).isEqualTo(unpunctuated);
     }
     @Test void mapsCompoundsContractionsAndUnicodeWithoutWhitespaceCounting() {
         var sentences=List.of(sentence("It’s ice-cream."),sentence("Good café."));

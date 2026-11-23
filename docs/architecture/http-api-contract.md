@@ -126,6 +126,24 @@ Timing errors retain sentence=N prefixes where available and all existing window
 Diagnostics return real recorded job/invocation evidence, sanitized and size/retention bounded.
 Expired/old jobs return an empty list, not fabricated server logs. There is no arbitrary log-file API.
 
+### Admin Shadowing pronunciation pilot
+
+Under `/api/v1/admin/lesson-authoring/{lessonId}/sentences/{sentenceId}/pronunciation-attempts`,
+`GET ?revision=N` returns the saved reference range plus `maxDurationSeconds` and
+`maxUploadBytes`. `POST` accepts multipart `revision` and `audio` with a UUID
+`Idempotency-Key`. It returns `202 {attemptId,jobId,expiresAt}` and an attempt Location.
+The same owner, key and payload replay the accepted attempt. A stale revision on a new submission
+or reuse of a key with a different payload returns 409.
+
+Owners can read `GET /api/v1/admin/pronunciation-attempts/{id}`, fetch its private WAV via `/audio`,
+and request cancellation via `POST /cancel`. Status comes from the background job. A successful job
+returns a v1 result with `SCORED` or `NO_SPEECH`, nullable scores, and optional word and phoneme
+intervals. A reference word carries a zero-based `referenceIndex` into the tokenized
+`referenceText`. Insertions carry a null index and appear in alignment order. Reads require the
+Admin role and the creating JWT subject. Unknown, expired and other
+Admins' attempts return 404. An accepted attempt keeps its reference text and revision through
+later edits. The UI can play the reference while its saved revision remains current.
+
 Catalog `/api/v1/admin/lessons` accepts status/source/category/channel/cefr/activity filters.
 `status=DELETED` includes only soft-deleted lessons; AI_FAILED identifies current failed processing.
 Items include metadata version, draft revision, deleted/processing/aiFailed flags and profile/activities.

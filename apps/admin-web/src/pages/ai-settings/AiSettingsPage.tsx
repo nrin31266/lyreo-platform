@@ -76,6 +76,7 @@ const presets = {
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
   },
   DEEPSEEK: { displayName: "DeepSeek", baseUrl: "https://api.deepseek.com" },
+  AZURE_SPEECH: { displayName: "Azure Speech", baseUrl: "" },
   LOCAL_WHISPERX: { displayName: "WhisperX · Local", baseUrl: "" },
   LOCAL_KOKORO: { displayName: "Kokoro · Local", baseUrl: "" },
   LOCAL_NLP: { displayName: "NLP · Local", baseUrl: "" },
@@ -93,6 +94,7 @@ const capabilities = [
   "GENERAL_LLM",
   "REASONING_LLM",
   "TTS",
+  "PRONUNCIATION_ASSESSMENT",
   "PRONUNCIATION_JUDGE",
   "NLP",
 ];

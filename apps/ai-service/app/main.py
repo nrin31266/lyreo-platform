@@ -5,10 +5,11 @@ os.environ.setdefault('MKL_NUM_THREADS', '2')
 os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from .config import settings
+from .providers.azure_speech import Assessment, AssessmentError, AzureSpeech, MAX_WAV_BYTES
 from .providers.errors import provider_error_message
 from .providers.gemini import GeminiProvider
 from .providers.groq import GroqProvider
@@ -31,6 +32,7 @@ kokoro = KokoroRuntime(cfg)
 nlp_runtime = LightweightNlpRuntime()
 groq = GroqProvider(cfg.groq_base_url)
 gemini = GeminiProvider(cfg.gemini_base_url)
+azure_speech = AzureSpeech(cfg.azure_speech_region, cfg.azure_speech_endpoint)
 
 app = FastAPI(
     title='Lyreo AI Service',
@@ -186,6 +188,29 @@ async def judge(
     if req.provider.upper() == 'GEMINI':
         return await gemini.judge(req, _require_provider_credential(x_lyreo_provider_credential))
     raise HTTPException(501, f'Pronunciation judge provider {req.provider} is not implemented')
+
+
+@app.post(
+    '/v1/speech/pronunciation-assessment',
+    response_model=Assessment,
+    dependencies=[Depends(verify_internal_token)],
+)
+async def pronunciation_assessment(
+    referenceText: str = Form(max_length=6_000),
+    audio: UploadFile = File(),
+    x_lyreo_provider_credential: str | None = Header(default=None),
+):
+    credential = _require_provider_credential(x_lyreo_provider_credential)
+    if cfg.azure_speech_language != 'en-US' or cfg.azure_speech_enable_prosody:
+        raise HTTPException(422, 'AZURE_SPEECH_NOT_CONFIGURED')
+    content = await audio.read(MAX_WAV_BYTES + 1)
+    if len(content) > MAX_WAV_BYTES:
+        raise HTTPException(413, 'ASSESSMENT_AUDIO_TOO_LARGE')
+    try:
+        return await azure_speech.assess(content, referenceText, credential)
+    except AssessmentError as error:
+        headers = {'Retry-After': '10'} if error.status == 429 else None
+        raise HTTPException(error.status, error.code, headers=headers) from None
 
 
 @app.post('/v1/llm/generate', response_model=ExecuteResponse, dependencies=[Depends(verify_internal_token)])

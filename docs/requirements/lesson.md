@@ -32,8 +32,9 @@ Waveform preparation is deferred.
 URL inspection and selection do not acquire audio or run inference. Explicit transcript preparation starts media acquisition.
 Admin checks valid YouTube video URLs automatically after typing stops and shows caption availability
 next to the URL. Inspection identifies a usable publisher-provided or original auto-generated English
-track, with preference for the publisher-provided track. Admin offers the English-caption option
-checked when a track is available. Otherwise the page continues with configured transcription.
+track, with preference for the publisher-provided track. The English-caption option is checked
+for publisher-provided tracks only. Auto-generated tracks require an explicit selection. An
+unchecked option uses configured audio transcription.
 A selected track that cannot be loaded or used in the chosen range gives a distinct error with retry
 and WhisperX actions. An Admin can also supply an SRT or WebVTT file for the exact video version.
 Caption timing anchors each line
@@ -101,6 +102,20 @@ deep judge. Deep judge bổ sung feedback nhưng không thay quyền chấm đi�
 
 `speech-assessment` tạo final score; client không tự chấm. Context notes ưu tiên
 `AFTER_ATTEMPT` để practice screen gọn.
+
+### FR-LSN-006A — Admin pronunciation pilot
+
+Hộp thoại Thử chấm phát âm mở ngay tại câu Shadowing đã chọn trong danh sách câu hoặc Shadowing
+Preview. Với bài nháp đã lưu và bài đã xuất bản, Admin có thể nghe mẫu, thu âm hay tải tệp, nghe thử bản thu và xem
+feedback từ Azure Pronunciation Assessment. Core tính giới hạn thu từ thời lượng mẫu.
+Khi nghe câu mẫu trong hộp thoại, karaoke làm nổi từ đang phát theo mốc của bài học.
+Kết quả gắn với revision đã gửi. Cùng một màn hình hiển thị bốn loại điểm, từ thiếu, từ thừa và từ
+sai phát âm ngay trên câu đã chấm. Chọn từ để xem âm vị và nghe lại theo mốc khi có. Với âm vị có
+trong [bảng phiên âm tiếng Anh Mỹ](lexicon-vocabulary.md#fr-lex-005--admin-ipa-chart), Admin
+có thể nghe riêng âm mẫu, nghe từ ví dụ và đọc hướng dẫn song ngữ để đối chiếu với bản thu.
+Hàng câu trong Shadowing Preview có tóm tắt kết quả còn hạn của revision hiện tại. Bản thu thiếu
+tín hiệu hiển thị hướng dẫn thu lại. Chỉ Admin tạo lượt có quyền truy cập dữ liệu chi tiết.
+Bản thu, transcript, điểm và feedback hết hạn sau 24 giờ. Lượt thử nằm ngoài tiến độ và điểm Learner.
 
 ## User Stories & Acceptance Criteria
 

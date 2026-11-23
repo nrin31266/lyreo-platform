@@ -25,6 +25,13 @@ the English sentence tokenizer. Restarts clear loaded models and retain download
 
 Internal capability calls require the service token. FastAPI does not persist provider credentials or business records. Do not log incoming credentials. Use authorized media references for large audio; storage ownership remains outside this process.
 
+The [Admin pronunciation pilot](../../docs/CONFIGURATION.md#admin-pronunciation-pilot) receives
+Azure credentials from Core for each call. Its optional live smoke uses synthetic samples with an
+initial pause and pauses across utterances. From this directory, inject the Speech F0 key in the
+test process as `AZURE_SPEECH_KEY`, then run
+`LYREO_AZURE_SMOKE=1 uv run --locked --extra dev python -m pytest tests/test_azure_speech_live.py`.
+The runner also needs `espeak-ng` and `ffmpeg`.
+
 ## Lesson authoring execution contract
 
 STT returns `text`, `timestamps` and coarse `segments` with millisecond anchors relative to the

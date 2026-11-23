@@ -29,6 +29,7 @@ orchestration, route, retry/fallback, persistence và state transition.
 
 FastAPI cung cấp STT, alignment, TTS, NLP analysis, generic LLM generation và
 multimodal judging qua capability endpoints; không có Lesson/Curriculum/Reward/SRS/TOEIC workflow.
+Admin pronunciation pilot dùng capability `PRONUNCIATION_ASSESSMENT` qua route Azure Speech.
 
 ### FR-AI-002 — Configurable routing and fallback
 

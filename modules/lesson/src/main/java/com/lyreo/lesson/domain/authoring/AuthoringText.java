@@ -55,6 +55,17 @@ public final class AuthoringText {
         if (result.isEmpty()) throw new RequestValidationException("Transcript contains no lexical text");
         return result;
     }
+    public static List<AuthoringSentence> joinCaptionCues(List<AuthoringSentence> cues, Map<String,Object> evidence) {
+        if (cues.isEmpty()) return cues;
+        String transcript = String.join(" ", cues.stream().map(cue -> cue.text).toList());
+        if (tokens(transcript).isEmpty()) return cues;
+        var sentences = split(transcript);
+        // An unpunctuated run still needs the original cue boundaries for transcript review.
+        if (sentences.size() == 1 && !transcript.matches("(?s).*[.!?][\"'’”)]*$")) return cues;
+        seedCoarse(sentences, evidence);
+        return sentences.stream().allMatch(sentence -> sentence.coarseStartMs != null && sentence.coarseEndMs != null)
+            ? sentences : cues;
+    }
     private static void addSentence(List<AuthoringSentence> result, String text) {
         if (!text.isBlank() && !tokens(text).isEmpty())
             result.add(new AuthoringSentence(UUID.randomUUID(), text.strip(), "LEARN"));

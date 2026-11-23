@@ -1,5 +1,9 @@
 import type { AuthoringSentence, TranscriptSentence } from './lesson-builder.types';
 
+export function isSelectedShadowingSentence(row: AuthoringSentence) {
+  return row.shadowingSelected && !row.hidden && row.usage === 'LEARN';
+}
+
 export function isSoundCueForActivity(sentence: AuthoringSentence, activity: 'DICTATION' | 'SHADOWING') {
   const eligible = activity === 'DICTATION' ? sentence.dictationEligible : sentence.shadowingEligible;
   return !eligible && sentence.exclusions?.[activity] === 'NON_SPEECH';
