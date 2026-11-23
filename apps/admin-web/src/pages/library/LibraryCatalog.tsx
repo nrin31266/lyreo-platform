@@ -57,7 +57,7 @@ export function LibraryList({ endpoint, route, title, extra }: { endpoint: strin
     if(row.status === 'DRAFT') return null;
     return <Button size="sm" variant="ghost" tooltip={t(row.status === 'PUBLISHED' ? 'library.help.hide' : 'library.help.show')} aria-label={t(row.status === 'PUBLISHED' ? 'library.hideItem' : 'library.showItem',{title:titleOf(row)})} disabled={visibility.isPending} onClick={()=>visibility.mutate(row)}>{row.status === 'PUBLISHED' ? <RiEyeOffLine aria-hidden="true" /> : <RiEyeLine aria-hidden="true" />}{t(row.status === 'PUBLISHED' ? 'library.hide' : 'library.showShort')}</Button>;
   }
-  const parents = useQuery({queryKey:['library','/api/v1/admin/grammar/topic','parents'],enabled:kind === 'subtopic',queryFn:({signal})=>api<Summary[]>('/api/v1/admin/grammar/topic?size=100',{signal})});
+  const parents = useQuery({queryKey:['library','/api/v1/admin/grammar/topic','parents'],enabled:kind === 'subtopic',queryFn:async({signal})=>(await api<CatalogPage<Summary>>('/api/v1/admin/grammar/topic/page?size=100&page=0',{signal})).items});
   const rows = list.data?.items;
   const countParams = new URLSearchParams(params);
   for (const key of ['page', 'size', 'after', 'before', 'tail', 'skip']) countParams.delete(key);

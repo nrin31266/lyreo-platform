@@ -479,6 +479,7 @@
     "searchChannels": "Search channels",
     "channelCount": "{{count}} channels",
     "noChannelMatches": "No channels match these filters.",
+    "allVisibility": "All visibility",
     "channelVisibilityFilter": "Channel visibility",
     "channelLessonFilter": "Filter by lesson count",
     "allLessonCounts": "All lesson counts",
@@ -1655,7 +1656,9 @@
     "combinedTranslation": "Source translation — question and options",
     "editReadingGroup": "Edit shared reading documents",
     "questionImages": "Images",
-    "readingMediaTranslation": "Images & translation"
+    "readingMediaTranslation": "Images & translation",
+    "toeicNoPartQuestions": "Part {{part}} has no questions",
+    "toeicNoPartQuestionsHelp": "Check the imported test structure or choose another Part."
   },
   "pagination": {
     "label": "Pagination",

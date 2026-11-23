@@ -182,6 +182,8 @@ it("confirms empty channel deletion, keeps failures open and clears its selectio
   vi.mocked(api.fetchChannels).mockResolvedValue([{id:'empty',title:'Unused channel',lessonCount:0,linkedLessonCount:0,avatarUrl:null,syncedAt:null,syncError:null,syncJobId:null,syncStatus:null,visible:true}]);
   vi.mocked(api.deleteChannel).mockRejectedValueOnce(new Error('Network failed')).mockResolvedValueOnce();
   show(<ChannelsPage />);
+  await userEvent.click(screen.getByRole('combobox',{name:'Filter by lesson count'}));
+  await userEvent.click(screen.getByRole('option',{name:'No current lessons'}));
   await userEvent.click(await screen.findByRole('checkbox',{name:'Select Unused channel'}));
   await userEvent.click(screen.getByRole('button',{name:'Delete Unused channel'}));
   expect(api.deleteChannel).not.toHaveBeenCalled();
@@ -201,11 +203,26 @@ it("prevents deleting channels with even deleted lessons or active synchronizati
     {...channel,id:'busy',title:'Busy',linkedLessonCount:0,syncStatus:'RUNNING'},
   ]);
   show(<ChannelsPage />);
+  await userEvent.click(screen.getByRole('combobox',{name:'Filter by lesson count'}));
+  await userEvent.click(screen.getByRole('option',{name:'No current lessons'}));
   expect(await screen.findByRole('button',{name:'Delete Used'})).toBeDisabled();
   expect(screen.getByRole('button',{name:'Delete Busy'})).toBeDisabled();
   expect(screen.getByRole('button',{name:'Delete Used'}).closest('span')).toHaveAttribute('title',expect.stringContaining('Hide'));
   expect(screen.getByRole('link',{name:'1 in trash'})).toHaveAttribute('href','/lessons?channel=used&status=DELETED');
   expect(api.deleteChannel).not.toHaveBeenCalled();
+});
+
+it('defaults to shown channels with current lessons', async () => {
+  vi.mocked(api.fetchChannels).mockResolvedValue([
+    {id:'shown',title:'Shown',lessonCount:2,linkedLessonCount:2,avatarUrl:null,syncedAt:null,syncError:null,syncJobId:null,syncStatus:null,visible:true},
+    {id:'hidden',title:'Hidden',lessonCount:3,linkedLessonCount:3,avatarUrl:null,syncedAt:null,syncError:null,syncJobId:null,syncStatus:null,visible:false},
+    {id:'empty',title:'Empty',lessonCount:0,linkedLessonCount:1,avatarUrl:null,syncedAt:null,syncError:null,syncJobId:null,syncStatus:null,visible:true},
+  ]);
+  show(<ChannelsPage />);
+  expect(await screen.findByRole('link',{name:'Shown'})).toBeInTheDocument();
+  expect(screen.queryByRole('link',{name:'Hidden'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('link',{name:'Empty'})).not.toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('1 of 3 channels');
 });
 
 it('combines channel visibility and lesson count filters and syncs only selected matches', async () => {

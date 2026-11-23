@@ -72,7 +72,7 @@ it('hides a published item directly from its table row using the current revisio
   expect(api).not.toHaveBeenCalledWith(expect.stringContaining('/publish'),expect.anything());
 });
 it('keeps the parent topic in subtopic navigation without manual creation',async()=>{
-  vi.mocked(api).mockImplementation(async url=>url.includes('/topic?')?[{id:'topic',title:'Tenses'}]:{items:[{id:'sub',title:'Present tense',status:'PUBLISHED',parentId:'topic',questionCount:10}],total:1,page:0,size:30});
+  vi.mocked(api).mockImplementation(async url=>url.includes('/topic/page?')?{items:[{id:'topic',title:'Tenses'}],total:1,page:0,size:100}:{items:[{id:'sub',title:'Present tense',status:'PUBLISHED',parentId:'topic',questionCount:10}],total:1,page:0,size:30});
   show('/grammar/subtopic','/api/v1/admin/grammar/subtopic','/grammar/subtopic?parentId=topic');
   expect(await screen.findByRole('link',{name:'Tenses'})).toHaveAttribute('href','/grammar/topic/topic');
   expect(screen.queryByRole('link',{name:'Add subtopic'})).not.toBeInTheDocument();

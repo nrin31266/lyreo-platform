@@ -31,8 +31,8 @@ export function ChannelsPage({ embedded = false }: { embedded?: boolean }) {
   const client = useQueryClient();
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState("");
-  const [visibilityFilter, setVisibilityFilter] = useState("all");
-  const [lessonFilter, setLessonFilter] = useState("all");
+  const [visibilityFilter, setVisibilityFilter] = useState("shown");
+  const [lessonFilter, setLessonFilter] = useState("hasLessons");
   const [deleting, setDeleting] = useState<Channel>();
   const query = useQuery({
     queryKey: catalogKeys.channels,
@@ -78,7 +78,7 @@ export function ChannelsPage({ embedded = false }: { embedded?: boolean }) {
           <Select value={visibilityFilter} onValueChange={setVisibilityFilter}>
             <SelectTrigger aria-label={t("catalog.channelVisibilityFilter")}><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">{t("catalog.allStatuses")}</SelectItem>
+              <SelectItem value="all">{t("catalog.allVisibility")}</SelectItem>
               <SelectItem value="shown">{t("catalog.visible")}</SelectItem>
               <SelectItem value="hidden">{t("catalog.hiddenShort")}</SelectItem>
             </SelectContent>

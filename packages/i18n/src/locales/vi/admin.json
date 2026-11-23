@@ -479,6 +479,7 @@
     "searchChannels": "Tìm kênh",
     "channelCount": "{{count}} kênh",
     "noChannelMatches": "Không có kênh khớp với bộ lọc.",
+    "allVisibility": "Mọi trạng thái hiển thị",
     "channelVisibilityFilter": "Trạng thái hiển thị của kênh",
     "channelLessonFilter": "Lọc theo số bài học",
     "allLessonCounts": "Mọi số lượng bài",
@@ -1655,7 +1656,9 @@
     "combinedTranslation": "Bản dịch nguồn — câu hỏi và lựa chọn",
     "editReadingGroup": "Sửa tài liệu đọc dùng chung",
     "questionImages": "Hình ảnh",
-    "readingMediaTranslation": "Hình ảnh & bản dịch"
+    "readingMediaTranslation": "Hình ảnh & bản dịch",
+    "toeicNoPartQuestions": "Part {{part}} chưa có câu hỏi",
+    "toeicNoPartQuestionsHelp": "Kiểm tra cấu trúc đề đã nhập hoặc chọn Part khác."
   },
   "pagination": {
     "label": "Phân trang",
