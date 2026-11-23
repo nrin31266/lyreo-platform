@@ -114,7 +114,7 @@ it('tests the selected sentence in place and submits its saved revision', async 
     const client = await show({ ...original, status: 'PUBLISHED' });
     await userEvent.click(screen.getByRole('button', { name: 'Test pronunciation for sentence 1' }));
     const editorDialog = within(await screen.findByRole('dialog', { name: 'Test pronunciation' }));
-    expect(editorDialog.getByText('Hello world.')).toBeVisible();
+    expect(editorDialog.getByRole('button', { name: 'Hello' })).toBeVisible();
     await userEvent.keyboard('{Escape}');
     expect(await screen.findByRole('button', { name: 'Preview' })).toBeVisible();
 
@@ -123,7 +123,7 @@ it('tests the selected sentence in place and submits its saved revision', async 
     await userEvent.click(preview.getByRole('button', { name: 'Shadowing' }));
     await userEvent.click(preview.getByRole('button', { name: 'Test pronunciation' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Test pronunciation' }));
-    expect(dialog.getByText('Hello world.')).toBeVisible();
+    expect(dialog.getByRole('button', { name: 'world.' })).toBeVisible();
     expect(await dialog.findByText('Record or upload up to 12 seconds.')).toBeInTheDocument();
     await userEvent.upload(dialog.getByLabelText('Upload audio'), new File(['wave'], 'test.wav', { type: 'audio/wav' }));
     expect(await dialog.findByRole('group', { name: 'Preview the recording before submitting' })).toBeInTheDocument();
@@ -146,14 +146,21 @@ it('tests the selected sentence in place and submits its saved revision', async 
     };
     await client.invalidateQueries({ queryKey: ['job', 'job'] });
     const results = within(await screen.findByRole('region', { name: 'Assessment results' }));
+    expect(results.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
     expect(results.getByRole('button', { name: /Review “Hello”/ })).toBeInTheDocument();
     const missingWord = results.getByRole('button', { name: /Review “world”.*Missing/ });
     missingWord.focus();
     await userEvent.keyboard('{Enter}');
-    expect(missingWord).toHaveAttribute('aria-pressed', 'true');
-    expect(missingWord).toHaveTextContent('Missing');
+    expect(results.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-selected', 'true');
+    expect(results.getByRole('button', { name: /Review “world”.*Missing/ })).toHaveAttribute('aria-pressed', 'true');
     expect(results.getByText('No matching segment in your recording.')).toBeInTheDocument();
     expect(results.queryByRole('button', { name: 'Play world' })).not.toBeInTheDocument();
+    await userEvent.click(results.getByRole('button', { name: 'Issues only' }));
+    expect(results.queryByRole('button', { name: /Review “Hello”/ })).not.toBeInTheDocument();
+    const detailsTab = results.getByRole('tab', { name: 'Details' });
+    detailsTab.focus();
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(results.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
     await userEvent.keyboard('{Escape}');
     await userEvent.click(await preview.findByRole('button', { name: 'Words to review · 1' }));
     expect(await screen.findByRole('button', { name: /Review “world”.*Missing/ })).toBeVisible();

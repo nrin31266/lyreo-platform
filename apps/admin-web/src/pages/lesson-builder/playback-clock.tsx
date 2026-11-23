@@ -35,8 +35,9 @@ export function SeekBar({ clock, durationMs, onSeek }: { clock: PlaybackClock; d
   const value = useSyncExternalStore(clock.subscribe, clock.get);
   return <label className="player-seek"><span className="sr-only">{t('authoringUi.seekPosition')}</span><input type="range" min={0} max={durationMs} step={100} value={Math.min(durationMs, Math.max(0,value))} aria-label={t('authoringUi.seekPosition')} onChange={e => { const at=Number(e.target.value); clock.set(at); onSeek(at); }} /><span className="text-xs text-muted-foreground tabular-nums">{timecode(value)} / {timecode(durationMs)}</span></label>;
 }
-export function PlaybackWords({ clock, sentence, onSeek, timing = false }: { clock: PlaybackClock; sentence: AuthoringSentence; onSeek: (atMs: number) => void; timing?: boolean }) {
-  const active = useSyncExternalStore(clock.subscribe, () => sentence.words.findIndex(word => clock.get() >= word.startMs && clock.get() < word.endMs));
+export function PlaybackWords({ clock, sentence, onSeek, timing = false, highlight = true }: { clock: PlaybackClock; sentence: AuthoringSentence; onSeek: (atMs: number) => void; timing?: boolean; highlight?: boolean }) {
+  const active = useSyncExternalStore(clock.subscribe, () => highlight
+    ? sentence.words.findIndex(word => clock.get() >= word.startMs && clock.get() < word.endMs) : -1);
   return <span className={timing ? 'timing-playback' : 'playback-words'}>
     <span className={timing ? 'timing-words' : undefined}>{sentence.words.length ? sentence.words.map((word, index) => {
       const surface = word.charStart == null ? word.text : sentence.text.slice(index === 0 ? 0 : word.charStart, sentence.words[index + 1]?.charStart ?? sentence.text.length) || word.text;

@@ -53,6 +53,7 @@ function LessonEditorPage({ lessonId }: { lessonId: string }) {
   const [settings, setSettings] = useState(false), [history, setHistory] = useState(false), [preview, setPreview] = useState(false);
   const [openingPreview, setOpeningPreview] = useState(false);
   const [pronunciation, setPronunciation] = useState<{ sentence: AuthoringSentence; revision: number }>();
+  const [referencePlaying, setReferencePlaying] = useState(false);
   const pronunciationTrigger = useRef<HTMLButtonElement>(null);
   const [attempts, setAttempts] = useState<Record<string, (AcceptedPronunciation & { summary?: PronunciationSummary }) | undefined>>({});
   const savePronunciationSummary = useCallback((sentenceId: string, attemptId: string, summary: PronunciationSummary) => {
@@ -148,7 +149,10 @@ function LessonEditorPage({ lessonId }: { lessonId: string }) {
       if (response.data) accept(response.data);
     });
   }
-  function pause() { setSeek({ atMs: clock.get(), sequence: Date.now(), play: false }); }
+  function pause() {
+    setReferencePlaying(false);
+    setSeek({ atMs: clock.get(), sequence: Date.now(), play: false });
+  }
   function discardChanges() {
     if (!persisted.current || busyRef.current || pending) return;
     pause();
@@ -237,7 +241,10 @@ function LessonEditorPage({ lessonId }: { lessonId: string }) {
       onRetry={() => void retryProcessing(false)} onUseWhisperX={() => void retryProcessing(true)} onCancel={() => void perform(async () => { accept(await authoring.cancelChain(lessonId, latest.current!.revision)); void query.refetch(); })} />
     {(error || query.error) && <div role="alert" className="studio-error"><CatalogError error={query.error} />{error && <p>{error}</p>}<Button variant="outline" size="sm" onClick={() => { if (!hasChanges || window.confirm(t('catalog.unsaved'))) { dirtyRef.current = new Set(); setDirty(new Set()); void query.refetch(); } }}>{t('finish.reload')}</Button></div>}
 
-      <div className="studio-workspace"><aside className="studio-player"><LessonPlayer draft={draft} sentences={playbackRows} seek={seek} controlsHost={preview ? previewControlsHost : controlsHost} onTimeChange={clock.set} onAvailabilityChange={setAvailable} onPlayingChange={playing => { if (playing && activeId !== playbackId) setActiveId(playbackId); }} review={{ sentenceId: pronunciation?.sentence.id ?? playbackId, context: pronunciation ? 'pronunciation' : preview ? `preview-${mode}` : 'studio', onSentenceChange: setActiveId }} />{draft.statistics && draft.sentences.length > 0 && <p className="studio-statistics">{t('finish.statistics', { sentences: draft.statistics.sentenceCount, words: draft.statistics.wordCount, duration: timecode(draft.statistics.durationMs), pace: draft.statistics.wordsPerMinute ?? '—' })}</p>}</aside>
+      <div className="studio-workspace"><aside className="studio-player"><LessonPlayer draft={draft} sentences={playbackRows} seek={seek} controlsHost={preview ? previewControlsHost : controlsHost} onTimeChange={clock.set} onAvailabilityChange={setAvailable} onPlayingChange={playing => {
+        if (pronunciation) setReferencePlaying(playing);
+        if (playing && activeId !== playbackId) setActiveId(playbackId);
+      }} review={{ sentenceId: pronunciation?.sentence.id ?? playbackId, context: pronunciation ? 'pronunciation' : preview ? `preview-${mode}` : 'studio', onSentenceChange: setActiveId }} />{draft.statistics && draft.sentences.length > 0 && <p className="studio-statistics">{t('finish.statistics', { sentences: draft.statistics.sentenceCount, words: draft.statistics.wordCount, duration: timecode(draft.statistics.durationMs), pace: draft.statistics.wordsPerMinute ?? '—' })}</p>}</aside>
       <div className="studio-content">{draft.sentences.length > 0 && <><div className="studio-list-toolbar"><h2>{t('lessonAuthoring.transcriptTab')} <span>{draft.sentences.length}</span></h2><LessonNotes draft={draft} onJump={id => { setActiveId(id); setNoteJump(value => value + 1); }} /><label className="finish-check"><Checkbox checked={showIpa} onCheckedChange={v => setShowIpa(v === true)} />{t('finish.showIpa')}</label><Button size="sm" variant={clozeEditing ? 'secondary' : 'ghost'} disabled={blocked || dirty.has('_transcript')} onClick={() => setClozeEditing(v => !v)}>{t('finish.editCloze')}</Button></div>
       {transcriptSource && <p className="studio-help">{t('captions.transcriptSource', {
         source: t(`captions.sources.${transcriptSource}`, { defaultValue: transcriptSource }),
@@ -299,7 +306,7 @@ function LessonEditorPage({ lessonId }: { lessonId: string }) {
     <Dialog open={!!pronunciation} onOpenChange={open => {
       if (!open) { pause(); setPronunciation(undefined); }
     }}>
-      {pronunciation && <DialogContent className="max-h-[calc(100dvh-2rem)] gap-4 overflow-y-auto sm:max-w-2xl"
+      {pronunciation && <DialogContent className="max-h-[calc(100dvh-2rem)] gap-4 overflow-y-auto sm:max-w-3xl"
         onCloseAutoFocus={event => {
           if (!pronunciationTrigger.current?.isConnected) return;
           event.preventDefault();
@@ -310,13 +317,13 @@ function LessonEditorPage({ lessonId }: { lessonId: string }) {
           <DialogDescription className="sr-only">{t('pronunciationPilot.dialogHelp')}</DialogDescription>
         </DialogHeader>
         <PronunciationPilot key={pronunciation.sentence.id} lessonId={lessonId}
-          sentenceId={pronunciation.sentence.id} referenceText={pronunciation.sentence.text}
+          sentence={pronunciation.sentence} referenceClock={clock} referencePlaying={referencePlaying}
           revision={pronunciation.revision} currentRevision={draft.revision}
           accepted={attempts[pronunciation.sentence.id]} onAccepted={attempt => {
             setAttempts(previous => ({ ...previous, [pronunciation.sentence.id]: attempt }));
           }} onSummary={savePronunciationSummary} playReference={available && pronunciation.revision === draft.revision
             && (pronunciation.sentence.words.length || pronunciation.sentence.previewStartMs != null)
-            ? () => play(pronunciation.sentence.id) : undefined}
+            ? atMs => play(pronunciation.sentence.id, atMs) : undefined}
           pauseReference={pause} onConflict={() => void query.refetch()} />
       </DialogContent>}
     </Dialog>

@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { RiLoader4Line, RiMicLine, RiPlayLine, RiStopLine } from '@remixicon/react';
+import { RiLoader4Line, RiMicLine, RiPauseLine, RiPlayLine, RiStopLine } from '@remixicon/react';
 import { useTranslation } from 'react-i18next';
 import { AudioPlayer } from '@/components/AudioPlayer';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PronunciationFeedback, wordPlaybackRange } from './PronunciationFeedback';
+import { PlaybackWords, type PlaybackClock } from './playback-clock';
+import type { AuthoringSentence } from './lesson-builder.types';
 import { ApiError } from '@/lib/api';
 import { useJobConnection } from '@/lib/realtime/JobRealtimeProvider';
 import { recordingPreview } from './recording-preview';
@@ -29,20 +31,22 @@ function LoadingStatus({ children, placeholder = false }: { children: ReactNode;
   </div>;
 }
 
-export function PronunciationPilot({ lessonId, sentenceId, referenceText, revision, currentRevision, accepted, onAccepted, onSummary, playReference, pauseReference, onConflict }: {
+export function PronunciationPilot({ lessonId, sentence, referenceClock, referencePlaying, revision, currentRevision, accepted, onAccepted, onSummary, playReference, pauseReference, onConflict }: {
   lessonId: string;
-  sentenceId: string;
-  referenceText: string;
+  sentence: AuthoringSentence;
+  referenceClock: PlaybackClock;
+  referencePlaying: boolean;
   revision: number;
   currentRevision: number;
   accepted?: AcceptedPronunciation;
   onAccepted: (value?: AcceptedPronunciation) => void;
   onSummary: (sentenceId: string, attemptId: string, summary: PronunciationSummary) => void;
-  playReference?: () => void;
+  playReference?: (atMs?: number) => void;
   pauseReference: () => void;
   onConflict: () => void;
 }) {
   const { t } = useTranslation('admin');
+  const sentenceId = sentence.id;
   const connection = useJobConnection();
   const inputId = useId();
   const [upload, setUpload] = useState<{ file: File; key: string; captured: boolean }>();
@@ -284,11 +288,11 @@ export function PronunciationPilot({ lessonId, sentenceId, referenceText, revisi
   }, [activeId, assessedRevision, onSummary, scored, sentenceId]);
 
   const canPlayReference = playReference && !requestingMic && !isRecording && !oldRevision;
-  function listenToReference() {
+  function listenToReference(atMs?: number) {
     uploadPlayer.current?.pause();
     player.current?.pause();
     stopClip();
-    playReference?.();
+    playReference?.(atMs);
   }
 
   function trackWord(audio: HTMLAudioElement) {
@@ -302,12 +306,20 @@ export function PronunciationPilot({ lessonId, sentenceId, referenceText, revisi
   const localControls = !accepted && current && limits.data;
 
   return <>
-    {!scored && <p lang="en" className="text-base wrap-anywhere">{oldRevision?.referenceText ?? referenceText}</p>}
-    {(!scored || canPlayReference) && <Button size="sm" variant="outline" className="justify-self-start"
-      disabled={!canPlayReference} onClick={listenToReference}>
-      <RiPlayLine aria-hidden="true" />{t('pronunciationPilot.reference')}
-    </Button>}
-    <section aria-labelledby={`${inputId}-panel`} className="@container flex min-w-0 flex-col gap-4">
+    {(!scored || canPlayReference) && <div role="group" aria-label={t('pronunciationPilot.referenceGroup')}
+      className="grid gap-2 rounded-lg border bg-muted/30 p-3">
+      <Button size="sm" variant="outline" className="justify-self-start" disabled={!canPlayReference}
+        onClick={() => referencePlaying ? pauseReference() : listenToReference()}>
+        {referencePlaying ? <RiPauseLine aria-hidden="true" /> : <RiPlayLine aria-hidden="true" />}
+        {t(referencePlaying ? 'pronunciationPilot.pauseReference' : 'pronunciationPilot.reference')}
+      </Button>
+      <div lang="en" className="text-base wrap-anywhere">
+        {canPlayReference && sentence.words.length > 0
+          ? <PlaybackWords clock={referenceClock} sentence={sentence} onSeek={listenToReference} highlight={referencePlaying} />
+          : oldRevision?.referenceText ?? sentence.text}
+      </div>
+    </div>}
+    <section aria-labelledby={`${inputId}-panel`} className="flex min-w-0 flex-col gap-4">
     <h2 id={`${inputId}-panel`} aria-live="polite" className="font-semibold">
       {t(result ? 'pronunciationPilot.results' : 'pronunciationPilot.recording')}
     </h2>
@@ -363,23 +375,12 @@ export function PronunciationPilot({ lessonId, sentenceId, referenceText, revisi
     {activeId && status === 'FAILED' && <p role="alert">{t(`pronunciationPilot.failure.${attempt.data?.errorCode}`, { defaultValue: t('pronunciationPilot.status.FAILED') })}</p>}
     {activeId && status === 'CANCELLED' && <p role="status">{t('pronunciationPilot.status.CANCELLED')}</p>}
     {result && <>
-      {scored ? <>
+      {scored ?
         <PronunciationFeedback key={activeId}
-          referenceText={attempt.data!.referenceText} words={scored.words} durationMs={scored.durationMs}
+          referenceText={attempt.data!.referenceText} result={scored}
           activeWord={activeWord} loaded={loaded} play={span => void replay(span, scored.durationMs)}
-          pause={() => { stopClip(); player.current?.pause(); }}
-          playReference={canPlayReference ? listenToReference : undefined} />
-        <dl className="grid grid-cols-2 gap-2 border-y py-3 @lg:grid-cols-4">
-          {(['overall', 'accuracy', 'fluency', 'completeness'] as const).map(metric => <div key={metric}>
-            <dt className="text-muted-foreground">{t(`pronunciationPilot.score.${metric}`)}</dt>
-            <dd className="font-semibold tabular-nums">{scored.scores[metric] == null ? '—' : Math.round(scored.scores[metric])}</dd>
-          </div>)}
-        </dl>
-        {scored.transcript && <div className="grid gap-1">
-          <p className="text-muted-foreground">{t('pronunciationPilot.heard')}</p>
-          <p lang="en" className="wrap-anywhere">{scored.transcript}</p>
-        </div>}
-      </> : <p role="status">{t('pronunciationPilot.noSpeech')}</p>}
+          pause={() => { stopClip(); player.current?.pause(); }} />
+        : <p role="status">{t('pronunciationPilot.noSpeech')}</p>}
       {audioUrl && <AudioPlayer ref={player} src={audioUrl} aria-label={t('pronunciationPilot.recording')}
         onPlay={event => { pauseReference(); trackWord(event.currentTarget); }}
         onTimeUpdate={event => trackWord(event.currentTarget)}

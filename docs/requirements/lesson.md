@@ -108,9 +108,10 @@ deep judge. Deep judge bổ sung feedback nhưng không thay quyền chấm đi�
 Hộp thoại Thử chấm phát âm mở ngay tại câu Shadowing đã chọn trong danh sách câu hoặc Shadowing
 Preview. Với bài nháp đã lưu và bài đã xuất bản, Admin có thể nghe mẫu, thu âm hay tải tệp, nghe thử bản thu và xem
 feedback từ Azure Pronunciation Assessment. Core tính giới hạn thu từ thời lượng mẫu.
-Kết quả gắn với revision đã gửi. Hộp thoại đánh dấu từ thiếu, từ thừa và từ sai phát âm ngay trên
-câu đã chấm, với chi tiết âm vị và phát lại theo mốc khi có. Hàng câu trong Shadowing Preview
-có tóm tắt kết quả còn hạn của revision hiện tại. Bản thu thiếu
+Khi nghe câu mẫu trong hộp thoại, karaoke làm nổi từ đang phát theo mốc của bài học.
+Kết quả gắn với revision đã gửi. Tab Tổng quan đánh dấu từ thiếu, từ thừa và từ sai phát âm ngay
+trên câu đã chấm. Tab Chi tiết cho xem lời nhận được, lọc lỗi, xem âm vị và phát lại theo mốc khi có.
+Hàng câu trong Shadowing Preview có tóm tắt kết quả còn hạn của revision hiện tại. Bản thu thiếu
 tín hiệu hiển thị hướng dẫn thu lại. Chỉ Admin tạo lượt có quyền truy cập dữ liệu chi tiết.
 Bản thu, transcript, điểm và feedback hết hạn sau 24 giờ. Lượt thử nằm ngoài tiến độ và điểm Learner.
 
