@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { cn } from 'cn';
-import { ieltsFighterIpa, ipaAudioCredits, ipaExample, ipaGroups } from './ipa';
+import { internationalIpaChart, ieltsFighterIpa, ipaAudioCredits, ipaExample, ipaGroups } from './ipa';
 import { IpaGuide } from './IpaGuide';
 import { IpaAudioButtons } from './IpaAudioButtons';
 import { useIpaAudio } from './useIpaAudio';
@@ -17,7 +17,8 @@ export function PhoneticsPage() {
     <header className="grid gap-1">
       <h1 className="text-2xl font-semibold">{t('phonetics.title')}</h1>
       <p className="max-w-2xl text-sm text-muted-foreground">{t('phonetics.intro')} <a href={ieltsFighterIpa}
-        target="_blank" rel="noreferrer" className="underline underline-offset-2">IELTS Fighter</a></p>
+        target="_blank" rel="noreferrer" className="underline underline-offset-2">IELTS Fighter</a>{' · '}<a href={internationalIpaChart}
+        target="_blank" rel="noreferrer" className="underline underline-offset-2">International IPA chart</a></p>
     </header>
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(270px,31%)]">
       <div className="grid gap-6">
@@ -26,14 +27,12 @@ export function PhoneticsPage() {
           <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5 xl:grid-cols-8">
             {examples.map(example => <li key={example.ipa}>
               <button type="button" aria-pressed={selected.ipa === example.ipa}
-                aria-label={example.lessonUrl ? t('phonetics.selectSymbol', { sound: example.ipa })
-                  : t('phonetics.selectSound', { sound: example.ipa, word: example.word })}
+                aria-label={t('phonetics.selectSound', { sound: example.ipa, word: example.word })}
                 className={cn('grid min-h-16 w-full content-center gap-0.5 rounded-lg border px-2 py-1 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
                   selected.ipa === example.ipa && 'border-primary bg-primary/10')}
                 onClick={() => {
                   setParams({ sound: example.ipa }, { replace: true });
-                  if (example.lessonUrl) audio.stop();
-                  else audio.toggle(example, 'sequence');
+                  audio.toggle(example, 'sequence');
                 }}>
                 <span className="text-xl leading-tight">/{example.ipa}/</span>
                 <span lang="en" className="truncate text-xs text-muted-foreground">{example.word}</span>
@@ -55,6 +54,10 @@ export function PhoneticsPage() {
           </a>{' · '}{credit.author}{' · '}
           {credit.licenseUrl
             ? <a href={credit.licenseUrl} className="underline" target="_blank" rel="noreferrer">{credit.license}</a> : credit.license}
+        </p>}
+        {selected.soundSource && selected.wordAudio && <p className="flex flex-wrap gap-x-3 gap-y-1 border-t pt-3 text-xs text-muted-foreground">
+          <a href={selected.soundSource} className="underline" target="_blank" rel="noreferrer">PolyU</a>
+          <a href={selected.wordAudio.source} className="underline" target="_blank" rel="noreferrer">Oxford Learner’s Dictionaries</a>
         </p>}
       </aside>
     </div>

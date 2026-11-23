@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createInstance } from 'i18next';
 import { I18nextProvider, initReactI18next } from 'react-i18next';
@@ -7,12 +7,12 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 import { adminI18nResources } from '@lyreo/i18n';
 import { PhoneticsPage } from './PhoneticsPage';
-import { ieltsFighterIpa, ipaAudioCredits, ipaExample, ipaGroups, ipaSoundUrl } from './ipa';
+import { ieltsFighterIpa, internationalIpaChart, ipaAudioCredits, ipaExample, ipaGroups, ipaSoundUrl, ipaWordUrl } from './ipa';
 import { ipaGuides } from './ipa-guides';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-it('covers all 44 symbols and keeps the duplicate /ʊə/ recording out of playback', () => {
+it('covers all 44 symbols and supplements the duplicate /ʊə/ recording', () => {
   const examples = Object.values(ipaGroups).flat();
   expect(ipaGroups.vowels).toHaveLength(12);
   expect(ipaGroups.diphthongs).toHaveLength(8);
@@ -21,13 +21,14 @@ it('covers all 44 symbols and keeps the duplicate /ʊə/ recording out of playba
   for (const example of examples) {
     const { ipa, word } = example;
     expect(ipaGuides[ipa]).toEqual({ en: expect.any(String), vi: expect.any(String) });
-    if (example.lessonUrl) {
+    if (example.wordAudio) {
       expect(ipa).toBe('ʊə');
-      expect(ipaSoundUrl(example)).toBeUndefined();
+      expect(new URL(ipaSoundUrl(example)).hostname).toBe('elc.polyu.edu.hk');
+      expect(new URL(ipaWordUrl(example)).hostname).toBe('www.oxfordlearnersdictionaries.com');
     } else {
-      expect(new URL(ipaSoundUrl(example)!).hostname).toBe('st.ielts-fighter.com');
-      expect(ipaAudioCredits[word].source).toMatch(/^https:\/\//);
-      expect(ipaAudioCredits[word].author).toBeTruthy();
+      expect(new URL(ipaSoundUrl(example)).hostname).toBe('st.ielts-fighter.com');
+      expect(ipaAudioCredits[word]?.source).toMatch(/^https:\/\//);
+      expect(ipaAudioCredits[word]?.author).toBeTruthy();
       expect(readFileSync(`public/ipa/${word}.ogg`).subarray(0, 4).toString()).toBe('OggS');
     }
   }
@@ -38,7 +39,7 @@ it('covers all 44 symbols and keeps the duplicate /ʊə/ recording out of playba
   expect(ipaExample('unknown')).toBeUndefined();
 });
 
-it('opens the linked sound, plays its two distinct recordings, and switches guidance language', async () => {
+it('plays distinct sounds and words and follows the system language', async () => {
   const sources: string[] = [];
   const players: HTMLMediaElement[] = [];
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(async function (this: HTMLMediaElement) {
@@ -52,16 +53,15 @@ it('opens the linked sound, plays its two distinct recordings, and switches guid
     <MemoryRouter initialEntries={['/phonetics?sound=%C5%8B']}><PhoneticsPage /></MemoryRouter>
   </I18nextProvider>);
   const sample = within(screen.getByRole('complementary', { name: 'Sound example' }));
-  const soundUrl = ipaSoundUrl(ipaExample('ŋ')!);
   await userEvent.click(sample.getByRole('button', { name: 'Hear sound /ŋ/' }));
-  await userEvent.click(sample.getByRole('button', { name: 'Hear ring' }));
-  expect(sources[0]).toBe(soundUrl);
+  await userEvent.click(sample.getByRole('button', { name: 'Hear ring /rɪŋ/' }));
+  expect(sources[0]).toBe(ipaSoundUrl(ipaExample('ŋ')!));
   expect(new URL(sources[1]).pathname).toBe('/ipa/ring.ogg');
   const sequence = sample.getByRole('button', { name: 'Hear sound → word' });
   await userEvent.click(sequence);
   fireEvent.ended(players[2]);
   expect(players[3]).toBe(players[2]);
-  expect(sources[2]).toBe(soundUrl);
+  expect(sources[2]).toBe(ipaSoundUrl(ipaExample('ŋ')!));
   expect(new URL(sources[3]).pathname).toBe('/ipa/ring.ogg');
   fireEvent.ended(players[3]);
   expect(sequence).toHaveAttribute('aria-pressed', 'false');
@@ -72,14 +72,20 @@ it('opens the linked sound, plays its two distinct recordings, and switches guid
   expect(sample.getByRole('link', { name: /BBC Learning English/ })).toHaveAttribute(
     'href', 'https://www.youtube.com/watch?v=QxQUapA-2w4&t=3750s',
   );
-  await userEvent.click(sample.getByRole('button', { name: 'Tiếng Việt' }));
-  expect(sample.getByText(/giữ đầu lưỡi thấp/i)).toHaveAttribute('lang', 'vi');
-  expect(sample.getByRole('link', { name: /IELTS Fighter/ })).toHaveAttribute(
-    'href', ieltsFighterIpa,
-  );
-  await userEvent.click(screen.getByRole('button', { name: 'Review /ʊə/' }));
-  expect(sample.queryByRole('button', { name: 'Hear sound /ʊə/' })).not.toBeInTheDocument();
-  expect(sample.getByRole('link', { name: 'Hear the BBC example' })).toHaveAttribute(
-    'href', 'https://www.youtube.com/watch?v=nHSqluHrD-U',
-  );
+  expect(sample.queryByRole('button', { name: 'Tiếng Việt' })).not.toBeInTheDocument();
+  expect(sample.getByText(/keep the tongue tip low/i)).toHaveAttribute('lang', 'en');
+  expect(sample.queryByRole('link', { name: /IELTS Fighter/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'International IPA chart' })).toHaveAttribute('href', internationalIpaChart);
+  await userEvent.click(screen.getByRole('button', { name: 'Hear /ʊə/ then tour' }));
+  const cure = ipaExample('ʊə')!;
+  expect(sources.at(-1)).toBe(ipaSoundUrl(cure));
+  fireEvent.ended(players.at(-1)!);
+  expect(sources.at(-1)).toBe(ipaWordUrl(cure));
+  await userEvent.click(sample.getByRole('button', { name: 'Hear sound /ʊə/' }));
+  expect(sources.at(-1)).toBe(ipaSoundUrl(cure));
+  await userEvent.click(sample.getByRole('button', { name: 'Hear tour /tʊə/' }));
+  expect(sources.at(-1)).toBe(ipaWordUrl(cure));
+  await act(async () => { await i18n.changeLanguage('vi'); });
+  expect(sample.getByText(/bắt đầu gần/i)).toHaveAttribute('lang', 'vi');
+  expect(sample.getByRole('link', { name: /IELTS Fighter/ })).toHaveAttribute('href', ieltsFighterIpa);
 });

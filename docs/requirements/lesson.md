@@ -113,6 +113,8 @@ Kết quả gắn với revision đã gửi. Cùng một màn hình hiển thị
 sai phát âm ngay trên câu đã chấm. Chọn từ để xem âm vị và nghe lại theo mốc khi có. Với âm vị có
 trong [bảng IPA của Kho ngôn ngữ](lexicon-vocabulary.md#fr-lex-005--admin-ipa-chart), Admin
 có thể nghe riêng âm mẫu, nghe từ ví dụ và đọc hướng dẫn song ngữ để đối chiếu với bản thu.
+Khi mở rộng dữ liệu Azure, Admin có thể mở payload thô của lượt chấm để đối chiếu các trường điểm,
+mốc và âm vị mà adapter đã nhận. Mốc nghe lại của từ dùng đệm kỹ thuật ngắn để tránh che lấp từ kế bên.
 Hàng câu trong Shadowing Preview có tóm tắt kết quả còn hạn của revision hiện tại. Bản thu thiếu
 tín hiệu hiển thị hướng dẫn thu lại. Chỉ Admin tạo lượt có quyền truy cập dữ liệu chi tiết.
 Bản thu, transcript, điểm và feedback hết hạn sau 24 giờ. Lượt thử nằm ngoài tiến độ và điểm Learner.

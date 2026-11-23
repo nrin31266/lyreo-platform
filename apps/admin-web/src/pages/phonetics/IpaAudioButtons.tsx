@@ -21,17 +21,11 @@ export function IpaAudioButtons({ example, audio, beforePlay }: {
     </Button>;
   }
 
-  if (example.lessonUrl) return <Button asChild size="sm" variant="outline" className="justify-self-start">
-    <a href={example.lessonUrl} target="_blank" rel="noreferrer" onClick={beforePlay}>
-      <RiVolumeUpLine aria-hidden="true" />{t('phonetics.watchBbc')}
-    </a>
-  </Button>;
-
   return <>
     <div className="flex flex-wrap gap-2">
       {listen('sequence', t('phonetics.playSequence'))}
       {listen('sound', t('phonetics.playSound', { sound: ipa }))}
-      {listen('word', t('phonetics.playExample', { word }))}
+      {listen('word', t('phonetics.playExample', { word, transcription: example.transcription }))}
     </div>
     {audio.failed && <p role="alert" className="text-sm text-destructive">{t('phonetics.playError')}</p>}
   </>;

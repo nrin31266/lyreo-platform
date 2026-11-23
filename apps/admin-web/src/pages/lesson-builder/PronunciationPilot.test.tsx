@@ -28,8 +28,8 @@ describe('pronunciation reference mapping', () => {
 
 describe('pronunciation playback', () => {
   it('pads words and clamps either end to the recording', () => {
-    expect(wordPlaybackRange({ startMs: 40, endMs: 330 }, 800)).toEqual({ start: 0, end: 0.48 });
-    expect(wordPlaybackRange({ startMs: 500, endMs: 760 }, 800)).toEqual({ start: 0.4, end: 0.8 });
+  expect(wordPlaybackRange({ startMs: 40, endMs: 330 }, 800)).toEqual({ start: 0.025, end: 0.355 });
+  expect(wordPlaybackRange({ startMs: 500, endMs: 760 }, 800)).toEqual({ start: 0.485, end: 0.785 });
     expect(wordPlaybackRange({ startMs: null, endMs: null }, 800)).toBeUndefined();
     expect(wordPlaybackRange({ startMs: 760, endMs: 900 }, 800)).toBeUndefined();
   });

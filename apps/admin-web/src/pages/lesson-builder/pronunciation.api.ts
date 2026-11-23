@@ -27,8 +27,9 @@ export type PronunciationAttempt = AcceptedPronunciation & {
     outcome: 'SCORED' | 'NO_SPEECH';
     durationMs: number;
     transcript: string | null;
-    scores: { overall: number | null; accuracy: number | null; fluency: number | null; completeness: number | null };
+    scores: { overall: number | null; accuracy: number | null; fluency: number | null; completeness: number | null; prosody?: number | null };
     words: PronunciationWord[];
+    providerRaw?: Record<string, unknown> | null;
   } | null;
 };
 

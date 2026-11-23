@@ -999,9 +999,6 @@
   },
   "phonetics": {
     "howTo": "Cách phát âm",
-    "guideLanguage": "Ngôn ngữ hướng dẫn",
-    "vietnameseGuide": "Tiếng Việt",
-    "englishGuide": "English",
     "title": "Bảng phiên âm tiếng Anh · 44 âm",
     "intro": "Chọn ký hiệu để nghe âm mẫu và từ ví dụ. Ký hiệu Anh–Anh theo",
     "group": {
@@ -1012,14 +1009,12 @@
     "sample": "Ví dụ phát âm",
     "selectSound": "Nghe /{{sound}}/ rồi nghe {{word}}",
     "selectSymbol": "Xem âm /{{sound}}/",
-    "playExample": "Nghe từ {{word}}",
+    "playExample": "Nghe {{word}} /{{transcription}}/",
     "playSequence": "Nghe âm → từ ví dụ",
     "playSound": "Nghe âm mẫu /{{sound}}/",
     "playError": "Không phát được audio mẫu. Bạn có thể thử lại hoặc mở nguồn.",
     "exampleSource": "Nguồn ghi âm từ",
-    "referenceSource": "IELTS Fighter · IPA Anh–Anh",
-    "noReference": "Bảng IELTS Fighter chưa có mẫu cho /{{sound}}/.",
-    "watchBbc": "Nghe mẫu trên BBC"
+    "noReference": "Chưa có âm mẫu /{{sound}}/."
   },
   "pronunciationPilot": {
     "title": "Thử chấm phát âm",
@@ -1067,6 +1062,8 @@
     "noWordAudio": "Không có đoạn tương ứng trong bản thu.",
     "noWordTiming": "Chưa có mốc phát lại cho từ này.",
     "listenToPhoneme": "Âm nên nghe lại",
+    "playHeardPhoneme": "Nghe âm bạn nói /{{text}}/",
+    "azureRaw": "Dữ liệu thô từ Azure",
     "noIssues": "Đã chấm · không phát hiện lỗi",
     "reviewIssues": "{{count}} từ cần xem lại",
     "status": {
