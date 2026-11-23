@@ -40,15 +40,13 @@ names and Vietnamese translations, plus [development AI defaults](CONFIGURATION.
 Rerunning preserves existing categories, providers, credentials and routes.
 No automatic reseeding runs at startup. Large banks stay under the [import tools](DATA_PIPELINES.md).
 
-`make seed-lessons` adds six YouTube lessons and one Text lesson after bootstrap. The two song
-lessons use short, timed excerpts and link to the original YouTube videos. The published snapshots
-include transcript timing and practice content for the learner API. Core needs access to the
-canonical audio objects in the shared development bucket. Rerunning preserves existing lessons
-and metadata.
+`make seed-lessons` adds the tracked lesson fixture after bootstrap. It contains the original
+lesson set plus the two tested recent drafts and real published lesson snapshots, with transcript
+timing, practice content and source metadata. Core needs access to the canonical audio objects
+in the shared development bucket. Rerunning preserves existing lessons and metadata.
 
-If a local full-song snapshot is available, put it at `.data/lesson-export/lessons-with-songs.sql`
-before the first sample seed. `make seed-lessons` uses it automatically. Set `LESSON_SEED_FILE`
-to select a different SQL snapshot. Keep full-song snapshots out of Git.
+Set `LESSON_SEED_FILE` to use a separately exported SQL snapshot. Keep private raw corpora and
+credentials out of Git.
 
 Large content datasets are imported through the [data-import tool](../tools/data-import/README.md), not Flyway seed blobs. Store raw datasets outside Git.
 

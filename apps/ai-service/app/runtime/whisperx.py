@@ -98,7 +98,7 @@ class WhisperXRuntime:
         if not isinstance(text, str) or not text.strip():
             raise ValueError('Alignment requires text')
         waveform = await self._audio(request)
-        windows = alignment_windows(waveform, text, request.input.get('segments'))
+        windows = alignment_windows(waveform, text, request.input.get('segments'), end_tolerance_ms=50)
         segments = [
             {'text': window_text, 'start': start / 16000, 'end': (start + len(window)) / 16000}
             for start, window, window_text in windows

@@ -22,11 +22,9 @@ async def resolve_audio(source: Any, decoder):
     return await asyncio.to_thread(decoder, source)
 
 
-def alignment_windows(waveform, text: str, segments, *, timestamp_precision_ms=0):
+def alignment_windows(waveform, text: str, segments, *, end_tolerance_ms=0):
     duration_ms = len(waveform) / 16
-    # Some models quantize timestamps to frames, while the slice stops at real samples.
-    anchor_end_ms = (math.ceil(duration_ms / timestamp_precision_ms) * timestamp_precision_ms
-                     if timestamp_precision_ms > 0 else math.ceil(duration_ms))
+    anchor_end_ms = math.ceil(duration_ms)
     if segments is None or segments == []:
         if len(waveform) > 120 * 16_000:
             raise ValueError('Alignment over 120 seconds requires anchored transcript segments')
@@ -34,12 +32,14 @@ def alignment_windows(waveform, text: str, segments, *, timestamp_precision_ms=0
     if not isinstance(segments, list) or not all(isinstance(s, dict) for s in segments):
         raise ValueError('Alignment segments must be a list of text/start_ms/end_ms objects')
     previous_end = 0
-    for segment in segments:
+    for index, segment in enumerate(segments):
         start = segment.get('start_ms')
         end = segment.get('end_ms')
+        # Media cuts can be rounded by one source frame. Only the final end may be clamped.
+        allowed_end = anchor_end_ms + (end_tolerance_ms if index == len(segments) - 1 else 0)
         if (not isinstance(start, int) or isinstance(start, bool)
                 or not isinstance(end, int) or isinstance(end, bool)
-                or start < previous_end or start >= duration_ms or end <= start or end > anchor_end_ms
+                or start < previous_end or start >= duration_ms or end <= start or end > allowed_end
                 or not isinstance(segment.get('text'), str) or not segment['text'].strip()):
             raise ValueError('Alignment segments require ordered non-overlapping in-bounds millisecond anchors')
         previous_end = end

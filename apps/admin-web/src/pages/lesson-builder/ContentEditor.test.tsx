@@ -21,6 +21,19 @@ it('shows translation and activities directly, emits edits without saving or rev
  fireEvent.change(screen.getByRole('textbox',{name:'Translation'}),{target:{value:'Bản sửa'}});expect(change).toHaveBeenCalledWith({translation:'Bản sửa'});
  fireEvent.click(screen.getByRole('checkbox',{name:'Shadowing'}));expect(change).toHaveBeenCalledWith({shadowingSelected:true});
 });
+it('explains activity exceptions and allows overrides for suggestions only',async()=>{
+ const change=vi.fn();
+ await provider(<SentenceContentEditor sentence={{...sentence,dictationEligible:false,
+   exclusions:{DICTATION:'NON_SPEECH',SHADOWING:'BROKEN_FRAGMENT'}}} options={defaultContentOptions} disabled={false} showIpa={false} onChange={change}/>);
+ const dictation=screen.getByRole('checkbox',{name:'Dictation'});
+ expect(dictation).toBeDisabled();
+ expect(dictation).toHaveAccessibleDescription('Non-speech content');
+ const shadowing=screen.getByRole('checkbox',{name:'Shadowing'});
+ expect(shadowing).toBeEnabled();
+ expect(shadowing).toHaveAccessibleDescription('Possibly cut-off sentence');
+ fireEvent.click(shadowing);
+ expect(change).toHaveBeenCalledWith({shadowingSelected:true});
+});
 it('shows the exact IPA issue and lets the editor dismiss it after reviewing',async()=>{
  const change=vi.fn();
  await provider(<SentenceContentEditor sentence={{...sentence,ipaRaw:'original IPA',ipaAccent:'UK',

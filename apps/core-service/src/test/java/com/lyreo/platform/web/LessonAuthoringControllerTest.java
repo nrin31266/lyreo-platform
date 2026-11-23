@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.lyreo.lesson.api.LessonAuthoringController;
 import com.lyreo.lesson.application.authoring.LessonAuthoringService;
+import com.lyreo.lesson.application.port.AuthoringSourcePort;
 import com.lyreo.lesson.domain.authoring.AuthoringLesson;
 import com.lyreo.lesson.domain.authoring.AuthoringSentence;
 import java.util.List;
@@ -109,6 +110,34 @@ class LessonAuthoringControllerTest {
                 .andExpect(status().isNotFound());
         verifyNoInteractions(service);
     }
+    @Test void youtubeEndpointsExposeCaptionAvailabilityAndAcceptExplicitWhisperX() throws Exception {
+        var service = mock(LessonAuthoringService.class);
+        var catalog = mock(com.lyreo.lesson.application.port.LessonCatalogPort.class);
+        var mvc = MockMvcBuilders.standaloneSetup(new LessonAuthoringController(service, catalog)).build();
+        String base = "/api/v1/admin/lesson-authoring";
+        String url = "https://youtu.be/abcdefghijk";
+        UUID id = UUID.randomUUID();
+        var accepted = new LessonAuthoringService.Accepted(id, UUID.randomUUID());
+        when(service.inspect(url)).thenReturn(new LessonAuthoringService.Inspect(
+            "abcdefghijk", "Reference", 10000, true, List.of(), null, new AuthoringSourcePort.CaptionTrack("en", true)));
+        when(service.create(null, url, 0, 1000, null, true, null)).thenReturn(accepted);
+        when(service.prepare(id, 7, true)).thenReturn(accepted);
+        mvc.perform(post(base + "/inspect").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"sourceReference\":\"" + url + "\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.englishCaptions.language").value("en"))
+            .andExpect(jsonPath("$.englishCaptions.automatic").value(true))
+            .andExpect(jsonPath("$.englishCaptions.transcriptSource").doesNotExist());
+        mvc.perform(post(base + "/drafts").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"sourceReference\":\"" + url + "\",\"startMs\":0,\"endMs\":1000,\"preferEnglishCaptions\":true}"))
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.jobId").value(accepted.jobId().toString()));
+        mvc.perform(post(base + "/" + id + "/prepare").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"revision\":7,\"useWhisperX\":true}"))
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.jobId").value(accepted.jobId().toString()));
+    }
+
     @Test void inspectTranslatesExpectedSourceFailuresToSafeServiceUnavailableProblems() throws Exception {
         var service = mock(LessonAuthoringService.class);
         var mvc = MockMvcBuilders.standaloneSetup(new LessonAuthoringController(service,mock(com.lyreo.lesson.application.port.LessonCatalogPort.class)))
@@ -129,7 +158,7 @@ class LessonAuthoringControllerTest {
         }
         doThrow(new com.lyreo.lesson.application.build.SourceMaterializationException(
             "YOUTUBE_MEDIA_TIMEOUT", "credential=secret provider details", true))
-            .when(service).create(isNull(), anyString(), eq(0L), eq(1000L), isNull());
+            .when(service).create(isNull(), anyString(), eq(0L), eq(1000L), isNull(), eq(false), isNull());
         mvc.perform(post("/api/v1/admin/lesson-authoring/drafts").contentType(MediaType.APPLICATION_JSON)
             .content("{\"sourceReference\":\"https://youtu.be/abcdefghijk\",\"startMs\":0,\"endMs\":1000}"))
             .andExpect(status().isServiceUnavailable())
@@ -150,6 +179,7 @@ class LessonAuthoringControllerTest {
         var draft = new AuthoringLesson();
         draft.id = UUID.randomUUID(); draft.title = "Review"; draft.revision = 3; draft.endMs = 5000;
         draft.audioObjectKey = "private/source.wav"; draft.activeJobId = UUID.randomUUID();
+        draft.timingEvidence = java.util.Map.of("transcriptSource", "YOUTUBE_EN_MANUAL");
         var sentence = new AuthoringSentence(UUID.randomUUID(), "Hello world.", "LEARN");
         sentence.coarseStartMs = 0L; sentence.coarseEndMs = 1000L;
         sentence.sourceWords = List.of(new com.lyreo.lesson.domain.authoring.AuthoringText.ObservedWord("Hello",0,500));
@@ -163,6 +193,8 @@ class LessonAuthoringControllerTest {
             mvc.perform(request).andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(draft.id.toString()))
                 .andExpect(jsonPath("$.revision").value(3))
+                .andExpect(jsonPath("$.transcriptSource").value("YOUTUBE_EN_MANUAL"))
+                .andExpect(jsonPath("$.timingEvidence").doesNotExist())
                 .andExpect(jsonPath("$.sentences[0].text").value("Hello world."))
                 .andExpect(jsonPath("$.sentences[0].previewStartMs").value(0))
                 .andExpect(jsonPath("$.audioObjectKey").doesNotExist())

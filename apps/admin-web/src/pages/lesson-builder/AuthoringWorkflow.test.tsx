@@ -16,13 +16,14 @@ afterEach(cleanup);
 async function show(value: LessonDraft, needsUpdate = true) {
   const i18n = createInstance();
   await i18n.use(initReactI18next).init({ resources: adminI18nResources, lng: 'en', ns: ['admin'] });
-  render(<I18nextProvider i18n={i18n}><AuthoringWorkflow draft={value} needsUpdate={needsUpdate} disabled={false} onCancel={vi.fn()} onRetry={vi.fn()} /></I18nextProvider>);
+  render(<I18nextProvider i18n={i18n}><AuthoringWorkflow draft={value} needsUpdate={needsUpdate} disabled={false} onCancel={vi.fn()} onRetry={vi.fn()} onUseWhisperX={vi.fn()} /></I18nextProvider>);
 }
 it('does not mark later stages complete during prepare, even with an old completion flag', async () => {
-  await show({ ...draft, jobs: [{ jobId: 'prepare', operation: 'PREPARE', status: 'RUNNING', currentStep: 'TRANSCRIBING', usage: [] }] });
+  await show({ ...draft, jobs: [{ jobId: 'prepare', operation: 'PREPARE', status: 'RUNNING', currentStep: 'FETCHING_CAPTIONS', usage: [] }] });
   expect(screen.getByRole('listitem', { name: /Prepare audio & transcript: Processing/ })).toHaveAttribute('aria-current', 'step');
   expect(screen.getByRole('listitem', { name: /Align word timing: Waiting/ })).toBeInTheDocument();
   expect(screen.getByRole('listitem', { name: /Create learning content: Waiting/ })).toBeInTheDocument();
+  expect(screen.getByRole('progressbar', { name: 'Fetching English captions' })).toBeInTheDocument();
   expect(screen.getAllByRole('progressbar')).toHaveLength(1);
   expect(screen.getByRole('listitem', { name: /Prepare audio & transcript: Processing/ }).querySelector('svg')).toBeNull();
 });

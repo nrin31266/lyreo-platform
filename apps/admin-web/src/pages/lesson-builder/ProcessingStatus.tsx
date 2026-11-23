@@ -6,8 +6,8 @@ import { activeJob, authoringJobErrorKey, jobRetryLabelKey, jobProblemSentence, 
 import { Badge } from '@/components/ui/badge';
 import type { AuthoringJob } from './lesson-builder.types';
 
-export function ProcessingStatus({ job, label, onRetry, onCancel, onInspectProblem, disabled = false }: {
-  job?: AuthoringJob; label?: string; onRetry?: () => void; onCancel?: () => void; onInspectProblem?: () => void; disabled?: boolean;
+export function ProcessingStatus({ job, label, onRetry, onCancel, onInspectProblem, onUseWhisperX, disabled = false }: {
+  job?: AuthoringJob; label?: string; onRetry?: () => void; onCancel?: () => void; onInspectProblem?: () => void; onUseWhisperX?: () => void; disabled?: boolean;
 }) {
   const { t, i18n } = useTranslation('admin');
   const describe = useCodeLabel();
@@ -27,9 +27,10 @@ export function ProcessingStatus({ job, label, onRetry, onCancel, onInspectProbl
         {job?.status === 'CANCELLED' && <p>{t('twoStep.cancelledHelp')}</p>}
       </div>
       {job && <div className="processing-status-duration"><JobDuration job={job} /></div>}
-      {(onInspectProblem || onRetry || (running && onCancel)) && <div className="processing-status-actions">
+      {(onInspectProblem || onRetry || onUseWhisperX || (running && onCancel)) && <div className="processing-status-actions">
         {onInspectProblem && job && <Button variant="outline" size="sm" disabled={disabled} onClick={onInspectProblem}>{t('twoStep.inspectSentence', {number:jobProblemSentence(job)})}</Button>}
         {onRetry && job && <Button variant={onInspectProblem ? 'ghost' : 'outline'} size="sm" disabled={disabled} onClick={onRetry}><RiRefreshLine aria-hidden="true" />{t(jobRetryLabelKey(job))}</Button>}
+        {onUseWhisperX && <Button variant="outline" size="sm" disabled={disabled} onClick={onUseWhisperX}>{t('captions.useWhisperX')}</Button>}
         {running && onCancel && <Button variant="ghost" size="sm" disabled={disabled || job?.status === 'CANCEL_REQUESTED'} onClick={onCancel}>{t('lessonAuthoring.cancel')}</Button>}
       </div>}
     </div>

@@ -51,12 +51,18 @@ it('does not invent historical results, fallback or token usage', async () => {
   expect(screen.queryByText(/Fallback route calls:/)).not.toBeInTheDocument();
 });
 it('loads raw diagnostics only on demand and collapses them again', async () => {
-  vi.mocked(fetchDiagnostics).mockResolvedValue([{ payload: { output: '<script>alert(1)</script>' } }]);
+  vi.mocked(fetchDiagnostics).mockResolvedValue([
+    { payload: { output: '<script>alert(1)</script>' } },
+    { payload: { event: 'CONTENT_BATCH_SPLIT' } },
+    { payload: { media_stage: 'AUDIO_DOWNLOAD' } },
+  ]);
   await show([job]);
   const button = screen.getByRole('button', { name: 'Debug' });
   expect(button).toHaveAttribute('aria-expanded', 'false');
   fireEvent.click(button);
   await screen.findByText(/<script>alert/);
+  expect(screen.getByText('AI batches split: 1')).toBeInTheDocument();
+  expect(screen.getByText('Failed audio downloads: 1')).toBeInTheDocument();
   expect(fetchDiagnostics).toHaveBeenCalledWith('lesson', 'content-job');
   expect(document.querySelector('script')).toBeNull();
   fireEvent.click(button);

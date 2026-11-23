@@ -72,6 +72,17 @@ def test_alignment_windows_split_the_shared_padding_gap_without_cutting_anchors(
     assert first[0] + len(first[1]) == second[0] == seam
 
 
+def test_alignment_clamps_only_small_rounding_at_the_end_of_the_audio():
+    waveform = Waveform(226_138 * 16)
+    segment = {'text': 'hello', 'start_ms': 221_599, 'end_ms': 226_159}
+    [(start, window, _)] = alignment_windows(waveform, 'hello', [segment], end_tolerance_ms=50)
+    assert start + len(window) == len(waveform)
+    with pytest.raises(ValueError, match='in-bounds'):
+        alignment_windows(waveform, 'hello', [{**segment, 'end_ms': 226_300}], end_tolerance_ms=50)
+    with pytest.raises(ValueError, match='in-bounds'):
+        alignment_windows(waveform, 'hello', [{**segment, 'start_ms': 226_139}], end_tolerance_ms=50)
+
+
 def test_gemini_real_usage_and_generation_contract():
     assert _interaction_usage({'usage': {'total_input_tokens': 12, 'total_output_tokens': 5}}) == {
         'input_tokens': 12, 'output_tokens': 5,
@@ -352,16 +363,18 @@ def test_deepseek_truncation_without_text_keeps_billable_usage(monkeypatch):
     assert result.usage == {'input_tokens': 10, 'output_tokens': 8192}
 
 
-def test_deepseek_lesson_keeps_default_thinking_with_bounded_headroom(monkeypatch):
+def test_deepseek_lesson_uses_low_effort_with_bounded_headroom(monkeypatch):
     async def post(self, url, **kwargs):
         body = kwargs['json']
         assert body['max_tokens'] == 256 + 2048
-        assert 'max_completion_tokens' not in body and 'thinking' not in body
+        assert body['thinking'] == {'type': 'enabled'}
+        assert body['reasoning_effort'] == 'low'
+        assert 'max_completion_tokens' not in body
         return httpx.Response(200, request=httpx.Request('POST', url), json={
             'choices': [{'message': {'content': '{"v": [], "g": []}'}, 'finish_reason': 'stop'}],
         })
     monkeypatch.setattr(httpx.AsyncClient, 'post', post)
-    req = request(options={'max_output_tokens': 256, 'reasoning_token_headroom': 2048})
+    req = request(options={'max_output_tokens': 256, 'reasoning_token_headroom': 2048, 'thinking_level': 'low'})
     req.provider = 'DEEPSEEK'
     result = asyncio.run(OpenAICompatibleProvider('https://api.deepseek.com').complete(req, 'test-only'))
     assert result.output['structured'] == {'v': [], 'g': []}

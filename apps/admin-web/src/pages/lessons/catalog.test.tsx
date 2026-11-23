@@ -204,7 +204,30 @@ it("prevents deleting channels with even deleted lessons or active synchronizati
   expect(await screen.findByRole('button',{name:'Delete Used'})).toBeDisabled();
   expect(screen.getByRole('button',{name:'Delete Busy'})).toBeDisabled();
   expect(screen.getByRole('button',{name:'Delete Used'}).closest('span')).toHaveAttribute('title',expect.stringContaining('Hide'));
+  expect(screen.getByRole('link',{name:'1 in trash'})).toHaveAttribute('href','/lessons?channel=used&status=DELETED');
   expect(api.deleteChannel).not.toHaveBeenCalled();
+});
+
+it('combines channel visibility and lesson count filters and syncs only selected matches', async () => {
+  const channel={avatarUrl:null,syncedAt:null,syncError:null,syncJobId:null,syncStatus:null};
+  vi.mocked(api.fetchChannels).mockResolvedValue([
+    {...channel,id:'shown',title:'Shown channel',visible:true,lessonCount:1,linkedLessonCount:1},
+    {...channel,id:'hidden',title:'Hidden channel',visible:false,lessonCount:2,linkedLessonCount:2},
+    {...channel,id:'trash',title:'Trash channel',visible:false,lessonCount:0,linkedLessonCount:1},
+  ]);
+  show(<ChannelsPage />);
+  await userEvent.click(await screen.findByRole('checkbox',{name:'Select Shown channel'}));
+  await userEvent.click(screen.getByRole('combobox',{name:'Channel visibility'}));
+  await userEvent.click(screen.getByRole('option',{name:'Hidden'}));
+  await userEvent.click(screen.getByRole('combobox',{name:'Filter by lesson count'}));
+  await userEvent.click(screen.getByRole('option',{name:'Has lessons'}));
+  expect(screen.queryByRole('link',{name:'Shown channel'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('link',{name:'Trash channel'})).not.toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('1 of 3 channels');
+  expect(screen.getByRole('button',{name:'Sync selected (0)'})).toBeDisabled();
+  await userEvent.click(screen.getByRole('checkbox',{name:'Select Hidden channel'}));
+  await userEvent.click(screen.getByRole('button',{name:'Sync selected (1)'}));
+  expect(api.syncChannels).toHaveBeenCalledWith(['hidden'],expect.anything());
 });
 
 it("opens category creation in a dialog and retains invalid or failed edits for retry", async () => {

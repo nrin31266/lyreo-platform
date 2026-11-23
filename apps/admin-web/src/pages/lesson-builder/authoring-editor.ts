@@ -1,5 +1,10 @@
 import type { AuthoringSentence, TranscriptSentence } from './lesson-builder.types';
 
+export function isSoundCueForActivity(sentence: AuthoringSentence, activity: 'DICTATION' | 'SHADOWING') {
+  const eligible = activity === 'DICTATION' ? sentence.dictationEligible : sentence.shadowingEligible;
+  return !eligible && sentence.exclusions?.[activity] === 'NON_SPEECH';
+}
+
 export function splitSentence(sentences: TranscriptSentence[], index: number, offset: number): TranscriptSentence[] {
   const sentence = sentences[index];
   const left = sentence.text.slice(0, offset).trim();
@@ -34,7 +39,7 @@ export function sentencePlaybackRange(sentence: AuthoringSentence, sentences: Au
   const startMs = sentence.words[0]?.startMs ?? sentence.previewStartMs;
   if (startMs == null) return undefined;
   // Before alignment only a containing segment is known, never claim exact sentence timing.
-  const endMs = sentence.words.at(-1)?.endMs ?? sentences
+  const endMs = sentence.words.at(-1)?.endMs ?? sentence.previewEndMs ?? sentences
     .map(row => row.previewStartMs).find(at => at != null && at > startMs) ?? durationMs;
   return endMs > startMs ? { startMs, endMs } : undefined;
 }

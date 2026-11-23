@@ -13,7 +13,7 @@ import { LessonBuilderPage } from './LessonBuilderPage';
 import * as api from './lesson-builder.api';
 import * as catalog from '@/pages/lessons/catalog.api';
 import type { LessonDraft } from './lesson-builder.types';
-vi.mock('./lesson-builder.api',()=>({fetchDraft:vi.fn(),cancelChain:vi.fn(),saveChanges:vi.fn(),runLesson:vi.fn(),fetchReadiness:vi.fn(),publishLesson:vi.fn(),duplicateLesson:vi.fn(),fetchDiagnostics:vi.fn(),saveTiming:vi.fn()}));
+vi.mock('./lesson-builder.api',()=>({fetchDraft:vi.fn(),cancelChain:vi.fn(),saveChanges:vi.fn(),runLesson:vi.fn(),fetchReadiness:vi.fn(),publishLesson:vi.fn(),duplicateLesson:vi.fn(),fetchDiagnostics:vi.fn(),saveTiming:vi.fn(),prepareTranscript:vi.fn()}));
 vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), api: vi.fn() }));
 vi.mock('@/pages/lessons/catalog.api',async original=>({...await original<typeof import('@/pages/lessons/catalog.api')>(),fetchCategories:vi.fn().mockResolvedValue([]),fetchMetadata:vi.fn().mockResolvedValue({id:'lesson-a',title:'A lesson',categories:[],description:'',imageUrl:'',version:0}),saveMetadata:vi.fn()}));
 vi.mock('./AudioPreview',()=>({LessonPlayer:({review,onAvailabilityChange}:{review:{sentenceId:string|null};onAvailabilityChange?: (available:boolean)=>void})=> { useEffect(() => onAvailabilityChange?.(true), [onAvailabilityChange]); return <div data-testid="player" data-selected={review.sentenceId}>Player</div>; }}));
@@ -172,4 +172,32 @@ it('disables discarding while the lesson is being processed',async()=>{
   await waitFor(()=>expect(screen.getByRole('button',{name:'Discard changes'})).toBeDisabled());
   expect(screen.getByRole('textbox',{name:'Sentence 1'})).toHaveValue('Unsaved transcript.');
   client.clear();
+});
+
+it('offers explicit WhisperX recovery after caption retrieval fails', async () => {
+  await show({ ...original, audioReady: false, alignmentRequired: true, jobs: [{
+    jobId: 'captions', operation: 'PREPARE', status: 'FAILED', errorCode: 'YOUTUBE_CAPTIONS_UNAVAILABLE', usage: [],
+  }] });
+  expect(screen.getByRole('alert')).toHaveTextContent('English captions could not be loaded for this clip.');
+  expect(screen.getByRole('button', { name: 'Retry preparation' })).toBeEnabled();
+  await userEvent.click(screen.getByRole('button', { name: 'Use WhisperX' }));
+  await waitFor(() => expect(api.prepareTranscript).toHaveBeenCalledWith('lesson-a', 1, true));
+  expect(api.runLesson).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['YOUTUBE_EN_AUTOMATIC', 'Auto-generated YouTube captions'],
+  ['UPLOADED_EN', 'Uploaded English captions'],
+])('allows listening and editing before aligning %s', async (transcriptSource, label) => {
+  await show({
+    ...original, transcriptSource, alignmentRequired: true,
+    sentences: [{ ...original.sentences[0], words: [], previewStartMs: 100, previewEndMs: 1100 }],
+  });
+  expect(screen.getByText(`Transcript source · ${label}`)).toBeVisible();
+  expect(screen.getByText('Approx. 00:00.100–00:01.100')).toBeVisible();
+  expect(screen.getByText(/Listen to the clip and correct the transcript/)).toBeVisible();
+  expect(screen.getByRole('textbox', { name: 'Sentence 1' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Seek to sentence' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Update affected parts' })).toBeEnabled();
+  expect(api.runLesson).not.toHaveBeenCalled();
 });

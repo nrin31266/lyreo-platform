@@ -49,7 +49,7 @@ class DatabaseSetupIT {
             assertThat(jdbc.queryForObject("SELECT encrypted_api_key FROM ai_provider WHERE code='DEEPSEEK' AND enabled", String.class)).isEqualTo("test-ciphertext");
             assertThat(jdbc.queryForObject("SELECT priority FROM ai_capability_route WHERE model='deepseek-flash' AND NOT enabled", Integer.class)).isEqualTo(17);
             assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class))
-                .containsExactly("001", "002");
+                .containsExactly("001", "002", "003");
         }
     }
 }

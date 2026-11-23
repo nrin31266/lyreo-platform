@@ -1,6 +1,7 @@
 import { api, http } from "@/lib/api";
 import type {
   BuildAccepted,
+  CaptionFile,
   LessonDraft,
   SourceInspection,
   TranscriptSentence,
@@ -11,11 +12,13 @@ const body = (value: unknown) => ({
   method: "POST",
   body: JSON.stringify(value),
 });
-export const inspectSource = (sourceReference: string) =>
-  api<SourceInspection>(`${base}/inspect`, body({ sourceReference }));
+export const inspectSource = (sourceReference: string, signal?: AbortSignal) =>
+  api<SourceInspection>(`${base}/inspect`, { ...body({ sourceReference }), signal });
 export const createDraft = (payload: {
   title: string;
   sourceReference: string;
+  preferEnglishCaptions?: boolean;
+  captionFile?: CaptionFile;
   startMs: number;
   endMs: number;
   description?: string;
@@ -49,10 +52,10 @@ export const reviewKaraoke = (id: string, revision: number) =>
     `${base}/${encodeURIComponent(id)}/karaoke-review`,
     body({ revision }),
   );
-export const prepareTranscript = (id: string, revision: number) =>
+export const prepareTranscript = (id: string, revision: number, useWhisperX?: boolean) =>
   api<BuildAccepted>(
     `${base}/${encodeURIComponent(id)}/prepare`,
-    body({ revision }),
+    body({ revision, useWhisperX }),
   );
 
 export const saveContentOptions = (id: string, revision: number, options: import('./lesson-builder.types').AuthoringOptions) =>

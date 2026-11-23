@@ -96,6 +96,7 @@ class AuthoringYoutubeAcquisitionTest {
         assertThat(info.title()).isEqualTo("Fixture video");
         assertThat(info.durationMs()).isEqualTo(5_000);
         assertThat(info.embedAllowed()).isTrue();
+        verify(jdbc, never()).update(contains("INSERT INTO lesson_youtube_channel"), anyMap());
 
         String first = source.prepare(URL, VIDEO_ID, 500, 1_500);
         String second = source.prepare(URL, VIDEO_ID, 2_000, 3_500);
@@ -123,7 +124,7 @@ class AuthoringYoutubeAcquisitionTest {
 
     @Test void reportsDownloaderFailuresAndMissingToolWithoutLeakingOutput() throws Exception {
         Path failing = temp.resolve("failing-yt-dlp");
-        Files.writeString(failing, "#!/bin/sh\necho 'credential=secret provider detail'\nexit 7\n");
+        Files.writeString(failing, "#!/bin/sh\necho 'ERROR: HTTP Error 503: credential=secret provider detail' >&2\nexit 7\n");
         makeExecutable(failing);
         var failedSource = source(failing.toString());
         assertThatThrownBy(() -> failedSource.inspect(URL))
@@ -131,6 +132,8 @@ class AuthoringYoutubeAcquisitionTest {
                 assertThat(error.errorCode()).isEqualTo("YOUTUBE_MEDIA_FAILED");
                 assertThat(error.getMessage()).doesNotContain("secret", "provider detail");
                 assertThat(error.retryable()).isTrue();
+                assertThat(error.diagnostics()).containsOnly(Map.entry("media_stage", "INSPECT"),
+                    Map.entry("media_exit_code", 7), Map.entry("media_failure", "UPSTREAM_UNAVAILABLE"));
             });
 
         var missingSource = source(temp.resolve("missing-yt-dlp").toString());
@@ -164,6 +167,48 @@ class AuthoringYoutubeAcquisitionTest {
         assertThatThrownBy(() -> source.inspect(URL))
             .isInstanceOfSatisfying(SourceMaterializationException.class,
                 error -> assertThat(error.errorCode()).isEqualTo("YOUTUBE_MEDIA_TIMEOUT"));
+        assertThatThrownBy(() -> source.englishCaptions(VIDEO_ID,
+            new AuthoringSourcePort.CaptionTrack("en-orig", true), 0, 1000))
+            .isInstanceOfSatisfying(SourceMaterializationException.class, error -> {
+                assertThat(error.errorCode()).isEqualTo("YOUTUBE_CAPTIONS_UNAVAILABLE");
+                assertThat(error.retryable()).isFalse();
+            });
+    }
+
+    @Test void checksDownloadedCaptionsAgainstTheSelectedTrack() throws Exception {
+        for (String query : java.util.List.of("lang=en", "lang=es&tlang=en")) {
+            Path downloader = temp.resolve("fake-caption-yt-dlp");
+            Files.writeString(downloader, """
+                #!/bin/sh
+                test "$1" = "--ignore-config" || exit 2
+                automatic=false
+                while [ $# -gt 0 ]; do
+                  case "$1" in
+                    --write-auto-subs) automatic=true ;;
+                    --sub-langs) shift; test "$1" = "^en-orig$" || exit 2 ;;
+                    --output) shift; output=${1%%.*}.en-orig.json3 ;;
+                  esac
+                  shift
+                done
+                test "$automatic" = true && test -n "$output" || exit 2
+                printf '%%s\\n' '{"events":[{"tStartMs":100,"dDurationMs":400,"segs":[{"utf8":"First line."}]}]}' > "$output"
+                printf '%%s\\n' '{"en-orig":{"ext":"json3","url":"https://example.test/captions?%s"}}'
+                """.formatted(query));
+            makeExecutable(downloader);
+            var source = source(downloader.toString());
+            var track = new AuthoringSourcePort.CaptionTrack("en-orig", true);
+            if (query.equals("lang=en")) {
+                assertThat(source.englishCaptions(VIDEO_ID, track, 0, 1000))
+                    .containsExactly(new AuthoringSourcePort.CaptionLine("First line.", 100, 500));
+            } else {
+                assertThatThrownBy(() -> source.englishCaptions(VIDEO_ID, track, 0, 1000))
+                    .isInstanceOfSatisfying(SourceMaterializationException.class, error -> {
+                        assertThat(error.errorCode()).isEqualTo("YOUTUBE_CAPTIONS_UNAVAILABLE");
+                        assertThat(error.retryable()).isFalse();
+                    });
+            }
+        }
+        verifyNoInteractions(storage);
     }
 
     private AuthoringYoutubeSource source(String command) {
@@ -184,7 +229,7 @@ class AuthoringYoutubeAcquisitionTest {
             + "for arg in \"$@\"; do\n"
             + "  if [ \"$arg\" = \"--dump-single-json\" ]; then\n"
             + "    echo metadata >> " + quote(calls) + "\n"
-            + "    printf '%s\\n' '{\"title\":\"Fixture video\",\"duration\":5,\"playable_in_embed\":true}'\n"
+            + "    printf '%s\\n' '{\"title\":\"Fixture video\",\"duration\":5,\"playable_in_embed\":true,\"channel_id\":\"UCabcdefghijklmnopqrstuv\",\"channel\":\"Fixture channel\"}'\n"
             + "    exit 0\n"
             + "  fi\n"
             + "done\n"

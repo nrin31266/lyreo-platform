@@ -19,9 +19,12 @@ public class AuthoringJobCommitter {
         if(current.publishedAt!=null || !Objects.equals(current.activeJobId,job.id())
             || current.transcriptRevision!=input.transcriptRevision())
             throw new PermanentJobException("AUTHORING_STALE","Authoring output discarded because the draft changed");
+        boolean captionsNeedReview="PREPARE".equals(input.operation()) && java.util.Set.of("YOUTUBE_EN_AUTOMATIC","UPLOADED_EN")
+            .stream().anyMatch(source -> source.equals(output.timingEvidence.get("transcriptSource")));
         if("PREPARE".equals(input.operation())) {
             current.audioObjectKey=output.audioObjectKey;current.sentences=output.sentences;
             current.timingEvidence=output.timingEvidence;current.transcriptRevision++;current.timingStatus=output.timingStatus;current.status="TRANSCRIPT_REVIEW";
+            if(captionsNeedReview) current.autoContinue=false;
         } else if("TTS".equals(input.operation())) {
             current.audioObjectKey=output.audioObjectKey;current.endMs=output.endMs;current.sentences=output.sentences;
             current.timingStatus="MISSING";current.timingEvidence=java.util.Map.of();
@@ -42,7 +45,8 @@ public class AuthoringJobCommitter {
         if("PREPARE".equals(input.operation()) && "AUDIO".equals(current.sourceType) && !current.sentences.isEmpty())
             repository.renameAutomatic(current.id,LessonAuthoringService.automaticTitle(current.sentences.getFirst().text));
         repository.completeJob(job.id());
-        if("PREPARE".equals(input.operation()) || "TTS".equals(input.operation())) authoring.alignPrepared(current);
+        if(("PREPARE".equals(input.operation()) && !captionsNeedReview)
+            || "TTS".equals(input.operation())) authoring.alignPrepared(current);
         if("ALIGN".equals(input.operation())) authoring.continueContent(current);
     }
 
@@ -56,21 +60,27 @@ public class AuthoringJobCommitter {
         for(int index:indexes) {
             var source=output.sentences.get(index);var target=current.sentences.get(index);
             for(String feature:features) {
-                if(target.manualFields.contains(feature)) continue;
+                boolean activity=current.options.activities().contains(feature);
+                if(target.manualFields.contains(feature) && !(activity && com.lyreo.lesson.domain.authoring.CaptionCueText.isNonSpeech(target.text))) continue;
                 switch(feature) {
                     case "TRANSLATION" -> target.translation=source.translation;
                     case "IPA" -> {target.ipaRaw=source.ipaRaw;target.ipaDisplayVersion=source.ipaDisplayVersion;target.ipa=source.ipa;target.ipaAccent=source.ipaAccent;
                         target.ipaVersion=source.ipaVersion;target.ipaNeedsReview=source.ipaNeedsReview;target.ipaReviewIssues=source.ipaReviewIssues;}
                     case "LEXICAL" -> target.vocabulary=source.vocabulary;
                     case "GRAMMAR" -> target.grammar=source.grammar;
-                    case "DICTATION" -> {target.dictationSelected=source.dictationSelected;target.dictationEligible=!target.words.isEmpty();}
-                    case "SHADOWING" -> {target.shadowingSelected=source.shadowingSelected;target.shadowingEligible=!target.words.isEmpty();}
+                    case "DICTATION" -> {target.dictationSelected=source.dictationSelected;target.dictationEligible=source.dictationEligible;}
+                    case "SHADOWING" -> {target.shadowingSelected=source.shadowingSelected;target.shadowingEligible=source.shadowingEligible;}
                     case "PROFILE" -> {target.cefrSuggestion=source.cefrSuggestion;target.contentTypeSuggestion=source.contentTypeSuggestion;}
                     default -> throw new IllegalArgumentException("Unsupported content feature");
                 }
+                if(activity) {
+                    var reason=source.exclusions.get(feature);
+                    if(reason==null) target.exclusions.remove(feature);
+                    else target.exclusions.put(feature,reason);
+                }
                 if(source.contentKeys.containsKey(feature)) target.contentKeys.put(feature,source.contentKeys.get(feature));
             }
-            target.contentWarnings=source.contentWarnings;target.exclusions=source.exclusions;
+            target.contentWarnings=source.contentWarnings;
             if(!target.clozeManual) target.cloze=com.lyreo.lesson.domain.authoring.AuthoringCloze.generate(target);
             target.contentStale=false;
         }

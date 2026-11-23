@@ -21,6 +21,7 @@ public final class AuthoringContentGenerator {
     }
     public void generate(BackgroundJob job,AuthoringRepository.JobInput input,AuthoringLesson lesson,JobExecutionContext context) {
         var enabled=AuthoringContent.features(lesson.options);
+        checkpointSoundCues(job,input,lesson,context);
         if(enabled.stream().anyMatch(f->!f.equals("IPA"))) {
             int budget=ai.requestTokenBudget(AiCapability.GENERAL_LLM);
             for(int start=0;start<lesson.sentences.size();) {
@@ -98,6 +99,24 @@ public final class AuthoringContentGenerator {
         if(lesson.profile.manual) features.remove("PROFILE");
         return features;
     }
+    private void checkpointSoundCues(BackgroundJob job,AuthoringRepository.JobInput input,AuthoringLesson lesson,JobExecutionContext context) {
+        if(lesson.options.activities().isEmpty()) return;
+        for(int i=0;i<lesson.sentences.size();i++) {
+            var sentence=lesson.sentences.get(i);
+            if(!CaptionCueText.isNonSpeech(sentence.text)) continue;
+            var features=new LinkedHashSet<String>();
+            for(String activity:lesson.options.activities()) {
+                if(AuthoringContent.current(lesson,i,activity)) continue;
+                selectActivity(sentence,activity,"NON_SPEECH",false);
+                sentence.contentKeys.put(activity,AuthoringContent.key(lesson,i,activity));
+                features.add(activity);
+            }
+            if(!features.isEmpty()) {
+                context.throwIfCancellationRequested();
+                committer.contentCheckpoint(job,input,lesson,List.of(i),features);
+            }
+        }
+    }
     private void generateBatch(BackgroundJob job,AuthoringRepository.JobInput input,AuthoringLesson lesson,
         List<Integer> indexes,Set<String> features,int budget,JobExecutionContext context) {
         try { executeBatch(job,input,lesson,indexes,features,budget,context); }
@@ -114,17 +133,21 @@ public final class AuthoringContentGenerator {
         try {
             result=ai.execute(AiCapability.GENERAL_LLM,prompt,Map.of(),Map.of(
                 "response_schema","lesson_content_v1","temperature",0.1,"max_output_tokens",batch.outputBudget(),
-                "reasoning_token_headroom",2048));
+                "thinking_level","low","reasoning_token_headroom",2048));
         } catch(AiExecutionException failure) {
-            if(!"AI_OUTPUT_INCOMPLETE".equals(failure.errorCode()) || indexes.size()==1) throw failure;
+            Object finish=failure.diagnostics().get("finish_reason");
+            if(!"AI_OUTPUT_INCOMPLETE".equals(failure.errorCode()) || indexes.size()==1
+                || finish!=null && !tokenLimit(finish)) throw failure;
+            recordSplit(job,indexes,finish);
             int mid=indexes.size()/2;
             generateBatch(job,input,lesson,indexes.subList(0,mid),features,budget,context);
             generateBatch(job,input,lesson,indexes.subList(mid,indexes.size()),features,budget,context);return;
         }
         repository.diagnostic(job.id(),result.invocationId(),Map.of("batch",List.of(indexes.getFirst()+1,indexes.getLast()+1),"prompt",prompt,"output",result.output(),"provider",result.provider(),"model",result.model()));context.throwIfCancellationRequested();
         Object finish=result.output().get("finish_reason");
-        if(finish!=null && Set.of("length","max_tokens","MAX_TOKENS","incomplete").contains(finish.toString())) {
+        if(finish!=null && tokenLimit(finish)) {
             if(indexes.size()==1) throw new PermanentJobException("AI_OUTPUT_INCOMPLETE","sentence="+(indexes.getFirst()+1)+", Shorten this sentence before retrying content generation");
+            recordSplit(job,indexes,finish);
             int mid=indexes.size()/2;
             generateBatch(job,input,lesson,indexes.subList(0,mid),features,budget,context);
             generateBatch(job,input,lesson,indexes.subList(mid,indexes.size()),features,budget,context);return;
@@ -151,8 +174,8 @@ public final class AuthoringContentGenerator {
             var notes=annotations(lesson,indexes,raw,kind,kind.equals("LEXICAL") ? batch.vocabulary() : batch.grammar());
             if(kind.equals("LEXICAL")) vocabulary=notes;else grammar=notes;
         }
-        var dictation=features.contains("DICTATION") ? excluded(structured.get("d"),indexes) : Map.<Integer,String>of();
-        var shadowing=features.contains("SHADOWING") ? excluded(structured.get("s"),indexes) : Map.<Integer,String>of();
+        var dictation=excluded(job,structured,"DICTATION","d",indexes,validFeatures);
+        var shadowing=excluded(job,structured,"SHADOWING","s",indexes,validFeatures);
         AuthoringProfile.Cefr cefr=null;AuthoringProfile.ContentType type=null;
         if(features.contains("PROFILE")) {
             try {var profile=tuple(structured.get("m"),2,2);cefr=AuthoringProfile.Cefr.valueOf(string(profile.get(0),20));type=AuthoringProfile.ContentType.valueOf(string(profile.get(1),30));}
@@ -163,14 +186,27 @@ public final class AuthoringContentGenerator {
             if(features.contains("TRANSLATION") && translations.containsKey(i)) sentence.translation=translations.get(i);
             if(validFeatures.contains("LEXICAL")) sentence.vocabulary=vocabulary.getOrDefault(i,List.of());
             if(validFeatures.contains("GRAMMAR")) sentence.grammar=grammar.getOrDefault(i,List.of());
-            if(features.contains("DICTATION")) {sentence.dictationSelected=!dictation.containsKey(i) && !sentence.words.isEmpty();sentence.exclusions.remove("DICTATION");if(dictation.containsKey(i)) sentence.exclusions.put("DICTATION",dictation.get(i));}
-            if(features.contains("SHADOWING")) {sentence.shadowingSelected=!shadowing.containsKey(i) && !sentence.words.isEmpty();sentence.exclusions.remove("SHADOWING");if(shadowing.containsKey(i)) sentence.exclusions.put("SHADOWING",shadowing.get(i));}
+            if(validFeatures.contains("DICTATION")) selectActivity(sentence,"DICTATION",dictation.get(i),!sentence.words.isEmpty());
+            if(validFeatures.contains("SHADOWING")) selectActivity(sentence,"SHADOWING",shadowing.get(i),!sentence.words.isEmpty());
             if(validFeatures.contains("PROFILE")) {sentence.cefrSuggestion=cefr;sentence.contentTypeSuggestion=type;}
             for(String feature:validFeatures) if(!feature.equals("TRANSLATION") || translations.containsKey(i)) sentence.contentKeys.put(feature,AuthoringContent.key(lesson,i,feature));
             if(!sentence.clozeManual) sentence.cloze=AuthoringCloze.generate(sentence);
         }
-        committer.contentCheckpoint(job,input,lesson,indexes,validFeatures);
+        if(!validFeatures.isEmpty()) committer.contentCheckpoint(job,input,lesson,indexes,validFeatures);
     }
+    private static boolean tokenLimit(Object finish) {
+        return Set.of("length","max_tokens","MAX_TOKENS","incomplete").contains(finish.toString());
+    }
+
+    private void recordSplit(BackgroundJob job,List<Integer> indexes,Object finish) {
+        try {
+            repository.diagnostic(job.id(),null,Map.of("event","CONTENT_BATCH_SPLIT",
+                "batch",List.of(indexes.getFirst()+1,indexes.getLast()+1),"finish_reason",finish==null?"unknown":finish));
+        } catch(RuntimeException failure) {
+            org.slf4j.LoggerFactory.getLogger(AuthoringContentGenerator.class).warn("Could not record batch split for {}",job.id());
+        }
+    }
+
     static Map<?,?> structuredContent(Map<String,Object> output) {
         Object value=output.get("structured");
         if(value==null && output.get("content") instanceof String content && content.length()<=200_000) {
@@ -216,15 +252,32 @@ public final class AuthoringContentGenerator {
     private static String noteKey(String kind,String surface,String explanation) {
         return AuthoringText.lexicalSequence(surface)+("LEXICAL".equals(kind) ? "" : "|"+explanation.strip().toLowerCase(Locale.ROOT));
     }
-    private Map<Integer,String> excluded(Object raw,List<Integer> indexes) {
+    private static final Set<String> EXCLUSION_REASONS=Set.of("PROMOTION","NON_SPEECH","BROKEN_FRAGMENT","CODE");
+    private Map<Integer,String> excluded(BackgroundJob job,Map<?,?> structured,String activity,String key,
+        List<Integer> indexes,Set<String> validFeatures) {
+        if(!validFeatures.contains(activity)) return Map.of();
         var result=new HashMap<Integer,String>();
-        for(Object value:raw instanceof List<?> rows ? rows : List.of()) {
-            if(!(value instanceof List<?>)) continue;
-            try {var row=tuple(value,2,2);int i=index(row.get(0),indexes);String reason=string(row.get(1),40);
-            if(Set.of("PROMOTION","NON_SPEECH","BROKEN_FRAGMENT","CODE").contains(reason)) result.put(i,reason);
-            } catch(com.lyreo.contracts.errors.RequestValidationException invalid) { /* Uncertain exclusions retain the sentence. */ }
+        try {
+            for(Object value:list(structured.get(key))) {
+                var row=tuple(value,2,2);
+                int i=index(row.get(0),indexes);
+                String reason=string(row.get(1),40);
+                require(EXCLUSION_REASONS.contains(reason),"Invalid activity exclusion reason code");
+                require(result.putIfAbsent(i,reason)==null,"Duplicate activity exclusion");
+            }
+        } catch(com.lyreo.contracts.errors.RequestValidationException invalid) {
+            validFeatures.remove(activity);
+            repository.diagnostic(job.id(),null,Map.of("feature",activity,"error",invalid.getMessage()));
+            return Map.of();
         }
         return result;
+    }
+    private static void selectActivity(AuthoringSentence sentence,String activity,String reason,boolean eligible) {
+        boolean selected=eligible && reason==null;
+        if("DICTATION".equals(activity)) {sentence.dictationEligible=eligible;sentence.dictationSelected=selected;}
+        else {sentence.shadowingEligible=eligible;sentence.shadowingSelected=selected;}
+        if(reason==null) sentence.exclusions.remove(activity);
+        else sentence.exclusions.put(activity,reason);
     }
     private static List<?> list(Object value) {require(value instanceof List<?>,"AI output is missing an enabled content array");return (List<?>)value;}
     private static List<?> tuple(Object value,int min,int max) {var row=list(value);require(row.size()>=min && row.size()<=max,"Invalid content tuple");return row;}
@@ -285,7 +338,10 @@ public final class AuthoringContentGenerator {
         if(features.contains("LEXICAL") || features.contains("GRAMMAR")) prompt.append("Notes: most useful first, no filler or repeated teaching point, explanations <=200 characters. Copy a contiguous phrase exactly, including case and punctuation. occurrence is 1 unless targeting a later match in that sentence. Empty arrays are valid.\n");
         if(features.contains("DICTATION")) prompt.append("d:[[number,reason]] dictation exclusions.\n");
         if(features.contains("SHADOWING")) prompt.append("s:[[number,reason]] shadowing exclusions.\n");
-        if(features.contains("DICTATION") || features.contains("SHADOWING")) prompt.append("Assess each activity separately. Keep by default; exclude only clear PROMOTION (ads/subscription requests), NON_SPEECH, BROKEN_FRAGMENT (unintelligible cutoff) or CODE. Do not infer audio quality from text.\n");
+        if(features.contains("DICTATION") || features.contains("SHADOWING")) prompt.append("""
+            Keep most sentences. List only clear exceptions; use [] when none. Each reason MUST be exactly one code: PROMOTION (standalone ad), NON_SPEECH (sound or title cue without spoken words), BROKEN_FRAGMENT (unusable cutoff), CODE (literal code or symbols). Never translate or explain codes. Example exclusion: [2,"NON_SPEECH"].
+            Judge activities separately: Dictation needs words a learner can transcribe; Shadowing needs a usable spoken phrase to repeat. A clear brief reply, lyric line, repetition or everyday dialogue can suit both. Keep uncertain cases and never guess audio quality from text.
+            """);
         if(features.contains("PROFILE")) prompt.append("m:[CEFR,type] for the excerpt. CEFR=A1|A2|B1|B2|C1|C2|UNKNOWN from vocabulary and syntax. type=CONVERSATION|MONOLOGUE|LECTURE|STORY|NEWS|MIXED|OTHER|UNKNOWN. Conversation needs evidence of turn-taking.\n");
         prompt.append("Sentences:\n");
         for(int i:indexes) prompt.append(i+1).append('|').append(lesson.sentences.get(i).text).append('\n');

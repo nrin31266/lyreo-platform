@@ -23,6 +23,7 @@ import tools.jackson.databind.ObjectMapper;
 public final class AuthoringYoutubeSource implements AuthoringSourcePort {
     private static final Pattern VIDEO_ID = Pattern.compile("[A-Za-z0-9_-]{11}");
     private static final long MAX_SOURCE_BYTES = 256L * 1024 * 1024;
+    private static final long MAX_CAPTION_BYTES = 4L * 1024 * 1024;
     private final NamedParameterJdbcTemplate jdbc;
     private final ObjectStoragePort storage;
     private final ObjectMapper mapper;
@@ -73,10 +74,13 @@ public final class AuthoringYoutubeSource implements AuthoringSourcePort {
     public SourceInfo inspect(String sourceReference) {
         String id = videoId(sourceReference);
         var cached = jdbc.query("""
-            SELECT video_id, title, duration_ms, embed_allowed,thumbnail_url FROM lesson_youtube_source
+            SELECT video_id,title,duration_ms,embed_allowed,thumbnail_url,english_caption_language,english_caption_automatic
+             FROM lesson_youtube_source
              WHERE video_id=:id AND channel_id IS NOT NULL AND updated_at > now() - interval '1 day'
+               AND english_captions_checked_at > now() - interval '1 day'
             """, Map.of("id", id), (rs, row) -> new SourceInfo(rs.getString(1), rs.getString(2),
-                rs.getLong(3), rs.getBoolean(4),rs.getString(5)));
+                rs.getLong(3), rs.getBoolean(4),rs.getString(5),rs.getString(6)==null ? null
+                    : new CaptionTrack(rs.getString(6),rs.getBoolean(7))));
         if (!cached.isEmpty()) return cached.getFirst();
         if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
             throw new RequestValidationException("Inspect the source before creating a draft; metadata is missing or expired");
@@ -85,32 +89,69 @@ public final class AuthoringYoutubeSource implements AuthoringSourcePort {
         try {
             Path result = work.resolve("metadata.json");
             run(List.of(command, "--no-playlist", "--no-warnings", "--skip-download",
-                "--dump-single-json", "--", url(id)), result);
+                "--dump-single-json", "--", url(id)), result, "INSPECT");
             var node = mapper.readTree(Files.readString(result));
             double seconds = node.path("duration").asDouble(0);
             if (!Double.isFinite(seconds) || seconds <= 0 || seconds > 7200
                 || node.path("is_live").asBoolean(false)) {
                 throw new RequestValidationException("Choose a completed video up to two hours long");
             }
-            SourceInfo info = new SourceInfo(id, node.path("title").asText(id),
-                Math.round(seconds * 1000), node.path("playable_in_embed").asBoolean(true),node.path("thumbnail").asText(null));
+            var captions = YoutubeEnglishCaptions.inspect(node);
+            SourceInfo info = new SourceInfo(id, node.path("title").asText(id), Math.round(seconds * 1000),
+                node.path("playable_in_embed").asBoolean(true),node.path("thumbnail").asText(null),captions);
             jdbc.update("""
-                INSERT INTO lesson_youtube_source(video_id,title,duration_ms,embed_allowed,channel_id,channel_title,thumbnail_url)
-                VALUES (:id,:title,:duration,:embed,:channel,:channelTitle,:thumbnail)
+                INSERT INTO lesson_youtube_source(video_id,title,duration_ms,embed_allowed,channel_id,channel_title,
+                    thumbnail_url,english_caption_language,english_caption_automatic,english_captions_checked_at)
+                VALUES (:id,:title,:duration,:embed,:channel,:channelTitle,:thumbnail,NULLIF(:captionLanguage,''),:automatic,now())
                 ON CONFLICT(video_id) DO UPDATE SET title=excluded.title,
                   duration_ms=excluded.duration_ms,embed_allowed=excluded.embed_allowed,
-                  channel_id=excluded.channel_id,channel_title=excluded.channel_title,thumbnail_url=excluded.thumbnail_url,updated_at=now()
+                  channel_id=excluded.channel_id,channel_title=excluded.channel_title,thumbnail_url=excluded.thumbnail_url,
+                  english_caption_language=excluded.english_caption_language,english_caption_automatic=excluded.english_caption_automatic,
+                  english_captions_checked_at=excluded.english_captions_checked_at,updated_at=now()
                 """, Map.of("id", id, "title", info.title(), "duration", info.durationMs(),
                     "embed", info.embedAllowed(), "channel", node.path("channel_id").asText(""),
-                    "channelTitle", node.path("channel").asText(""),"thumbnail",node.path("thumbnail").asText("")));
-            String channel=node.path("channel_id").asText("");
-            if(!channel.isBlank()) jdbc.update("""
-                INSERT INTO lesson_youtube_channel(channel_id,title) VALUES(:id,:title)
-                ON CONFLICT(channel_id) DO UPDATE SET title=CASE WHEN lesson_youtube_channel.synced_at IS NULL THEN excluded.title ELSE lesson_youtube_channel.title END
-                """,Map.of("id",channel,"title",node.path("channel").asText(channel)));
+                    "channelTitle", node.path("channel").asText(""),"thumbnail",node.path("thumbnail").asText(""),
+                    "captionLanguage",captions==null ? "" : captions.language(),"automatic",captions!=null && captions.automatic()));
             return info;
         } catch (IOException failure) {
             throw unavailable(failure);
+        } finally { cleanup(work); }
+    }
+
+    @Override
+    public List<CaptionLine> englishCaptions(String videoId, CaptionTrack track, long startMs, long endMs) {
+        if (!enabled) throw YoutubeEnglishCaptions.unavailable("YouTube acquisition is disabled");
+        if (videoId == null || !VIDEO_ID.matcher(videoId).matches() || track == null
+            || !YoutubeEnglishCaptions.isEnglish(track.language())) {
+            throw YoutubeEnglishCaptions.unavailable("The selected English caption track is invalid");
+        }
+        Path work = temp();
+        try {
+            Path selection = work.resolve("selection.json");
+            try {
+                run(List.of(command, "--ignore-config", "--no-playlist", "--no-warnings", "--skip-download",
+                    "--no-simulate", "--print", "%(requested_subtitles)j", "--output-na-placeholder", "{}",
+                    track.automatic() ? "--write-auto-subs" : "--write-subs", "--sub-langs", "^" + track.language() + "$",
+                    "--sub-format", "json3", "--output", work.resolve("captions.%(ext)s").toString(), "--", url(videoId)),
+                    selection, "CAPTIONS");
+            } catch (SourceMaterializationException failure) {
+                if (Thread.currentThread().isInterrupted()) throw failure;
+                throw YoutubeEnglishCaptions.unavailable("Could not download the selected English caption track")
+                    .withDiagnostics(failure.diagnostics());
+            }
+            // Verify the track chosen by this invocation. A cached automatic language may now be a translation.
+            if (Files.size(selection) > MAX_CAPTION_BYTES
+                || !YoutubeEnglishCaptions.isUsableFormat(
+                    mapper.readTree(Files.readString(selection)).path(track.language()), track.automatic())) {
+                throw YoutubeEnglishCaptions.unavailable("The selected original English caption track is unavailable");
+            }
+            Path captions = work.resolve("captions." + track.language() + ".json3");
+            if (!Files.isRegularFile(captions) || Files.size(captions) > MAX_CAPTION_BYTES) {
+                throw YoutubeEnglishCaptions.unavailable("The selected English caption track is missing or too large");
+            }
+            return YoutubeEnglishCaptions.lines(mapper.readTree(Files.readString(captions)), startMs, endMs);
+        } catch (IOException | tools.jackson.core.JacksonException failure) {
+            throw YoutubeEnglishCaptions.unavailable("Could not read the selected English caption track");
         } finally { cleanup(work); }
     }
 
@@ -141,7 +182,7 @@ public final class AuthoringYoutubeSource implements AuthoringSourcePort {
                 run(List.of(command, "--no-playlist", "--no-progress", "--max-filesize", "256M",
                     "-f", "bestaudio", "--download-sections", "*" + seconds(startMs) + "-" + seconds(endMs),
                     "--force-keyframes-at-cuts", "--output", source.toString(),
-                    "--", url(videoId)), work.resolve("acquisition.log"));
+                    "--", url(videoId)), work.resolve("acquisition.log"), "AUDIO_DOWNLOAD");
                 if (!Files.isRegularFile(source) || Files.size(source) > MAX_SOURCE_BYTES)
                     throw new RequestValidationException("Source audio exceeds the supported size");
             } else {
@@ -150,7 +191,7 @@ public final class AuthoringYoutubeSource implements AuthoringSourcePort {
             Path segment = work.resolve("segment.wav");
             run(List.of("ffmpeg", "-v", "error", "-nostdin", "-y", "-ss", ranged ? "0" : seconds(startMs),
                 "-i", source.toString(), "-t", seconds(endMs - startMs), "-vn", "-ar", "16000",
-                "-ac", "1", "-c:a", "pcm_s16le", segment.toString()), work.resolve("ffmpeg.log"));
+                "-ac", "1", "-c:a", "pcm_s16le", segment.toString()), work.resolve("ffmpeg.log"), "AUDIO_NORMALIZE");
             String key = "sources/youtube/" + videoId + "/segments/" + startMs + "-" + endMs + "-pcm16-v1.wav";
             storage.put(key, "audio/wav", Files.readAllBytes(segment));
             jdbc.update("""
@@ -164,22 +205,40 @@ public final class AuthoringYoutubeSource implements AuthoringSourcePort {
         finally { cleanup(work); }
     }
 
-    private void run(List<String> args, Path log) throws IOException {
-        Process process = new ProcessBuilder(args).redirectError(ProcessBuilder.Redirect.DISCARD)
+    private void run(List<String> args, Path log, String stage) throws IOException {
+        Path stderr = log.resolveSibling(log.getFileName() + ".stderr");
+        Process process = new ProcessBuilder(args).redirectError(stderr.toFile())
             .redirectOutput(log.toFile()).start();
         try {
             if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
                 process.destroyForcibly();
-                throw new SourceMaterializationException("YOUTUBE_MEDIA_TIMEOUT", "Media command timed out", true);
+                throw new SourceMaterializationException("YOUTUBE_MEDIA_TIMEOUT", "Media command timed out", true)
+                    .withDiagnostics(Map.of("media_stage", stage, "media_failure", "TIMEOUT"));
             }
             if (process.exitValue() != 0) {
+                String reason = failureCategory(stderr);
                 throw new SourceMaterializationException("YOUTUBE_MEDIA_FAILED",
-                    "Media command failed; verify source availability and operator tools", true);
+                    "Media command failed; verify source availability and operator tools", !reason.equals("SOURCE_REMOVED"))
+                    .withDiagnostics(Map.of("media_stage", stage, "media_exit_code", process.exitValue(), "media_failure", reason));
             }
         } catch (InterruptedException interrupted) {
             process.destroyForcibly(); Thread.currentThread().interrupt();
             throw new SourceMaterializationException("YOUTUBE_MEDIA_INTERRUPTED", "Media preparation interrupted", true);
         }
+    }
+
+    private static String failureCategory(Path stderr) {
+        // Keep only categories. Tool stderr can contain signed URLs or authentication details.
+        try (var stream = Files.newInputStream(stderr)) {
+            String detail = new String(stream.readNBytes(8192), StandardCharsets.UTF_8).toLowerCase(java.util.Locale.ROOT);
+            if (detail.contains("private video") || detail.contains("video has been removed")) return "SOURCE_REMOVED";
+            if (detail.contains("http error 429")) return "RATE_LIMITED";
+            if (detail.contains("http error 403")) return "UPSTREAM_FORBIDDEN";
+            if (detail.matches("(?s).*http error 5[0-9]{2}.*")) return "UPSTREAM_UNAVAILABLE";
+            if (detail.contains("timed out") || detail.contains("connection reset")) return "CONNECTION_FAILED";
+            if (detail.contains("requested format is not available")) return "FORMAT_UNAVAILABLE";
+        } catch (IOException ignored) { /* Diagnostics must not replace the media failure. */ }
+        return "COMMAND_FAILED";
     }
 
     private void requireEnabled() {

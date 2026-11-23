@@ -20,6 +20,7 @@ import { CatalogError, CatalogSkeleton, CatalogImage } from "./CatalogFeedback";
 import { catalogKeys } from "./catalog.queries";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { fetchChannels, syncChannels, fetchSyncConfiguration, setChannelVisibility, deleteChannel, type Channel } from "./catalog.api";
 const active = (status: string | null) =>
@@ -30,6 +31,8 @@ export function ChannelsPage({ embedded = false }: { embedded?: boolean }) {
   const client = useQueryClient();
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState("");
+  const [visibilityFilter, setVisibilityFilter] = useState("all");
+  const [lessonFilter, setLessonFilter] = useState("all");
   const [deleting, setDeleting] = useState<Channel>();
   const query = useQuery({
     queryKey: catalogKeys.channels,
@@ -58,21 +61,45 @@ export function ChannelsPage({ embedded = false }: { embedded?: boolean }) {
     },
   });
   const mutating = mutation.isPending || deletion.isPending || visibility.isPending;
-  const channels = query.data?.filter(channel => `${channel.title} ${channel.id}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())) ?? [];
+  const searchTerm = search.trim().toLocaleLowerCase();
+  const channels = query.data?.filter(channel =>
+    (visibilityFilter === "all" || channel.visible === (visibilityFilter === "shown"))
+    && (lessonFilter === "all" || (channel.lessonCount > 0) === (lessonFilter === "hasLessons"))
+    && `${channel.title} ${channel.id}`.toLocaleLowerCase().includes(searchTerm)
+  ) ?? [];
+  const selectedChannels = channels.filter(channel => selected.includes(channel.id));
   return (
     <section className="grid gap-4">
       {!embedded && <h1>{t("catalog.channels")}</h1>}
       <p className="text-sm text-muted-foreground">{t("catalog.channelVisibilityHelp")} {t("catalog.channelDeleteHelp")}</p>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <Input className="max-w-sm" aria-label={t("catalog.searchChannels")} placeholder={t("catalog.searchChannels")} value={search} onChange={event => setSearch(event.target.value)} />
-          {query.data && <span className="shrink-0 text-sm text-muted-foreground">{t("catalog.channelCount", { count: query.data.length })}</span>}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Input className="w-full sm:w-52" aria-label={t("catalog.searchChannels")} placeholder={t("catalog.searchChannels")} value={search} onChange={event => setSearch(event.target.value)} />
+          <Select value={visibilityFilter} onValueChange={setVisibilityFilter}>
+            <SelectTrigger aria-label={t("catalog.channelVisibilityFilter")}><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("catalog.allStatuses")}</SelectItem>
+              <SelectItem value="shown">{t("catalog.visible")}</SelectItem>
+              <SelectItem value="hidden">{t("catalog.hiddenShort")}</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={lessonFilter} onValueChange={setLessonFilter}>
+            <SelectTrigger aria-label={t("catalog.channelLessonFilter")}><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("catalog.allLessonCounts")}</SelectItem>
+              <SelectItem value="hasLessons">{t("catalog.channelHasLessons")}</SelectItem>
+              <SelectItem value="empty">{t("catalog.channelNoCurrentLessons")}</SelectItem>
+            </SelectContent>
+          </Select>
+          {query.data && <span role="status" className="text-sm text-muted-foreground">{channels.length === query.data.length
+            ? t("catalog.channelCount", { count: query.data.length })
+            : t("catalog.filteredChannelCount", { count: channels.length, total: query.data.length })}</span>}
         </div>
         <Button variant="outline" title={t("catalog.channelSyncHelp")}
-          disabled={!configuration.data?.configured || !selected.length || selected.length > 50 || mutating || query.data?.some((c) => selected.includes(c.id) && active(c.syncStatus))}
-          onClick={() => mutation.mutate(selected)}>
+          disabled={!configuration.data?.configured || !selectedChannels.length || selectedChannels.length > 50 || mutating || selectedChannels.some((c) => active(c.syncStatus))}
+          onClick={() => mutation.mutate(selectedChannels.map(c => c.id))}>
           <Refresh data-icon="inline-start" aria-hidden="true" />
-          {t("catalog.syncSelected", { count: selected.length })}
+          {t("catalog.syncSelected", { count: selectedChannels.length })}
         </Button>
       </div>
       <CatalogError
@@ -108,7 +135,12 @@ export function ChannelsPage({ embedded = false }: { embedded?: boolean }) {
                     <span className="min-w-0 break-words">{c.title}</span>
                   </Link>
                 </TableCell>
-                <TableCell className="text-right tabular-nums"><Link className="hover:underline" to={`/lessons?channel=${encodeURIComponent(c.id)}`}>{c.lessonCount}</Link></TableCell>
+                <TableCell className="text-right tabular-nums">
+                  <Link className="hover:underline" to={`/lessons?channel=${encodeURIComponent(c.id)}`}>{c.lessonCount}</Link>
+                  {c.linkedLessonCount > c.lessonCount && <Link className="block text-xs text-muted-foreground hover:underline" to={`/lessons?channel=${encodeURIComponent(c.id)}&status=DELETED`}>
+                    {t("catalog.channelTrashCount", { count: c.linkedLessonCount - c.lessonCount })}
+                  </Link>}
+                </TableCell>
                 <TableCell className="whitespace-normal">
                   <div className="flex flex-col items-start gap-1">
                     <Badge variant={active(c.syncStatus) ? "secondary" : c.syncError || c.syncStatus === "FAILED" ? "destructive" : c.syncedAt ? "success" : "outline"}>

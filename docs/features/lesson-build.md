@@ -63,7 +63,8 @@ Observed grouping never invents duration or hides missing coverage. Invalid timi
 quality warnings do not require a listening checkbox. Anchored realignment retains the existing
 coverage/order/overlap/window limits. While the transcript exactly matches STT, Core reuses its original
 ordered audio windows directly: a sentence crossing a 115-second seam does not create a 230-second
-alignment request. Edited text falls back to validated observed sentence/word anchors.
+alignment request. Edited text falls back to validated observed sentence/word anchors. WhisperX
+clips the final anchor to decoded audio when source frame rounding leaves up to 50 ms of overrun.
 
 ## Content generation and review
 
@@ -71,13 +72,17 @@ The accepted behavior, enums, budgets, IPA conventions and cloze rules are owned
 [FR-LSN-008](../requirements/lesson.md#fr-lsn-008--contextual-generation-and-candidate-review).
 Core batches enabled LLM work as numbered transcript text exactly once, no UUID/timing/token tables.
 Output uses tr:[[n,translation]], v/g:[[n,phrase,explanation,occurrence?]],
-d/s:[[n,exclusion_reason]] and m:[CEFR,type]. The prompt keeps all valid-timing sentences by default.
+d/s:[[n,reason_code]] and m:[CEFR,type]. Activity arrays contain only clear exceptions to including
+spoken lines with valid timing. The server checkpoints explicit sound-cue exclusions locally in
+existing drafts. Invalid or missing exclusion arrays leave only the affected activity pending.
 A lossless single-object outer-array normalization is accepted; ambiguous roots are rejected.
-No JSON repair/ranking request is made. Truncated output recursively splits only the failed range.
+Lesson content requests low thinking effort on providers that support it. No JSON repair/ranking
+request is made. Truncated output recursively splits only the failed range. Explicit provider
+rejection does not split the batch.
 Translations checkpoint per sentence; invalid notes are warnings, not a failed batch. Missing feature
 arrays/profile are incomplete while valid results remain durable. Fingerprints include text/context,
 locale, budget, activity-selection policy and IPA display version as relevant. Retry targets only
-missing/stale features and never overwrites protected manual values. Explicit reconfirmation makes
+missing/stale features and preserves manual edits on eligible lines. Explicit reconfirmation makes
 stale manual content current; timing-only edits do not re-run text capabilities.
 
 Every concrete route attempt contributes usage, including failed/truncated/fallback attempts. A
@@ -88,6 +93,8 @@ Credential/auth fields, signed URLs and media payloads are excluded. Only Admin 
 records scoped to its lesson. Old jobs have no reconstructed output. Diagnostics render as text,
 with copy/download JSON. Failed provider attempts retain original HTTP status and sanitized message
 behind Debug; see the [AI failure contract](../architecture/ai-execution.md#failure-artifacts-and-security).
+Incomplete responses keep their finish reason when available. Debug identifies a split's sentence
+range and records media retry stage, attempt number and failure category without raw tool stderr.
 History shows saved checkpoint coverage, note/selection counts, grouped
 model calls and separate queue/call duration before Debug is opened. LLM API calls/tokens are
 separate from audio/IPA calls; missing usage stays unknown. New calls carry capability, invocation
@@ -101,6 +108,18 @@ PREPARE/TTS → ALIGN → CONTENT enqueue happens with checkpoint completion und
 cancellation and revision fence. Completed input recovery is idempotent. Initial generation never
 sets human-review revisions. Legacy SEMANTIC/IPA jobs stay retired; explicit writes normalize old
 unsupported options. GET does not persist normalization. The foundation schema includes CONTENT/profile metadata, auto-continuation, publisher, expiring diagnostics, metadata versions and job results. Published content guards stay intact.
+
+Admin checks a complete YouTube video URL after 350 ms of inactivity, cancels older requests on URL
+changes, and offers checked English captions when inspection finds a usable track. An uploaded
+caption file takes precedence. YouTube metadata inspection caches the available English track kind
+and language. Core uses
+yt-dlp to fetch the selected track during PREPARE. Draft timing evidence retains the normalized cue
+anchors and transcript source. An uploaded SRT or WebVTT file is parsed from at most 256 KiB of
+UTF-8 text. Use video-relative timestamps and select a range that contains the complete cues you
+want to include. Common explicit sound labels, such as `(plane roaring)` or `[applause]`, and
+music symbols are removed before making cue windows. Other bracketed speech and lyrics remain
+available for review. The word aligner receives the prepared audio and the cue windows. Existing
+drafts without a caption choice keep their configured STT flow.
 
 Profile estimates use word-weighted CEFR median and a 60% majority for type; otherwise MIXED or
 UNKNOWN. Admin overrides are protected. IPA uses eSpeak raw/display fields and versions. Cloze

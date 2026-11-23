@@ -67,6 +67,9 @@ class OpenAICompatibleProvider:
             body["temperature"] = request.options["temperature"]
         deepseek = request.provider.upper() == "DEEPSEEK"
         thinking = request.options.get("thinking")
+        if deepseek and thinking is None and request.options.get("thinking_level") == "low":
+            thinking = "enabled"
+            body.setdefault("reasoning_effort", "low")
         thinking_enabled = thinking == "enabled" or thinking is None and provider_options.get("reasoning_effort") != "none"
         budget = request.options.get("max_output_tokens")
         if budget is not None and not {"max_tokens", "max_completion_tokens"} & provider_options.keys():

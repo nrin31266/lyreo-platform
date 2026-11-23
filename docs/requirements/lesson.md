@@ -30,6 +30,15 @@ narrow screens can scroll naturally. Playback, zoom and selection controls are g
 are collapsed by default. Icon controls expose hover/focus help, and longer instructions open on click.
 Waveform preparation is deferred.
 URL inspection and selection do not acquire audio or run inference. Explicit transcript preparation starts media acquisition.
+Admin checks valid YouTube video URLs automatically after typing stops and shows caption availability
+next to the URL. Inspection identifies a usable publisher-provided or original auto-generated English
+track, with preference for the publisher-provided track. Admin offers the English-caption option
+checked when a track is available. Otherwise the page continues with configured transcription.
+A selected track that cannot be loaded or used in the chosen range gives a distinct error with retry
+and WhisperX actions. An Admin can also supply an SRT or WebVTT file for the exact video version.
+Caption timing anchors each line
+relative to the selected range. Local alignment derives individual word timing. Automatic and uploaded
+captions stop for transcript review before alignment. The Admin draft shows the transcript source.
 Overlap warns, not blocks.
 
 ### FR-LSN-002 — Independent build dimensions
@@ -148,7 +157,7 @@ stale output không commit và private recording không lộ.
 Admin uses one workspace for YouTube, Audio and Text, with live processing status rather than
 mandatory Next screens. Source inspection skeletons match the player/timeline and metadata regions.
 Creation and each queued/running/retrying/cancelling step show explicit feedback; completed stages
-remain visible. Duplicate submissions and source switching are disabled while creation/upload is pending. One explicit Create lesson starts STT → alignment → content for media, or
+remain visible. Duplicate submissions and source switching are disabled while creation/upload is pending. One explicit Create lesson starts transcript preparation → alignment → content for media, subject to caption review above, or
 TTS → alignment → content for Text. Text never runs STT. Every checkpoint and follow-up enqueue
 share a short fenced transaction; recovery cannot create duplicate successors. Cancellation prevents
 continuation, and failed alignment/content preserves valid transcript/audio for targeted retry.
@@ -213,11 +222,13 @@ AUTO note budgets use ceil(words/75) for vocabulary and ceil(words/175) for gram
 are 0–100 vocabulary and 0–30 grammar. Later batches can use unused earlier capacity within the
 whole-lesson cap. Admin shows generated and manually edited counts. Manual edits do not consume the cap.
 
-Every sentence with valid timing is selected by default for each enabled activity. LLM exclusions
-are limited to PROMOTION, NON_SPEECH, BROKEN_FRAGMENT and CODE. Length, difficulty, repetition,
-simple statements and transitions do not justify exclusion. Uncertain cases are kept. Admin can
-select/deselect all, restore suggestions, undo before save or change individual choices. Text-only
-inference never claims audio quality. Unselected sentences still appear in the view mode; hidden is not membership.
+Spoken lines with valid timing are selected by default. Dictation needs words a learner can transcribe,
+and Shadowing needs a usable spoken phrase to repeat. The LLM returns only clear exceptions for each
+activity, using PROMOTION, NON_SPEECH, BROKEN_FRAGMENT or CODE. Keep short replies, lyrics, repetition,
+simple statements, transitions and uncertain cases. Text-only inference never claims audio quality.
+The server excludes explicit sound cues in existing drafts for both activities. Admin can select or
+deselect eligible lines, restore suggestions, undo before saving or override an AI suggestion. Unselected
+sentences remain visible in view mode.
 
 Dictation preview has fewer blanks (~20%), more blanks (~40%) and full sentence levels, independent
 of CEFR. Deterministic code prioritizes validated notes then suitable content tokens, retains context,
@@ -289,6 +300,9 @@ import videos or create lessons automatically.
 Admin may delete a source channel only when it has no linked lessons, including soft-deleted lessons,
 and no active synchronization job. A named confirmation explains that deletion removes channel
 metadata only; cached sources/media and job history remain. Channels with lessons use Hide instead.
+The channel list filters by visibility and whether there are current lessons. It shows any remaining
+soft-deleted lesson count separately and links to those lessons, which are still available for recovery.
+URL inspection caches the video metadata. The channel enters the managed list on lesson creation.
 The backend serializes deletion with synchronization and new lesson creation. Explicitly creating a
 lesson from a cached source may recreate its missing channel metadata.
 

@@ -37,7 +37,10 @@ class AiCompletionBoundaryTest {
             var gateway = new FastApiAiExecutionGateway(WebClient.create("http://127.0.0.1:" + server.getAddress().getPort()),
                 Duration.ofSeconds(5), "test-internal");
             assertThatThrownBy(() -> gateway.execute(command())).isInstanceOfSatisfying(AiExecutionException.class,
-                error -> assertThat(error.errorCode()).isEqualTo("AI_OUTPUT_INCOMPLETE"));
+                error -> {
+                    assertThat(error.errorCode()).isEqualTo("AI_OUTPUT_INCOMPLETE");
+                    assertThat(error.diagnostics()).containsEntry("finish_reason", "length");
+                });
         } finally { server.stop(0); }
     }
 
