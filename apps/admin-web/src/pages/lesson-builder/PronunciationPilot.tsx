@@ -313,9 +313,9 @@ export function PronunciationPilot({ lessonId, sentence, referenceClock, referen
         {referencePlaying ? <RiPauseLine aria-hidden="true" /> : <RiPlayLine aria-hidden="true" />}
         {t(referencePlaying ? 'pronunciationPilot.pauseReference' : 'pronunciationPilot.reference')}
       </Button>
-      <div lang="en" className="text-base wrap-anywhere">
+      <div lang="en" className="studio-karaoke text-base wrap-anywhere">
         {canPlayReference && sentence.words.length > 0
-          ? <PlaybackWords clock={referenceClock} sentence={sentence} onSeek={listenToReference} highlight={referencePlaying} />
+          ? <PlaybackWords timing clock={referenceClock} sentence={sentence} onSeek={listenToReference} />
           : oldRevision?.referenceText ?? sentence.text}
       </div>
     </div>}

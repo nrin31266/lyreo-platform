@@ -121,9 +121,10 @@ it('tests the selected sentence in place and submits its saved revision', async 
     await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
     const preview = within(await screen.findByRole('dialog'));
     await userEvent.click(preview.getByRole('button', { name: 'Shadowing' }));
+    expect(preview.getByRole('button', { name: 'world.' })).toHaveClass('timing-word');
     await userEvent.click(preview.getByRole('button', { name: 'Test pronunciation' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Test pronunciation' }));
-    expect(dialog.getByRole('button', { name: 'world.' })).toBeVisible();
+    expect(dialog.getByRole('button', { name: 'world.' })).toHaveClass('timing-word');
     expect(await dialog.findByText('Record or upload up to 12 seconds.')).toBeInTheDocument();
     await userEvent.upload(dialog.getByLabelText('Upload audio'), new File(['wave'], 'test.wav', { type: 'audio/wav' }));
     expect(await dialog.findByRole('group', { name: 'Preview the recording before submitting' })).toBeInTheDocument();

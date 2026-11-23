@@ -17,13 +17,11 @@ it('updates playback leaves without rerendering the authoring form', () => {
 it('highlights only the current observed word', () => {
   const clock=createPlaybackClock();
   const sentence={text:'Hello world.',words:[{text:'Hello',startMs:0,endMs:500},{text:'world',startMs:500,endMs:1000}]} as AuthoringSentence;
-  const { rerender } = render(<I18nextProvider i18n={i18n}><PlaybackWords clock={clock} sentence={sentence} onSeek={()=>{}} /></I18nextProvider>);
+  render(<I18nextProvider i18n={i18n}><PlaybackWords clock={clock} sentence={sentence} onSeek={()=>{}} /></I18nextProvider>);
   expect(screen.getByRole('button',{name:'Hello'})).toHaveAttribute('data-active','true');
   act(()=>clock.set(600));
   expect(screen.getByRole('button',{name:'world'})).toHaveAttribute('data-active','true');
   expect(screen.getByRole('button',{name:'Hello'})).toHaveAttribute('data-active','false');
-  rerender(<I18nextProvider i18n={i18n}><PlaybackWords clock={clock} sentence={sentence} onSeek={()=>{}} highlight={false} /></I18nextProvider>);
-  expect(screen.getByRole('button',{name:'world'})).toHaveAttribute('data-active','false');
 });
 
 it('marks only the currently spoken word, including gaps and seeks, without a sentence-wide bar', () => {
