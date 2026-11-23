@@ -44,6 +44,31 @@ class DatabaseSetupIT {
             assertThat(jdbc.queryForObject("SELECT count(*) FROM app_user", Integer.class)).isEqualTo(3);
             assertThat(jdbc.queryForObject("SELECT daily_minutes FROM learner_profile WHERE display_name = 'Minh Anh'", Integer.class))
                 .isEqualTo(15);
+
+            String newMinhAnhSubject = "cdba0081-1dbf-4e1a-b351-85bbad05e639";
+            String newGiaHuySubject = "e30dc993-8b1b-4fe8-8832-6774ac70ad10";
+            jdbc.update("""
+                INSERT INTO app_user (id, keycloak_subject, email_snapshot)
+                VALUES (gen_random_uuid(), ?, 'gia-huy@example.test')
+                """, newGiaHuySubject);
+            jdbc.update("""
+                INSERT INTO learner_profile (learner_id, display_name, daily_minutes, first_seen_at)
+                SELECT id, 'Huy JIT', 30, now() FROM app_user WHERE keycloak_subject = ?
+                """, newGiaHuySubject);
+            var reseed = Files.writeString(tmp.resolve("recreated-realm-learners.sql"), Files.readString(seed)
+                .replace("5352d996-50af-4498-a53c-9e4bd3712c75", newMinhAnhSubject)
+                .replace("e963ecc1-d469-4938-94cb-c85c24e08f5d", newGiaHuySubject));
+            DatabaseSetup.apply(datasource, reseed);
+            assertThat(jdbc.queryForObject("""
+                SELECT p.daily_minutes FROM learner_profile p JOIN app_user u ON u.id = p.learner_id
+                WHERE u.keycloak_subject = ? AND p.display_name = 'Minh Anh' AND p.onboarding_completed_at IS NOT NULL
+                """, Integer.class, newMinhAnhSubject)).isEqualTo(15);
+            assertThat(jdbc.queryForObject("""
+                SELECT p.daily_minutes FROM learner_profile p JOIN app_user u ON u.id = p.learner_id
+                WHERE u.keycloak_subject = ? AND p.display_name = 'Huy JIT'
+                """, Integer.class, newGiaHuySubject)).isEqualTo(30);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM learner_profile WHERE first_seen_at IS NOT NULL", Integer.class))
+                .isEqualTo(3);
         }
     }
 

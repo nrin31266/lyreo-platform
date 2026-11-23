@@ -1,6 +1,7 @@
 package com.lyreo.database;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -218,6 +219,16 @@ class LearnerProfilesIT {
                     {"avatarPreset":"FLOWER_UNKNOWN"}
                     """))
             .andExpect(status().isBadRequest());
+        String invalidName = """
+            {"displayName":"Demo\\u0000Avatar"}
+            """;
+        mvc.perform(patch(detail).with(admin).contentType(MediaType.APPLICATION_JSON).content(invalidName))
+            .andExpect(status().isBadRequest());
+        mvc.perform(patch("/api/v1/learner/profile").with(learner)
+                .contentType(MediaType.APPLICATION_JSON).content(invalidName))
+            .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/admin/learners").with(admin).param("query", "Demo\0Avatar"))
+            .andExpect(status().isBadRequest());
 
         ByteArrayOutputStream original = new ByteArrayOutputStream();
         ImageIO.write(new BufferedImage(20, 10, BufferedImage.TYPE_INT_RGB), "png", original);
@@ -249,8 +260,16 @@ class LearnerProfilesIT {
         mvc.perform(get("/v3/api-docs").param("fresh", "learner-contract"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.paths['/api/v1/learner/profile'].patch.responses['409']").exists())
+            .andExpect(jsonPath("$.paths['/api/v1/learner/profile/avatar'].put.responses['409']").exists())
+            .andExpect(jsonPath("$.paths['/api/v1/admin/learners/{learnerId}/avatar'].get.responses['404']").exists())
             .andExpect(jsonPath("$.paths['/api/v1/admin/learners'].get.tags[0]").value("Learner Administration"))
-            .andExpect(jsonPath("$.components.schemas.LearnerProfilePatchRequest.properties.focusArea").exists());
+            .andExpect(jsonPath("$.components.schemas.LearnerProfileResponse.required").value(hasItem("profile")))
+            .andExpect(jsonPath("$.components.schemas.LearnerProfileResponse.properties.profile.anyOf[0]['$ref']")
+                .value("#/components/schemas/LearnerProfileDto"))
+            .andExpect(jsonPath("$.components.schemas.LearnerProfileResponse.properties.profile.anyOf[1].type").value("null"))
+            .andExpect(jsonPath("$.components.schemas.LearnerProfilePatchRequest.properties.focusArea.type").value(hasItem("null")))
+            .andExpect(jsonPath("$.components.schemas.LearnerAppearancePatchRequest.properties.avatarPreset.type").value(hasItem("null")))
+            .andExpect(jsonPath("$.components.schemas.Entry.properties.email.type").value(hasItem("null")));
     }
 
     private static RequestPostProcessor auth(String subject, String role) {

@@ -51,7 +51,9 @@ credentials out of Git.
 `make setup` creates three login-capable demo learners in local Keycloak and links
 them to the configured development database. The fixture starts with two completed
 profiles and one pending profile. Rerunning keeps saved edits and existing demo
-passwords. See [local demo accounts](ACCOUNT.md#learner-demo-accounts) for usernames.
+passwords. If Keycloak was recreated with the application database intact, setup
+links the new demo identities to the existing fixture profiles when possible.
+See [local demo accounts](ACCOUNT.md#learner-demo-accounts) for usernames.
 
 Large content datasets are imported through the [data-import tool](../tools/data-import/README.md), not Flyway seed blobs. Store raw datasets outside Git.
 

@@ -5,6 +5,7 @@ import com.lyreo.learner.domain.LearnerDirectory;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.UUID;
 import org.slf4j.LoggerFactory;
@@ -35,7 +36,8 @@ public class AdminLearnerController {
 
     @GetMapping
     public LearnerDirectory list(
-        @RequestParam(defaultValue = "") @Size(max = 120) String query,
+        @RequestParam(defaultValue = "") @Size(max = 120)
+        @Pattern(regexp = LearnerAppearancePatchRequest.WITHOUT_NUL, message = "Query must not contain NUL") String query,
         @RequestParam(required = false) LearnerDirectory.Status status,
         @RequestParam(defaultValue = "0") @Min(0) int page,
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size

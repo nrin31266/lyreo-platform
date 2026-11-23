@@ -18,6 +18,7 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.tags.Tag;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -102,6 +103,7 @@ public class OpenApiConfiguration {
                 "application/problem+json",
                 new MediaType().schema(problemRef)
             );
+            describeLearnerSchemas(openApi);
             describeLearnerOperations(openApi, problemContent);
 
             // Operation-level contract for POST /api/v1/admin/lessons/build
@@ -191,6 +193,34 @@ public class OpenApiConfiguration {
         };
     }
 
+    private static void describeLearnerSchemas(OpenAPI openApi) {
+        var schemas = openApi.getComponents().getSchemas();
+        if (schemas == null) return;
+
+        var wrapper = schemas.get("LearnerProfileResponse");
+        if (wrapper != null) {
+            var profile = (Schema<?>) wrapper.getProperties().get("profile");
+            wrapper.addProperty("profile", new Schema<>().anyOf(List.of(profile, new Schema<>().typesItem("null"))));
+            wrapper.setRequired(List.of("userId", "onboarded", "profile"));
+        }
+        markNullable(schemas.get("LearnerProfilePatchRequest"), "string", "displayName", "focusArea", "avatarPreset");
+        markNullable(schemas.get("LearnerAppearancePatchRequest"), "string", "displayName", "avatarPreset");
+        markNullable(schemas.get("LearnerProfileDto"), "string",
+            "displayName", "goal", "currentLevel", "focusArea", "avatarPreset", "avatarUploadId");
+        markNullable(schemas.get("LearnerProfileDto"), "integer", "dailyMinutes");
+        markNullable(schemas.get("StarterSuggestion"), "integer", "dailyMinutes");
+        markNullable(schemas.get("Entry"), "string",
+            "displayName", "email", "onboardingCompletedAt", "goal", "currentLevel", "focusArea", "avatarPreset", "avatarUploadId");
+        markNullable(schemas.get("Entry"), "integer", "dailyMinutes");
+    }
+
+    private static void markNullable(Schema<?> schema, String type, String... fields) {
+        if (schema == null) return;
+        for (String field : fields) {
+            schema.getProperties().get(field).setTypes(Set.of(type, "null"));
+        }
+    }
+
     private static void describeLearnerOperations(OpenAPI openApi, Content problems) {
         openApi.getPaths().forEach((path, item) -> {
             boolean admin = path.equals("/api/v1/admin/learners") || path.startsWith("/api/v1/admin/learners/");
@@ -202,7 +232,7 @@ public class OpenApiConfiguration {
             });
             if (path.equals("/api/v1/learner/profile")) {
                 item.getGet().setDescription("Profile is null until the learner completes onboarding.");
-                item.getPatch().setDescription("Omitted fields retain their values. Explicit null clears displayName or focusArea.");
+                item.getPatch().setDescription("Omitted fields retain their values. Explicit null clears displayName, focusArea or avatarPreset.");
                 item.getPatch().getResponses().addApiResponse("409", new ApiResponse()
                     .description("Complete onboarding before editing the profile").content(problems));
             }
@@ -210,8 +240,15 @@ public class OpenApiConfiguration {
                 item.getPut().setDescription("Completes onboarding once. Later requests return the current profile.");
             }
             if (path.equals("/api/v1/admin/learners/{learnerId}")) {
+                item.readOperations().forEach(operation -> operation.getResponses().addApiResponse("404",
+                    new ApiResponse().description("Learner profile not found in the directory").content(problems)));
+            }
+            if (path.endsWith("/avatar")) {
                 item.getGet().getResponses().addApiResponse("404", new ApiResponse()
-                    .description("Learner profile not found in the directory").content(problems));
+                    .description("Avatar not found").content(problems));
+                item.getPut().getResponses().addApiResponse(admin ? "404" : "409", new ApiResponse()
+                    .description(admin ? "Learner profile not found in the directory" : "Complete onboarding before uploading an avatar")
+                    .content(problems));
             }
         });
     }
