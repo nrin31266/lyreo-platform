@@ -1,7 +1,7 @@
 import { RiPauseLine, RiVolumeUpLine } from '@remixicon/react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import type { IpaExample } from './ipa';
+import { ipaWordUrl, type IpaExample } from './ipa';
 import { ipaPlaybackKey, type IpaPlayback, type useIpaAudio } from './useIpaAudio';
 
 export function IpaAudioButtons({ example, audio, beforePlay }: {
@@ -21,7 +21,8 @@ export function IpaAudioButtons({ example, audio, beforePlay }: {
     </Button>;
   }
 
-  if (example.lessonUrl) return <Button asChild size="sm" variant="outline" className="justify-self-start">
+  const hasWordAudio = Boolean(ipaWordUrl(example));
+  if (example.lessonUrl && !example.soundUrl && !example.soundFile) return <Button asChild size="sm" variant="outline" className="justify-self-start">
     <a href={example.lessonUrl} target="_blank" rel="noreferrer" onClick={beforePlay}>
       <RiVolumeUpLine aria-hidden="true" />{t('phonetics.watchBbc')}
     </a>
@@ -29,9 +30,9 @@ export function IpaAudioButtons({ example, audio, beforePlay }: {
 
   return <>
     <div className="flex flex-wrap gap-2">
-      {listen('sequence', t('phonetics.playSequence'))}
+      {hasWordAudio && listen('sequence', t('phonetics.playSequence'))}
       {listen('sound', t('phonetics.playSound', { sound: ipa }))}
-      {listen('word', t('phonetics.playExample', { word, transcription: example.transcription }))}
+      {hasWordAudio && listen('word', t('phonetics.playExample', { word, transcription: example.transcription }))}
     </div>
     {audio.failed && <p role="alert" className="text-sm text-destructive">{t('phonetics.playError')}</p>}
   </>;

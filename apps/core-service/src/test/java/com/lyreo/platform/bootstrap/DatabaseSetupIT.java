@@ -95,7 +95,9 @@ class DatabaseSetupIT {
                 WHERE r.capability='GENERAL_LLM' AND r.enabled AND NOT p.enabled
                   AND p.encrypted_api_key IS NULL AND p.key_last4 IS NULL ORDER BY r.priority
                 """, String.class)).containsExactly("DEEPSEEK:deepseek-flash", "GEMINI:gemini-3.5-flash-lite", "GROQ:openai/gpt-oss-120b");
-            assertThat(jdbc.queryForObject("SELECT count(*) FROM ai_capability_route", Integer.class)).isEqualTo(7);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM ai_capability_route", Integer.class)).isEqualTo(8);
+            assertThat(jdbc.queryForObject("SELECT enabled FROM ai_provider WHERE code='AZURE_SPEECH'", Boolean.class)).isFalse();
+            assertThat(jdbc.queryForObject("SELECT enabled FROM ai_capability_route WHERE capability='PRONUNCIATION_ASSESSMENT'", Boolean.class)).isFalse();
             jdbc.update("UPDATE lesson_category SET name='Edited category' WHERE id='20000000-0000-0000-0000-000000000001'");
             jdbc.update("UPDATE ai_provider SET enabled=true,encrypted_api_key='test-ciphertext' WHERE code='DEEPSEEK'");
             jdbc.update("UPDATE ai_capability_route SET priority=17,enabled=false WHERE model='deepseek-flash'");
@@ -107,7 +109,7 @@ class DatabaseSetupIT {
             DatabaseSetup.apply(datasource, seed);
             assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_category", Integer.class)).isEqualTo(24);
             assertThat(jdbc.queryForObject("SELECT name FROM lesson_category WHERE id='20000000-0000-0000-0000-000000000001'", String.class)).isEqualTo("Edited category");
-            assertThat(jdbc.queryForObject("SELECT count(*) FROM ai_capability_route", Integer.class)).isEqualTo(7);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM ai_capability_route", Integer.class)).isEqualTo(8);
             assertThat(jdbc.queryForObject("SELECT count(*) FROM ai_provider WHERE code='QWEN'", Integer.class)).isZero();
             assertThat(jdbc.queryForObject("SELECT encrypted_api_key FROM ai_provider WHERE code='DEEPSEEK' AND enabled", String.class)).isEqualTo("test-ciphertext");
             assertThat(jdbc.queryForObject("SELECT priority FROM ai_capability_route WHERE model='deepseek-flash' AND NOT enabled", Integer.class)).isEqualTo(17);

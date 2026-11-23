@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ipaAudioCredits, ipaSoundUrl, type IpaExample } from './ipa';
+import { ipaSoundUrl, ipaWordUrl, type IpaExample } from './ipa';
 
 export type IpaPlayback = 'sequence' | 'sound' | 'word';
 export const ipaPlaybackKey = (ipa: string, playback: IpaPlayback) => `${ipa}/${playback}`;
@@ -23,7 +23,7 @@ export function useIpaAudio() {
     const key = ipaPlaybackKey(example.ipa, playback);
     stop();
     if (playing === key) return;
-    const word = ipaAudioCredits[example.word] && `${import.meta.env.BASE_URL}ipa/${example.word}.ogg`;
+    const word = ipaWordUrl(example);
     const first = playback === 'word' ? word : ipaSoundUrl(example);
     if (!first || (playback === 'sequence' && !word)) return;
     const player = new Audio();

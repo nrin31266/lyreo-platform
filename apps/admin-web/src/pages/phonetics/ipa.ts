@@ -5,9 +5,17 @@ export const ieltsFighterIpa = 'https://ielts-fighter.com/tin-tuc/bang-phien-am-
 const ieltsFighterAudio = 'https://st.ielts-fighter.com/src/ielts-fighter/2019/09/09/';
 export const bbcSoundsOfEnglish = 'https://www.youtube.com/watch?v=QxQUapA-2w4';
 const bbcCureLesson = 'https://www.youtube.com/watch?v=nHSqluHrD-U';
+const speechActiveCureSound = 'https://www.speechactive.com/wp-content/uploads/2018/08/20.diphth_ua_.mp3';
 
-export type IpaExample = { ipa: string; word: string; transcription: string; bbcStart: number } &
-  ({ soundFile: string; lessonUrl?: never } | { soundFile?: never; lessonUrl: string });
+export type IpaExample = {
+  ipa: string;
+  word: string;
+  transcription: string;
+  bbcStart: number;
+  soundFile?: string;
+  soundUrl?: string;
+  lessonUrl?: string;
+};
 
 export const ipaGroups: Record<'vowels' | 'diphthongs' | 'consonants', IpaExample[]> = {
   vowels: [
@@ -32,7 +40,7 @@ export const ipaGroups: Record<'vowels' | 'diphthongs' | 'consonants', IpaExampl
     { ipa: 'aɪ', word: 'try', transcription: 'traɪ', bbcStart: 1526, soundFile: 'aɪ.mp3' },
     { ipa: 'əʊ', word: 'coat', transcription: 'kəʊt', bbcStart: 1313, soundFile: 'əʊ.mp3' },
     { ipa: 'aʊ', word: 'mouth', transcription: 'maʊθ', bbcStart: 1586, soundFile: 'aʊ.mp3' },
-    { ipa: 'ʊə', word: 'tour', transcription: 'tʊə', bbcStart: 1205, lessonUrl: bbcCureLesson },
+    { ipa: 'ʊə', word: 'tour', transcription: 'tʊə', bbcStart: 1205, soundUrl: speechActiveCureSound, lessonUrl: bbcCureLesson },
   ],
   consonants: [
     { ipa: 'p', word: 'pen', transcription: 'pen', bbcStart: 1723, soundFile: 'p.mp3' },
@@ -74,7 +82,11 @@ export function ipaExample(symbol: string): IpaExample | undefined {
 }
 
 export function ipaSoundUrl(example: IpaExample) {
-  return example.soundFile && ieltsFighterAudio + encodeURIComponent(example.soundFile);
+  return example.soundUrl ?? (example.soundFile && ieltsFighterAudio + encodeURIComponent(example.soundFile));
+}
+
+export function ipaWordUrl(example: IpaExample) {
+  return ipaAudioCredits[example.word] && `${import.meta.env.BASE_URL}ipa/${example.word}.ogg`;
 }
 
 export const ipaAudioCredits: Record<string, { source: string; author: string; license: string; licenseUrl?: string }> = audioCredits;

@@ -12,7 +12,7 @@ import { ipaGuides } from './ipa-guides';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-it('covers all 44 symbols and keeps the duplicate /ʊə/ recording out of playback', () => {
+it('covers all 44 symbols and supplements the duplicate /ʊə/ recording', () => {
   const examples = Object.values(ipaGroups).flat();
   expect(ipaGroups.vowels).toHaveLength(12);
   expect(ipaGroups.diphthongs).toHaveLength(8);
@@ -23,7 +23,7 @@ it('covers all 44 symbols and keeps the duplicate /ʊə/ recording out of playba
     expect(ipaGuides[ipa]).toEqual({ en: expect.any(String), vi: expect.any(String) });
     if (example.lessonUrl) {
       expect(ipa).toBe('ʊə');
-      expect(ipaSoundUrl(example)).toBeUndefined();
+      expect(ipaSoundUrl(example)).toMatch(/^https:\/\/www\.speechactive\.com\//);
     } else {
       expect(new URL(ipaSoundUrl(example)!).hostname).toBe('st.ielts-fighter.com');
       expect(ipaAudioCredits[word].source).toMatch(/^https:\/\//);
@@ -76,8 +76,12 @@ it('opens the linked sound, plays its two distinct recordings, and switches guid
   expect(sample.queryByRole('link', { name: /IELTS Fighter/ })).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'International IPA chart' })).toHaveAttribute('href', internationalIpaChart);
   await userEvent.click(screen.getByRole('button', { name: 'Review /ʊə/' }));
-  expect(sample.queryByRole('button', { name: 'Hear sound /ʊə/' })).not.toBeInTheDocument();
-  expect(sample.getByRole('link', { name: 'Hear the BBC example' })).toHaveAttribute(
-    'href', 'https://www.youtube.com/watch?v=nHSqluHrD-U',
+  const cureSound = sample.getByRole('button', { name: 'Hear sound /ʊə/' });
+  expect(cureSound).toBeInTheDocument();
+  expect(sample.queryByRole('button', { name: /Hear tour/ })).not.toBeInTheDocument();
+  expect(sample.getByRole('link', { name: /BBC Learning English/ })).toHaveAttribute(
+    'href', 'https://www.youtube.com/watch?v=QxQUapA-2w4&t=1205s',
   );
+  await userEvent.click(cureSound);
+  expect(sources.at(-1)).toBe(ipaSoundUrl(ipaExample('ʊə')!));
 });

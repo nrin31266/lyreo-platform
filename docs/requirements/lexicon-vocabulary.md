@@ -61,8 +61,10 @@ CLI cài gói từ điển đã xác minh. Admin biên tập mục đã có và 
 Kho ngôn ngữ có bảng 44 âm theo [IELTS Fighter](https://ielts-fighter.com/tin-tuc/bang-phien-am-tieng-anh-ipa_mt1567386908.html),
 đối chiếu với [bảng IPA tương tác chính thức](https://www.internationalphoneticassociation.org/IPAcharts/IPA_charts_TI/IPA_charts_TI.html).
 Audio âm riêng dùng 44 MP3 tương ứng trong bài IELTS Fighter. Từ ví dụ dùng các bản ghi Commons
-có giấy phép và tác giả riêng. Admin có thể phát âm rồi đến từ bằng một nút. Mục /ʊə/ mở
-[bài mẫu /ʊə/ của BBC](https://www.youtube.com/watch?v=nHSqluHrD-U) vì tệp IELTS Fighter của mục này trùng tệp /uː/.
+có giấy phép và tác giả riêng. Admin có thể phát âm rồi đến từ bằng một nút. Mục /ʊə/ dùng
+[clip âm riêng của Speech Active](https://www.speechactive.com/wp-content/uploads/2018/08/20.diphth_ua_.mp3)
+vì tệp IELTS Fighter của mục này trùng tệp /uː/, và mở [bài mẫu /ʊə/ của BBC](https://www.youtube.com/watch?v=nHSqluHrD-U)
+để xem hướng dẫn.
 Mỗi mục có hướng dẫn khẩu hình tiếng Việt và tiếng Anh. Ký hiệu và âm mẫu theo bảng Anh–Anh.
 Dialog chấm phát âm giữ phần hướng dẫn gọn và mở bảng IPA đầy đủ ở Kho ngôn ngữ. Ký hiệu trong kết quả và điểm của Azure vẫn theo `en-US`.
 
