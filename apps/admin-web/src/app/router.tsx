@@ -24,6 +24,8 @@ const LessonBuilderPage = lazy(() =>
 );
 
 const OrganizationPage = lazy(() => import("@/pages/lessons/OrganizationPage").then(m => ({default: m.OrganizationPage})));
+const LearnersPage = lazy(() => import("@/pages/learners/LearnersPage").then(m => ({ default: m.LearnersPage })));
+const LearnerDetailPage = lazy(() => import("@/pages/learners/LearnersPage").then(m => ({ default: m.LearnerDetailPage })));
 const LexiconPage = lazy(() => import("@/pages/lexicon/LexiconPage").then(m => ({ default: m.LexiconPage })));
 const LexiconDetailPage = lazy(() => import("@/pages/lexicon/LexiconDetailPage").then(m => ({ default: m.LexiconDetailPage })));
 const GrammarPage = lazy(() => import("@/pages/grammar/GrammarPage").then(m => ({ default: m.GrammarPage })));
@@ -62,6 +64,8 @@ export function AppRouter() {
         <Route path="lessons/new" element={<LessonBuilderPage />} />
         <Route path="lessons/:lessonId" element={<LessonDetailPage />} />
         <Route path="jobs" element={<JobsPage />} />
+        <Route path="learners" element={<LearnersPage />} />
+        <Route path="learners/:learnerId" element={<LearnerDetailPage />} />
         <Route path="settings/ai" element={<AiSettingsPage />} />
         <Route path="curriculum" element={<CurriculumPage />} />
         <Route path="lexicon" element={<LexiconPage />} />

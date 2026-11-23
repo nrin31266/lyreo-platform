@@ -33,9 +33,7 @@ Nếu đã có volume cũ trước khi script tồn tại, recreate local volume
 ## 3. Local setup
 
 ```bash
-./scripts/init-dev-env.sh
-docker compose --env-file infra/docker/.env -f compose.dev.yml up -d
-make keycloak-seed
+make setup
 ```
 
 `init-dev-env.sh` đồng bộ:
@@ -48,14 +46,14 @@ cho lúc thật sự cần Keycloak Admin API như spec mô tả. Khi capability
 Core runtime variable cùng code consumer trong cùng change; không copy secret vào Core `.env` trước
 chỉ để “phòng xa”.
 
-`make keycloak-seed`:
+Bước Keycloak trong `make setup`:
 
 1. đợi Keycloak ready;
 2. login bằng bootstrap admin;
 3. verify/create `ADMIN`, `LEARNER`;
 4. apply current `LYREO_CORE_CLIENT_SECRET`;
-5. seed dev admin/learner idempotently;
-6. nếu Core chạy profile `dev`, mirror subject/email vào `app_user` qua guarded dev endpoint.
+5. seed tài khoản `admin` và `learner`, đồng thời mirror subject/email vào `app_user` nếu Core đang chạy với profile `dev`;
+6. tạo ba tài khoản learner demo và seed hồ sơ liên kết vào database cấu hình trong Core.
 
 ## 4. Dev identities
 

@@ -1,7 +1,7 @@
-.PHONY: help init-env doctor setup setup-media deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset db-recreate seed-dev seed-lessons keycloak-seed down dev core ai admin mobile \
+.PHONY: help init-env doctor setup setup-media deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset db-recreate seed-dev seed-lessons down dev core ai admin mobile \
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
-        ai-local clean-cache clean \
+        ai-local clean \
         test-java verify-java test-ai test-data-import test-tooling test-frontend typecheck build-web validate-docs validate-repo validate check prod-config verify-prod-env down-v \
         import-clean-lexicon import-clean-grammar-toeic migrate setup-data data-storage-check data-ai-pilot
 
@@ -10,7 +10,7 @@ help:
 	  'Lyreo common commands:' \
 	  '' \
 	  'Setup' \
-	  '  make setup                       First-clone setup: env + deps + infrastructure + migrations + reference seed' \
+	  '  make setup                       First-clone setup: env + deps + infrastructure + local accounts + reference data' \
 	  '  make init-env                    Copy/synchronize local .env files' \
 	  '  make doctor                      Inspect local toolchain/env/data readiness' \
 	  '  make setup-media                 Install the Core YouTube metadata/audio downloader' \
@@ -44,7 +44,6 @@ help:
 	  '  make seed-dev                    Migrate and seed reference categories in the configured database' \
 	  '  make migrate                     Apply Flyway without starting HTTP or workers' \
 	  '  make down-v CONFIRM=lyreo-volumes Delete ALL volumes, including imports and Keycloak' \
-	  '  make keycloak-seed               Verify realm/client/roles and seed dev users' \
 	  '' \
 	  'Mobile native' \
 	  '  make mobile-ios-device-register  Register a physical iOS device with EAS (run once per device)' \
@@ -68,7 +67,6 @@ help:
 	  '  make build-web                  Build Admin Web' \
 	  '' \
 	  'Cleanup' \
-	  '  make clean-cache                 Clean Python bytecode and test caches' \
 	  '  make clean                       Clean Python bytecode and test caches' \
 	  '' \
 	  'Deployment/config' \
@@ -121,13 +119,18 @@ deps: deps-java
 	cd tools/data-import && uv sync --locked --extra dev
 	pnpm install --frozen-lockfile
 
+DB_SETUP = set -a; . ./apps/core-service/.env && set +a && ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup
+DEV_SEED_FILE := $(CURDIR)/infra/postgres/seed/dev.sql
+seed_database = $(DB_SETUP) -Dspring-boot.run.arguments="--seed-dev \"$(1)\""
+
 setup:
 	$(MAKE) init-env
 	$(MAKE) doctor
 	$(MAKE) deps
 	$(MAKE) dev-infra
-	$(MAKE) keycloak-seed
-	$(MAKE) seed-dev
+	@set -a; . ./infra/keycloak/.env && set +a && ./infra/keycloak/scripts/bootstrap-keycloak.sh && ./infra/keycloak/scripts/seed-dev-users.sh
+	@bash scripts/seed-learners.sh
+	@$(call seed_database,$(DEV_SEED_FILE))
 	@printf '%s\n' \
 	  'Lyreo local dependencies are ready.' \
 	  'Open separate terminals for: make core, make ai, make admin, make mobile.'
@@ -148,14 +151,14 @@ db-recreate:
 	./scripts/db-reset.sh --database
 
 seed-dev: deps-java
-	@set -a; . ./apps/core-service/.env; set +a; ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup -Dspring-boot.run.arguments="--seed-dev \"$(CURDIR)/infra/postgres/seed/dev.sql\""
+	@$(call seed_database,$(DEV_SEED_FILE))
 
 LESSON_SEED_FILE ?= $(CURDIR)/infra/postgres/seed/lessons.sql
 seed-lessons: seed-dev
-	@set -a; . ./apps/core-service/.env; set +a; ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup -Dspring-boot.run.arguments="--seed-dev \"$(abspath $(LESSON_SEED_FILE))\""
+	@$(call seed_database,$(abspath $(LESSON_SEED_FILE)))
 
 migrate: deps-java
-	@set -a; . ./apps/core-service/.env; set +a; ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup
+	@$(DB_SETUP)
 
 setup-data: export DATASET ?= all
 setup-data:
@@ -163,9 +166,6 @@ setup-data:
 
 data-storage-check:
 	./scripts/check-data-storage.sh
-
-keycloak-seed:
-	set -a; . ./infra/keycloak/.env; set +a; ./infra/keycloak/scripts/bootstrap-keycloak.sh; ./infra/keycloak/scripts/seed-dev-users.sh
 
 down:
 	docker compose --env-file infra/docker/.env -f compose.dev.yml down
@@ -243,13 +243,10 @@ test-ai:
 test-data-import:
 	cd tools/data-import && uv run --locked --extra dev python -m pytest
 
-clean-cache:
+clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 	@echo "Cleaned Python bytecode and test caches."
-
-clean: clean-cache
-	@echo "Python bytecode and test caches cleaned."
 
 typecheck:
 	pnpm typecheck

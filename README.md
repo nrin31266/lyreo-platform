@@ -68,7 +68,7 @@ See [Core development](apps/core-service/README.md#local-run-and-verification) f
 | Command | Purpose |
 |---|---|
 | `make init-env`, `make doctor`, `make deps` | Initialize and inspect local dependencies |
-| `make dev-infra`, `make keycloak-seed` | Run local PostgreSQL/Keycloak and seed the realm |
+| `make dev-infra` | Start local PostgreSQL and Keycloak after initial `make setup` |
 | `make db-shell`, `make db-reset` | Inspect DB or preview lesson-only reset; [scope and confirmation](docs/DEVELOPMENT.md) |
 | `make db-recreate`, `make down-v` | Guarded destructive DB/volume operations; see the same guide |
 | `make migrate`, `make seed-dev` | Apply schema and add reference categories without overwriting edits |

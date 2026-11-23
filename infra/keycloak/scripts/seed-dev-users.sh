@@ -5,8 +5,33 @@ DIR=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=_common.sh
 source "$DIR/_common.sh"
 
-"$DIR/wait-for-keycloak.sh"
+"$DIR/wait-for-keycloak.sh" >&2
 login_admin
+
+demo_learner() {
+  local username=$1 email=$2 last_name=$3 id credentials
+  id=$(user_id_by_username "$username") || return
+  if [[ -z "$id" ]]; then
+    credentials=$(python3 -c 'import json,os; print(json.dumps([{
+        "type":"password","value":os.environ["KEYCLOAK_SEED_LEARNER_PASSWORD"],"temporary":False
+    }]))') || return
+    id=$(kcadm create users -r "$REALM" -i -s "username=$username" -s "email=$email" \
+      -s firstName=Demo -s "lastName=$last_name" -s enabled=true -s emailVerified=true \
+      -s "credentials=$credentials") || return
+  elif [[ $(kcadm get "users/$id" -r "$REALM" --fields email --format csv --noquotes) != "$email" ]]; then
+    echo "Cannot seed $username: email differs from the local fixture." >&2
+    return 1
+  fi
+  kcadm add-roles -r "$REALM" --uid "$id" --rolename LEARNER >/dev/null || return
+  printf '%s\n' "$id"
+}
+
+if [[ ${1:-} == --demo-learners ]]; then
+  demo_learner demo-learner-minh-anh minh-anh@example.test 'Minh Anh'
+  demo_learner demo-learner-gia-huy gia-huy@example.test 'Gia Huy'
+  demo_learner demo-learner-new learner-moi@example.test 'Learner'
+  exit
+fi
 
 rename_dev_user() (
   local id=$1 username=$2 editable

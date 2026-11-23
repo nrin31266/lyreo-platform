@@ -70,6 +70,7 @@ public class OpenApiConfiguration {
             .tags(List.of(
                 new Tag().name("Identity").description("User identity and session endpoints"),
                 new Tag().name("Learner").description("Learner profile, onboarding and preferences"),
+                new Tag().name("Learner Administration").description("Learner directory and profile appearance"),
                 new Tag().name("Lesson").description("Admin lesson authoring and build triggers"),
                 new Tag().name("Lesson Practice").description("Learner lesson dictation and practice"),
                 new Tag().name("Jobs").description("Background job tracking and cancellation"),
@@ -101,6 +102,7 @@ public class OpenApiConfiguration {
                 "application/problem+json",
                 new MediaType().schema(problemRef)
             );
+            describeLearnerOperations(openApi, problemContent);
 
             // Operation-level contract for POST /api/v1/admin/lessons/build
             var lessonBuildPath = openApi.getPaths().get("/api/v1/admin/lessons/build");
@@ -187,6 +189,31 @@ public class OpenApiConfiguration {
                 });
             });
         };
+    }
+
+    private static void describeLearnerOperations(OpenAPI openApi, Content problems) {
+        openApi.getPaths().forEach((path, item) -> {
+            boolean admin = path.equals("/api/v1/admin/learners") || path.startsWith("/api/v1/admin/learners/");
+            if (!admin && !path.startsWith("/api/v1/learner/")) return;
+            item.readOperations().forEach(operation -> {
+                operation.setTags(List.of(admin ? "Learner Administration" : "Learner"));
+                operation.getResponses().addApiResponse("403", new ApiResponse()
+                    .description(admin ? "ADMIN role required" : "LEARNER role required").content(problems));
+            });
+            if (path.equals("/api/v1/learner/profile")) {
+                item.getGet().setDescription("Profile is null until the learner completes onboarding.");
+                item.getPatch().setDescription("Omitted fields retain their values. Explicit null clears displayName or focusArea.");
+                item.getPatch().getResponses().addApiResponse("409", new ApiResponse()
+                    .description("Complete onboarding before editing the profile").content(problems));
+            }
+            if (path.equals("/api/v1/learner/onboarding")) {
+                item.getPut().setDescription("Completes onboarding once. Later requests return the current profile.");
+            }
+            if (path.equals("/api/v1/admin/learners/{learnerId}")) {
+                item.getGet().getResponses().addApiResponse("404", new ApiResponse()
+                    .description("Learner profile not found in the directory").content(problems));
+            }
+        });
     }
 
     private static void allowLexiconExampleProperties(OpenAPI openApi) {

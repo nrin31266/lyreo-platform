@@ -34,7 +34,7 @@ function NavItem({ item }: { item: AdminNavItem }) {
     !!path &&
     (path.includes("#")
       ? location.pathname + location.hash === path
-      : location.pathname === path || (["/lexicon", "/grammar", "/toeic"].includes(path) && location.pathname.startsWith(path + "/")));
+      : location.pathname === path || (["/lexicon", "/grammar", "/toeic", "/learners"].includes(path) && location.pathname.startsWith(path + "/")));
   const childActive =
     item.children?.some((c) => active(c.path)) ||
     (item.key === "lessons" &&

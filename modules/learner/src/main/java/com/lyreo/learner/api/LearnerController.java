@@ -1,5 +1,7 @@
 package com.lyreo.learner.api;
 
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.annotation.Nulls;
 import com.lyreo.identity.application.AppUserProvisioningService;
 import com.lyreo.learner.application.LearnerProfileService;
 import com.lyreo.learner.application.OnboardingService;
@@ -12,18 +14,32 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import java.util.UUID;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.ValueDeserializer;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 @RestController
 @RequestMapping("/api/v1/learner")
 public class LearnerController {
+    private static final String GOAL_CODE = "CONVERSATION|WORK|TOEIC|UNDECIDED";
+    private static final String LEVEL_CODE = "[ABC][12]|UNKNOWN";
+
     private final AppUserProvisioningService users;
     private final LearnerProfileService profiles;
     private final OnboardingService onboarding;
@@ -41,7 +57,7 @@ public class LearnerController {
     @GetMapping("/profile")
     public LearnerProfileResponse profile(@AuthenticationPrincipal Jwt jwt) {
         var user = users.provision(jwt.getSubject(), jwt.getClaimAsString("email"));
-        var profile = profiles.findByLearnerId(user.id()).orElse(null);
+        var profile = profiles.findByLearnerId(user.id()).filter(LearnerProfile::onboarded).orElse(null);
         return new LearnerProfileResponse(
             user.id(),
             profile != null,
@@ -55,11 +71,30 @@ public class LearnerController {
         @Valid @RequestBody OnboardingRequest request
     ) {
         var user = users.provision(jwt.getSubject(), jwt.getClaimAsString("email"));
-        var profile = onboarding.onboard(
-            user.id(), request.displayName(), request.currentLevel(), request.goal(),
-            request.dailyMinutes(), request.focusArea()
-        );
+        var profile = onboarding.onboard(user.id(), LearnerProfile.Goal.valueOf(request.goal()),
+            LearnerProfile.Level.valueOf(request.currentLevel()), request.dailyMinutes());
         return LearnerProfileDto.from(profile);
+    }
+
+    @PatchMapping("/profile")
+    public LearnerProfileDto patchProfile(
+        @AuthenticationPrincipal Jwt jwt,
+        @Valid @RequestBody LearnerProfilePatchRequest request
+    ) {
+        var user = users.provision(jwt.getSubject(), jwt.getClaimAsString("email"));
+        return LearnerProfileDto.from(profiles.patchProfile(user.id(), request.toDomain()));
+    }
+
+    @PutMapping(value = "/profile/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public LearnerProfileDto uploadAvatar(@AuthenticationPrincipal Jwt jwt, @RequestPart("file") MultipartFile file) {
+        var user = users.provision(jwt.getSubject(), jwt.getClaimAsString("email"));
+        return LearnerProfileDto.from(profiles.uploadOwnAvatar(user.id(), LearnerAvatarImage.normalize(file)));
+    }
+
+    @GetMapping(value = "/profile/avatar", produces = MediaType.IMAGE_PNG_VALUE)
+    public ResponseEntity<byte[]> avatar(@AuthenticationPrincipal Jwt jwt) {
+        var user = users.provision(jwt.getSubject(), jwt.getClaimAsString("email"));
+        return LearnerAvatarImage.response(profiles.avatar(user.id()));
     }
 
     @GetMapping("/preferences")
@@ -91,7 +126,10 @@ public class LearnerController {
         String goal,
         Integer dailyMinutes,
         String focusArea,
-        LearnerPreferencesResponse preferences
+        LearnerPreferencesResponse preferences,
+        LearnerProfile.StarterSuggestion starterSuggestion,
+        String avatarPreset,
+        UUID avatarUploadId
     ) {
         public static LearnerProfileDto from(LearnerProfile p) {
             if (p == null) return null;
@@ -102,7 +140,10 @@ public class LearnerController {
                 p.goal(),
                 p.dailyMinutes(),
                 p.focusArea(),
-                LearnerPreferencesResponse.from(p.preferences())
+                LearnerPreferencesResponse.from(p.preferences()),
+                p.starterSuggestion(),
+                p.avatarPreset(),
+                p.avatarUploadId()
             );
         }
     }
@@ -135,15 +176,57 @@ public class LearnerController {
     }
 
     public record OnboardingRequest(
-        @NotBlank(message = "displayName is required")
-        String displayName,
-        String currentLevel,
-        String goal,
+        @NotNull @Pattern(regexp = GOAL_CODE) String goal,
+        @NotNull @Pattern(regexp = LEVEL_CODE) String currentLevel,
+        @NotNull
+        @JsonDeserialize(using = DailyMinutesDeserializer.class)
         @Min(value = 5, message = "dailyMinutes must be at least 5")
         @Max(value = 240, message = "dailyMinutes must be at most 240")
-        int dailyMinutes,
-        String focusArea
+        Integer dailyMinutes
     ) {}
+
+    public static final class LearnerProfilePatchRequest extends LearnerAppearancePatchRequest {
+        @JsonSetter(nulls = Nulls.FAIL)
+        @Pattern(regexp = GOAL_CODE)
+        public String goal;
+        @JsonSetter(nulls = Nulls.FAIL)
+        @Pattern(regexp = LEVEL_CODE)
+        public String currentLevel;
+        @JsonSetter(nulls = Nulls.FAIL)
+        @JsonDeserialize(using = DailyMinutesDeserializer.class)
+        @Min(5) @Max(240)
+        public Integer dailyMinutes;
+
+        @Pattern(regexp = "LISTENING|SPEAKING|VOCABULARY|GRAMMAR")
+        private String focusArea;
+        private boolean changeFocusArea;
+
+        @JsonSetter("focusArea")
+        public void setFocusArea(String focus) {
+            changeFocusArea = true;
+            focusArea = focus;
+        }
+
+        LearnerProfile.Patch toDomain() {
+            return new LearnerProfile.Patch(
+                appearance(),
+                goal == null ? null : LearnerProfile.Goal.valueOf(goal),
+                currentLevel == null ? null : LearnerProfile.Level.valueOf(currentLevel),
+                dailyMinutes, changeFocusArea,
+                focusArea == null ? null : LearnerProfile.FocusArea.valueOf(focusArea)
+            );
+        }
+    }
+
+    public static final class DailyMinutesDeserializer extends ValueDeserializer<Integer> {
+        @Override
+        public Integer deserialize(JsonParser parser, DeserializationContext context) {
+            if (!parser.hasToken(JsonToken.VALUE_NUMBER_INT)) {
+                return context.reportInputMismatch(Integer.class, "dailyMinutes must be an integer");
+            }
+            return parser.getIntValue();
+        }
+    }
 
     public record UpdatePreferencesRequest(
         @NotBlank(message = "preferredAccent is required")

@@ -4,7 +4,7 @@ React/Vite client for content managers and operators. Product scope lives in the
 
 ## Local development
 
-From this directory, copy `.env.example` to `.env` and set the public endpoints. From the repository root, run `make admin` after `make dev-infra` and `make keycloak-seed`; the dev server normally listens on `http://localhost:5173`.
+From the repository root, run `make setup` once to prepare local dependencies and accounts, then run `make admin`. The dev server normally listens on `http://localhost:5173`. Set public endpoints in `apps/admin-web/.env` when using a different local configuration.
 
 ```bash
 pnpm --filter @lyreo/admin-web typecheck

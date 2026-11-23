@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -18,6 +20,7 @@ import com.lyreo.ai.api.AiAdminController;
 import com.lyreo.ai.application.admin.AiAdminService;
 import com.lyreo.ai.application.admin.ProviderSummary;
 import com.lyreo.ai.application.admin.RouteSummary;
+import com.lyreo.contracts.errors.StateConflictException;
 import com.lyreo.grammar.api.GrammarCatalogController;
 import com.lyreo.grammar.application.PublishedGrammarCatalogs;
 import com.lyreo.assessment.api.AssessmentSessions;
@@ -463,6 +466,42 @@ class HttpWireContractTest {
     }
 
     @Test
+    void learnerCannotPatchProfileBeforeOnboarding() throws Exception {
+        UUID learnerId = UUID.randomUUID();
+        when(provisioningService.provision(any(), any()))
+            .thenReturn(new ProvisionedUser(learnerId, "new-learner", "new@example.test", Instant.now()));
+        when(learnerProfileService.patchProfile(eq(learnerId), any()))
+            .thenThrow(new StateConflictException("Complete onboarding before editing the profile"));
+        learnerMvc.perform(patch("/api/v1/learner/profile")
+                .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(MOCK_JWT))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"displayName":"New learner"}
+                    """))
+            .andExpect(status().isConflict());
+    }
+
+    @Test
+    void learnerOnboardingRejectsAnInvalidGoalOrNonIntegerDuration() throws Exception {
+        for (String body : List.of(
+            """
+                {"goal":"MISSING","currentLevel":"B2","dailyMinutes":15}
+                """,
+            """
+                {"goal":0,"currentLevel":"B2","dailyMinutes":15}
+                """,
+            """
+                {"goal":"WORK","currentLevel":"B2","dailyMinutes":15.5}
+                """
+        )) {
+            learnerMvc.perform(put("/api/v1/learner/onboarding")
+                    .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(MOCK_JWT))
+                    .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Test
     void learnerProfileAndPreferencesReturnExactWireShape() throws Exception {
         UUID learnerId = UUID.randomUUID();
         when(provisioningService.provision(any(), any()))
@@ -470,7 +509,7 @@ class HttpWireContractTest {
 
         LearnerPreferences prefs = LearnerPreferences.defaults();
         when(learnerProfileService.findByLearnerId(learnerId)).thenReturn(Optional.of(
-            new LearnerProfile(learnerId, "Jane Doe", "B1", "Career", 20, "SPEAKING", prefs)
+            new LearnerProfile(learnerId, "Jane Doe", "B1", "Career", 20, "SPEAKING", prefs, Instant.now(), null, null)
         ));
         when(learnerProfileService.findPreferences(learnerId)).thenReturn(prefs);
 
@@ -486,7 +525,8 @@ class HttpWireContractTest {
             .andExpect(jsonPath("$.profile.dailyMinutes").value(20))
             .andExpect(jsonPath("$.profile.focusArea").value("SPEAKING"))
             .andExpect(jsonPath("$.profile.preferences.preferredAccent").value("US"))
-            .andExpect(jsonPath("$.profile.preferences.defaultPlaybackSpeed").value(1.0));
+            .andExpect(jsonPath("$.profile.preferences.defaultPlaybackSpeed").value(1.0))
+            .andExpect(jsonPath("$.profile.starterSuggestion.difficulty").value("INTERMEDIATE"));
 
         learnerMvc.perform(get("/api/v1/learner/preferences")
                 .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(MOCK_JWT)))

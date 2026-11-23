@@ -1,0 +1,35 @@
+.learner-avatar-initials {
+  background-color: var(--learner-avatar-background, var(--muted));
+  color: var(--learner-avatar-ink, var(--foreground));
+  font-weight: 600;
+}
+
+.learner-avatar-initials[data-color="rose"] {
+  --learner-avatar-background: var(--avatar-rose-surface);
+  --learner-avatar-ink: var(--avatar-rose-ink);
+}
+
+.learner-avatar-initials[data-color="peach"] {
+  --learner-avatar-background: var(--avatar-peach-surface);
+  --learner-avatar-ink: var(--avatar-peach-ink);
+}
+
+.learner-avatar-initials[data-color="yellow"] {
+  --learner-avatar-background: var(--avatar-yellow-surface);
+  --learner-avatar-ink: var(--avatar-yellow-ink);
+}
+
+.learner-avatar-initials[data-color="mint"] {
+  --learner-avatar-background: var(--avatar-mint-surface);
+  --learner-avatar-ink: var(--avatar-mint-ink);
+}
+
+.learner-avatar-initials[data-color="sky"] {
+  --learner-avatar-background: var(--avatar-sky-surface);
+  --learner-avatar-ink: var(--avatar-sky-ink);
+}
+
+.learner-avatar-initials[data-color="lilac"] {
+  --learner-avatar-background: var(--avatar-lilac-surface);
+  --learner-avatar-ink: var(--avatar-lilac-ink);
+}

@@ -20,8 +20,19 @@ Dev bootstrap endpoint phải bị tắt ngoài development.
 
 ### FR-IDN-003 — Onboarding lần đầu
 
-Learner lần đầu cung cấp current level, target, daily minutes, focus areas và
-optional preferred content để nhận initial rule-based path suggestion.
+Sau đăng nhập, learner chưa hoàn tất thiết lập đi qua đúng ba bước:
+
+1. **Mục tiêu học** — Giao tiếp, Công việc, TOEIC hoặc Chưa xác định.
+2. **Trình độ hiện tại** — mô tả ngắn điều người học tự đánh giá mình làm được,
+   từ A1 đến C2, hoặc Chưa chắc.
+3. **Thời lượng mỗi ngày** — chọn 5, 10, 15 hoặc 20 phút, với 10 phút được
+   gợi ý để xác nhận hoặc đổi. Đây là bước riêng.
+
+Quay lại giữ lựa chọn trong phiên thiết lập. **Lưu và bắt đầu** gửi cả ba câu trả lời
+và vào Home sau khi Core xác nhận đã lưu. Lỗi tải có hành động Thử lại. Lỗi lưu giữ
+câu trả lời để gửi lại. Khi Core xác nhận đã hoàn tất, lần đăng nhập sau đi thẳng Home.
+Core trả gợi ý chủ đề, độ khó và thời lượng để Mobile dùng khi kết nối luồng học.
+Quyết định sản phẩm: [D-036](../DECISIONS.md#d-036--learner-profile-and-three-step-onboarding-2026-11-23).
 
 ### FR-IDN-004 — Persistent learner preferences
 
@@ -38,6 +49,21 @@ preferences không dùng SecureStore. Precedence chi tiết: [Configuration](../
 
 Settings được nhóm General, Audio & Playback, Shadowing, Dictation, Vocabulary &
 Grammar, Pronunciation, Notifications và Accessibility; không gom thành một danh sách toggle phẳng.
+
+### FR-IDN-006 — Learner profile and Admin directory
+
+Learner chỉnh tên hiển thị, mục tiêu, trình độ tự đánh giá, thời lượng mỗi ngày và
+kỹ năng ưu tiên trong Hồ sơ học tập. Tên hiển thị và kỹ năng ưu tiên là tùy chọn.
+Admin tra cứu learner đã truy cập API Learner, kể cả khi đang chờ hoàn tất onboarding.
+Danh sách hỗ trợ tìm tên hoặc email và lọc trạng thái. Admin có thể sửa giúp tên
+hiển thị và ảnh đại diện từ hồ sơ chi tiết. Learner tiếp tục tự quản lý các lựa chọn học.
+Admin bấm bút cạnh tên để sửa tại chỗ hoặc bấm ảnh để mở hộp thoại đổi avatar.
+Ảnh tải lên được căn và xem trước trong khung tròn trước khi lưu.
+Ảnh đại diện mặc định dùng chữ viết tắt theo tên hoặc email. Learner và Admin có thể
+chọn ảnh từ các nhóm Thú, Hoa, Nhân vật và Truyện tranh trong cùng một danh sách cuộn,
+hoặc tải JPEG/PNG. Core giữ ảnh riêng tư, chỉ phục vụ cho
+chủ hồ sơ và Admin.
+[Hợp đồng HTTP](../architecture/http-api-contract.md#learner-profile-onboarding-and-admin-directory).
 
 ## User Stories & Acceptance Criteria
 
@@ -64,8 +90,16 @@ nghiệm phù hợp trên các thiết bị.
 
 #### AC-IDN-003 — Onboarding result
 
-Given learner hợp lệ, when gửi level/target/daily minutes/focus hợp lệ, then profile lưu persistent
-state và trả initial rule-based suggestion.
+Given learner hợp lệ, when gửi mục tiêu, trình độ và thời lượng hợp lệ, then Core lưu
+hồ sơ và mốc hoàn tất, trả gợi ý khởi đầu theo quy tắc. Gửi lại trả hồ sơ đã lưu
+và giữ chỉnh sửa cùng preferences.
+
+#### AC-IDN-005 — Learner directory and profile edit
+
+Given Core ghi nhận lượt truy cập Learner, when Admin tìm hoặc lọc danh sách,
+then hồ sơ có trạng thái phù hợp với mốc hoàn tất. Chỉ learner sở hữu hồ sơ mới được
+sửa dữ liệu học tập của mình sau onboarding. Lưu preferences trước onboarding vẫn giữ
+trạng thái chưa hoàn tất.
 
 #### AC-IDN-004 — Preference precedence
 

@@ -328,3 +328,21 @@ development databases and their history can be kept as backups. Append future mi
 **Reason.** Team onboarding starts from a known schema and a small bootstrap. Previous schema
 iterations remain in Git. The fresh schema was compared with the final schema from the prior
 migration chain. Real lesson samples use a separate idempotent development seed linked to shared audio.
+
+## D-036 — Learner profile and three-step onboarding (2026-11-23)
+
+Decision: collect a learning goal, self-assessed level and separate daily study time
+during initial onboarding. Display name and optional skill focus belong to profile
+editing. Core returns a rule-based starting suggestion. Admin can look up learners
+after they use the Learner API, including profiles pending onboarding. Keycloak owns
+roles and Identity owns email snapshots.
+
+See [Identity and Learner requirements](requirements/identity-learner.md) for behavior
+and the [HTTP contract](architecture/http-api-contract.md#learner-profile-onboarding-and-admin-directory)
+for handoff and wire examples.
+
+## D-037 — Learner profile appearance editing (2026-11-23)
+
+Learners edit their own appearance. Admin can help edit the display name and avatar
+of learners already in the directory. Refer to [profile requirements](requirements/identity-learner.md#fr-idn-006--learner-profile-and-admin-directory)
+and the [HTTP contract](architecture/http-api-contract.md#learner-profile-onboarding-and-admin-directory).
