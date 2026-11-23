@@ -32,12 +32,16 @@ class LessonResetIT {
                 sql.execute(seed);assertThat(count(sql,"lesson_category")).isEqualTo(24);
                 var sampleLessons=new ResourceDatabasePopulator(new FileSystemResource("../../infra/postgres/seed/lessons.sql"));
                 sampleLessons.populate(connection);
-                assertThat(count(sql,"lesson")).isEqualTo(8);
+                assertThat(count(sql,"lesson")).isEqualTo(11);
                 assertSampleLessonProjections(sql);
+                var seedCounts = new HashMap<String, Long>();
+                for (String table : List.of("lesson_authoring", "lesson_sentence", "lesson_word_timestamp", "lesson_annotation",
+                    "sentence_pronunciation", "lesson_activity", "lesson_activity_sentence", "lesson_category_membership"))
+                    seedCounts.put(table, count(sql, table));
                 sql.execute("UPDATE lesson_metadata SET title='Edited sample title' WHERE lesson_id='246d7560-e4a3-4807-a022-190220c7a00d'");
                 sampleLessons.populate(connection);
-                assertThat(count(sql,"lesson")).isEqualTo(8);
-                assertSampleLessonProjections(sql);
+                assertThat(count(sql,"lesson")).isEqualTo(11);
+                for (var row : seedCounts.entrySet()) assertThat(count(sql, row.getKey())).as(row.getKey()).isEqualTo(row.getValue());
                 assertThat(scalar(sql,"SELECT title FROM lesson_metadata WHERE lesson_id='246d7560-e4a3-4807-a022-190220c7a00d'"))
                     .isEqualTo("Edited sample title");
                 assertThatThrownBy(() -> sql.execute("UPDATE lesson_sentence SET text='Edited published sentence'"))
@@ -118,7 +122,7 @@ class LessonResetIT {
                     """);
                 String reset=Files.readString(Path.of("../../infra/postgres/reset-lessons.sql"));
                 assertThatThrownBy(()->sql.execute(reset)).hasMessageContaining("active lesson jobs");sql.execute("ROLLBACK");
-                assertThat(count(sql,"lesson")).isEqualTo(8);
+                assertThat(count(sql,"lesson")).isEqualTo(11);
                 assertThat(count(sql,"lesson_job_diagnostic")).isEqualTo(1);
                 sql.execute("UPDATE background_job SET status='CANCELLED' WHERE job_type='LESSON_AUTHORING'");
                 sql.execute("UPDATE vocabulary_card SET source_context_id='10000000-0000-0000-0000-000000000001',source_context_type='LESSON'");
@@ -138,17 +142,22 @@ class LessonResetIT {
     }
 
     private static void assertSampleLessonProjections(Statement sql) throws SQLException {
-        assertThat(scalar(sql,"SELECT count(*) FROM lesson WHERE source_type='YOUTUBE' AND status='PUBLISHED'")).isEqualTo("6");
+        assertThat(scalar(sql,"SELECT count(*) FROM lesson WHERE source_type='YOUTUBE' AND status='PUBLISHED'")).isEqualTo("9");
         assertThat(scalar(sql,"SELECT count(*) FROM lesson WHERE source_type='TEXT' AND status='PUBLISHED'")).isEqualTo("1");
-        assertThat(count(sql,"lesson_sentence")).isEqualTo(188);
-        assertThat(count(sql,"lesson_word_timestamp")).isEqualTo(2670);
-        assertThat(count(sql,"lesson_annotation")).isEqualTo(188);
-        assertThat(count(sql,"sentence_pronunciation")).isEqualTo(188);
-        assertThat(count(sql,"lesson_activity")).isEqualTo(21);
-        assertThat(count(sql,"lesson_activity_sentence")).isEqualTo(564);
-        assertThat(count(sql,"lesson_category_membership")).isEqualTo(7);
-        assertThat(scalar(sql,"SELECT sum(jsonb_array_length(document)) FROM lesson_authoring WHERE published_at IS NOT NULL"))
-            .isEqualTo("188");
+        assertThat(count(sql,"lesson_authoring")).isEqualTo(10);
+        assertThat(count(sql,"lesson_authoring_job")).isZero();
+        assertThat(scalar(sql,"""
+            SELECT count(*) FROM lesson_authoring a
+            WHERE a.published_at IS NULL OR jsonb_array_length(a.document)=0
+               OR jsonb_array_length(a.document)<>(SELECT count(*) FROM lesson_sentence s WHERE s.lesson_id=a.lesson_id)
+               OR (SELECT count(*) FROM lesson_activity act WHERE act.lesson_id=a.lesson_id)<>3
+            """)).isEqualTo("0");
+        assertThat(scalar(sql,"""
+            SELECT count(*) FROM lesson_sentence s WHERE
+                NOT EXISTS (SELECT FROM lesson_word_timestamp w WHERE w.sentence_id=s.id)
+                OR NOT EXISTS (SELECT FROM lesson_annotation a WHERE a.sentence_id=s.id)
+                OR NOT EXISTS (SELECT FROM sentence_pronunciation p WHERE p.sentence_id=s.id)
+            """)).isEqualTo("0");
     }
 
     private static String scalar(Statement sql,String query) throws SQLException {

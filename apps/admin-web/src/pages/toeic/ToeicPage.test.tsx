@@ -26,6 +26,8 @@ it('groups quality warnings and opens the affected Part and passage editor direc
   expect(screen.getByRole('textbox',{name:'Passage editor'})).toBeVisible();
   expect(screen.queryByRole('button',{name:'Create drill from this Part'})).not.toBeInTheDocument();
   expect(screen.queryByRole('tab',{name:'Learner preview'})).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button',{name:/Part 1/}));
+  expect(screen.getByText('Part 1 has no questions')).toBeVisible();
   cache.clear();
 });
 

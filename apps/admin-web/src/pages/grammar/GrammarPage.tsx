@@ -23,7 +23,14 @@ export function GrammarPage() {
   const selected = params.get("tab") ?? routeKind ?? "topic";
   const kind = ["topic", "subtopic", "bank", "questions", "review"].includes(selected) ? selected : "topic";
   const tabIcons = { topic: RiFolder2Line, subtopic: RiFolderOpenLine, bank: RiStackLine, questions: RiQuestionLine, review: RiAlertLine };
-  const tabs = <nav className="flex flex-wrap gap-2" aria-label={t("navigation.grammar")}>{["topic", "subtopic", "bank", "questions", "review"].map(tab => <Button key={tab} variant={kind === tab ? "secondary" : "ghost"} onClick={() => setParams(current => { const next = new URLSearchParams(current); next.set("tab", tab); return next; })}>{(() => { const Icon = tabIcons[tab as keyof typeof tabIcons]; return <Icon aria-hidden="true" />; })()}{t(`library.grammarTabs.${tab}`)}</Button>)}</nav>;
+  function selectTab(tab: string) {
+    if (tab === kind) return;
+    const next = new URLSearchParams(params);
+    next.set("tab", tab);
+    next.delete("page");
+    setParams(next);
+  }
+  const tabs = <nav className="flex flex-wrap gap-2" aria-label={t("navigation.grammar")}>{["topic", "subtopic", "bank", "questions", "review"].map(tab => <Button key={tab} variant={kind === tab ? "secondary" : "ghost"} onClick={() => selectTab(tab)}>{(() => { const Icon = tabIcons[tab as keyof typeof tabIcons]; return <Icon aria-hidden="true" />; })()}{t(`library.grammarTabs.${tab}`)}</Button>)}</nav>;
   if (kind === "review") return <section className="grid gap-6"><h1>{t("navigation.grammar")}</h1>{tabs}<GrammarReview /></section>;
   return <LibraryList key={kind} title={t("navigation.grammar")} endpoint={kind === "questions" ? "/api/v1/admin/assessment-items" : `/api/v1/admin/grammar/${kind}`} route={`/grammar/${kind}`} extra={tabs} />;
 }

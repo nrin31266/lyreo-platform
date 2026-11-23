@@ -40,10 +40,10 @@ names and Vietnamese translations, plus [development AI defaults](CONFIGURATION.
 Rerunning preserves existing categories, providers, credentials and routes.
 No automatic reseeding runs at startup. Large banks stay under the [import tools](DATA_PIPELINES.md).
 
-`make seed-lessons` adds the tracked lesson fixture after bootstrap. It contains the original
-lesson set plus the tested real published lesson snapshots, with transcript timing,
-practice content and source metadata. Drafts used for local verification are excluded. Core needs access to the canonical audio objects
-in the shared development bucket. Rerunning preserves existing lessons and metadata.
+`make seed-lessons` adds the ten published lessons in the tracked fixture after bootstrap.
+Each snapshot includes transcript timing, practice content and source metadata. Core needs
+access to the canonical audio objects in the shared development bucket. Rerunning preserves
+existing lessons and metadata.
 
 Set `LESSON_SEED_FILE` to use a separately exported SQL snapshot. Keep private raw corpora and
 credentials out of Git.

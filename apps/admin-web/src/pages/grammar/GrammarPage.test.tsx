@@ -6,10 +6,23 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 import { i18n } from '@/i18n';
 import { api } from '@/lib/api';
-import { GrammarDetailPage } from './GrammarPage';
+import { GrammarDetailPage, GrammarPage } from './GrammarPage';
 
 vi.mock('@/lib/api',async original=>({...await original<typeof import('@/lib/api')>(),api:vi.fn()}));
 afterEach(()=>{cleanup();vi.clearAllMocks();});
+
+it('keeps a subtopic parent filter when returning from another tab', async () => {
+  await i18n.changeLanguage('en');
+  const cache=new QueryClient({defaultOptions:{queries:{retry:false}}});
+  vi.mocked(api).mockResolvedValue({items:[],total:90,page:0,size:30});
+  render(<QueryClientProvider client={cache}><I18nextProvider i18n={i18n}><MemoryRouter initialEntries={['/grammar/subtopic?parentId=topic&page=2']}><Routes><Route path="/grammar/:kind" element={<GrammarPage />} /></Routes></MemoryRouter></I18nextProvider></QueryClientProvider>);
+  await waitFor(()=>expect(api).toHaveBeenCalledWith(expect.stringMatching(/subtopic\/page.*page=2&parentId=topic/),expect.anything()));
+  await userEvent.click(screen.getByRole('button',{name:'Topics'}));
+  await waitFor(()=>expect(api).toHaveBeenCalledWith('/api/v1/admin/grammar/topic/page?q=&size=30&page=0',expect.anything()));
+  await userEvent.click(screen.getByRole('button',{name:'Subtopics'}));
+  await waitFor(()=>expect(api).toHaveBeenCalledWith(expect.stringMatching(/subtopic\/page.*page=0&parentId=topic/),expect.anything()));
+  cache.clear();
+});
 it('opens topic metadata first, then manages question memberships in a compact table',async()=>{
   await i18n.changeLanguage('en');
   const cache=new QueryClient({defaultOptions:{queries:{retry:false}}});

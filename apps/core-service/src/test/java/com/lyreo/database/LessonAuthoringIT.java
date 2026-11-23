@@ -275,6 +275,16 @@ class LessonAuthoringIT {
         var after=service.get(draft.id).jobs.stream().filter(row->row.jobId().equals(accepted.jobId())).findFirst().orElseThrow().result();
         assertThat(after).isEqualTo(before);
     }
+    @Test void lessonRemainsReadableWhenHistoryDisappearsBetweenQueries() {
+        var accepted=service.create("History reset", "https://www.youtube.com/watch?v=abcdefghijk", 0, 5000);
+        var missingJobs=mock(BackgroundJobService.class);
+        when(missingJobs.findById(accepted.jobId())).thenReturn(Optional.empty());
+        var reader=new com.lyreo.lesson.infrastructure.persistence.JdbcAuthoringRepository(
+            new NamedParameterJdbcTemplate(jdbc), new tools.jackson.databind.ObjectMapper(), missingJobs);
+        var lesson=reader.find(accepted.lessonId(), false).orElseThrow();
+        assertThat(lesson.title).isEqualTo("History reset");
+        assertThat(lesson.jobs).isEmpty();
+    }
     @Test void deletionRejectsActiveJobsAndPreservesSharedSources() throws Exception {
         var accepted=service.create("Delete draft","https://www.youtube.com/watch?v=abcdefghijk",0,2000);
         assertThatThrownBy(()->catalog.deleteDraft(accepted.lessonId())).hasMessageContaining("Cancel active jobs");
