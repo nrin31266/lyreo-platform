@@ -10,16 +10,32 @@ import static org.mockito.Mockito.*;
 class DevAiBootstrapTest {
     @Test void preservesConfiguredProvidersIncludingDisabledMock() {
         var admin = mock(AiAdminService.class);
-        when(admin.providers()).thenReturn(List.of(mock(ProviderSummary.class)));
+        var mockProvider = mock(ProviderSummary.class);
+        when(mockProvider.code()).thenReturn("DEV_MOCK");
+        when(admin.providers()).thenReturn(List.of(mockProvider));
         new DevAiBootstrap(admin).run(null);
         verify(admin).providers();
         verifyNoMoreInteractions(admin);
     }
-    @Test void explicitBootstrapSeedsOnlyAnEmptyCatalog() {
+    @Test void explicitBootstrapCoexistsWithLocalDefaultsAndExternalPlaceholders() {
         var admin = mock(AiAdminService.class);
-        when(admin.providers()).thenReturn(List.of());
+        var local = mock(ProviderSummary.class);
+        var placeholder = mock(ProviderSummary.class);
+        when(local.code()).thenReturn("LOCAL_WHISPERX");
+        when(placeholder.code()).thenReturn("DEEPSEEK");
+        when(admin.providers()).thenReturn(List.of(local, placeholder));
         new DevAiBootstrap(admin).run(null);
         verify(admin).saveProvider("DEV_MOCK", "Lyreo development mock", null, null, true);
-        verify(admin).saveRoute("STT", "DEV_MOCK", "mock", 10, false, true);
+        verify(admin).saveRoute("STT", "DEV_MOCK", "mock", 0, false, true);
+    }
+
+    @Test void explicitBootstrapSkipsExistingCredentials() {
+        var admin = mock(AiAdminService.class);
+        var external = mock(ProviderSummary.class);
+        when(external.configured()).thenReturn(true);
+        when(admin.providers()).thenReturn(List.of(external));
+        new DevAiBootstrap(admin).run(null);
+        verify(admin).providers();
+        verifyNoMoreInteractions(admin);
     }
 }

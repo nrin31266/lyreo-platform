@@ -11,8 +11,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { RiLink as Link2, RiSearchLine as Search, RiLoader4Line as LoaderCircle, RiErrorWarningLine as AlertCircle } from "@remixicon/react";
+import { RiLink as Link2, RiLoader4Line as LoaderCircle, RiErrorWarningLine as AlertCircle } from "@remixicon/react";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupInput, InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -21,6 +23,7 @@ import {
   FieldGroup,
   FieldLabel,
   FieldError,
+  FieldDescription,
 } from "@/components/ui/field";
 import { SourceInspectionSkeleton } from "./AuthoringSkeleton";
 import {
@@ -36,12 +39,31 @@ import { defaultRange, sourceOffset, timecode } from "./timecode";
 import { validSelection } from "./timeline-view";
 import * as authoring from "./lesson-builder.api";
 import { ContentOptionsPanel, defaultContentOptions } from "./ContentEditor";
-import type { SourceInspection } from "./lesson-builder.types";
+import type { CaptionFile, SourceInspection } from "./lesson-builder.types";
 import { createMetadataSchema as metadataSchema } from "@/pages/lessons/catalog.api";
 import { useCategories, catalogKeys } from "@/pages/lessons/catalog.queries";
 import { UnsavedChangesGuard } from "./UnsavedChangesGuard";
+function isYouTubeVideoUrl(reference: string) {
+  if (!/^https?:\/\//.test(reference) || !URL.canParse(reference)) return false;
+  const url = new URL(reference);
+  if (url.username || url.password || !["", "80", "443"].includes(url.port)) return false;
+  const host = url.hostname;
+  let id: string | undefined;
+  if (host === "youtu.be" || host === "www.youtu.be") {
+    id = url.pathname.slice(1);
+  } else if (["youtube.com", "www.youtube.com", "m.youtube.com", "youtube-nocookie.com", "www.youtube-nocookie.com"].includes(host)) {
+    if (url.pathname === "/watch") {
+      const ids = url.searchParams.getAll("v");
+      if (ids.length === 1) id = ids[0];
+    } else {
+      id = /^\/(?:embed|shorts|live)\/([^/]+)$/.exec(url.pathname)?.[1];
+    }
+  }
+  return id !== undefined && /^[A-Za-z0-9_-]{11}$/.test(id);
+}
+
 const sourceSchema = z.object({
-  sourceReference: z.string().trim().pipe(z.url()),
+  sourceReference: z.string().trim().refine(isYouTubeVideoUrl),
 });
 function CreateYouTubePage({ onDirtyChange, onBusyChange }: { onDirtyChange: (dirty: boolean) => void; onBusyChange: (busy: boolean) => void }) {
   const { t } = useTranslation(["admin", "common"]);
@@ -62,48 +84,83 @@ function CreateYouTubePage({ onDirtyChange, onBusyChange }: { onDirtyChange: (di
       categoryIds: [],
     },
   });
+  const [preferEnglishCaptions, setPreferEnglishCaptions] = useState(false);
+  const [captionFile, setCaptionFile] = useState<CaptionFile | null>(null);
+  const [captionError, setCaptionError] = useState("");
+  const [readingCaption, setReadingCaption] = useState(false);
+  const captionVersion = useRef(0);
+  const captionInput = useRef<HTMLInputElement>(null);
+
+  function clearCaption() {
+    captionVersion.current += 1;
+    setCaptionFile(null);
+    setCaptionError("");
+    setReadingCaption(false);
+    if (captionInput.current) captionInput.current.value = "";
+  }
+
+  async function readCaption(file?: File) {
+    const version = ++captionVersion.current;
+    setCaptionFile(null);
+    setCaptionError("");
+    setReadingCaption(false);
+    if (!file) return;
+    const format = /\.(srt|vtt)$/i.exec(file.name)?.[1].toLowerCase();
+    if ((format !== "srt" && format !== "vtt") || !file.size || file.size > 256 * 1024) {
+      setCaptionError(t("captions.invalidFile"));
+      return;
+    }
+    setReadingCaption(true);
+    try {
+      const text = await file.text();
+      if (version !== captionVersion.current) return;
+      if (text.trim()) setCaptionFile({ format, text });
+      else setCaptionError(t("captions.invalidFile"));
+    } catch {
+      if (version === captionVersion.current) setCaptionError(t("captions.readError"));
+    } finally {
+      if (version === captionVersion.current) setReadingCaption(false);
+    }
+  }
+
   const sourceReference = sourceForm.watch("sourceReference");
   useEffect(() => { onDirtyChange(!!sourceReference.trim() || metadata.formState.isDirty || JSON.stringify(options) !== JSON.stringify(defaultContentOptions)); }, [sourceReference, metadata.formState.isDirty, options, onDirtyChange]);
   const inspectionVersion = useRef(0);
-  const inspectionInFlight = useRef(false);
+  const inspectionTimer = useRef<number>(undefined);
+  const inspectionRequest = useRef<AbortController | null>(null);
   const lastInspectedReference = useRef<string | null>(null);
-  const [selectionVersion, setSelectionVersion] = useState(0);
+  const [inspecting, setInspecting] = useState(false);
   const [inspection, setInspection] = useState<SourceInspection | null>(null);
   const [startMs, setStartMs] = useState<number | null>(null);
   const [endMs, setEndMs] = useState<number | null>(null);
   const [rangeInputValid, setRangeInputValid] = useState(false);
-  const currentRange = useRef({ startMs, endMs });
-  currentRange.current = { startMs, endMs };
   const [error, setError] = useState("");
   const [inspectError, setInspectError] = useState("");
-  const inspectionMutation = useMutation({
-    mutationFn: authoring.inspectSource,
-  });
   const createMutation = useMutation({ mutationFn: authoring.createDraft });
   const creating = useRef(false);
   useEffect(() => { onBusyChange(createMutation.isPending); return () => onBusyChange(false); }, [createMutation.isPending, onBusyChange]);
   async function inspectReference(reference: string) {
-    if (inspectionInFlight.current) return;
-    inspectionInFlight.current = true;
-    const version = ++inspectionVersion.current;
-    reference = reference.trim();
+    clearTimeout(inspectionTimer.current);
+    if (inspectionRequest.current || reference === lastInspectedReference.current) return;
+    if (!isYouTubeVideoUrl(reference)) {
+      void sourceForm.trigger("sourceReference");
+      return;
+    }
+    const request = new AbortController();
+    inspectionRequest.current = request;
+    const version = inspectionVersion.current;
+    setInspecting(true);
     setError("");
     setInspectError("");
     try {
-      if (!(await sourceForm.trigger()) || version !== inspectionVersion.current) return;
-      const next = await inspectionMutation.mutateAsync(reference);
+      const next = await authoring.inspectSource(reference, request.signal);
       if (version !== inspectionVersion.current) return;
-      const refresh = reference === lastInspectedReference.current;
       setInspection(next);
-      const range = currentRange.current;
-      if (!refresh || (range.startMs !== null && (range.startMs < 0 || range.startMs >= next.durationMs)) ||
-        (range.endMs !== null && (range.startMs === null || !validSelection(range.startMs, range.endMs, next.durationMs)))) {
-        const [start, end] = defaultRange(next.durationMs, env.youtubeAutoSelectMaxMinutes);
-        setStartMs(start);
-        setEndMs(end);
-        setRangeInputValid(start !== null && end !== null);
-        setSelectionVersion(value => value + 1);
-      }
+      setPreferEnglishCaptions(!!next.englishCaptions);
+      const [start, end] = defaultRange(next.durationMs, env.youtubeAutoSelectMaxMinutes);
+      setStartMs(start);
+      setEndMs(end);
+      setRangeInputValid(start !== null && end !== null);
       lastInspectedReference.current = reference;
     } catch (cause) {
       if (version !== inspectionVersion.current) return;
@@ -126,17 +183,27 @@ function CreateYouTubePage({ onDirtyChange, onBusyChange }: { onDirtyChange: (di
           : message,
       );
     } finally {
-      inspectionInFlight.current = false;
+      if (inspectionRequest.current === request) {
+        inspectionRequest.current = null;
+        setInspecting(false);
+      }
     }
   }
-  useEffect(() => () => { inspectionVersion.current += 1; }, []);
+  useEffect(() => () => {
+    inspectionVersion.current += 1;
+    captionVersion.current += 1;
+    clearTimeout(inspectionTimer.current);
+    inspectionRequest.current?.abort();
+    inspectionRequest.current = null;
+  }, []);
   async function create(event: FormEvent) {
     event.preventDefault();
-    if (inspectionInFlight.current || creating.current) return;
+    if (inspectionRequest.current || creating.current || readingCaption || captionError) return;
     const version = inspectionVersion.current;
+    const fileVersion = captionVersion.current;
     setError("");
     if (!(await metadata.trigger())) return;
-    if (version !== inspectionVersion.current) return;
+    if (version !== inspectionVersion.current || fileVersion !== captionVersion.current) return;
     if (
       !inspection ||
       !rangeInputValid ||
@@ -153,6 +220,7 @@ function CreateYouTubePage({ onDirtyChange, onBusyChange }: { onDirtyChange: (di
         options,
         ...metadata.getValues(),
         sourceReference: sourceReference.trim(),
+        ...(captionFile ? { captionFile } : { preferEnglishCaptions: !!inspection.englishCaptions && preferEnglishCaptions }),
         startMs,
         endMs,
       });
@@ -165,6 +233,10 @@ function CreateYouTubePage({ onDirtyChange, onBusyChange }: { onDirtyChange: (di
   const overlap = startMs !== null && endMs !== null && inspection?.usedRanges.some(
     (range) => startMs < range.endMs && endMs > range.startMs,
   );
+  const track = inspection?.englishCaptions;
+  const captionAvailability = inspecting ? t("captions.checking") : track
+    ? t(track.automatic ? "captions.automaticTrack" : "captions.manualTrack", { language: track.language })
+    : inspection?.embedAllowed && t(captionFile ? "captions.noEnglishTrackOnYouTube" : "captions.noEnglishTrack");
   return (
     <section className="authoring-page source-page" aria-busy={createMutation.isPending}>
       {createMutation.isPending && <ProcessingStatus label={t("finish.starting")} />}
@@ -176,7 +248,7 @@ function CreateYouTubePage({ onDirtyChange, onBusyChange }: { onDirtyChange: (di
         className="source-url-form"
         onSubmit={(event) => {
           event.preventDefault();
-          void inspectReference(sourceReference);
+          void inspectReference(sourceReference.trim());
         }}
       >
         <Field
@@ -194,36 +266,53 @@ function CreateYouTubePage({ onDirtyChange, onBusyChange }: { onDirtyChange: (di
             type="url"
             required
             value={sourceReference}
+            aria-describedby="source-caption-status"
             aria-invalid={
               !!inspectError || !!sourceForm.formState.errors.sourceReference
             }
             onChange={(event) => {
+              const value = event.target.value;
+              const reference = value.trim();
+              sourceForm.setValue("sourceReference", value);
+              if (reference === sourceReference.trim()) return;
               inspectionVersion.current += 1;
-              sourceForm.setValue("sourceReference", event.target.value);
+              clearTimeout(inspectionTimer.current);
+              inspectionRequest.current?.abort();
+              inspectionRequest.current = null;
+              lastInspectedReference.current = null;
+              setInspecting(false);
               setInspection(null);
+              sourceForm.clearErrors("sourceReference");
+              clearCaption();
               setInspectError("");
               setError("");
+              if (isYouTubeVideoUrl(reference)) {
+                inspectionTimer.current = window.setTimeout(() => void inspectReference(reference), 350);
+              }
+            }}
+            onBlur={() => {
+              if (sourceReference.trim() && !isYouTubeVideoUrl(sourceReference.trim())) void sourceForm.trigger("sourceReference");
             }}
             placeholder="https://www.youtube.com/watch?v=…"
           />
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton type="submit" variant="secondary" disabled={inspectionMutation.isPending || createMutation.isPending || !sourceReference.trim()}>
-              {inspectionMutation.isPending ? <LoaderCircle className="animate-spin" /> : <Search />}
-              {t("lessonAuthoring.inspect")}
-            </InputGroupButton>
-          </InputGroupAddon>
+          {(inspecting || inspectError) && <InputGroupAddon align="inline-end">
+            {inspecting
+              ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              : <InputGroupButton type="submit" variant="secondary">{t("catalog.retry")}</InputGroupButton>}
+          </InputGroupAddon>}
           </InputGroup>
+          <FieldDescription id="source-caption-status" aria-live="polite">{captionAvailability}</FieldDescription>
           <FieldError>
             {sourceForm.formState.errors.sourceReference
-              ? t("catalog.invalidField")
-              : inspection && inspectError}
+              ? t("captions.invalidYoutubeUrl")
+              : inspectError}
           </FieldError>
         </Field>
       </form>
 
           {inspection?.embedAllowed ? (
             <SourceRangeEditor
-              key={`${inspection.videoId}:${selectionVersion}`}
+              key={inspection.videoId}
               thumbnailUrl={inspection.thumbnailUrl}
               videoId={inspection.videoId}
               durationMs={inspection.durationMs}
@@ -242,14 +331,14 @@ function CreateYouTubePage({ onDirtyChange, onBusyChange }: { onDirtyChange: (di
                 {t("lessonAuthoring.embedBlocked")}
               </AlertDescription>
             </Alert>
-          ) : inspectionMutation.isPending ? (
+          ) : inspecting ? (
             <SourceInspectionSkeleton />
           ) : (
-            <Empty className="source-empty" role={inspectError ? "alert" : undefined}>
+            <Empty className="source-empty">
               <EmptyHeader>
                 <EmptyMedia variant="icon">{inspectError ? <AlertCircle className="text-destructive" /> : <Link2 />}</EmptyMedia>
                 <EmptyTitle>{t(inspectError ? "sourceWorkspace.sourceFailed" : "sourceWorkspace.emptyTitle")}</EmptyTitle>
-                <EmptyDescription>{inspectError || t("sourceWorkspace.pasteSource")}</EmptyDescription>
+                {!inspectError && <EmptyDescription>{t("sourceWorkspace.pasteSource")}</EmptyDescription>}
               </EmptyHeader>
             </Empty>
           )}
@@ -258,6 +347,24 @@ function CreateYouTubePage({ onDirtyChange, onBusyChange }: { onDirtyChange: (di
           <h2 className="source-section-title">{t("reviewWorkspace.lessonInformation")}</h2>
           <form id="lesson-create-form" onSubmit={create} noValidate>
             <FieldGroup>
+              {inspection?.embedAllowed && <Field className="gap-2">
+                {track && <div className="flex items-center gap-2">
+                  <Checkbox id="prefer-english-captions" checked={preferEnglishCaptions}
+                    disabled={!!captionFile || readingCaption || createMutation.isPending}
+                    aria-describedby="source-caption-status"
+                    onCheckedChange={value => setPreferEnglishCaptions(value === true)} />
+                  <FieldLabel htmlFor="prefer-english-captions">{t("captions.preferEnglish")}</FieldLabel>
+                </div>}
+                <FieldLabel htmlFor="caption-file">{t("captions.upload")}</FieldLabel>
+                <Input id="caption-file" ref={captionInput} type="file" accept=".srt,.vtt"
+                  aria-describedby={captionError ? "caption-file-help caption-file-error" : "caption-file-help"}
+                  aria-invalid={!!captionError} disabled={createMutation.isPending}
+                  onChange={event => void readCaption(event.target.files?.[0])} />
+                <FieldDescription id="caption-file-help">{t(captionFile ? "captions.fileOverrides" : "captions.fileHelp")}</FieldDescription>
+                {captionError && <FieldError id="caption-file-error">{captionError}</FieldError>}
+                {(captionFile || captionError || readingCaption) && <Button className="w-fit" variant="outline" size="sm"
+                  type="button" disabled={createMutation.isPending} onClick={clearCaption}>{t("captions.clearFile")}</Button>}
+              </Field>}
               <CreateMetadataFields form={metadata} titleHint={inspection?.title} imageHint={inspection?.thumbnailUrl || undefined} /><ContentOptionsPanel draft={{options}} disabled={createMutation.isPending} onChange={setOptions} />
               {overlap && <p role="status" className="text-sm text-muted-foreground">{t("lessonAuthoring.overlap")}</p>}
               {inspection && <>
@@ -294,7 +401,7 @@ function CreateYouTubePage({ onDirtyChange, onBusyChange }: { onDirtyChange: (di
             form="lesson-create-form"
             disabled={
               !inspection?.embedAllowed || categories.isPending || categories.isError ||
-              inspectionMutation.isPending ||
+              inspecting || readingCaption || !!captionError ||
               !rangeInputValid ||
               startMs === null || endMs === null ||
               createMutation.isPending

@@ -105,12 +105,19 @@ class AuthoringContentGeneratorTest {
     }
     @Test void truncationSplitsOnlyFailedBatch() {
         when(ai.execute(any(),anyString(),anyMap(),anyMap()))
-            .thenThrow(new AiExecutionException("truncated",false,"AI_OUTPUT_INCOMPLETE"))
+            .thenThrow(new AiExecutionException("truncated",false,"AI_OUTPUT_INCOMPLETE").diagnostics(Map.of("finish_reason","length")))
             .thenReturn(result(Map.of("structured",Map.of("tr",List.of(List.of(1,"Một")),"v",List.of(),"g",List.of()))))
             .thenReturn(result(Map.of("structured",Map.of("tr",List.of(List.of(2,"Hai")),"v",List.of(),"g",List.of()))));
         generator.generate(job,input,lesson,context);
         verify(committer,times(2)).contentCheckpoint(eq(job),eq(input),eq(lesson),anyList(),anySet());
         assertThat(AuthoringContent.complete(lesson)).isTrue();
+    }
+    @Test void doesNotSplitContentRejectedByTheModel() {
+        when(ai.execute(any(),anyString(),anyMap(),anyMap())).thenThrow(
+            new AiExecutionException("filtered",false,"AI_OUTPUT_INCOMPLETE").diagnostics(Map.of("finish_reason","content_filter")));
+        assertThatThrownBy(()->generator.generate(job,input,lesson,context)).isInstanceOf(AiExecutionException.class);
+        verify(ai).execute(any(),anyString(),anyMap(),anyMap());
+        verifyNoInteractions(committer);
     }
     @Test void ipaFailureKeepsLlmCheckpointAndRetryDoesNotCallLlmAgain() {
         lesson.options=AuthoringOptions.defaults();
@@ -141,6 +148,52 @@ class AuthoringContentGeneratorTest {
         generator.generate(job,input,lesson,context);
         assertThat(lesson.sentences.subList(0,3)).allSatisfy(s->{assertThat(s.dictationSelected).isTrue();assertThat(s.shadowingSelected).isTrue();});
         assertThat(lesson.sentences.get(3).exclusions).containsEntry("SHADOWING","BROKEN_FRAGMENT");
+    }
+    @Test void activityExclusionsSkipSoundCuesButKeepShortSpokenLinesAndManualChoices() {
+        lesson.options=new AuthoringOptions(Set.of("DICTATION","SHADOWING"),Set.of(),"vi-VN","AUTO",20,8,"DISABLED","US");
+        lesson.sentences=List.of(timed("(plane roaring)"),timed("(I know.)"),timed("Oh, yes."));
+        var cue=lesson.sentences.getFirst();
+        cue.dictationSelected=true;cue.shadowingSelected=true;
+        cue.manualFields.add("DICTATION");
+        var manual=lesson.sentences.getLast();
+        manual.manualFields.add("DICTATION");
+        manual.contentKeys.put("DICTATION",AuthoringContent.key(lesson,2,"DICTATION"));
+        when(ai.execute(any(),anyString(),anyMap(),anyMap())).thenReturn(result(Map.of("structured",Map.of("d",List.of(),"s",List.of()))));
+
+        generator.generate(job,input,lesson,context);
+
+        assertThat(cue.dictationSelected).isFalse();
+        assertThat(cue.shadowingSelected).isFalse();
+        assertThat(cue.exclusions).containsExactlyInAnyOrderEntriesOf(Map.of("DICTATION","NON_SPEECH","SHADOWING","NON_SPEECH"));
+        assertThat(lesson.sentences.get(1).dictationSelected).isTrue();
+        assertThat(lesson.sentences.get(1).shadowingSelected).isTrue();
+        assertThat(manual.dictationSelected).isFalse();
+        assertThat(manual.shadowingSelected).isTrue();
+        verify(ai,never()).execute(any(),argThat(prompt->prompt.contains("1|(plane roaring)")),anyMap(),anyMap());
+    }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"missing", "localized", "duplicate"})
+    void malformedActivityOutputKeepsItsCheckpointPendingAndRetriesOnlyThatActivity(String problem) {
+        lesson.options=new AuthoringOptions(Set.of("DICTATION","SHADOWING"),Set.of("TRANSLATION"),"vi-VN","AUTO",20,8,"DISABLED","US");
+        lesson.sentences=List.of(timed("It was good."),timed("It's too cold."));
+        var malformed=new HashMap<String,Object>(Map.of("tr",List.of(List.of(1,"Tốt"),List.of(2,"Quá lạnh")),"s",List.of()));
+        if(problem.equals("localized")) malformed.put("d",List.of(List.of(1,"Không phải lời nói")));
+        if(problem.equals("duplicate")) malformed.put("d",List.of(List.of(1,"NON_SPEECH"),List.of(1,"PROMOTION")));
+        when(ai.execute(any(),anyString(),anyMap(),anyMap())).thenReturn(result(Map.of("structured",malformed)))
+            .thenReturn(result(Map.of("structured",Map.of("d",List.of()))));
+
+        assertThatThrownBy(()->generator.generate(job,input,lesson,context)).hasMessageContaining("incomplete");
+        verify(committer).contentCheckpoint(eq(job),eq(input),eq(lesson),eq(List.of(0,1)),eq(Set.of("TRANSLATION","SHADOWING")));
+        assertThat(lesson.sentences).allSatisfy(row->{assertThat(row.shadowingSelected).isTrue();assertThat(row.dictationSelected).isFalse();});
+
+        generator.generate(job,input,lesson,context);
+        verify(ai).execute(any(),argThat(prompt->prompt.contains("d:[[") && !prompt.contains("tr:[[") && !prompt.contains("s:[[")),anyMap(),anyMap());
+        assertThat(AuthoringContent.complete(lesson)).isTrue();
+    }
+    private static AuthoringSentence timed(String text) {
+        var row=new AuthoringSentence(UUID.randomUUID(),text,"LEARN");
+        row.words=List.of(new AuthoringSentence.Word(text,0,100,0,text.length(),0,AuthoringText.tokens(text).size()));
+        return row;
     }
     @Test void disabledFeaturesDoNotRunAndManualTranslationIsPreserved() {
         lesson.options=new AuthoringOptions(Set.of(),Set.of("TRANSLATION"),"vi-VN","AUTO",20,8,"DISABLED","US","LOCAL");

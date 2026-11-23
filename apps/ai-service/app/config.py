@@ -9,12 +9,9 @@ class Settings(BaseSettings):
     ai_runtime_mode: str = 'mock'
     ai_service_internal_token: str = 'change-me-local-internal-token'
 
-    qwen_asr_model: str = 'Qwen/Qwen3-ASR-0.6B'
-    qwen_aligner_model: str = 'Qwen/Qwen3-ForcedAligner-0.6B'
-    qwen_device: str = 'cuda:0'
-    qwen_dtype: str = 'bfloat16'
-    qwen_max_inference_batch_size: int = 1
-    qwen_max_new_tokens: int = 2048
+    whisperx_asr_model: str = 'small.en'
+    whisperx_aligner_model: str = 'WAV2VEC2_ASR_BASE_960H'
+    whisperx_device: str = 'cuda'
 
     kokoro_model: str = 'hexgrad/Kokoro-82M'
     kokoro_default_voice: str = 'af_heart'

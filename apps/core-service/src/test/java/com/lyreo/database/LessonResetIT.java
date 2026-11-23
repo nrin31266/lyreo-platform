@@ -1,6 +1,8 @@
 package com.lyreo.database;
 
 import static org.assertj.core.api.Assertions.*;
+import com.lyreo.lesson.application.authoring.LessonAuthoringService;
+import com.lyreo.lesson.infrastructure.persistence.JdbcAuthoringRepository;
 import com.lyreo.lesson.infrastructure.persistence.JdbcLessonPracticeRepository;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,6 +15,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import tools.jackson.databind.ObjectMapper;
 
 class LessonResetIT {
     @Test void resetIsAtomicAndPreservesBanksConfigurationHistoryAndSharedMedia() throws Exception {
@@ -29,18 +32,31 @@ class LessonResetIT {
                 sql.execute(seed);assertThat(count(sql,"lesson_category")).isEqualTo(24);
                 var sampleLessons=new ResourceDatabasePopulator(new FileSystemResource("../../infra/postgres/seed/lessons.sql"));
                 sampleLessons.populate(connection);
-                assertThat(count(sql,"lesson")).isEqualTo(6);
+                assertThat(count(sql,"lesson")).isEqualTo(8);
                 assertSampleLessonProjections(sql);
                 sql.execute("UPDATE lesson_metadata SET title='Edited sample title' WHERE lesson_id='246d7560-e4a3-4807-a022-190220c7a00d'");
                 sampleLessons.populate(connection);
-                assertThat(count(sql,"lesson")).isEqualTo(6);
+                assertThat(count(sql,"lesson")).isEqualTo(8);
                 assertSampleLessonProjections(sql);
                 assertThat(scalar(sql,"SELECT title FROM lesson_metadata WHERE lesson_id='246d7560-e4a3-4807-a022-190220c7a00d'"))
                     .isEqualTo("Edited sample title");
                 assertThatThrownBy(() -> sql.execute("UPDATE lesson_sentence SET text='Edited published sentence'"))
                     .hasMessageContaining("Published lesson content is immutable");
                 var datasource=new DriverManagerDataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword());
-                var practice=new JdbcLessonPracticeRepository(new NamedParameterJdbcTemplate(datasource));
+                var jdbc=new NamedParameterJdbcTemplate(datasource);
+                var authoring=new JdbcAuthoringRepository(jdbc,new ObjectMapper(),null);
+                for (String songId : List.of("6f6e6cf8-7c1f-4d0a-9f8d-2c14d95d5b01", "7dca3d68-9c75-4e8c-8f59-5af5fbd34a02")) {
+                    var song=authoring.find(UUID.fromString(songId),false).orElseThrow();
+                    assertThat(song.publishedAt).isNotNull();
+                    assertThat(song.endMs-song.startMs).isBetween(7000L,8000L);
+                    assertThat(song.sentences).hasSize(2).allSatisfy(sentence -> {
+                        assertThat(sentence.translation).isNotBlank();
+                        assertThat(sentence.ipa).isNotBlank();
+                        assertThat(sentence.dictationSelected && sentence.shadowingSelected).isTrue();
+                    });
+                    LessonAuthoringService.validateTiming(song);
+                }
+                var practice=new JdbcLessonPracticeRepository(jdbc);
                 UUID summer=UUID.fromString("246d7560-e4a3-4807-a022-190220c7a00d");
                 UUID dictation=UUID.fromString(scalar(sql,"SELECT id FROM lesson_activity WHERE lesson_id='"+summer+"' AND activity_type='DICTATION'"));
                 UUID firstSentence=UUID.fromString(scalar(sql,"SELECT id FROM lesson_sentence WHERE lesson_id='"+summer+"' AND position=0"));
@@ -102,7 +118,7 @@ class LessonResetIT {
                     """);
                 String reset=Files.readString(Path.of("../../infra/postgres/reset-lessons.sql"));
                 assertThatThrownBy(()->sql.execute(reset)).hasMessageContaining("active lesson jobs");sql.execute("ROLLBACK");
-                assertThat(count(sql,"lesson")).isEqualTo(6);
+                assertThat(count(sql,"lesson")).isEqualTo(8);
                 assertThat(count(sql,"lesson_job_diagnostic")).isEqualTo(1);
                 sql.execute("UPDATE background_job SET status='CANCELLED' WHERE job_type='LESSON_AUTHORING'");
                 sql.execute("UPDATE vocabulary_card SET source_context_id='10000000-0000-0000-0000-000000000001',source_context_type='LESSON'");
@@ -122,17 +138,17 @@ class LessonResetIT {
     }
 
     private static void assertSampleLessonProjections(Statement sql) throws SQLException {
-        assertThat(scalar(sql,"SELECT count(*) FROM lesson WHERE source_type='YOUTUBE' AND status='PUBLISHED'")).isEqualTo("4");
+        assertThat(scalar(sql,"SELECT count(*) FROM lesson WHERE source_type='YOUTUBE' AND status='PUBLISHED'")).isEqualTo("6");
         assertThat(scalar(sql,"SELECT count(*) FROM lesson WHERE source_type='TEXT' AND status='PUBLISHED'")).isEqualTo("1");
-        assertThat(count(sql,"lesson_sentence")).isEqualTo(184);
-        assertThat(count(sql,"lesson_word_timestamp")).isEqualTo(2650);
-        assertThat(count(sql,"lesson_annotation")).isEqualTo(184);
-        assertThat(count(sql,"sentence_pronunciation")).isEqualTo(184);
-        assertThat(count(sql,"lesson_activity")).isEqualTo(15);
-        assertThat(count(sql,"lesson_activity_sentence")).isEqualTo(552);
-        assertThat(count(sql,"lesson_category_membership")).isEqualTo(5);
+        assertThat(count(sql,"lesson_sentence")).isEqualTo(188);
+        assertThat(count(sql,"lesson_word_timestamp")).isEqualTo(2670);
+        assertThat(count(sql,"lesson_annotation")).isEqualTo(188);
+        assertThat(count(sql,"sentence_pronunciation")).isEqualTo(188);
+        assertThat(count(sql,"lesson_activity")).isEqualTo(21);
+        assertThat(count(sql,"lesson_activity_sentence")).isEqualTo(564);
+        assertThat(count(sql,"lesson_category_membership")).isEqualTo(7);
         assertThat(scalar(sql,"SELECT sum(jsonb_array_length(document)) FROM lesson_authoring WHERE published_at IS NOT NULL"))
-            .isEqualTo("184");
+            .isEqualTo("188");
     }
 
     private static String scalar(Statement sql,String query) throws SQLException {

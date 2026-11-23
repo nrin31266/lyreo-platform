@@ -8,10 +8,10 @@ import userEvent from '@testing-library/user-event';
 import { CreateLessonPage } from './CreateLessonPage';
 import { CreateMediaLessonPage } from './CreateMediaLessonPage';
 import * as authoring from './lesson-builder.api';
-import type { LessonDraft } from './lesson-builder.types';
+import type { LessonDraft, SourceInspection } from './lesson-builder.types';
 import * as catalog from '@/pages/lessons/catalog.api';
 
-vi.mock('./lesson-builder.api', async original => ({...(await original<typeof import('./lesson-builder.api')>()),fetchVoices:vi.fn(),inspectSource:vi.fn(),createTextDraft:vi.fn(),synthesizeText:vi.fn(),uploadAudio:vi.fn(),fetchAudioSource:vi.fn(),createAudioDraft:vi.fn()}));
+vi.mock('./lesson-builder.api', async original => ({...(await original<typeof import('./lesson-builder.api')>()),fetchVoices:vi.fn(),inspectSource:vi.fn(),createDraft:vi.fn(),createTextDraft:vi.fn(),synthesizeText:vi.fn(),uploadAudio:vi.fn(),fetchAudioSource:vi.fn(),createAudioDraft:vi.fn()}));
 vi.mock('@/pages/lessons/catalog.api', async original => ({...(await original<typeof import('@/pages/lessons/catalog.api')>()),fetchCategories:vi.fn()}));
 vi.mock('./SourceRangeEditor', () => ({SourceRangeEditor: ({onRangeChange}: {onRangeChange:(start:number,end:number)=>void}) => <button type="button" onClick={()=>onRangeChange(500,1500)}>Choose range</button>}));
 let client: QueryClient;
@@ -250,12 +250,12 @@ it('keeps source inputs stable and preserves them when creation fails', async()=
   expect(await screen.findByRole('button',{name:'Create lesson'})).toBeEnabled();
 });
 it('keeps editable metadata visible before, during and after YouTube inspection',async()=>{
-  let resolve!: (source:import('./lesson-builder.types').SourceInspection)=>void;
+  let resolve!: (source:SourceInspection)=>void;
   vi.mocked(authoring.inspectSource).mockImplementation(()=>new Promise(yes=>{resolve=yes;}));
   render(<QueryClientProvider client={client}><I18nextProvider i18n={i18n}><MemoryRouter initialEntries={['/lessons/new']}><CreateLessonPage /></MemoryRouter></I18nextProvider></QueryClientProvider>);
   fireEvent.change(screen.getByLabelText('YouTube URL'),{target:{value:'https://www.youtube.com/watch?v=abcdefghijk'}});
-  fireEvent.click(screen.getByRole('button',{name:'Search'}));
   await waitFor(()=>expect(authoring.inspectSource).toHaveBeenCalledOnce());
+  expect(screen.getByText('Checking video and captions…')).toBeVisible();
   expect(screen.getByRole('button',{name:'Create lesson'})).toBeDisabled();
   expect(document.querySelector('.source-range-skeleton .source-player')).toBeInTheDocument();
   expect(document.querySelector('.source-metadata-pane .source-details-skeleton')).not.toBeInTheDocument();
@@ -275,3 +275,121 @@ it('shows the YouTube settings panel before entering a URL without starting infe
   expect(authoring.inspectSource).not.toHaveBeenCalled();
 });
 import { transferableAbortController } from 'node:util';
+
+it.each([
+  [null, 'No English captions. The lesson will use audio transcription.'],
+  [{ language: 'en-GB', automatic: false }, 'Manual English captions available (en-GB).'],
+  [{ language: 'en', automatic: true }, 'Auto-generated English captions available (en).'],
+] as const)('checks caption availability automatically (%j)', async (englishCaptions, message) => {
+  vi.mocked(authoring.inspectSource).mockResolvedValue({
+    videoId: 'abcdefghijk', title: 'Example', durationMs: 45000, embedAllowed: true, usedRanges: [], englishCaptions,
+  });
+  vi.mocked(authoring.createDraft).mockResolvedValue({ lessonId: 'youtube-1', jobId: 'job-1' });
+  showCreateRoute(['/lessons/new']);
+  fireEvent.change(screen.getByLabelText('YouTube URL'), { target: { value: 'https://www.youtube.com/watch?v=abcdefghijk' } });
+  expect(authoring.inspectSource).not.toHaveBeenCalled();
+  expect(await screen.findByText(message)).toBeVisible();
+  const prefer = screen.queryByRole('checkbox', { name: 'Prefer English captions' });
+  if (englishCaptions) expect(prefer).toBeChecked();
+  else expect(prefer).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'YouTube lesson' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create lesson' }));
+  await screen.findByRole('heading', { name: 'Editor' });
+  expect(vi.mocked(authoring.createDraft).mock.calls[0][0].preferEnglishCaptions).toBe(!!englishCaptions);
+});
+
+it.each([null, { language: 'en', automatic: false }])('applies a locally supplied caption file with online track %j', async englishCaptions => {
+  vi.mocked(authoring.inspectSource).mockResolvedValue({
+    videoId: 'abcdefghijk', title: 'Example', durationMs: 45000, embedAllowed: true, usedRanges: [],
+    englishCaptions,
+  });
+  vi.mocked(authoring.createDraft).mockResolvedValue({ lessonId: 'youtube-1', jobId: 'job-1' });
+  showCreateRoute(['/lessons/new']);
+  fireEvent.change(screen.getByLabelText('YouTube URL'), { target: { value: 'https://www.youtube.com/watch?v=abcdefghijk' } });
+  const upload = await screen.findByLabelText('Upload English captions (optional)');
+  const captions = 'WEBVTT\n\n00:00.000 --> 00:02.000\nHello!';
+  const file = new File([captions], 'example.vtt');
+  Object.defineProperty(file, 'text', { value: async () => captions });
+  await userEvent.upload(upload, file);
+  expect(await screen.findByText('The uploaded file takes priority over YouTube captions.')).toBeVisible();
+  const prefer = screen.queryByRole('checkbox', { name: 'Prefer English captions' });
+  if (englishCaptions) expect(prefer).toBeDisabled();
+  else {
+    expect(prefer).not.toBeInTheDocument();
+    expect(screen.getByText('No English caption track on YouTube.')).toBeVisible();
+  }
+  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'YouTube lesson' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create lesson' }));
+  await screen.findByRole('heading', { name: 'Editor' });
+  const draft = vi.mocked(authoring.createDraft).mock.calls[0][0];
+  expect(draft.captionFile).toEqual({ format: 'vtt', text: captions });
+  expect(draft).not.toHaveProperty('preferEnglishCaptions');
+});
+
+it('discards an outstanding file read when the source video changes', async () => {
+  vi.mocked(authoring.inspectSource).mockResolvedValue({
+    videoId: 'abcdefghijk', title: 'Example', durationMs: 45000, embedAllowed: true, usedRanges: [],
+  });
+  vi.mocked(authoring.createDraft).mockResolvedValue({ lessonId: 'youtube-1', jobId: 'job-1' });
+  showCreateRoute(['/lessons/new']);
+  const url = screen.getByLabelText('YouTube URL');
+  fireEvent.change(url, { target: { value: 'https://www.youtube.com/watch?v=abcdefghijk' } });
+  let resolve!: (text: string) => void;
+  const file = new File(['old'], 'old.srt');
+  Object.defineProperty(file, 'text', { value: () => new Promise(yes => { resolve = yes; }) });
+  await userEvent.upload(await screen.findByLabelText('Upload English captions (optional)'), file);
+  expect(screen.getByRole('button', { name: 'Create lesson' })).toBeDisabled();
+  fireEvent.change(url, { target: { value: 'https://www.youtube.com/watch?v=12345678901' } });
+  await act(async () => resolve('old'));
+  await screen.findByLabelText('Upload English captions (optional)');
+  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'New source lesson' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create lesson' }));
+  await screen.findByRole('heading', { name: 'Editor' });
+  const draft = vi.mocked(authoring.createDraft).mock.calls[0][0];
+  expect(draft.preferEnglishCaptions).toBe(false);
+  expect(draft).not.toHaveProperty('captionFile');
+});
+
+it('ignores incomplete URLs and protects the latest inspection from a stale response', async () => {
+  let resolveOld!: (source: SourceInspection) => void;
+  const source = { videoId: '12345678901', title: 'New source', durationMs: 45000, embedAllowed: true, usedRanges: [] };
+  vi.mocked(authoring.inspectSource)
+    .mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }))
+    .mockResolvedValueOnce(source);
+  showCreateRoute(['/lessons/new']);
+  const url = screen.getByLabelText('YouTube URL');
+  fireEvent.change(url, { target: { value: 'https://www.youtube.com/watch?v=abc' } });
+  fireEvent.blur(url);
+  expect(await screen.findByText('Enter a valid YouTube video URL.')).toBeVisible();
+  expect(authoring.inspectSource).not.toHaveBeenCalled();
+
+  fireEvent.change(url, { target: { value: 'https://www.youtube.com/watch?v=abcdefghijk' } });
+  await waitFor(() => expect(authoring.inspectSource).toHaveBeenCalledOnce());
+  fireEvent.change(url, { target: { value: 'https://youtu.be/12345678901?si=share&t=3s' } });
+  expect(await screen.findByText('No English captions. The lesson will use audio transcription.')).toBeVisible();
+  expect(vi.mocked(authoring.inspectSource).mock.calls[0][1]?.aborted).toBe(true);
+  expect(authoring.inspectSource).toHaveBeenCalledTimes(2);
+
+  await act(async () => resolveOld({ ...source, videoId: 'abcdefghijk', englishCaptions: { language: 'en', automatic: false } }));
+  expect(screen.queryByRole('checkbox', { name: 'Prefer English captions' })).not.toBeInTheDocument();
+});
+
+it('retries a failed source check and allows opting out of the discovered track', async () => {
+  vi.mocked(authoring.inspectSource)
+    .mockRejectedValueOnce(new Error('Network unavailable'))
+    .mockResolvedValueOnce({
+      videoId: 'abcdefghijk', title: 'Example', durationMs: 45000, embedAllowed: true, usedRanges: [],
+      englishCaptions: { language: 'en', automatic: false },
+    });
+  vi.mocked(authoring.createDraft).mockResolvedValue({ lessonId: 'youtube-1', jobId: 'job-1' });
+  showCreateRoute(['/lessons/new']);
+  fireEvent.change(screen.getByLabelText('YouTube URL'), { target: { value: 'https://www.youtube.com/shorts/abcdefghijk' } });
+  await userEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+  const prefer = await screen.findByRole('checkbox', { name: 'Prefer English captions' });
+  expect(prefer).toBeChecked();
+  await userEvent.click(prefer);
+  fireEvent.click(screen.getByRole('button', { name: 'Create lesson' }));
+  await screen.findByRole('heading', { name: 'Editor' });
+  expect(authoring.inspectSource).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(authoring.createDraft).mock.calls[0][0].preferEnglishCaptions).toBe(false);
+});

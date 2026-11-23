@@ -28,5 +28,5 @@ def test_local_model_defaults():
     from app.config import Settings
 
     cfg = Settings(_env_file=None)
-    assert cfg.qwen_max_inference_batch_size == 1
+    assert cfg.whisperx_asr_model == 'small.en'
     assert cfg.kokoro_device == 'cpu'

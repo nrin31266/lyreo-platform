@@ -53,6 +53,10 @@ describe('sentence listening policy', () => {
   it('bounds approximate preview by the next distinct segment anchor without inventing word timing', () => {
     const approximate = sentences.map((row,index)=>({...row,words:[],previewStartMs:index===2?2000:100}));
     expect(sentencePlaybackRange(approximate[0], approximate, 3000)).toEqual({startMs:100,endMs:2000});
+    const caption = { ...approximate[0], previewEndMs: 1200 };
+    expect(sentencePlaybackRange(caption, approximate, 3000)).toEqual({startMs:100,endMs:1200});
+    expect(sentencePlaybackAction(1300, caption.id, false, [caption, ...approximate.slice(1)], 3000))
+      .toEqual({pause:true,stopMs:1200});
     expect(sentencePlaybackRange(approximate[2], approximate, 3000)).toEqual({startMs:2000,endMs:3000});
   });
 });

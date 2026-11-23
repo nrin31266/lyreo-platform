@@ -87,7 +87,15 @@ public final class FastApiAiExecutionGateway implements AiExecutionGateway {
                 ? "completed".equals(status) : "stop".equals(finish);
             if ((llm && !completed) || (finish != null && !"stop".equals(finish))
                 || (status != null && !"completed".equals(status))) {
-                throw new AiExecutionException("AI output did not complete", false, "AI_OUTPUT_INCOMPLETE").evidence(new AiExecutionResult(command.invocationId(),command.provider(),command.model(),output,asInteger(usage.get("input_tokens")),asInteger(usage.get("output_tokens")),latency));
+                var diagnostics = new java.util.LinkedHashMap<String, Object>();
+                if (finish instanceof String reason && reason.matches("[A-Za-z0-9_-]{1,40}"))
+                    diagnostics.put("finish_reason", reason);
+                if (status instanceof String value && value.matches("[A-Za-z0-9_-]{1,40}"))
+                    diagnostics.put("completion_status", value);
+                throw new AiExecutionException("AI output did not complete", false, "AI_OUTPUT_INCOMPLETE")
+                    .diagnostics(diagnostics)
+                    .evidence(new AiExecutionResult(command.invocationId(),command.provider(),command.model(),output,
+                        asInteger(usage.get("input_tokens")),asInteger(usage.get("output_tokens")),latency));
             }
 
             return new AiExecutionResult(

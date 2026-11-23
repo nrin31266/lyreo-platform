@@ -21,7 +21,7 @@ help:
 	  '  make dev                         Run Core + AI + Admin in one terminal (APPS="core ai admin mobile" to choose); Ctrl+C stops all' \
 	  '  make core                        Run Core; rebuild/restart after saved Java/resources change' \
 	  '  make ai                          Run FastAPI locally' \
-	  '  make ai-local                    Run FastAPI locally with local Qwen/Kokoro weights' \
+	  '  make ai-local                    Run FastAPI locally with WhisperX and Kokoro' \
 	  '  make admin                       Run Admin Vite dev server' \
 	  '  make mobile                      Run Expo Metro bundler (requires Dev Build installed on device/emulator)' \
 	  '' \
@@ -150,8 +150,9 @@ db-recreate:
 seed-dev: deps-java
 	@set -a; . ./apps/core-service/.env; set +a; ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup -Dspring-boot.run.arguments="--seed-dev \"$(CURDIR)/infra/postgres/seed/dev.sql\""
 
+LESSON_SEED_FILE ?= $(or $(wildcard $(CURDIR)/.data/lesson-export/lessons-with-songs.sql),$(CURDIR)/infra/postgres/seed/lessons.sql)
 seed-lessons: seed-dev
-	@set -a; . ./apps/core-service/.env; set +a; ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup -Dspring-boot.run.arguments="--seed-dev \"$(CURDIR)/infra/postgres/seed/lessons.sql\""
+	@set -a; . ./apps/core-service/.env; set +a; ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup -Dspring-boot.run.arguments="--seed-dev \"$(abspath $(LESSON_SEED_FILE))\""
 
 migrate: deps-java
 	@set -a; . ./apps/core-service/.env; set +a; ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup
@@ -183,9 +184,13 @@ core:
 ai:
 	cd apps/ai-service && set -a && . ./.env && set +a && uv run --locked uvicorn app.main:app --reload --port 8000
 
-# Local Qwen/Kokoro capability runtimes require GPU/model availability.
+# CTranslate2 resolves the CUDA libraries installed with PyTorch at process startup.
 ai-local:
-	cd apps/ai-service && set -a && . ./.env && set +a && AI_RUNTIME_MODE=local uv run --locked --extra qwen --extra kokoro uvicorn app.main:app --reload --port 8000
+	cd apps/ai-service && uv sync --locked --extra whisperx --extra kokoro
+	cd apps/ai-service && set -a && . ./.env && set +a && \
+	  cuda_libs=$$(.venv/bin/python -c 'from pathlib import Path; import sysconfig; root = Path(sysconfig.get_path("purelib")); print(":".join(str(p) for p in (root / "nvidia/cublas/lib", root / "nvidia/cudnn/lib") if p.is_dir()))') && \
+	  if [ -n "$$cuda_libs" ]; then export LD_LIBRARY_PATH="$$cuda_libs$${LD_LIBRARY_PATH:+:$$LD_LIBRARY_PATH}"; fi && \
+	  AI_RUNTIME_MODE=local .venv/bin/python -m uvicorn app.main:app --reload --port 8000
 
 admin:
 	pnpm --filter @lyreo/admin-web dev

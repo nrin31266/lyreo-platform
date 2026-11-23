@@ -70,9 +70,17 @@ function JobDiagnostics({ lessonId, job }: { lessonId: string; job: AuthoringJob
   const [copied, setCopied] = useState(false), [copyError, setCopyError] = useState(false);
   const diagnostics = useQuery({ queryKey: ['authoring-diagnostics', lessonId, job.jobId], queryFn: () => fetchDiagnostics(lessonId, job.jobId), refetchInterval: activeJob(job) ? 2500 : false });
   const json = JSON.stringify({ job, diagnostics: diagnostics.data }, null, 2);
+  let splits = 0, downloadFailures = 0;
+  for (const { payload } of diagnostics.data ?? []) {
+    if (!payload || typeof payload !== 'object') continue;
+    if ('event' in payload && payload.event === 'CONTENT_BATCH_SPLIT') splits += 1;
+    if ('media_stage' in payload && payload.media_stage === 'AUDIO_DOWNLOAD') downloadFailures += 1;
+  }
   return <section className="studio-diagnostic" aria-label={t('finish.technical')}>
     <CatalogError error={diagnostics.error} retry={() => void diagnostics.refetch()} />
     {diagnostics.isPending ? <CatalogSkeleton /> : !diagnostics.data?.length ? <p>{t('finish.noDiagnostic')}</p> : null}
+    {downloadFailures > 0 && <p>{t('processingHistory.audioDownloadFailures', { count: downloadFailures })}</p>}
+    {splits > 0 && <p>{t('processingHistory.batchSplits', { count: splits })}</p>}
     <div className="studio-bulk"><Button size="sm" variant="outline" disabled={diagnostics.isPending || diagnostics.isError} onClick={async () => { try { await navigator.clipboard.writeText(json); setCopied(true); setCopyError(false); } catch { setCopyError(true); } }}>{t(copied ? 'jobs.copied' : 'finish.copyDiagnostic')}</Button><Button size="sm" variant="outline" disabled={diagnostics.isPending || diagnostics.isError} onClick={() => { const url = URL.createObjectURL(new Blob([json], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = `lesson-job-${job.jobId}.json`; link.click(); URL.revokeObjectURL(url); }}>{t('finish.downloadDiagnostic')}</Button></div>
     {copyError && <p role="alert">{t('jobs.copyFailed')}</p>}<pre tabIndex={0}>{json}</pre>
   </section>;

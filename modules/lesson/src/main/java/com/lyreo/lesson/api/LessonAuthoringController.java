@@ -1,6 +1,7 @@
 package com.lyreo.lesson.api;
 
 import com.lyreo.lesson.application.authoring.LessonAuthoringService;
+import com.lyreo.lesson.application.authoring.UploadedCaptions;
 import com.lyreo.lesson.application.build.SourceMaterializationException;
 import com.lyreo.contracts.errors.ServiceUnavailableException;
 import jakarta.validation.Valid;
@@ -33,7 +34,8 @@ public class LessonAuthoringController {
     }
     @org.springframework.transaction.annotation.Transactional
     @PostMapping("/drafts") public ResponseEntity<LessonAuthoringService.Accepted> create(@Valid @RequestBody CreateRequest request) {
-        var result=youtubeSource(() -> service.create(request.title(),request.sourceReference(),request.startMs(),request.endMs(),request.options()));
+        var result=youtubeSource(() -> service.create(request.title(),request.sourceReference(),request.startMs(),request.endMs(),
+            request.options(),Boolean.TRUE.equals(request.preferEnglishCaptions()),request.captionFile()));
         catalog.updateMetadata(result.lessonId(),null,request.description()==null ? "" : request.description(),request.imageUrl(),request.categoryIds()==null ? List.of() : request.categoryIds());
         return accepted(result);
     }
@@ -47,8 +49,8 @@ public class LessonAuthoringController {
     @PostMapping("/{id}/align") public ResponseEntity<LessonAuthoringService.Accepted> align(@PathVariable UUID id,@RequestBody RevisionRequest request) {
         return accepted(service.align(id,request.revision()));
     }
-    @PostMapping("/{id}/prepare") public ResponseEntity<LessonAuthoringService.Accepted> prepare(@PathVariable UUID id,@RequestBody RevisionRequest request) {
-        return accepted(service.prepare(id,request.revision()));
+    @PostMapping("/{id}/prepare") public ResponseEntity<LessonAuthoringService.Accepted> prepare(@PathVariable UUID id,@RequestBody PrepareRequest request) {
+        return accepted(service.prepare(id,request.revision(),Boolean.TRUE.equals(request.useWhisperX())));
     }
     @PostMapping("/{id}/karaoke-review") public LessonAuthoringResponse karaoke(@PathVariable UUID id,@RequestBody RevisionRequest request) {
         return LessonAuthoringResponse.from(service.karaoke(id,request.revision()));
@@ -86,7 +88,8 @@ public class LessonAuthoringController {
     }
     public record TimingRequest(long revision,List<com.lyreo.lesson.domain.authoring.AuthoringSentence.Word> words) {}
     public record InspectRequest(@NotBlank String sourceReference) {}
-    public record CreateRequest(@jakarta.validation.constraints.Size(max=500) String title,@NotBlank String sourceReference,long startMs,long endMs,String description,String imageUrl,List<UUID> categoryIds,com.lyreo.lesson.domain.authoring.AuthoringOptions options) {}
+    public record CreateRequest(@jakarta.validation.constraints.Size(max=500) String title,@NotBlank String sourceReference,long startMs,long endMs,String description,String imageUrl,List<UUID> categoryIds,com.lyreo.lesson.domain.authoring.AuthoringOptions options,Boolean preferEnglishCaptions,UploadedCaptions.File captionFile) {}
+    public record PrepareRequest(long revision,Boolean useWhisperX) {}
     public record RevisionRequest(long revision) {}
     public record TranscriptRequest(long revision,@NotNull List<LessonAuthoringService.SentenceInput> sentences) {}
 }

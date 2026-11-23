@@ -717,7 +717,7 @@
 .processing-status-duration, .processing-status-actions { flex: none; }
 .processing-status-heading strong { font-size: 14px; font-weight: 600; }
 .processing-status-heading p, .processing-status > p { font-size: 13px; color: var(--muted-foreground); }
-.processing-status-actions { display: flex; gap: 8px; }
+.processing-status-actions { display: flex; flex-wrap: wrap; gap: 8px; max-width: 100%; }
 .processing-status [data-slot="progress"] { height: 4px; }
 .processing-indeterminate [data-slot="progress-indicator"] { flex: none; width: 35%; animation: processing-slide 1.5s ease-in-out infinite; }
 @keyframes processing-slide { from { transform: translateX(-110%); } to { transform: translateX(390%); } }

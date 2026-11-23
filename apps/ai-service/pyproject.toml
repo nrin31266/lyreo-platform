@@ -12,7 +12,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-qwen = ["qwen-asr==0.0.6", "torch>=2.7"]
+# Faster-whisper 1.2.1 uses an audio decoding argument removed in PyAV 19.
+whisperx = ["whisperx==3.8.6", "ctranslate2==4.7.1", "av<19"]
 kokoro = ["kokoro>=0.9,<1", "torch>=2.7"]
 dev = ["pytest>=8.4,<9", "pytest-asyncio>=1.1,<2"]
 

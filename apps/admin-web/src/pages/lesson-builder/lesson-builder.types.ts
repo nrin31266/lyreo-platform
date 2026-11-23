@@ -1,10 +1,12 @@
 export type SentenceUsage = 'LEARN' | 'WATCH_ONLY' | 'SKIP';
 export type Priority = 'HIGH' | 'MEDIUM';
+export type CaptionFile = { format: 'srt' | 'vtt'; text: string };
 export type SourceInspection = {
   videoId: string;
   title: string;
   durationMs: number;
   embedAllowed: boolean;
+  englishCaptions?: { language: string; automatic: boolean } | null;
   thumbnailUrl?:string|null;
   usedRanges: { lessonId: string; title: string; startMs: number; endMs: number; status: string }[];
 };
@@ -29,6 +31,7 @@ export type AuthoringSentence = {
   clozeManual?: boolean;
   hidden?: boolean;
   previewStartMs?: number | null;
+  previewEndMs?: number | null;
   manualFields?: string[];
   contentStale?: boolean;
   timingSource?: string | null;
@@ -94,6 +97,7 @@ export type LessonDraft = {
   endMs: number;
   revision: number;
   transcriptRevision: number;
+  transcriptSource?: string | null;
   status: string;
   timingStatus: string;
   alignmentRequired?: boolean;

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RiAddLine, RiDeleteBinLine, RiInformationLine } from '@remixicon/react';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { isSoundCueForActivity } from './authoring-editor';
 import type { AuthoringAnnotation, AuthoringOptions, AuthoringSentence, LessonDraft } from './lesson-builder.types';
 
 export const defaultContentOptions: AuthoringOptions = { activities: ['DICTATION', 'SHADOWING'], annotations: ['TRANSLATION', 'LEXICAL', 'GRAMMAR', 'PROFILE'], locale: 'vi-VN', density: 'AUTO', vocabularyLimit: 20, grammarLimit: 8, pronunciationStrategy: 'PREGENERATE', accent: 'US', pronunciationProvider: 'LOCAL' };
@@ -109,6 +110,7 @@ export function ContentProfile({ draft, disabled, onChange }: { draft: LessonDra
 }
 export function SentenceContentEditor({ sentence, options, disabled, showIpa, onChange }: { sentence: AuthoringSentence; options: AuthoringOptions; disabled: boolean; showIpa: boolean; onChange: (value: Partial<AuthoringSentence>) => void }) {
   const { t } = useTranslation('admin');
+  const exclusionId = useId();
   const [vocab, grammar] = [sentence.vocabulary, sentence.grammar];
   function updateNote(kind: 'vocabulary' | 'grammar', index: number, value: Partial<AuthoringAnnotation>, occurrence?: number) {
     onChange({ [kind]: sentence[kind].map((note, i) => {
@@ -148,7 +150,17 @@ export function SentenceContentEditor({ sentence, options, disabled, showIpa, on
       for (let at = 1; at <= textTokens(sentence.text).length; at++) { const span = contentSpan(sentence.text, note.surface, at); if (!span) break; occurrences.push(span); }
       return <div className="finish-note" key={`${kind}-${index}`}><div><Input aria-label={t('contentAuthoring.phrase')} value={note.surface} onChange={e => updateNote(kind, index, { surface: e.target.value })} />{occurrences.length > 1 && <label className="finish-occurrence">{t('contentAuthoring.occurrence')}<select aria-label={t('contentAuthoring.occurrence')} value={Math.max(1, occurrences.findIndex(span => span.tokenStart === note.tokenStart) + 1)} onChange={e => updateNote(kind, index, {}, Number(e.target.value))}>{occurrences.map((_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}</select></label>}</div><Textarea rows={1} maxLength={500} aria-label={t('contentAuthoring.explanation')} value={note.explanation} onChange={e => updateNote(kind, index, { explanation: e.target.value })} /><Button type="button" variant="ghost" size="icon-sm" aria-label={t('contentAuthoring.removeNote')} onClick={() => onChange({ [kind]: sentence[kind].filter((_, i) => i !== index) })}><RiDeleteBinLine /></Button>{note.tokenStart < 0 && <small role="alert">{t('contentAuthoring.invalidSpan')}</small>}</div>;
     }))}</div>
-    <div className="finish-row-actions">{(['DICTATION', 'SHADOWING'] as const).filter(a => options.activities.includes(a)).map(activity => { const field = activity === 'DICTATION' ? 'dictationSelected' : 'shadowingSelected'; return <label className="finish-check" key={activity}><Checkbox checked={sentence[field]} onCheckedChange={v => onChange({ [field]: v === true })} />{t(`contentAuthoring.${activity}`)}{sentence.exclusions?.[activity] && <RiInformationLine className="size-3" aria-label={t(`finish.reasons.${sentence.exclusions[activity]}`)} />}</label>; })}<span className="finish-add-notes">{(['vocabulary', 'grammar'] as const).map(kind => <Button variant="ghost" size="sm" type="button" key={kind} onClick={() => onChange({ [kind]: [...sentence[kind], { surface: '', explanation: '', label: kind === 'vocabulary' ? 'LEXICAL' : 'GRAMMAR', importance: 'MEDIUM', tokenStart: -1, tokenEnd: -1 }] })}><RiAddLine />{t(`contentAuthoring.${kind === 'vocabulary' ? 'LEXICAL' : 'GRAMMAR'}`)}</Button>)}</span></div>
+    <div className="finish-row-actions">{(['DICTATION', 'SHADOWING'] as const).filter(a => options.activities.includes(a)).map(activity => {
+      const field = activity === 'DICTATION' ? 'dictationSelected' : 'shadowingSelected';
+      const reason = sentence.exclusions?.[activity];
+      const explanation = reason ? t(`finish.reasons.${reason}`) : undefined;
+      const descriptionId = `${exclusionId}-${activity}`;
+      return <span className="finish-check" key={activity}>
+        <label className="finish-check"><Checkbox checked={sentence[field]} disabled={isSoundCueForActivity(sentence, activity)}
+          aria-describedby={explanation ? descriptionId : undefined} onCheckedChange={v => onChange({ [field]: v === true })} />{t(`contentAuthoring.${activity}`)}</label>
+        {explanation && <span title={explanation}><RiInformationLine className="size-3" aria-hidden="true" /><span id={descriptionId} className="sr-only">{explanation}</span></span>}
+      </span>;
+    })}<span className="finish-add-notes">{(['vocabulary', 'grammar'] as const).map(kind => <Button variant="ghost" size="sm" type="button" key={kind} onClick={() => onChange({ [kind]: [...sentence[kind], { surface: '', explanation: '', label: kind === 'vocabulary' ? 'LEXICAL' : 'GRAMMAR', importance: 'MEDIUM', tokenStart: -1, tokenEnd: -1 }] })}><RiAddLine />{t(`contentAuthoring.${kind === 'vocabulary' ? 'LEXICAL' : 'GRAMMAR'}`)}</Button>)}</span></div>
     {!!sentence.contentWarnings?.length && <p className="finish-warning">{t('finish.noteWarning')} {sentence.contentWarnings.join('; ')}</p>}
   </fieldset>;
 }

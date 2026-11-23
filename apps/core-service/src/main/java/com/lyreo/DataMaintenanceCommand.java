@@ -14,7 +14,7 @@ public final class DataMaintenanceCommand {
         if(input==null || output==null) throw new IllegalArgumentException("Set maintenance input/output paths");
         boolean execute=Arrays.asList(args).contains("--execute");
         String model=System.getenv().getOrDefault("DATA_MAINTENANCE_MODEL","DEEPSEEK");
-        String confirmed=System.getenv().getOrDefault("DATA_MAINTENANCE_PRICING_CONFIRMED_ON",System.getenv("DEEPSEEK_PRICING_CONFIRMED_ON"));
+        String confirmed=System.getenv("DATA_MAINTENANCE_PRICING_CONFIRMED_ON");
         String budget=System.getenv("DATA_MAINTENANCE_BUDGET_USD");
         String credential=System.getenv(DataMaintenance.credentialVariable(model));
         try(var app=new SpringApplicationBuilder(LyreoApplication.class).properties("server.port=0","spring.devtools.restart.enabled=false","lyreo.jobs.scheduler-enabled=false").run("--server.port=0","--lyreo.jobs.scheduler-enabled=false")) {

@@ -1,4 +1,4 @@
-# Optional override: run Lyreo AI Service with the CUDA/Qwen image.
+# Optional override: run Lyreo AI Service with the CUDA/WhisperX image.
 # Usage: docker compose -f compose.prod.yml -f compose.gpu.yml up -d --build
 services:
   ai-service:

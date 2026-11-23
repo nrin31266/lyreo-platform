@@ -14,7 +14,7 @@ Deployment capability and secrets
 
 A lower layer cannot exceed a higher layer's capability or safety limit. For example, an Admin-disabled pronunciation feature cannot be enabled by a learner preference. A temporary playback-speed change stays in session state until explicitly saved as a cross-device preference.
 
-Deployment configuration supplies endpoints, credentials, storage mode, runtime resources, and service limits. Every executable has its own `.env.example`. The [root template](../.env.example) and [research template](../tools/research/.env.example) are optional inputs for operator data maintenance. `scripts/init-dev-env.sh` creates local application files and synchronizes values that cross process boundaries. `VITE_*` and `EXPO_PUBLIC_*` values are public build data and must never contain server secrets.
+Deployment configuration supplies endpoints, credentials, storage mode, runtime resources, and service limits. Each executable owns its `.env.example`. `scripts/init-dev-env.sh` creates private local application files and synchronizes values that cross process boundaries. Optional data maintenance settings have a [research template](../tools/research/.env.example). `VITE_*` and `EXPO_PUBLIC_*` values are public build data and must never contain server secrets.
 
 Admin policy controls provider/model routing, enabled capabilities, allowable Lesson processing, rate/cost envelopes, and controlled reward policy. Model identifiers are runtime strings, not Java enums. Provider API keys are encrypted in Core with an environment-held master key; Admin reads masked metadata only.
 
@@ -41,20 +41,26 @@ Job polling, lease, and concurrency are deployment tuning settings constrained b
 Identify its owner, secret status, persistence needs, override authority, and audit/snapshot needs. Add exact environment keys to the owning `.env.example` and code. Update this document only when precedence or semantics change. Keep authorization, scoring authority, domain transitions, schema authority, and module boundaries in code and architecture contracts. Public API documentation availability follows the [HTTP contract](architecture/http-api-contract.md).
 
 
-### Local speech recognition for authoring
+### Development AI defaults
 
-For local authoring, configure **Admin → AI settings → Routing** with provider `QWEN`:
+`make setup` and `make seed-dev` add the following routes for new local providers:
 
-| Capability | Model | Priority | Enabled |
+| Capability | Provider | Model | Priority |
 |---|---|---|---|
-| STT | `Qwen/Qwen3-ASR-0.6B` | 1 | Yes |
-| ALIGNMENT | `Qwen/Qwen3-ForcedAligner-0.6B` | 1 | Yes |
+| STT | WhisperX local | `small.en` | 1 |
+| ALIGNMENT | WhisperX local | `WAV2VEC2_ASR_BASE_960H` | 1 |
+| TTS | Kokoro | `hexgrad/Kokoro-82M` | 1 |
+| NLP | Local NLP | `espeak-ng` | 1 |
 
-Disable the Groq STT route when using this local-only setup; other Groq capabilities can stay enabled.
-Routes are persisted in PostgreSQL and survive restarts and lesson-only reset. No hard-coded provider
-fallback overrides Admin routing. Run `make ai-local` with the Qwen dependencies/weights available.
-Local recognition can still make mistakes; transcript review remains required before alignment.
-An explicitly enabled mock development bootstrap remains a separate test configuration.
+DeepSeek Flash, Gemini 3.5 Flash-Lite and Groq GPT-OSS 120B are prepared for `GENERAL_LLM` in
+priority order 1–3. To use an
+external provider, enter its key and enable the connection in **Admin → AI settings → Providers**.
+Gemini and Groq still require the Core free-tier eligibility configuration.
+
+Routes survive restarts and lesson-only resets. After a full database recreation, run `make seed-dev`
+and enter the external keys again. Rerunning leaves existing providers and their routes alone.
+Run `make ai-local` for WhisperX and Kokoro execution. The optional mock bootstrap is for tests against
+`AI_RUNTIME_MODE=mock` before external keys are configured.
 
 ### Local IPA runtime
 
@@ -66,7 +72,7 @@ AI uses the configured free-eligible GENERAL_LLM route. Accent selection does no
 ### Kokoro voice previews
 
 Keep Kokoro library 0.9.4 / `hexgrad/Kokoro-82M` v1.0 for the English catalog.
-Start `make ai-local`, enable a `TTS` route to `LOCAL_KOKORO` (no provider key), then use
+Start `make ai-local` with the seeded `LOCAL_KOKORO` TTS route enabled, then use
 **Prepare missing voice previews** in the Admin voice picker. One Core job generates 28 samples
 with fixed English text and speed 1.0, persists a versioned manifest in the configured object storage
 and skips valid successes on retry. Discovery does not load the heavy model; preview playback

@@ -37,7 +37,7 @@ public final class AuthoringContent {
         if ("LEXICAL".equals(feature)) context += "|"+(manualAuto ? (words(lesson)+99)/100 : vocabularyLimit(lesson));
         if ("GRAMMAR".equals(feature)) context += "|"+(manualAuto ? (words(lesson)+249)/250 : grammarLimit(lesson));
         String version = switch (feature) {
-            case "DICTATION", "SHADOWING" -> "keep-v2";
+            case "DICTATION", "SHADOWING" -> manual ? "keep-v2" : "keep-v3";
             case "IPA" -> manual ? "ipa-display-v1" : "ipa-display-v2";
             default -> "content-v1";
         };
@@ -52,7 +52,13 @@ public final class AuthoringContent {
     }
     public static boolean current(AuthoringLesson lesson,int index,String feature) {
         if("PROFILE".equals(feature) && lesson.profile.manual) return profileKey(lesson).equals(lesson.profile.key);
-        return key(lesson,index,feature).equals(lesson.sentences.get(index).contentKeys.get(feature));
+        var sentence=lesson.sentences.get(index);
+        if(lesson.options.activities().contains(feature) && CaptionCueText.isNonSpeech(sentence.text)) {
+            boolean active="DICTATION".equals(feature) ? sentence.dictationSelected || sentence.dictationEligible
+                : sentence.shadowingSelected || sentence.shadowingEligible;
+            if(active || !"NON_SPEECH".equals(sentence.exclusions.get(feature))) return false;
+        }
+        return key(lesson,index,feature).equals(sentence.contentKeys.get(feature));
     }
     public static boolean complete(AuthoringLesson lesson) {
         if (lesson.sentences.isEmpty()) return false;
@@ -61,10 +67,13 @@ public final class AuthoringContent {
         return true;
     }
     public static boolean needed(AuthoringLesson lesson) {
-        for (int i=0;i<lesson.sentences.size();i++)
+        for (int i=0;i<lesson.sentences.size();i++) {
+            var sentence=lesson.sentences.get(i);
             for (String feature:features(lesson.options))
-                if (!current(lesson,i,feature) && !lesson.sentences.get(i).manualFields.contains(feature)
+                if (!current(lesson,i,feature) && (!sentence.manualFields.contains(feature)
+                    || lesson.options.activities().contains(feature) && CaptionCueText.isNonSpeech(sentence.text))
                     && !("PROFILE".equals(feature) && lesson.profile.manual)) return true;
+        }
         return false;
     }
     public static AuthoringSentence.Annotation annotation(AuthoringSentence sentence,String surface,String explanation,int occurrence,String kind) {

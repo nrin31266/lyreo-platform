@@ -9,6 +9,7 @@ import com.lyreo.lesson.domain.authoring.AuthoringLesson;
 import com.lyreo.lesson.domain.authoring.AuthoringSentence;
 import com.lyreo.lesson.domain.authoring.AuthoringText;
 import com.lyreo.lesson.domain.authoring.AuthoringContent;
+import com.lyreo.lesson.domain.authoring.CaptionCueText;
 import com.lyreo.lesson.domain.authoring.AuthoringOptions;
 import com.lyreo.platform.jobs.application.BackgroundJobService;
 import java.time.Instant;
@@ -34,10 +35,14 @@ public class LessonAuthoringService {
     }
     public Inspect inspect(String reference) {
         var info=source.inspect(reference);
-        return new Inspect(info.videoId(),info.title(),info.durationMs(),info.embedAllowed(),repository.usedRanges(info.videoId()),info.thumbnailUrl());
+        return new Inspect(info.videoId(),info.title(),info.durationMs(),info.embedAllowed(),repository.usedRanges(info.videoId()),info.thumbnailUrl(),info.englishCaptions());
     }
     @Transactional public Accepted create(String title,String reference,long start,long end) {return create(title,reference,start,end,null);}
     @Transactional public Accepted create(String title,String reference,long start,long end,AuthoringOptions options) {
+        return create(title,reference,start,end,options,false,null);
+    }
+    @Transactional public Accepted create(String title,String reference,long start,long end,AuthoringOptions options,
+                                           boolean preferEnglishCaptions,UploadedCaptions.File captionFile) {
         require(title==null || title.length()<=500,"Title supports a maximum of 500 characters");
         var info=source.inspect(reference);
         require(info.embedAllowed(),"This source cannot be embedded");
@@ -48,6 +53,12 @@ public class LessonAuthoringService {
         lesson.title=lesson.automaticTitle ? automaticTitle(info.title()) : title.strip(); lesson.videoId=info.videoId();
         lesson.sourceReference="https://www.youtube.com/watch?v="+info.videoId();
         lesson.options=options==null?AuthoringOptions.defaults():options.normalized();lesson.autoContinue=true;lesson.startMs=start; lesson.endMs=end; lesson.status="TRANSCRIPT_REVIEW";lesson.timingStatus="MISSING";
+        if(captionFile!=null) {
+            var lines=UploadedCaptions.parse(captionFile,start,end);
+            lesson.timingEvidence=Map.of("transcriptSource","UPLOADED_EN","segments",captionSegments(lines));
+        } else if(preferEnglishCaptions) {
+            lesson.timingEvidence=info.englishCaptions()==null ? Map.of("useWhisperX",true) : info.englishCaptions().evidence();
+        }
         repository.create(lesson);
         return enqueue(lesson,"PREPARE");
     }
@@ -324,9 +335,11 @@ public class LessonAuthoringService {
         AuthoringContent.validateAnnotations(sentence,input.grammar(),30);
         if(!sentence.vocabulary.equals(input.vocabulary()) || sentence.manualFields.contains("LEXICAL") && !AuthoringContent.current(lesson,index,"LEXICAL")) {sentence.vocabulary=List.copyOf(input.vocabulary());fields.add("LEXICAL");}
         if(!sentence.grammar.equals(input.grammar()) || sentence.manualFields.contains("GRAMMAR") && !AuthoringContent.current(lesson,index,"GRAMMAR")) {sentence.grammar=List.copyOf(input.grammar());fields.add("GRAMMAR");}
-        if(sentence.dictationSelected!=input.dictationSelected() || sentence.manualFields.contains("DICTATION") && !AuthoringContent.current(lesson,index,"DICTATION")) fields.add("DICTATION");
-        if(sentence.shadowingSelected!=input.shadowingSelected() || sentence.manualFields.contains("SHADOWING") && !AuthoringContent.current(lesson,index,"SHADOWING")) fields.add("SHADOWING");
-        sentence.dictationSelected=input.dictationSelected();sentence.shadowingSelected=input.shadowingSelected();
+        boolean speech=!CaptionCueText.isNonSpeech(sentence.text);
+        boolean dictation=speech && input.dictationSelected(),shadowing=speech && input.shadowingSelected();
+        if(sentence.dictationSelected!=dictation || sentence.manualFields.contains("DICTATION") && !AuthoringContent.current(lesson,index,"DICTATION")) fields.add("DICTATION");
+        if(sentence.shadowingSelected!=shadowing || sentence.manualFields.contains("SHADOWING") && !AuthoringContent.current(lesson,index,"SHADOWING")) fields.add("SHADOWING");
+        sentence.dictationSelected=dictation;sentence.shadowingSelected=shadowing;
         for(String field:fields) {sentence.manualFields.add(field);sentence.contentKeys.put(field,AuthoringContent.key(lesson,index,field));}
         if(fields.isEmpty()) return lesson;
         sentence.contentStale=false;lesson.semanticRevision=null;lesson.status="CONTENT_REVIEW";
@@ -486,10 +499,23 @@ public class LessonAuthoringService {
         repository.save(lesson);return lesson;
     }
     @Transactional public Accepted prepare(UUID id,long revision) {
+        return prepare(id,revision,false);
+    }
+    @Transactional public Accepted prepare(UUID id,long revision,boolean useWhisperX) {
         var lesson=editable(id,revision);
         require(!"TEXT".equals(lesson.sourceType),"Use speech synthesis for text lessons");
         require(lesson.sentences.isEmpty(),"Preparation cannot overwrite an edited transcript");
+        if(useWhisperX) {
+            require("YOUTUBE".equals(lesson.sourceType) && AuthoringSourcePort.CaptionTrack.fromEvidence(lesson.timingEvidence)!=null,
+                "The draft has no pending English caption track to replace");
+            requireNoActiveJob(lesson);
+            lesson.timingEvidence=Map.of("useWhisperX",true);
+            lesson.autoContinue=true;
+        }
         return enqueue(lesson,"PREPARE");
+    }
+    static List<Map<String,Object>> captionSegments(List<AuthoringSourcePort.CaptionLine> lines) {
+        return lines.stream().map(line -> Map.<String,Object>of("text",line.text(),"start_ms",line.startMs(),"end_ms",line.endMs())).toList();
     }
     private Accepted enqueue(AuthoringLesson lesson,String operation) {
         if(lesson.activeJobId!=null) {
@@ -564,6 +590,7 @@ public class LessonAuthoringService {
     public record SentenceInput(UUID id,String text,String usage,Boolean hidden) {
         public SentenceInput(UUID id,String text,String usage) {this(id,text,usage,null);}
     }
-    public record Inspect(String videoId,String title,long durationMs,boolean embedAllowed,List<AuthoringRepository.UsedRange> usedRanges,String thumbnailUrl) {}
+    public record Inspect(String videoId,String title,long durationMs,boolean embedAllowed,List<AuthoringRepository.UsedRange> usedRanges,
+                          String thumbnailUrl,AuthoringSourcePort.CaptionTrack englishCaptions) {}
     public record Accepted(UUID lessonId,UUID jobId) {}
 }

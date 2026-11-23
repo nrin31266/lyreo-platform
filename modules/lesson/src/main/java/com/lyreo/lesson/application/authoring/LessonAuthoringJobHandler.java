@@ -77,6 +77,13 @@ public final class LessonAuthoringJobHandler implements JobHandler {
             if(!failure.fallbackAllowed()) throw new PermanentJobException(failure.errorCode(),failure.getMessage(),failure);
             throw failure;
         } catch(SourceMaterializationException failure) {
+            var diagnostic=new java.util.LinkedHashMap<>(failure.diagnostics());
+            diagnostic.put("code",failure.errorCode());
+            diagnostic.put("operation",input.operation());
+            diagnostic.put("attempt",job.attemptCount());
+            diagnostic.put("retryable",failure.retryable());
+            try {repository.diagnostic(job.id(),null,diagnostic);}
+            catch(RuntimeException loggingFailure) {failure.addSuppressed(loggingFailure);}
             if(!failure.retryable()) throw new PermanentJobException(failure.errorCode(),failure.getMessage(),failure);
             throw failure;
         } catch(com.lyreo.lesson.domain.authoring.TimingValidationException failure) {
@@ -133,12 +140,38 @@ public final class LessonAuthoringJobHandler implements JobHandler {
         context.progress("SOURCE_PREPARE",0);
         lesson.audioObjectKey="AUDIO".equals(lesson.sourceType) ? media.prepare(lesson.audioSourceId,lesson.startMs,lesson.endMs)
             : source.prepare(lesson.sourceReference,lesson.videoId,lesson.startMs,lesson.endMs);
-        context.throwIfCancellationRequested();context.progress("TRANSCRIBING",0);
-        var result=invoke(job,AiCapability.STT,"",Map.of("audio_url",audioUrl(lesson)),Map.of("language","English","timestamps",true,"allow_alignment",false));
+        context.throwIfCancellationRequested();
+        var track=AuthoringSourcePort.CaptionTrack.fromEvidence(lesson.timingEvidence);
+        if(track!=null || "UPLOADED_EN".equals(lesson.timingEvidence.get("transcriptSource"))) {
+            context.progress("FETCHING_CAPTIONS",0);
+            if(track!=null) {
+                var lines=source.englishCaptions(lesson.videoId,track,lesson.startMs,lesson.endMs);
+                lesson.timingEvidence=Map.of("transcriptSource",track.transcriptSource(),"segments",LessonAuthoringService.captionSegments(lines));
+            }
+            var rows=new ArrayList<AuthoringSentence>();
+            for(var entry:(List<?>)lesson.timingEvidence.get("segments")) {
+                var line=(Map<?,?>)entry;
+                var sentence=new AuthoringSentence(java.util.UUID.randomUUID(),(String)line.get("text"),"LEARN");
+                sentence.coarseStartMs=((Number)line.get("start_ms")).longValue();
+                sentence.coarseEndMs=((Number)line.get("end_ms")).longValue();
+                rows.add(sentence);
+            }
+            lesson.sentences=rows;lesson.timingStatus="MISSING";
+            LessonAuthoringService.alignmentSegments(lesson);
+            return;
+        }
+        context.progress("TRANSCRIBING",0);
+        var input=Map.<String,Object>of("audio_url",audioUrl(lesson));
+        var options=Map.<String,Object>of("language","English","timestamps",true,"allow_alignment",false);
+        var result=Boolean.TRUE.equals(lesson.timingEvidence.get("useWhisperX"))
+            ? ai.executeForProvider(AiCapability.STT,"LOCAL_WHISPERX","",input,options)
+            : invoke(job,AiCapability.STT,"",input,options);
         context.throwIfCancellationRequested();
         Object text=result.output().get("text");
         LessonAuthoringService.require(text instanceof String && !((String)text).isBlank(),"ASR response has no transcript");
-        lesson.timingEvidence=java.util.Collections.unmodifiableMap(new java.util.HashMap<>(result.output()));
+        var evidence=new java.util.HashMap<>(result.output());
+        evidence.put("transcriptSource",result.provider());
+        lesson.timingEvidence=java.util.Collections.unmodifiableMap(evidence);
         lesson.sentences=AuthoringText.split((String)text);
         lesson.timingStatus="MISSING";
         try {

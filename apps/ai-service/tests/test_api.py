@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.runtime.qwen import _resolve_audio
+from app.runtime.audio import resolve_audio
 
 client = TestClient(app)
 AUTH = {"X-Lyreo-Internal-Token": "test-token"}
@@ -48,14 +48,13 @@ def test_audio_download_keeps_signed_query_out_of_logs(monkeypatch, caplog, upst
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(
         transport=httpx.MockTransport(download), **kwargs,
     ))
-    monkeypatch.setattr("app.runtime.qwen._read_audio", lambda source: source)
     url = f"https://media.example/audio?X-Amz-Signature={signature}"
     with caplog.at_level(logging.INFO):
         if upstream_status == 200:
-            assert asyncio.run(_resolve_audio(url)) == b"audio data"
+            assert asyncio.run(resolve_audio(url, lambda source: source)) == b"audio data"
         else:
             with pytest.raises(HTTPException, match="^502: Audio download failed$"):
-                asyncio.run(_resolve_audio(url))
+                asyncio.run(resolve_audio(url, lambda source: source))
     assert signature not in caplog.text
 
 
@@ -97,7 +96,7 @@ def test_mock_alignment_contract_uses_milliseconds():
         "/v1/align",
         headers=AUTH,
         json=request(
-            provider="QWEN3_FORCED_ALIGNER",
+            provider="LOCAL_WHISPERX",
             input={"audio_url": "https://example.invalid/audio.wav", "text": "Hello world"},
         ),
     )
@@ -202,76 +201,12 @@ def test_generic_exception_handler_returns_safe_detail(monkeypatch):
     response = safe_client.post(
         "/v1/stt",
         headers=AUTH,
-        json=request(provider="LOCAL_QWEN", input={"audio_url": "https://example.invalid/audio.wav"}),
+        json=request(provider="LOCAL_WHISPERX", input={"audio_url": "https://example.invalid/audio.wav"}),
     )
     assert response.status_code == 500
     assert response.json() == {"detail": "Internal server error"}
     assert "super_secret_123" not in response.text
     assert "RuntimeError" not in response.text
-
-
-def test_qwen_inference_lock_serializes_execution(monkeypatch):
-    import asyncio
-    from unittest.mock import AsyncMock, MagicMock
-    from app.config import Settings
-    from app.runtime.qwen import QwenRuntime
-    from app.schemas import ExecuteRequest
-
-    cfg = Settings(_env_file=None)
-    runtime = QwenRuntime(cfg)
-    monkeypatch.setattr("app.runtime.qwen._read_audio", lambda _: [0.0] * 16000)
-
-    execution_order = []
-
-    async def fake_transcribe(*args, **kwargs):
-        execution_order.append("start_stt")
-        await asyncio.sleep(0.05)
-        execution_order.append("end_stt")
-        res = MagicMock()
-        res.text = "transcribed"
-        res.language = "English"
-        return [res]
-
-    async def fake_align(*args, **kwargs):
-        execution_order.append("start_align")
-        await asyncio.sleep(0.05)
-        execution_order.append("end_align")
-        return []
-
-    mock_asr = MagicMock()
-    mock_asr.transcribe = lambda *a, **kw: asyncio.run(fake_transcribe(*a, **kw))
-    runtime._load_asr = AsyncMock(return_value=mock_asr)
-    runtime._align_words = AsyncMock(side_effect=fake_align)
-
-    req1 = ExecuteRequest(
-        invocation_id="1", provider="LOCAL_QWEN", model="qwen",
-        input={"audio": "/tmp/a.wav"}, options={},
-    )
-    req2 = ExecuteRequest(
-        invocation_id="2", provider="LOCAL_QWEN", model="qwen",
-        input={"audio": "/tmp/b.wav", "text": "hello"}, options={},
-    )
-
-    async def run_concurrent():
-        await asyncio.gather(runtime.stt(req1), runtime.align(req2))
-
-    asyncio.run(run_concurrent())
-
-    # Because of _inference_lock, the operations cannot interleave
-    # (i.e. one must finish before the other starts)
-    assert execution_order in (
-        ["start_stt", "end_stt", "start_align", "end_align"],
-        ["start_align", "end_align", "start_stt", "end_stt"],
-    )
-
-
-def test_empty_cuda_cache_safely_handles_missing_torch(monkeypatch):
-    import sys
-    from app.runtime.qwen import _empty_cuda_cache
-
-    monkeypatch.setitem(sys.modules, "torch", None)
-    # Must not raise ModuleNotFoundError or any exception when torch is missing
-    _empty_cuda_cache()
 
 
 def test_mock_editorial_suggestions_keep_answer_and_sense_contracts():

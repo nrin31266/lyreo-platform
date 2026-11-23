@@ -54,7 +54,7 @@ Browser chỉ nhận configured/last4/status, không plaintext. FastAPI không p
 ### FR-AI-004 — Runtime modes
 
 `mock` hỗ trợ dev/CI deterministic không GPU/paid provider; `local` lazy-load
-Qwen ASR/alignment. SaaS provider routing độc lập với runtime mode; External provider execution follows the configured route.
+WhisperX STT and forced alignment. SaaS provider routing độc lập với runtime mode; External provider execution follows the configured route.
 
 ### FR-AI-005 — Configured paid providers
 

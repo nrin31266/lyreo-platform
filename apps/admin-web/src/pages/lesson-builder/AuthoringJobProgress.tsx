@@ -37,6 +37,7 @@ const labelCodes = [
   "TIMING_COVERAGE_MISMATCH",
   "SOURCE_PREPARE",
   "TRANSCRIBING",
+  "FETCHING_CAPTIONS",
   "ALIGNING",
   "GENERATING_CONTENT",
   "CHECKPOINT_SAVED",
@@ -110,7 +111,7 @@ export function JobProgress({
 }) {
   const { t, i18n } = useTranslation("admin");
   const describe = useCodeLabel();
-  const knownError = ["AUTHORING_OPERATION_REMOVED", "AI_CONFIGURATION_REQUIRED", "AI_FREE_TOKEN_BUDGET_EXCEEDED", "AUTHORING_VALIDATION_FAILED", "AI_OUTPUT_INCOMPLETE", "AI_HTTP_400", ...timingErrors].includes(job.errorCode ?? "");
+  const knownError = ["AUTHORING_OPERATION_REMOVED", "AI_CONFIGURATION_REQUIRED", "AI_FREE_TOKEN_BUDGET_EXCEEDED", "AUTHORING_VALIDATION_FAILED", "AI_OUTPUT_INCOMPLETE", "AI_HTTP_400", "YOUTUBE_CAPTIONS_UNAVAILABLE", ...timingErrors].includes(job.errorCode ?? "");
   const errorLabel = authoringJobErrorKey(job);
   const configurationError = job.errorCode === "AI_CONFIGURATION_REQUIRED" || job.errorCode === "AI_HTTP_400";
   return <article className="authoring-job-card" data-historical={historical} role={historical ? undefined : "status"}>

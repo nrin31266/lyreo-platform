@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useEffect } from 'react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,13 +8,15 @@ import { createInstance } from 'i18next';
 import { I18nextProvider, initReactI18next } from 'react-i18next';
 import { adminI18nResources } from '@lyreo/i18n';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { api as request } from '@/lib/api';
 import { LessonBuilderPage } from './LessonBuilderPage';
 import * as api from './lesson-builder.api';
 import * as catalog from '@/pages/lessons/catalog.api';
 import type { LessonDraft } from './lesson-builder.types';
-vi.mock('./lesson-builder.api',()=>({fetchDraft:vi.fn(),cancelChain:vi.fn(),saveChanges:vi.fn(),runLesson:vi.fn(),fetchReadiness:vi.fn(),publishLesson:vi.fn(),duplicateLesson:vi.fn(),fetchDiagnostics:vi.fn(),saveTiming:vi.fn()}));
+vi.mock('./lesson-builder.api',()=>({fetchDraft:vi.fn(),cancelChain:vi.fn(),saveChanges:vi.fn(),runLesson:vi.fn(),fetchReadiness:vi.fn(),publishLesson:vi.fn(),duplicateLesson:vi.fn(),fetchDiagnostics:vi.fn(),saveTiming:vi.fn(),prepareTranscript:vi.fn()}));
+vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), api: vi.fn() }));
 vi.mock('@/pages/lessons/catalog.api',async original=>({...await original<typeof import('@/pages/lessons/catalog.api')>(),fetchCategories:vi.fn().mockResolvedValue([]),fetchMetadata:vi.fn().mockResolvedValue({id:'lesson-a',title:'A lesson',categories:[],description:'',imageUrl:'',version:0}),saveMetadata:vi.fn()}));
-vi.mock('./AudioPreview',()=>({LessonPlayer:({review}:{review:{sentenceId:string|null}})=> <div data-testid="player" data-selected={review.sentenceId}>Player</div>}));
+vi.mock('./AudioPreview',()=>({LessonPlayer:({review,onAvailabilityChange}:{review:{sentenceId:string|null};onAvailabilityChange?: (available:boolean)=>void})=> { useEffect(() => onAvailabilityChange?.(true), [onAvailabilityChange]); return <div data-testid="player" data-selected={review.sentenceId}>Player</div>; }}));
 vi.mock('./VoiceSelect',()=>({VoiceSelect:()=>null}));
 const original: LessonDraft={id:'lesson-a',title:'A lesson',videoId:'abcdefghijk',sourceType:'YOUTUBE',sourceReference:'source',startMs:0,endMs:10000,audioReady:true,revision:1,transcriptRevision:1,status:'CONTENT_REVIEW',timingStatus:'VALID',alignmentRequired:false,contentComplete:true,contentNeeded:false,approvedRevision:null,karaokeReviewedRevision:null,semanticRevision:null,jobs:[],sentences:[{id:'s1',text:'Hello world.',usage:'LEARN',issues:[],vocabulary:[],grammar:[],hints:[],notes:[],thoughtGroups:[],dictationEligible:true,shadowingEligible:true,dictationSelected:true,shadowingSelected:true,translation:'Xin chào.',words:[{text:'Hello',startMs:0,endMs:500,charStart:0,charEnd:5,tokenStart:0,tokenEnd:1},{text:'world',startMs:500,endMs:1000,charStart:6,charEnd:11,tokenStart:1,tokenEnd:2}]}]};
 beforeEach(()=>{vi.clearAllMocks();vi.mocked(api.fetchDraft).mockResolvedValue(structuredClone(original));vi.mocked(api.fetchReadiness).mockResolvedValue({ready:true,blockers:[]});vi.mocked(api.saveChanges).mockImplementation(async(_id,draft)=>({...draft,revision:2}));});
@@ -21,6 +24,51 @@ afterEach(cleanup);
 async function show(draft?:LessonDraft) {if(draft)vi.mocked(api.fetchDraft).mockResolvedValue(draft);const i18n=createInstance();await i18n.use(initReactI18next).init({resources:adminI18nResources,lng:'en',ns:['admin']});const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});render(<QueryClientProvider client={client}><I18nextProvider i18n={i18n}><TooltipProvider><MemoryRouter initialEntries={['/lessons/lesson-a']}><Routes><Route path="/lessons/:lessonId" element={<div id="main-content"><LessonBuilderPage/></div>}/></Routes></MemoryRouter></TooltipProvider></I18nextProvider></QueryClientProvider>);await screen.findByRole('textbox',{name:'Sentence 1'});return client;}
 it('opens with directly editable translation and selections without inference or review gates',async()=>{await show();expect(screen.getByRole('textbox',{name:'Translation'})).toHaveValue('Xin chào.');expect(screen.getByRole('checkbox',{name:'Shadowing'})).toBeChecked();expect(screen.queryByText(/checked all|listened to all|pronunciation checked/i)).not.toBeInTheDocument();expect(api.runLesson).not.toHaveBeenCalled();expect(screen.getByRole('button',{name:'Update affected parts'})).toBeDisabled();});
 it('saves sentence edits in one batch with Ctrl+S and never invokes AI',async()=>{await show();fireEvent.change(screen.getByRole('textbox',{name:'Translation'}),{target:{value:'Bản sửa'}});fireEvent.keyDown(document,{key:'s',ctrlKey:true});await waitFor(()=>expect(api.saveChanges).toHaveBeenCalledTimes(1));expect(vi.mocked(api.saveChanges).mock.calls[0][1].sentences[0].translation).toBe('Bản sửa');expect(api.runLesson).not.toHaveBeenCalled();});
+it('splits at the transcript caret and merges with the next sentence using row buttons', async () => {
+  await show();
+  const input = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Sentence 1' });
+  const firstRow = within(screen.getByRole('listitem'));
+  const splitButton = firstRow.getByRole('button', { name: 'Split at cursor' });
+  const mergeButton = firstRow.getByRole('button', { name: 'Merge with next' });
+  expect(mergeButton).toBeDisabled();
+  await userEvent.click(input);
+  input.setSelectionRange(2, 2);
+  await userEvent.click(splitButton);
+  expect(firstRow.getByRole('alert')).toHaveTextContent('Place the cursor between two words');
+  expect(input).toHaveValue('Hello world.');
+
+  input.setSelectionRange(6, 6);
+  await userEvent.click(splitButton);
+  expect(firstRow.queryByRole('alert')).not.toBeInTheDocument();
+  expect(input).toHaveValue('Hello');
+  expect(screen.getByRole('textbox', { name: 'Sentence 2' })).toHaveValue('world.');
+  expect(firstRow.getByRole('button', { name: 'Seek to sentence' })).toBeEnabled();
+  expect(api.saveChanges).not.toHaveBeenCalled();
+  await userEvent.click(mergeButton);
+  expect(input).toHaveValue('Hello world.');
+  expect(screen.queryByRole('textbox', { name: 'Sentence 2' })).not.toBeInTheDocument();
+  expect(mergeButton).toBeDisabled();
+});
+it('sends the new sentence with a boolean cloze flag before running processing', async () => {
+  const { saveChanges } = await vi.importActual<typeof api>('./lesson-builder.api');
+  vi.mocked(api.saveChanges).mockImplementationOnce(saveChanges);
+  const saved = { ...original, revision: 2 };
+  vi.mocked(request).mockResolvedValueOnce(saved);
+  await show({ ...original, sentences: [{ ...original.sentences[0], clozeManual: true }] });
+  const input = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Sentence 1' });
+  input.setSelectionRange(6, 6);
+  await userEvent.click(screen.getByRole('button', { name: 'Split at cursor' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Update affected parts' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Start processing' }));
+
+  expect(request).toHaveBeenCalledWith('/api/v1/admin/lesson-authoring/lesson-a/changes', expect.objectContaining({ method: 'PUT' }));
+  const payload = JSON.parse(vi.mocked(request).mock.calls[0][1]!.body as string);
+  expect(payload.changes.sentences).toMatchObject([
+    { id: 's1', text: 'Hello', clozeManual: true },
+    { id: null, text: 'world.', clozeManual: false },
+  ]);
+  await waitFor(() => expect(api.runLesson).toHaveBeenCalledWith('lesson-a', saved.revision));
+});
 it('retains local input on save conflict and background refetch',async()=>{vi.mocked(api.saveChanges).mockRejectedValue(new Error('Revision conflict'));const client=await show();fireEvent.change(screen.getByRole('textbox',{name:'Translation'}),{target:{value:'Keep this edit'}});fireEvent.keyDown(document,{key:'s',metaKey:true});await screen.findByText('Revision conflict');client.setQueryData(['authoring','lesson-a'],{...original,revision:9});await waitFor(()=>expect(screen.getByRole('textbox',{name:'Translation'})).toHaveValue('Keep this edit'));});
 it('saves before explicit update and states which steps will run',async()=>{await show({...structuredClone(original),alignmentRequired:true,contentComplete:false,contentNeeded:true});fireEvent.change(screen.getByRole('textbox',{name:'Sentence 1'}),{target:{value:'Hello again.'}});fireEvent.click(screen.getByRole('button',{name:'Update affected parts'}));expect(await screen.findByText(/Will run: alignment/)).toBeInTheDocument();expect(api.runLesson).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:'Start processing'}));await waitFor(()=>expect(api.runLesson).toHaveBeenCalledWith('lesson-a',2));});
 it('preview shows real blockers and does not require confirmation checkboxes',async()=>{vi.mocked(api.fetchReadiness).mockResolvedValue({ready:false,blockers:['IPA_MISSING:1']});await show();fireEvent.click(screen.getByRole('button',{name:'Preview & publish'}));expect(await screen.findByText(/IPA missing: edit manually/)).toBeInTheDocument();expect(screen.getByRole('button',{name:'Publish lesson'})).toBeDisabled();expect(screen.queryByRole('checkbox',{name:/checked/})).not.toBeInTheDocument();});
@@ -124,4 +172,32 @@ it('disables discarding while the lesson is being processed',async()=>{
   await waitFor(()=>expect(screen.getByRole('button',{name:'Discard changes'})).toBeDisabled());
   expect(screen.getByRole('textbox',{name:'Sentence 1'})).toHaveValue('Unsaved transcript.');
   client.clear();
+});
+
+it('offers explicit WhisperX recovery after caption retrieval fails', async () => {
+  await show({ ...original, audioReady: false, alignmentRequired: true, jobs: [{
+    jobId: 'captions', operation: 'PREPARE', status: 'FAILED', errorCode: 'YOUTUBE_CAPTIONS_UNAVAILABLE', usage: [],
+  }] });
+  expect(screen.getByRole('alert')).toHaveTextContent('English captions could not be loaded for this clip.');
+  expect(screen.getByRole('button', { name: 'Retry preparation' })).toBeEnabled();
+  await userEvent.click(screen.getByRole('button', { name: 'Use WhisperX' }));
+  await waitFor(() => expect(api.prepareTranscript).toHaveBeenCalledWith('lesson-a', 1, true));
+  expect(api.runLesson).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['YOUTUBE_EN_AUTOMATIC', 'Auto-generated YouTube captions'],
+  ['UPLOADED_EN', 'Uploaded English captions'],
+])('allows listening and editing before aligning %s', async (transcriptSource, label) => {
+  await show({
+    ...original, transcriptSource, alignmentRequired: true,
+    sentences: [{ ...original.sentences[0], words: [], previewStartMs: 100, previewEndMs: 1100 }],
+  });
+  expect(screen.getByText(`Transcript source · ${label}`)).toBeVisible();
+  expect(screen.getByText('Approx. 00:00.100–00:01.100')).toBeVisible();
+  expect(screen.getByText(/Listen to the clip and correct the transcript/)).toBeVisible();
+  expect(screen.getByRole('textbox', { name: 'Sentence 1' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Seek to sentence' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Update affected parts' })).toBeEnabled();
+  expect(api.runLesson).not.toHaveBeenCalled();
 });

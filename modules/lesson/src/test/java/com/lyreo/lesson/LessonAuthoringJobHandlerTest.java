@@ -31,7 +31,8 @@ class LessonAuthoringJobHandlerTest {
     private final BackgroundJob job=mock(BackgroundJob.class);
     private final JobExecutionContext context=mock(JobExecutionContext.class,CALLS_REAL_METHODS);
     private final ObjectStoragePort storage=mock(ObjectStoragePort.class);
-    private final LessonAuthoringJobHandler handler=new LessonAuthoringJobHandler(repository,mock(AuthoringSourcePort.class),
+    private final AuthoringSourcePort source=mock(AuthoringSourcePort.class);
+    private final LessonAuthoringJobHandler handler=new LessonAuthoringJobHandler(repository,source,
         storage,ai,committer);
     private AuthoringLesson lesson;
     private AuthoringSentence sentence;
@@ -53,6 +54,26 @@ class LessonAuthoringJobHandlerTest {
                 failure->assertThat(failure.errorCode()).isEqualTo("AUTHORING_OPERATION_REMOVED"));
         }
         verifyNoInteractions(ai,committer);
+    }
+    @Test void captionPreparationKeepsLineAnchorsAndSkipsSpeechRecognition() throws Exception {
+        var track = new AuthoringSourcePort.CaptionTrack("en", false);
+        lesson.timingEvidence = track.evidence();
+        lesson.sourceReference = "https://www.youtube.com/watch?v=abcdefghijk";
+        lesson.videoId = "abcdefghijk";
+        lesson.endMs = 4000;
+        when(repository.jobInput(job.id())).thenReturn(new AuthoringRepository.JobInput(lesson.id,"PREPARE",1,false));
+        when(source.prepare(lesson.sourceReference,lesson.videoId,0,4000)).thenReturn("audio.wav");
+        when(source.englishCaptions(lesson.videoId,track,0,4000)).thenReturn(List.of(
+            new AuthoringSourcePort.CaptionLine("First line",300,1400),
+            new AuthoringSourcePort.CaptionLine("Second line",1800,3500)));
+
+        handler.execute(job,context);
+
+        assertThat(lesson.sentences).extracting(row -> row.text).containsExactly("First line","Second line");
+        assertThat(lesson.sentences).extracting(row -> row.coarseStartMs).containsExactly(300L,1800L);
+        assertThat(lesson.sentences).allSatisfy(row -> assertThat(row.words).isEmpty());
+        assertThat(LessonAuthoringService.alignmentSegments(lesson)).hasSize(2);
+        verify(ai,never()).execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap());
     }
     @Test void unsupportedAlignmentProviderEndsWithConfigurationError() {
         alignment(List.of());
@@ -119,8 +140,8 @@ class LessonAuthoringJobHandlerTest {
         var next=new AuthoringSentence(UUID.randomUUID(),"English daily.","LEARN");
         next.coarseStartMs=250L;next.coarseEndMs=500L;lesson.sentences=List.of(sentence,next);
         when(ai.execute(eq(AiCapability.ALIGNMENT),anyString(),anyMap(),anyMap()))
-            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"QWEN","test",Map.of("words",initial),1,1,10))
-            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"QWEN","test",Map.of("words",List.of(
+            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"LOCAL_WHISPERX","test",Map.of("words",initial),1,1,10))
+            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"LOCAL_WHISPERX","test",Map.of("words",List.of(
                 Map.of("text","English","start_ms",300,"end_ms",350),
                 Map.of("text","daily","start_ms",350,"end_ms",450))),1,1,10));
         handler.execute(job,context);
@@ -152,7 +173,7 @@ class LessonAuthoringJobHandlerTest {
         when(storage.createDownloadUrl(anyString(),any())).thenReturn(java.net.URI.create("http://storage/test.wav"));
         when(repository.jobInput(job.id())).thenReturn(new AuthoringRepository.JobInput(lesson.id,"ALIGN",1,false));
         when(ai.execute(eq(AiCapability.ALIGNMENT),anyString(),anyMap(),anyMap()))
-            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"QWEN","test",Map.of("words",words),1,1,10));
+            .thenReturn(new AiExecutionResult(UUID.randomUUID(),"LOCAL_WHISPERX","test",Map.of("words",words),1,1,10));
     }
     @Test void alignsEverySentenceIncludingLegacyHiddenText() throws Exception {
         alignment(List.of(Map.of("text","We","start_ms",0,"end_ms",100),

@@ -8,6 +8,7 @@ import com.lyreo.ai.application.execution.AiExecutionResult;
 import com.lyreo.ai.application.execution.AiInvocationService;
 import com.lyreo.ai.domain.AiCapability;
 import com.lyreo.lesson.application.authoring.*;
+import com.lyreo.lesson.application.build.SourceMaterializationException;
 import com.lyreo.lesson.application.port.AuthoringRepository;
 import com.lyreo.lesson.application.port.AuthoringSourcePort;
 import com.lyreo.lesson.domain.authoring.AuthoringLesson;
@@ -27,6 +28,8 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -84,6 +87,98 @@ class LessonAuthoringIT {
             "segments",List.of(Map.of("text","We learn. Practice helps.","start_ms",0,"end_ms",1200)))));
 
     }
+    @ParameterizedTest
+    @ValueSource(booleans={false,true})
+    void confirmedEnglishCaptionsSkipTranscriptionAndOnlyAutomaticCaptionsPauseForReview(boolean automatic) throws Exception {
+        String url="https://www.youtube.com/watch?v=abcdefghijk";
+        var track=new AuthoringSourcePort.CaptionTrack("en",automatic);
+        when(source.inspect(url)).thenReturn(new AuthoringSourcePort.SourceInfo("abcdefghijk","Reference",10_000,true,null,track));
+        when(source.englishCaptions("abcdefghijk",track,2000,5000)).thenReturn(List.of(
+            new AuthoringSourcePort.CaptionLine("We learn.",100,600),
+            new AuthoringSourcePort.CaptionLine("Practice helps.",700,1200)));
+
+        var accepted=service.create("Captions",url,2000,5000,null,true,null);
+        run(accepted);
+        var draft=service.get(accepted.lessonId());
+
+        assertThat(draft.timingEvidence).containsEntry("transcriptSource",automatic?"YOUTUBE_EN_AUTOMATIC":"YOUTUBE_EN_MANUAL");
+        assertThat(draft.sentences).extracting(row->row.text).containsExactly("We learn.","Practice helps.");
+        assertThat(draft.sentences).extracting(row->row.coarseStartMs).containsExactly(100L,700L);
+        assertThat(draft.sentences).allSatisfy(row->assertThat(row.words).isEmpty());
+        assertThat(draft.timingStatus).isEqualTo("MISSING");
+        verify(ai,never()).execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap());
+        verify(ai,never()).executeForProvider(eq(AiCapability.STT),anyString(),anyString(),anyMap(),anyMap());
+        if(automatic) {
+            assertThat(draft.activeJobId).isNull();
+            assertThat(draft.jobs).extracting(row->row.operation()).containsExactly("PREPARE");
+            var resumed=service.run(draft.id,draft.revision);
+            draft=service.get(resumed.lessonId());
+        }
+        UUID alignmentJob=draft.activeJobId;
+        assertThat(draft.jobs).anyMatch(row->row.jobId().equals(alignmentJob) && row.operation().equals("ALIGN"));
+        jobs.cancel(alignmentJob);
+    }
+    @Test void unavailableConfirmedCaptionsRequireExplicitWhisperXPreparation() throws Exception {
+        String url="https://www.youtube.com/watch?v=abcdefghijk";
+        var track=new AuthoringSourcePort.CaptionTrack("en",false);
+        when(source.inspect(url)).thenReturn(new AuthoringSourcePort.SourceInfo("abcdefghijk","Reference",10_000,true,null,track));
+        when(source.englishCaptions("abcdefghijk",track,0,5000)).thenThrow(
+            new SourceMaterializationException("YOUTUBE_CAPTIONS_UNAVAILABLE","English captions are unavailable",false));
+
+        var accepted=service.create("Unavailable captions",url,0,5000,null,true,null);
+        claim(accepted.jobId());
+        var job=jobs.findById(accepted.jobId()).orElseThrow();
+        assertThatThrownBy(()->handler.execute(job,mock(JobExecutionContext.class)))
+            .isInstanceOfSatisfying(PermanentJobException.class,error->assertThat(error.errorCode()).isEqualTo("YOUTUBE_CAPTIONS_UNAVAILABLE"));
+        assertThat(transitions.failed(job,"test-worker","YOUTUBE_CAPTIONS_UNAVAILABLE","English captions are unavailable",
+            job.currentStep(),job.progressPercent())).isTrue();
+        var draft=service.get(accepted.lessonId());
+        assertThat(draft.sentences).isEmpty();
+        verify(ai,never()).execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap());
+        verify(ai,never()).executeForProvider(eq(AiCapability.STT),anyString(),anyString(),anyMap(),anyMap());
+
+        when(ai.executeForProvider(eq(AiCapability.STT),eq("LOCAL_WHISPERX"),anyString(),anyMap(),anyMap()))
+            .thenReturn(whisperXTranscript());
+        run(service.prepare(draft.id,draft.revision,true));
+        var recovered=service.get(draft.id);
+        assertThat(recovered.timingEvidence).containsEntry("transcriptSource","LOCAL_WHISPERX");
+        assertThat(recovered.sentences).extracting(row->row.text).containsExactly("We learn.");
+        verify(source).englishCaptions("abcdefghijk",track,0,5000);
+        verify(ai,never()).execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap());
+        jobs.cancel(recovered.activeJobId);
+    }
+    @Test void captionPreferenceWithoutAnEnglishTrackUsesWhisperX() throws Exception {
+        when(ai.executeForProvider(eq(AiCapability.STT),eq("LOCAL_WHISPERX"),anyString(),anyMap(),anyMap()))
+            .thenReturn(whisperXTranscript());
+        var accepted=service.create("No captions","https://www.youtube.com/watch?v=abcdefghijk",0,5000,null,true,null);
+        run(accepted);
+
+        var draft=service.get(accepted.lessonId());
+        assertThat(draft.timingEvidence).containsEntry("transcriptSource","LOCAL_WHISPERX");
+        assertThat(draft.sentences).extracting(row->row.text).containsExactly("We learn.");
+        verify(source,never()).englishCaptions(anyString(),any(),anyLong(),anyLong());
+        verify(ai,never()).execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap());
+        jobs.cancel(draft.activeJobId);
+    }
+    @Test void uploadedEnglishCaptionsSkipTranscriptionAndPauseForReview() throws Exception {
+        var file=new UploadedCaptions.File("srt","""
+            1
+            00:00:02,100 --> 00:00:02,600
+            We learn.
+            """);
+        var accepted=service.create("Uploaded captions","https://www.youtube.com/watch?v=abcdefghijk",
+            2000,5000,null,false,file);
+        run(accepted);
+
+        var draft=service.get(accepted.lessonId());
+        assertThat(draft.timingEvidence).containsEntry("transcriptSource","UPLOADED_EN");
+        assertThat(draft.sentences).extracting(row->row.text).containsExactly("We learn.");
+        assertThat(draft.sentences.getFirst().coarseStartMs).isEqualTo(100L);
+        assertThat(draft.activeJobId).isNull();
+        verify(source,never()).englishCaptions(anyString(),any(),anyLong(),anyLong());
+        verify(ai,never()).execute(eq(AiCapability.STT),anyString(),anyMap(),anyMap());
+        verify(ai,never()).executeForProvider(eq(AiCapability.STT),anyString(),anyString(),anyMap(),anyMap());
+    }
     @Test void jobBrowserFiltersAndPaginatesWithoutChangingJobs() {
         String type="BROWSER_"+UUID.randomUUID().toString().replace("-", "").toUpperCase(java.util.Locale.ROOT);
         UUID first=jobs.enqueue(type,"lesson",UUID.randomUUID(),1,3,"{}");
@@ -124,7 +219,7 @@ class LessonAuthoringIT {
         when(ai.requestTokenBudget(any())).thenReturn(7500);
         when(ai.execute(eq(AiCapability.GENERAL_LLM),anyString(),anyMap(),anyMap())).thenReturn(result(Map.of("structured",Map.of(
             "tr",List.of(List.of(1,"Chúng ta học."),List.of(2,"Luyện tập có ích.")),"v",List.of(),"g",List.of(),
-            "d",List.of(1,2),"s",List.of(1),"m",List.of("A1","MONOLOGUE")))));
+            "d",List.of(),"s",List.of(),"m",List.of("A1","MONOLOGUE")))));
         when(ai.executeForProvider(eq(AiCapability.NLP),anyString(),anyString(),anyMap(),anyMap()))
             .thenThrow(new com.lyreo.ai.application.execution.AiExecutionException("Unavailable",true,"AI_HTTP_503"));
         var accepted=service.generateContent(draft.id,draft.revision);claim(accepted.jobId());
@@ -390,6 +485,18 @@ class LessonAuthoringIT {
         assertThat(saved.approvedRevision).isNull();assertThat(saved.karaokeReviewedRevision).isNull();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM lesson_authoring_job WHERE lesson_id=? AND operation='ALIGN'",Long.class,output.id)).isEqualTo(1L);
     }
+    @Test void validatedSttTimingSkipsAutomaticAlignmentButStillRequiresReview() throws Exception {
+        var accepted=service.create("Reuse timing","https://www.youtube.com/watch?v=abcdefghijk",0,5000);
+        run(accepted);
+        var draft=service.get(accepted.lessonId());
+        assertThat(draft.timingStatus).isEqualTo("DRAFT_VALID");
+        assertThat(draft.alignmentRequired).isFalse();
+        assertThat(draft.jobs.stream().map(AuthoringLesson.Job::operation)).doesNotContain("ALIGN");
+        assertThat(draft.approvedRevision).isNull();
+        assertThat(draft.karaokeReviewedRevision).isNull();
+        verify(ai,never()).execute(eq(AiCapability.ALIGNMENT),anyString(),anyMap(),anyMap());
+    }
+
     @Test void initialAlignmentIsAtomicRecoverableAndNeverApprovesTranscript() throws Exception {
         service.setReuseDraftTiming(false);
         var accepted=service.create("Automatic alignment","https://www.youtube.com/watch?v=abcdefghijk",0,5000);
@@ -796,6 +903,37 @@ class LessonAuthoringIT {
         catalog.deleteDraft(ready.id);assertThat(catalog.list("","DELETED",null,"",0,100).items()).anyMatch(row->row.id().equals(ready.id));
         catalog.restore(ready.id);assertThat(catalog.get(ready.id).visible()).isFalse();assertThat(service.get(copy.id).audioObjectKey).isEqualTo(published.audioObjectKey);
     }
+    @Test void activityUpdatePersistsLocalSoundCueExclusionAndProtectsItFromManualSelection() throws Exception {
+        var draft=prepared();
+        draft.options=new com.lyreo.lesson.domain.authoring.AuthoringOptions(java.util.Set.of("DICTATION","SHADOWING"),java.util.Set.of(),"vi-VN","AUTO",20,8,"DISABLED","US");
+        var cue=draft.sentences.getFirst();
+        var start=cue.words.getFirst();var end=cue.words.getLast();
+        cue.text="(plane roaring)";
+        cue.words=List.of(new AuthoringSentence.Word("plane",start.startMs(),start.endMs(),1,6,0,1),
+            new AuthoringSentence.Word("roaring",end.startMs(),end.endMs(),7,14,1,2));
+        cue.dictationSelected=true;cue.shadowingSelected=true;
+        cue.manualFields.add("DICTATION");
+        repository.save(draft);
+        when(ai.requestTokenBudget(any())).thenReturn(7500);
+        when(ai.execute(eq(AiCapability.GENERAL_LLM),anyString(),anyMap(),anyMap()))
+            .thenReturn(result(Map.of("structured",Map.of("d",List.of(),"s",List.of()))));
+
+        run(service.run(draft.id,draft.revision));
+
+        var saved=service.get(draft.id);
+        assertThat(saved.sentences.getFirst().exclusions).containsEntry("DICTATION","NON_SPEECH").containsEntry("SHADOWING","NON_SPEECH");
+        assertThat(saved.sentences.getFirst().dictationSelected).isFalse();
+        assertThat(saved.sentences.getFirst().shadowingSelected).isFalse();
+        assertThat(saved.sentences.getFirst().dictationEligible).isFalse();
+        assertThat(saved.sentences.getLast().dictationSelected).isTrue();
+        assertThat(service.readiness(saved)).isEmpty();
+        verify(ai,never()).execute(eq(AiCapability.GENERAL_LLM),argThat(prompt->prompt.contains("1|(plane roaring)")),anyMap(),anyMap());
+
+        var changed=service.saveContent(saved.id,saved.revision,cue.id,
+            new LessonAuthoringService.ContentInput(null,null,false,List.of(),List.of(),true,true));
+        assertThat(changed.sentences.getFirst().dictationSelected).isFalse();
+        assertThat(changed.sentences.getFirst().shadowingSelected).isFalse();
+    }
 
     @Test void cancellationPreventsFencedCheckpointAndNextJob() throws Exception {
         var draft=prepared();draft.autoContinue=true;repository.save(draft);
@@ -918,6 +1056,10 @@ class LessonAuthoringIT {
     private void run(LessonAuthoringService.Accepted accepted) throws Exception {
         claim(accepted.jobId());handler.execute(jobs.findById(accepted.jobId()).orElseThrow(),mock(JobExecutionContext.class));
         jdbc.update("UPDATE background_job SET status='SUCCEEDED' WHERE id=?",accepted.jobId());
+    }
+    private static AiExecutionResult whisperXTranscript() {
+        return new AiExecutionResult(UUID.randomUUID(),"LOCAL_WHISPERX","mock-v1",
+            Map.of("text","We learn.","segments",List.of(Map.of("text","We learn.","start_ms",0,"end_ms",800))),100,30,10);
     }
     private static AiExecutionResult result(Map<String,Object> output) {return new AiExecutionResult(UUID.randomUUID(),"MOCK","mock-v1",output,100,30,10);}
 }

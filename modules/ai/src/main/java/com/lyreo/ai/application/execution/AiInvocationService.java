@@ -218,8 +218,9 @@ public final class AiInvocationService {
                 && Set.of("hexgrad/Kokoro-82M", "Kokoro-82M", "kokoro").contains(model);
         }
         if (provider.equals("LOCAL_NLP")) return route.capability() == AiCapability.NLP;
-        if (Set.of("QWEN", "QWEN3", "QWEN3_ASR", "QWEN3_FORCED_ALIGNER", "LOCAL_QWEN").contains(provider)) {
-            return model.equals("Qwen/Qwen3-ASR-0.6B") || model.equals("Qwen/Qwen3-ForcedAligner-0.6B");
+        if (provider.equals("LOCAL_WHISPERX")) {
+            return route.capability() == AiCapability.STT && "small.en".equals(model)
+                || route.capability() == AiCapability.ALIGNMENT && "WAV2VEC2_ASR_BASE_960H".equals(model);
         }
         if (!confirmedFreeProviders.contains(provider)) return false;
         return (provider.equals("GEMINI") && model.equals("gemini-3.5-flash-lite"))

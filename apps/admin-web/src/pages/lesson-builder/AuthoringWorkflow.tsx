@@ -4,14 +4,16 @@ import { ProcessingStatus } from './ProcessingStatus';
 import { activeJob } from './AuthoringJobProgress';
 import type { LessonDraft } from './lesson-builder.types';
 
-export function AuthoringWorkflow({ draft, needsUpdate, disabled, onCancel, onRetry }: {
+export function AuthoringWorkflow({ draft, needsUpdate, disabled, onCancel, onRetry, onUseWhisperX }: {
   draft: LessonDraft; needsUpdate: boolean; disabled: boolean;
-  onCancel: () => void; onRetry: () => void;
+  onCancel: () => void; onRetry: () => void; onUseWhisperX: () => void;
 }) {
   const { t } = useTranslation('admin');
   const current = draft.jobs.find(activeJob), last = draft.jobs.at(-1);
   const problem = !current && needsUpdate && last && ['FAILED', 'CANCELLED'].includes(last.status) ? last : undefined;
   const job = current ?? problem;
+  const captionsUnavailable = problem?.operation === 'PREPARE' && problem.status === 'FAILED'
+    && problem.errorCode === 'YOUTUBE_CAPTIONS_UNAVAILABLE';
   const prepared = draft.audioReady && draft.sentences.length > 0;
   const aligned = prepared && !draft.alignmentRequired;
   const complete = aligned && draft.contentComplete;
@@ -23,7 +25,7 @@ export function AuthoringWorkflow({ draft, needsUpdate, disabled, onCancel, onRe
   const activeIndex = steps.findIndex(step => job?.operation === step.code);
   const SummaryIcon = needsUpdate || !complete ? RiErrorWarningLine : RiCheckLine;
   return <section className="studio-workflow" aria-label={t('finish.progress')}>
-    {job ? <ProcessingStatus job={job} disabled={disabled} onCancel={current ? onCancel : undefined} onRetry={problem ? onRetry : undefined} />
+    {job ? <ProcessingStatus job={job} disabled={disabled} onCancel={current ? onCancel : undefined} onRetry={problem ? onRetry : undefined} onUseWhisperX={captionsUnavailable ? onUseWhisperX : undefined} />
       : <div className="studio-workflow-summary"><SummaryIcon aria-hidden="true" /><strong>{t(draft.status === 'PUBLISHED' ? 'catalog.published' : needsUpdate || !complete ? 'finish.updateNeeded' : 'finish.readyDraft')}</strong><span>{t(draft.status === 'PUBLISHED' ? 'finish.publishedHelp' : needsUpdate || !complete ? 'finish.updateHelp' : 'finish.readyHelp')}</span></div>}
     {(job || !complete) && <ol className="studio-workflow-stages">{steps.map((step, index) => {
       const state = index === activeIndex ? current ? 'running' : 'error' : step.done && (activeIndex < 0 || index < activeIndex) ? 'done' : 'waiting';

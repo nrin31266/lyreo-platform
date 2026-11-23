@@ -73,10 +73,10 @@ Product `Lyreo`; mascot `Lyrebird`; Java namespace `com.lyreo`.
 Status: Accepted.
 Admin-tunable module policy uses versioned PostgreSQL JSONB documents behind typed module policy repositories. Do not spread raw config maps through domain code.
 
-## D-015 — Qwen runtime remains Python capability implementation
+## D-015 — Local speech runtime remains a Python capability implementation
 
 Status: Accepted.
-Qwen3-ASR/ForcedAligner may run directly in FastAPI Python process or a later dedicated model host. Docker is packaging, not domain architecture.
+WhisperX STT and forced alignment run in FastAPI. A dedicated model host can be introduced without moving business orchestration out of Core. Docker is packaging, not domain architecture.
 
 ## D-016 — Chat boundary exists but is low priority
 
