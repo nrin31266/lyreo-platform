@@ -26,7 +26,12 @@ export const adminNavGroups: { key: string; items: AdminNavItem[] }[] = [
       {
         key: "languageLibrary",
         icon: Library,
-        children: [{ key: "lexicon", path: "/lexicon" }, { key: "grammar", path: "/grammar" }, { key: "toeic", path: "/toeic" }],
+        children: [
+          { key: "lexicon", path: "/lexicon" },
+          { key: "phonetics", path: "/phonetics" },
+          { key: "grammar", path: "/grammar" },
+          { key: "toeic", path: "/toeic" },
+        ],
       },
     ],
   },

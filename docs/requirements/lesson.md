@@ -109,8 +109,10 @@ Hộp thoại Thử chấm phát âm mở ngay tại câu Shadowing đã chọn 
 Preview. Với bài nháp đã lưu và bài đã xuất bản, Admin có thể nghe mẫu, thu âm hay tải tệp, nghe thử bản thu và xem
 feedback từ Azure Pronunciation Assessment. Core tính giới hạn thu từ thời lượng mẫu.
 Khi nghe câu mẫu trong hộp thoại, karaoke làm nổi từ đang phát theo mốc của bài học.
-Kết quả gắn với revision đã gửi. Tab Tổng quan đánh dấu từ thiếu, từ thừa và từ sai phát âm ngay
-trên câu đã chấm. Tab Chi tiết cho xem lời nhận được, lọc lỗi, xem âm vị và phát lại theo mốc khi có.
+Kết quả gắn với revision đã gửi. Cùng một màn hình hiển thị bốn loại điểm, từ thiếu, từ thừa và từ
+sai phát âm ngay trên câu đã chấm. Chọn từ để xem âm vị và nghe lại theo mốc khi có. Với âm vị có
+trong [bảng phiên âm tiếng Anh Mỹ](lexicon-vocabulary.md#fr-lex-005--admin-ipa-chart), Admin
+có thể nghe riêng âm mẫu, nghe từ ví dụ và đọc hướng dẫn song ngữ để đối chiếu với bản thu.
 Hàng câu trong Shadowing Preview có tóm tắt kết quả còn hạn của revision hiện tại. Bản thu thiếu
 tín hiệu hiển thị hướng dẫn thu lại. Chỉ Admin tạo lượt có quyền truy cập dữ liệu chi tiết.
 Bản thu, transcript, điểm và feedback hết hạn sau 24 giờ. Lượt thử nằm ngoài tiến độ và điểm Learner.

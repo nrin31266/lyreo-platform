@@ -140,28 +140,33 @@ it('tests the selected sentence in place and submits its saved revision', async 
         outcome: 'SCORED', durationMs: 1000, transcript: 'Hello',
         scores: { overall: 80, accuracy: 90, fluency: 90, completeness: 50 },
         words: [
-          { text: 'Hello', referenceIndex: 0, error: 'NONE', startMs: 0, endMs: 400, phonemes: [] },
+          { text: 'Hello', referenceIndex: 0, error: 'NONE', startMs: 0, endMs: 400,
+            phonemes: [{ ipa: 'h', accuracy: 82, startMs: null, endMs: null }] },
           { text: 'world', referenceIndex: 1, error: 'OMISSION', startMs: null, endMs: null, phonemes: [] },
         ],
       },
     };
     await client.invalidateQueries({ queryKey: ['job', 'job'] });
     const results = within(await screen.findByRole('region', { name: 'Assessment results' }));
-    expect(results.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+    expect(results.queryByRole('tab')).not.toBeInTheDocument();
+    expect(results.getByText('Overall')).toBeVisible();
+    expect(results.getByText('Completeness')).toBeVisible();
     expect(results.getByRole('button', { name: /Review “Hello”/ })).toBeInTheDocument();
     const missingWord = results.getByRole('button', { name: /Review “world”.*Missing/ });
     missingWord.focus();
     await userEvent.keyboard('{Enter}');
-    expect(results.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-selected', 'true');
     expect(results.getByRole('button', { name: /Review “world”.*Missing/ })).toHaveAttribute('aria-pressed', 'true');
     expect(results.getByText('No matching segment in your recording.')).toBeInTheDocument();
     expect(results.queryByRole('button', { name: 'Play world' })).not.toBeInTheDocument();
-    await userEvent.click(results.getByRole('button', { name: 'Issues only' }));
-    expect(results.queryByRole('button', { name: /Review “Hello”/ })).not.toBeInTheDocument();
-    const detailsTab = results.getByRole('tab', { name: 'Details' });
-    detailsTab.focus();
-    await userEvent.keyboard('{ArrowLeft}');
-    expect(results.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+    await userEvent.click(results.getByRole('button', { name: /Review “Hello”/ }));
+    expect(results.getByRole('button', { name: 'Review /h/' })).toBeVisible();
+    expect(results.getByRole('button', { name: 'Hear sound /h/' })).toBeVisible();
+    expect(results.getByRole('button', { name: 'Hear hat' })).toBeVisible();
+    expect(results.getByRole('button', { name: 'Hear sound → word' })).toBeVisible();
+    expect(results.getByRole('link', { name: /Rachel’s English/ })).toBeVisible();
+    await userEvent.click(results.getByRole('button', { name: 'Tiếng Việt' }));
+    expect(results.getByRole('link', { name: /Dan Hauer/ })).toBeVisible();
+    expect(results.getByRole('link', { name: 'IPA chart' })).toHaveAttribute('href', '/phonetics?sound=h');
     await userEvent.keyboard('{Escape}');
     await userEvent.click(await preview.findByRole('button', { name: 'Words to review · 1' }));
     expect(await screen.findByRole('button', { name: /Review “world”.*Missing/ })).toBeVisible();

@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useIpaAudio } from '@/pages/phonetics/useIpaAudio';
 import { PronunciationFeedback, wordPlaybackRange } from './PronunciationFeedback';
 import { PlaybackWords, type PlaybackClock } from './playback-clock';
 import type { AuthoringSentence } from './lesson-builder.types';
@@ -47,6 +48,7 @@ export function PronunciationPilot({ lessonId, sentence, referenceClock, referen
 }) {
   const { t } = useTranslation('admin');
   const sentenceId = sentence.id;
+  const ipaAudio = useIpaAudio();
   const connection = useJobConnection();
   const inputId = useId();
   const [upload, setUpload] = useState<{ file: File; key: string; captured: boolean }>();
@@ -158,6 +160,7 @@ export function PronunciationPilot({ lessonId, sentence, referenceClock, referen
       return;
     }
     setRequestingMic(true);
+    ipaAudio.stop();
     pauseReference();
     uploadPlayer.current?.pause();
     let stream: MediaStream | undefined;
@@ -252,6 +255,7 @@ export function PronunciationPilot({ lessonId, sentence, referenceClock, referen
     const range = wordPlaybackRange(span, durationMs);
     const audio = player.current;
     if (!range || !audio || !loaded) return;
+    ipaAudio.stop();
     pauseReference();
     stopClip();
     clip.current = range;
@@ -289,6 +293,7 @@ export function PronunciationPilot({ lessonId, sentence, referenceClock, referen
 
   const canPlayReference = playReference && !requestingMic && !isRecording && !oldRevision;
   function listenToReference(atMs?: number) {
+    ipaAudio.stop();
     uploadPlayer.current?.pause();
     player.current?.pause();
     stopClip();
@@ -379,10 +384,16 @@ export function PronunciationPilot({ lessonId, sentence, referenceClock, referen
         <PronunciationFeedback key={activeId}
           referenceText={attempt.data!.referenceText} result={scored}
           activeWord={activeWord} loaded={loaded} play={span => void replay(span, scored.durationMs)}
-          pause={() => { stopClip(); player.current?.pause(); }} />
+          pause={() => { ipaAudio.stop(); stopClip(); player.current?.pause(); }}
+          sampleAudio={ipaAudio}
+          beforeSample={() => {
+            pauseReference();
+            stopClip();
+            player.current?.pause();
+          }} />
         : <p role="status">{t('pronunciationPilot.noSpeech')}</p>}
       {audioUrl && <AudioPlayer ref={player} src={audioUrl} aria-label={t('pronunciationPilot.recording')}
-        onPlay={event => { pauseReference(); trackWord(event.currentTarget); }}
+        onPlay={event => { ipaAudio.stop(); pauseReference(); trackWord(event.currentTarget); }}
         onTimeUpdate={event => trackWord(event.currentTarget)}
         onSeeked={event => {
           const audio = event.currentTarget;
@@ -397,7 +408,7 @@ export function PronunciationPilot({ lessonId, sentence, referenceClock, referen
     </>}
     {accepted && current && (expired || missing || terminal(status)) &&
       <Button size="sm" variant="outline" className="self-start" onClick={() => {
-        setError(''); setExpired(false); onAccepted();
+        ipaAudio.stop(); setError(''); setExpired(false); onAccepted();
       }}>{t('pronunciationPilot.newAttempt')}</Button>}
     </section>
   </>;

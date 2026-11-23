@@ -56,6 +56,16 @@ Learner API cung cấp nhóm để caller chọn đúng cách đọc; không xâ
 Identity phân biệt hoa/thường; `headwordId` và liên kết Lesson/SRS trường tồn qua release.
 CLI cài gói từ điển đã xác minh. Admin biên tập mục đã có và có thể xuất một mục để đối chiếu.
 
+### FR-LEX-005 — Admin IPA chart
+
+Kho ngôn ngữ có bảng phiên âm tiếng Anh Mỹ cho Admin. Mỗi ký hiệu có bản nghe âm riêng,
+một từ ví dụ ghi âm, IPA của từ và hướng dẫn đặt khẩu hình bằng tiếng Việt và tiếng Anh.
+Admin có thể nghe từng phần hoặc phát lần lượt âm rồi đến từ bằng một nút. Hướng dẫn liên kết bài học
+theo âm của [Rachel’s English](https://rachelsenglish.com/pronunciation-compilation-2/) và
+[Dan Hauer](https://www.youtube.com/playlist?list=PL7YqrWXed1abz3FwdKMZEwclWMZ2cMHio).
+Trang hiển thị nguồn và giấy phép từng bản ghi Commons. Mẫu âm trích từ từ ví dụ để giữ cách đọc
+của cùng người nói. Mẫu /ɔ/ dùng bản ghi riêng để nghe âm ngoài ngữ cảnh /ɹ/ của từ north.
+
 ### BR-LEX-003 — Editorial publication
 
 Nguồn import bất biến. Admin biên tập mục đã có, lưu bản sửa thưa và tách nháp khỏi publication
