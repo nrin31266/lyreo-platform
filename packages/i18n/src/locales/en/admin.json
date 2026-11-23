@@ -1014,9 +1014,7 @@
     "playSound": "Hear sound /{{sound}}/",
     "playError": "Could not play the example. Try again or open the source.",
     "exampleSource": "Word recording",
-    "referenceSource": "IELTS Fighter · British IPA",
-    "noReference": "No IELTS Fighter sample for /{{sound}}/.",
-    "watchBbc": "Hear the BBC example"
+    "noReference": "No reference recording for /{{sound}}/."
   },
   "pronunciationPilot": {
     "title": "Test pronunciation",

@@ -4,17 +4,15 @@ export const internationalIpaChart = 'https://www.internationalphoneticassociati
 export const ieltsFighterIpa = 'https://ielts-fighter.com/tin-tuc/bang-phien-am-tieng-anh-ipa_mt1567386908.html';
 const ieltsFighterAudio = 'https://st.ielts-fighter.com/src/ielts-fighter/2019/09/09/';
 export const bbcSoundsOfEnglish = 'https://www.youtube.com/watch?v=QxQUapA-2w4';
-const bbcCureLesson = 'https://www.youtube.com/watch?v=nHSqluHrD-U';
-const speechActiveCureSound = 'https://www.speechactive.com/wp-content/uploads/2018/08/20.diphth_ua_.mp3';
 
 export type IpaExample = {
   ipa: string;
   word: string;
   transcription: string;
   bbcStart: number;
-  soundFile?: string;
-  soundUrl?: string;
-  lessonUrl?: string;
+  soundFile: string;
+  soundSource?: string;
+  wordAudio?: { url: string; source: string };
 };
 
 export const ipaGroups: Record<'vowels' | 'diphthongs' | 'consonants', IpaExample[]> = {
@@ -40,7 +38,15 @@ export const ipaGroups: Record<'vowels' | 'diphthongs' | 'consonants', IpaExampl
     { ipa: 'aɪ', word: 'try', transcription: 'traɪ', bbcStart: 1526, soundFile: 'aɪ.mp3' },
     { ipa: 'əʊ', word: 'coat', transcription: 'kəʊt', bbcStart: 1313, soundFile: 'əʊ.mp3' },
     { ipa: 'aʊ', word: 'mouth', transcription: 'maʊθ', bbcStart: 1586, soundFile: 'aʊ.mp3' },
-    { ipa: 'ʊə', word: 'tour', transcription: 'tʊə', bbcStart: 1205, soundUrl: speechActiveCureSound, lessonUrl: bbcCureLesson },
+    {
+      ipa: 'ʊə', word: 'tour', transcription: 'tʊə', bbcStart: 1205,
+      soundFile: 'https://elc.polyu.edu.hk/sounds/pron/ipa/OO-ER.mp3',
+      soundSource: 'https://elc.polyu.edu.hk/sounds/lesson4-2.htm',
+      wordAudio: {
+        url: 'https://www.oxfordlearnersdictionaries.com/media/english/uk_pron/t/tou/tour_/tour__gb_5.mp3',
+        source: 'https://www.oxfordlearnersdictionaries.com/definition/english/tour_1',
+      },
+    },
   ],
   consonants: [
     { ipa: 'p', word: 'pen', transcription: 'pen', bbcStart: 1723, soundFile: 'p.mp3' },
@@ -82,11 +88,11 @@ export function ipaExample(symbol: string): IpaExample | undefined {
 }
 
 export function ipaSoundUrl(example: IpaExample) {
-  return example.soundUrl ?? (example.soundFile && ieltsFighterAudio + encodeURIComponent(example.soundFile));
+  return new URL(example.soundFile, ieltsFighterAudio).href;
 }
 
 export function ipaWordUrl(example: IpaExample) {
-  return ipaAudioCredits[example.word] && `${import.meta.env.BASE_URL}ipa/${example.word}.ogg`;
+  return example.wordAudio?.url ?? `${import.meta.env.BASE_URL}ipa/${example.word}.ogg`;
 }
 
-export const ipaAudioCredits: Record<string, { source: string; author: string; license: string; licenseUrl?: string }> = audioCredits;
+export const ipaAudioCredits: Partial<Record<string, { source: string; author: string; license: string; licenseUrl?: string }>> = audioCredits;

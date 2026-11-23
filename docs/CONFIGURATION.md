@@ -73,8 +73,9 @@ AI uses the configured free-eligible GENERAL_LLM route. Accent selection does no
 
 Use an Azure Speech F0 resource and append `AZURE_SPEECH` to Core's
 `AI_CONFIRMED_FREE_PROVIDERS`. In **Admin → AI settings → Providers**, save and enable
-`AZURE_SPEECH` with its key. Add an enabled `PRONUNCIATION_ASSESSMENT` route with model
-`pronunciation-assessment`, priority 0 and fallback disabled. Core encrypts and forwards the key.
+`AZURE_SPEECH` with its key. Enable the route created by `make seed-dev`, or add a
+`PRONUNCIATION_ASSESSMENT` route with model `pronunciation-assessment`, priority 0 and fallback
+disabled. Core encrypts and forwards the key.
 FastAPI uses the resource region, `en-US`, and disabled Prosody. Run a single FastAPI replica
 with a single worker process against the F0 resource.
 

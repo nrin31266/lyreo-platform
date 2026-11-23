@@ -60,12 +60,12 @@ CLI cài gói từ điển đã xác minh. Admin biên tập mục đã có và 
 
 Kho ngôn ngữ có bảng 44 âm theo [IELTS Fighter](https://ielts-fighter.com/tin-tuc/bang-phien-am-tieng-anh-ipa_mt1567386908.html),
 đối chiếu với [bảng IPA tương tác chính thức](https://www.internationalphoneticassociation.org/IPAcharts/IPA_charts_TI/IPA_charts_TI.html).
-Audio âm riêng dùng 44 MP3 tương ứng trong bài IELTS Fighter. Từ ví dụ dùng các bản ghi Commons
-có giấy phép và tác giả riêng. Admin có thể phát âm rồi đến từ bằng một nút. Mục /ʊə/ dùng
-[clip âm riêng của Speech Active](https://www.speechactive.com/wp-content/uploads/2018/08/20.diphth_ua_.mp3)
-vì tệp IELTS Fighter của mục này trùng tệp /uː/, và mở [bài mẫu /ʊə/ của BBC](https://www.youtube.com/watch?v=nHSqluHrD-U)
-để xem hướng dẫn.
-Mỗi mục có hướng dẫn khẩu hình tiếng Việt và tiếng Anh. Ký hiệu và âm mẫu theo bảng Anh–Anh.
+Âm mẫu phát trực tiếp từ 43 MP3 của IELTS Fighter. Từ ví dụ dùng bản ghi Commons đã cắt khoảng
+im lặng, có ghi giấy phép và tác giả. Admin có thể phát riêng âm, riêng từ, hoặc âm rồi đến từ.
+Mục /ʊə/ dùng [âm mẫu PolyU](https://elc.polyu.edu.hk/sounds/lesson4-2.htm)
+và [từ tour /tʊə/ từ Oxford](https://www.oxfordlearnersdictionaries.com/definition/english/tour_1)
+vì tệp /ʊə/ của IELTS Fighter trùng với tệp /uː/.
+Hướng dẫn khẩu hình hiển thị tiếng Việt hoặc tiếng Anh theo ngôn ngữ hệ thống. Ký hiệu mẫu theo bảng Anh–Anh.
 Dialog chấm phát âm giữ phần hướng dẫn gọn và mở bảng IPA đầy đủ ở Kho ngôn ngữ. Ký hiệu trong kết quả và điểm của Azure vẫn theo `en-US`.
 
 ### BR-LEX-003 — Editorial publication

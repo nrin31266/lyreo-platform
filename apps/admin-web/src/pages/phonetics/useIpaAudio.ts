@@ -25,7 +25,6 @@ export function useIpaAudio() {
     if (playing === key) return;
     const word = ipaWordUrl(example);
     const first = playback === 'word' ? word : ipaSoundUrl(example);
-    if (!first || (playback === 'sequence' && !word)) return;
     const player = new Audio();
     audio.current = player;
     setPlaying(key);

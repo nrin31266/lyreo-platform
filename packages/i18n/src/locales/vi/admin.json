@@ -1014,9 +1014,7 @@
     "playSound": "Nghe âm mẫu /{{sound}}/",
     "playError": "Không phát được audio mẫu. Bạn có thể thử lại hoặc mở nguồn.",
     "exampleSource": "Nguồn ghi âm từ",
-    "referenceSource": "IELTS Fighter · IPA Anh–Anh",
-    "noReference": "Bảng IELTS Fighter chưa có mẫu cho /{{sound}}/.",
-    "watchBbc": "Nghe mẫu trên BBC"
+    "noReference": "Chưa có âm mẫu /{{sound}}/."
   },
   "pronunciationPilot": {
     "title": "Thử chấm phát âm",

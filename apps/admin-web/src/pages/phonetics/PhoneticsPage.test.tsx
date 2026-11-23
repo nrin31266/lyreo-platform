@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createInstance } from 'i18next';
 import { I18nextProvider, initReactI18next } from 'react-i18next';
@@ -7,7 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 import { adminI18nResources } from '@lyreo/i18n';
 import { PhoneticsPage } from './PhoneticsPage';
-import { internationalIpaChart, ipaAudioCredits, ipaExample, ipaGroups, ipaSoundUrl } from './ipa';
+import { ieltsFighterIpa, internationalIpaChart, ipaAudioCredits, ipaExample, ipaGroups, ipaSoundUrl, ipaWordUrl } from './ipa';
 import { ipaGuides } from './ipa-guides';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -21,13 +21,14 @@ it('covers all 44 symbols and supplements the duplicate /ʊə/ recording', () =>
   for (const example of examples) {
     const { ipa, word } = example;
     expect(ipaGuides[ipa]).toEqual({ en: expect.any(String), vi: expect.any(String) });
-    if (example.lessonUrl) {
+    if (example.wordAudio) {
       expect(ipa).toBe('ʊə');
-      expect(ipaSoundUrl(example)).toMatch(/^https:\/\/www\.speechactive\.com\//);
+      expect(new URL(ipaSoundUrl(example)).hostname).toBe('elc.polyu.edu.hk');
+      expect(new URL(ipaWordUrl(example)).hostname).toBe('www.oxfordlearnersdictionaries.com');
     } else {
-      expect(new URL(ipaSoundUrl(example)!).hostname).toBe('st.ielts-fighter.com');
-      expect(ipaAudioCredits[word].source).toMatch(/^https:\/\//);
-      expect(ipaAudioCredits[word].author).toBeTruthy();
+      expect(new URL(ipaSoundUrl(example)).hostname).toBe('st.ielts-fighter.com');
+      expect(ipaAudioCredits[word]?.source).toMatch(/^https:\/\//);
+      expect(ipaAudioCredits[word]?.author).toBeTruthy();
       expect(readFileSync(`public/ipa/${word}.ogg`).subarray(0, 4).toString()).toBe('OggS');
     }
   }
@@ -38,7 +39,7 @@ it('covers all 44 symbols and supplements the duplicate /ʊə/ recording', () =>
   expect(ipaExample('unknown')).toBeUndefined();
 });
 
-it('opens the linked sound, plays its two distinct recordings, and switches guidance language', async () => {
+it('plays distinct sounds and words and follows the system language', async () => {
   const sources: string[] = [];
   const players: HTMLMediaElement[] = [];
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(async function (this: HTMLMediaElement) {
@@ -75,13 +76,16 @@ it('opens the linked sound, plays its two distinct recordings, and switches guid
   expect(sample.getByText(/keep the tongue tip low/i)).toHaveAttribute('lang', 'en');
   expect(sample.queryByRole('link', { name: /IELTS Fighter/ })).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'International IPA chart' })).toHaveAttribute('href', internationalIpaChart);
-  await userEvent.click(screen.getByRole('button', { name: 'Review /ʊə/' }));
-  const cureSound = sample.getByRole('button', { name: 'Hear sound /ʊə/' });
-  expect(cureSound).toBeInTheDocument();
-  expect(sample.queryByRole('button', { name: /Hear tour/ })).not.toBeInTheDocument();
-  expect(sample.getByRole('link', { name: /BBC Learning English/ })).toHaveAttribute(
-    'href', 'https://www.youtube.com/watch?v=QxQUapA-2w4&t=1205s',
-  );
-  await userEvent.click(cureSound);
-  expect(sources.at(-1)).toBe(ipaSoundUrl(ipaExample('ʊə')!));
+  await userEvent.click(screen.getByRole('button', { name: 'Hear /ʊə/ then tour' }));
+  const cure = ipaExample('ʊə')!;
+  expect(sources.at(-1)).toBe(ipaSoundUrl(cure));
+  fireEvent.ended(players.at(-1)!);
+  expect(sources.at(-1)).toBe(ipaWordUrl(cure));
+  await userEvent.click(sample.getByRole('button', { name: 'Hear sound /ʊə/' }));
+  expect(sources.at(-1)).toBe(ipaSoundUrl(cure));
+  await userEvent.click(sample.getByRole('button', { name: 'Hear tour /tʊə/' }));
+  expect(sources.at(-1)).toBe(ipaWordUrl(cure));
+  await act(async () => { await i18n.changeLanguage('vi'); });
+  expect(sample.getByText(/bắt đầu gần/i)).toHaveAttribute('lang', 'vi');
+  expect(sample.getByRole('link', { name: /IELTS Fighter/ })).toHaveAttribute('href', ieltsFighterIpa);
 });

@@ -47,22 +47,18 @@ INSERT INTO ai_provider (id, code, display_name, base_url, enabled) VALUES
         (gen_random_uuid(), 'AZURE_SPEECH', 'Azure Speech', NULL, false)
     ON CONFLICT (code) DO NOTHING;
 
-INSERT INTO ai_capability_route (id, provider_id, capability, model, priority)
-SELECT gen_random_uuid(), provider.id, route.capability, route.model, route.priority
+INSERT INTO ai_capability_route (id, provider_id, capability, model, priority, enabled)
+SELECT gen_random_uuid(), provider.id, route.capability, route.model, route.priority, route.enabled
 FROM ai_provider provider
 JOIN (VALUES
-    ('LOCAL_WHISPERX', 'STT', 'small.en', 1),
-    ('LOCAL_WHISPERX', 'ALIGNMENT', 'WAV2VEC2_ASR_BASE_960H', 1),
-    ('LOCAL_KOKORO', 'TTS', 'hexgrad/Kokoro-82M', 1),
-    ('LOCAL_NLP', 'NLP', 'espeak-ng', 1),
-    ('DEEPSEEK', 'GENERAL_LLM', 'deepseek-flash', 1),
-    ('GEMINI', 'GENERAL_LLM', 'gemini-3.5-flash-lite', 2),
-    ('GROQ', 'GENERAL_LLM', 'openai/gpt-oss-120b', 3),
-    ('AZURE_SPEECH', 'PRONUNCIATION_ASSESSMENT', 'pronunciation-assessment', 0)
-) route (provider_code, capability, model, priority) ON route.provider_code=provider.code
+    ('LOCAL_WHISPERX', 'STT', 'small.en', 1, true),
+    ('LOCAL_WHISPERX', 'ALIGNMENT', 'WAV2VEC2_ASR_BASE_960H', 1, true),
+    ('LOCAL_KOKORO', 'TTS', 'hexgrad/Kokoro-82M', 1, true),
+    ('LOCAL_NLP', 'NLP', 'espeak-ng', 1, true),
+    ('DEEPSEEK', 'GENERAL_LLM', 'deepseek-flash', 1, true),
+    ('GEMINI', 'GENERAL_LLM', 'gemini-3.5-flash-lite', 2, true),
+    ('GROQ', 'GENERAL_LLM', 'openai/gpt-oss-120b', 3, true),
+    ('AZURE_SPEECH', 'PRONUNCIATION_ASSESSMENT', 'pronunciation-assessment', 0, false)
+) route (provider_code, capability, model, priority, enabled) ON route.provider_code=provider.code
 ON CONFLICT (capability, provider_id, model) DO NOTHING;
-UPDATE ai_capability_route
-SET enabled=false
-WHERE capability='PRONUNCIATION_ASSESSMENT'
-  AND provider_id=(SELECT id FROM ai_provider WHERE code='AZURE_SPEECH');
 COMMIT;
