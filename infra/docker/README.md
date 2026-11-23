@@ -32,7 +32,7 @@ Xoá **toàn bộ volume**, gồm dữ liệu import và Keycloak (destructive):
 make down-v CONFIRM=lyreo-volumes
 ```
 
-Sau reset phải chạy lại `make keycloak-seed`.
+Sau khi xóa toàn bộ volume, chạy `make setup` để tạo lại hạ tầng, tài khoản và dữ liệu mẫu.
 
 ## `compose.prod.yml` (name pending clarification)
 

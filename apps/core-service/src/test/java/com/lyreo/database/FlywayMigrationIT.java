@@ -106,7 +106,7 @@ class FlywayMigrationIT {
     void verifiesConsolidatedBaselineMigrationsSucceeded() {
         MigrationInfo[] applied = flyway.info().applied();
 
-        assertThat(applied).hasSize(3).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
+        assertThat(applied).hasSize(7).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
@@ -114,7 +114,11 @@ class FlywayMigrationIT {
         assertThat(applied[1].getVersion().getVersion()).isEqualTo("002");
         assertThat(applied[1].getDescription()).isEqualTo("reference data");
         assertThat(applied[2].getDescription()).isEqualTo("youtube caption inspection");
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("003");
+        assertThat(applied[3].getDescription()).isEqualTo("learner directory");
+        assertThat(applied[4].getDescription()).isEqualTo("learner avatars");
+        assertThat(applied[5].getDescription()).isEqualTo("learner avatar portraits");
+        assertThat(applied[6].getDescription()).isEqualTo("learner avatar catalog");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("007");
     }
 
     @Test

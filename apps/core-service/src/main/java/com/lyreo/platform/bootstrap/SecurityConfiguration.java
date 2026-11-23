@@ -38,6 +38,7 @@ public class SecurityConfiguration {
                 // Controller exists only in the dev Spring profile and additionally requires a shared token.
                 .requestMatchers("/internal/dev/**").permitAll()
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/v1/learner/**").hasRole("LEARNER")
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()
             )

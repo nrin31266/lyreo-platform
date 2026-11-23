@@ -40,7 +40,7 @@ export const adminNavGroups: { key: string; items: AdminNavItem[] }[] = [
   {
     key: "learners",
     items: [
-      { key: "profiles", icon: Users },
+      { key: "profiles", icon: Users, path: "/learners" },
       { key: "progress", icon: ChartNoAxesCombined },
     ],
   },
@@ -75,6 +75,7 @@ export function getNavTitleKey(pathname: string, hash = ""): string {
   if (exact) return exact.labelKey;
   if (["/lessons/categories", "/lessons/channels"].includes(pathname)) return "admin:navigation.organization";
   if (/^\/lessons\/[^/]+$/.test(pathname)) return 'admin:authoringFlow.editorTitle';
+  if (/^\/learners\/[^/]+$/.test(pathname)) return "admin:navigation.profiles";
   for (const library of ["lexicon", "grammar", "toeic"]) {
     if (pathname.startsWith(`/${library}/`)) return `admin:navigation.${library}`;
   }

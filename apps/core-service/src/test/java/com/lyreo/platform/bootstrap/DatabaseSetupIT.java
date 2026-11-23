@@ -2,13 +2,76 @@ package com.lyreo.platform.bootstrap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 class DatabaseSetupIT {
+    @Test
+    void seedsBothLearnerStatesAndPreservesDemoEditsOnRepeat(@TempDir Path tmp) throws Exception {
+        try (var postgres = new PostgreSQLContainer("postgres:18.6-alpine")) {
+            postgres.start();
+            var datasource = new DriverManagerDataSource(
+                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+            var seed = Files.writeString(tmp.resolve("learners.sql"),
+                Files.readString(Path.of("../../infra/postgres/seed/learners.sql"))
+                    .replace("__MINH_ANH_SUBJECT__", "5352d996-50af-4498-a53c-9e4bd3712c75")
+                    .replace("__GIA_HUY_SUBJECT__", "e963ecc1-d469-4938-94cb-c85c24e08f5d")
+                    .replace("__NEW_LEARNER_SUBJECT__", "b50746c8-525c-4b37-b0f8-80cb4a494441"));
+            var jdbc = new JdbcTemplate(datasource);
+            DatabaseSetup.apply(datasource, null);
+            jdbc.update("""
+                INSERT INTO app_user (id,keycloak_subject,email_snapshot)
+                VALUES ('30000000-0000-0000-0000-000000000001','demo-learner-minh-anh','minh-anh@example.test')
+                """);
+            jdbc.update("""
+                INSERT INTO learner_profile (learner_id,display_name,daily_minutes,first_seen_at,onboarding_completed_at)
+                VALUES ('30000000-0000-0000-0000-000000000001','Minh Anh',15,now(),now())
+                """);
+            DatabaseSetup.apply(datasource, seed);
+            assertThat(jdbc.queryForObject("""
+                SELECT keycloak_subject FROM app_user WHERE id = '30000000-0000-0000-0000-000000000001'
+                """, String.class)).isEqualTo("5352d996-50af-4498-a53c-9e4bd3712c75");
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM learner_profile WHERE first_seen_at IS NOT NULL", Integer.class))
+                .isEqualTo(3);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM learner_profile WHERE onboarding_completed_at IS NOT NULL", Integer.class))
+                .isEqualTo(2);
+            DatabaseSetup.apply(datasource, seed);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM app_user", Integer.class)).isEqualTo(3);
+            assertThat(jdbc.queryForObject("SELECT daily_minutes FROM learner_profile WHERE display_name = 'Minh Anh'", Integer.class))
+                .isEqualTo(15);
+
+            String newMinhAnhSubject = "cdba0081-1dbf-4e1a-b351-85bbad05e639";
+            String newGiaHuySubject = "e30dc993-8b1b-4fe8-8832-6774ac70ad10";
+            jdbc.update("""
+                INSERT INTO app_user (id, keycloak_subject, email_snapshot)
+                VALUES (gen_random_uuid(), ?, 'gia-huy@example.test')
+                """, newGiaHuySubject);
+            jdbc.update("""
+                INSERT INTO learner_profile (learner_id, display_name, daily_minutes, first_seen_at)
+                SELECT id, 'Huy JIT', 30, now() FROM app_user WHERE keycloak_subject = ?
+                """, newGiaHuySubject);
+            var reseed = Files.writeString(tmp.resolve("recreated-realm-learners.sql"), Files.readString(seed)
+                .replace("5352d996-50af-4498-a53c-9e4bd3712c75", newMinhAnhSubject)
+                .replace("e963ecc1-d469-4938-94cb-c85c24e08f5d", newGiaHuySubject));
+            DatabaseSetup.apply(datasource, reseed);
+            assertThat(jdbc.queryForObject("""
+                SELECT p.daily_minutes FROM learner_profile p JOIN app_user u ON u.id = p.learner_id
+                WHERE u.keycloak_subject = ? AND p.display_name = 'Minh Anh' AND p.onboarding_completed_at IS NOT NULL
+                """, Integer.class, newMinhAnhSubject)).isEqualTo(15);
+            assertThat(jdbc.queryForObject("""
+                SELECT p.daily_minutes FROM learner_profile p JOIN app_user u ON u.id = p.learner_id
+                WHERE u.keycloak_subject = ? AND p.display_name = 'Huy JIT'
+                """, Integer.class, newGiaHuySubject)).isEqualTo(30);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM learner_profile WHERE first_seen_at IS NOT NULL", Integer.class))
+                .isEqualTo(3);
+        }
+    }
+
     @Test
     void seedsTheSelectedDatabaseAndPreservesEditsWhenRepeated() {
         try (var postgres = new PostgreSQLContainer("postgres:18.6-alpine")) {
@@ -49,7 +112,7 @@ class DatabaseSetupIT {
             assertThat(jdbc.queryForObject("SELECT encrypted_api_key FROM ai_provider WHERE code='DEEPSEEK' AND enabled", String.class)).isEqualTo("test-ciphertext");
             assertThat(jdbc.queryForObject("SELECT priority FROM ai_capability_route WHERE model='deepseek-flash' AND NOT enabled", Integer.class)).isEqualTo(17);
             assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class))
-                .containsExactly("001", "002", "003");
+                .containsExactly("001", "002", "003", "004", "005", "006", "007");
         }
     }
 }

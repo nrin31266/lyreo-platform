@@ -153,7 +153,7 @@ make mobile
   retries once on `401`, then invalidates the session. Core RFC 9457 errors are normalized with
   their stable code, field violations and correlation ID.
 - **OIDC callback**: The Development Build returns to `lyreo://auth/callback`. Run
-  `make keycloak-seed` after pulling callback configuration changes so an existing realm is updated.
+  `make setup` after pulling callback configuration changes so an existing realm is updated.
 - **Typecheck**:
   ```bash
   pnpm --filter @lyreo/mobile typecheck

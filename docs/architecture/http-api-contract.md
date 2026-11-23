@@ -207,3 +207,97 @@ publication validates current saved content on the server.
 carry test/question revisions; AI uses the current saved Part, placement, transcript and documents.
 Saving pins the question publication into that test draft; publishing the whole test is separate.
 Learner sessions keep the publication/question/media evidence captured at start.
+
+<a id="learner-profile-onboarding-and-admin-directory"></a>
+## Learner profile, onboarding and Admin directory
+
+Self-service routes require `LEARNER` and derive ownership from the authenticated
+JWT subject. Admin directory routes require `ADMIN`.
+
+| Operation | Contract |
+|---|---|
+| `GET /api/v1/learner/profile` | Returns `{userId,onboarded,profile}`. Before completion, `profile` is null. |
+| `PUT /api/v1/learner/onboarding` | Accepts `{goal,currentLevel,dailyMinutes}`. Returns the saved profile DTO directly. Repeat requests return the current DTO and keep later edits. |
+| `PATCH /api/v1/learner/profile` | Returns the updated profile DTO directly. Omitted fields keep their values. Null clears `displayName` or `focusArea`. Before completion, returns `409`. |
+| `GET /api/v1/admin/learners` | Accepts `query` (name/email, case-insensitive literal substring, max 120 characters), optional `status=PENDING\|COMPLETED`, zero-based `page` (default 0), and `size` (default 20, 1–100). Returns `{items,total,page,size}` ordered by first-seen time descending and then learner ID descending. |
+| `GET /api/v1/admin/learners/{learnerId}` | Returns a directory entry or `404`. Directory entries contain `learnerId`, `displayName`, `email`, `firstSeenAt`, `onboardingStatus`, `onboardingCompletedAt`, `goal`, `currentLevel`, `dailyMinutes`, `focusArea`, `avatarPreset`, and `avatarUploadId`. Unset values are null. |
+| `PATCH /api/v1/admin/learners/{learnerId}` | Changes `displayName` and/or `avatarPreset` and returns the directory entry. Only learners already in the directory are editable. |
+| `GET /api/v1/learner/profile/avatar` and `GET /api/v1/admin/learners/{learnerId}/avatar` | Return the uploaded PNG for the authorized viewer, or `404` when the profile uses initials or a preset. |
+| `PUT /api/v1/learner/profile/avatar` and `PUT /api/v1/admin/learners/{learnerId}/avatar` | Accept a multipart `file` and return the updated profile DTO or directory entry, respectively. Learner uploads require a completed onboarding. |
+
+Writes accept `goal` values `CONVERSATION`, `WORK`, `TOEIC`, and `UNDECIDED`.
+`currentLevel` accepts `A1`, `A2`, `B1`, `B2`, `C1`, `C2`, and `UNKNOWN`.
+`dailyMinutes` is an integer from 5 to 240. Profile edits can also set `displayName`
+(trimmed, at most 80 characters, blank clears it) and `focusArea` (`LISTENING`,
+`SPEAKING`, `VOCABULARY`, or `GRAMMAR`). Existing stored values remain readable.
+The existing preferences endpoints own preferences. Editing a profile and completing
+onboarding leave saved preferences intact.
+
+Profile DTOs and directory entries expose nullable `avatarPreset` and
+`avatarUploadId`. Clients render initials when both are null. Admin chooses a stable
+background color from the learner ID. The picker groups preset IDs by collection:
+
+| Collection | Preset IDs |
+|---|---|
+| Animals | `BEAR`, `PANDA`, `RED_PANDA`, `KOALA`, `LION`, `PENGUIN`, `GIRAFFE`, `ORCA`, `TOUCAN` |
+| Flowers | `FLOWER_HEATHER`, `FLOWER_CLIMBING_LILY`, `FLOWER_CHRYSANTHEMUMS`, `FLOWER_ROSES_LILACS`, `FLOWER_IRISES`, `FLOWER_POTTED_PANSIES` |
+| Characters | `PEEP_CURLS`, `PEEP_BEANIE`, `PEEP_BUN`, `PEEP_HEADSCARF`, `PEEP_LONG_HAIR`, `PEEP_QUIFF` |
+| Comics | `COMIC_MILO`, `COMIC_LUNA`, `COMIC_NOVA`, `COMIC_KYO`, `COMIC_MIKA`, `COMIC_ARI` |
+
+The earlier `CAT`, `DOG`, `FOX`, and `RABBIT` presets remain valid in the API.
+Admin displays initials for these saved presets.
+Setting a preset or clearing it with null replaces the current avatar. Uploads
+accept JPEG and PNG up to 2 MiB and dimensions up to 4096 pixels per side. Core
+stores one metadata-free 256 × 256 PNG per learner. Use `avatarUploadId` as the
+avatar revision when fetching authorized image bytes.
+
+First successful use of a Learner API records `firstSeenAt` once. A learner is
+listed even before completion. Keycloak remains the role authority and Identity
+provides the email snapshot through the `identity_user_directory` read view.
+
+### Mobile examples
+
+A first profile read returns:
+
+```json
+{"userId":"6eca0ef7-d80d-42e5-b694-d010a45ac233","onboarded":false,"profile":null}
+```
+
+Complete onboarding with:
+
+```json
+{"goal":"CONVERSATION","currentLevel":"A2","dailyMinutes":10}
+```
+
+The completion response is a profile DTO. A later GET wraps this same DTO in
+`{userId,onboarded:true,profile}`.
+
+```json
+{
+  "learnerId":"6eca0ef7-d80d-42e5-b694-d010a45ac233",
+  "displayName":null,
+  "currentLevel":"A2",
+  "goal":"CONVERSATION",
+  "dailyMinutes":10,
+  "focusArea":null,
+  "avatarPreset":null,
+  "avatarUploadId":null,
+  "preferences":{
+    "preferredAccent":"US",
+    "translation":"AFTER_ATTEMPT",
+    "sentenceIpa":"TAP_TO_SHOW",
+    "vocabularyNotes":"AFTER_ATTEMPT",
+    "grammarNotes":"AFTER_ATTEMPT",
+    "thoughtGroups":true,
+    "karaokeHighlighting":true,
+    "properNounHints":true,
+    "defaultPlaybackSpeed":1.0
+  },
+  "starterSuggestion":{"topic":"CONVERSATION","difficulty":"BEGINNER","dailyMinutes":10}
+}
+```
+
+To edit, send `{"displayName":"Mai","focusArea":"LISTENING","dailyMinutes":15}`.
+The response has the same DTO shape with the new fields and
+`"starterSuggestion":{"topic":"CONVERSATION","difficulty":"BEGINNER","dailyMinutes":15}`.
+A following GET returns the updated DTO in its wrapper.

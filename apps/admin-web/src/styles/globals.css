@@ -49,6 +49,18 @@
 }
 
 :root {
+    --avatar-rose-surface: #f4dbe4;
+    --avatar-rose-ink: #732a4c;
+    --avatar-peach-surface: #fae0cb;
+    --avatar-peach-ink: #773819;
+    --avatar-yellow-surface: #f7e9b4;
+    --avatar-yellow-ink: #634b05;
+    --avatar-mint-surface: #d5eee1;
+    --avatar-mint-ink: #1e5940;
+    --avatar-sky-surface: #dbe9fa;
+    --avatar-sky-ink: #264779;
+    --avatar-lilac-surface: #e8dff8;
+    --avatar-lilac-ink: #513579;
     --success: #2E7D5B;
     --warning: #8A5918;
     --background: oklch(1 0 0);
