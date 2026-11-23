@@ -60,8 +60,8 @@ CLI cài gói từ điển đã xác minh. Admin biên tập mục đã có và 
 
 Kho ngôn ngữ có bảng 44 âm theo [IELTS Fighter](https://ielts-fighter.com/tin-tuc/bang-phien-am-tieng-anh-ipa_mt1567386908.html),
 đối chiếu với [bảng IPA tương tác chính thức](https://www.internationalphoneticassociation.org/IPAcharts/IPA_charts_TI/IPA_charts_TI.html).
-Âm mẫu phát trực tiếp từ 43 MP3 của IELTS Fighter. Từ ví dụ dùng bản ghi Commons đã cắt khoảng
-im lặng, có ghi giấy phép và tác giả. Admin có thể phát riêng âm, riêng từ, hoặc âm rồi đến từ.
+Âm mẫu phát trực tiếp từ 43 MP3 của IELTS Fighter. Từ ví dụ dùng bản ghi gốc từ Commons,
+có ghi giấy phép và tác giả. Admin có thể phát riêng âm, riêng từ, hoặc âm rồi đến từ.
 Mục /ʊə/ dùng [âm mẫu PolyU](https://elc.polyu.edu.hk/sounds/lesson4-2.htm)
 và [từ tour /tʊə/ từ Oxford](https://www.oxfordlearnersdictionaries.com/definition/english/tour_1)
 vì tệp /ʊə/ của IELTS Fighter trùng với tệp /uː/.
