@@ -223,7 +223,9 @@ public final class AiInvocationService {
                 || route.capability() == AiCapability.ALIGNMENT && "WAV2VEC2_ASR_BASE_960H".equals(model);
         }
         if (!confirmedFreeProviders.contains(provider)) return false;
-        return (provider.equals("GEMINI") && model.equals("gemini-3.5-flash-lite"))
+        return (provider.equals("AZURE_SPEECH") && route.capability() == AiCapability.PRONUNCIATION_ASSESSMENT
+                    && model.equals("pronunciation-assessment"))
+            || (provider.equals("GEMINI") && model.equals("gemini-3.5-flash-lite"))
             || (provider.equals("GROQ") && Set.of("whisper-large-v3-turbo", "openai/gpt-oss-120b").contains(model));
     }
 
@@ -244,7 +246,14 @@ public final class AiInvocationService {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             digest.update((prompt == null ? "" : prompt).getBytes(StandardCharsets.UTF_8));
-            digest.update(String.valueOf(input == null ? Map.of() : input).getBytes(StandardCharsets.UTF_8));
+            if (input != null && input.get("audio") instanceof byte[] audio) {
+                var fields = new LinkedHashMap<>(input);
+                fields.remove("audio");
+                digest.update(fields.toString().getBytes(StandardCharsets.UTF_8));
+                digest.update(audio);
+            } else {
+                digest.update(String.valueOf(input == null ? Map.of() : input).getBytes(StandardCharsets.UTF_8));
+            }
             return HexFormat.of().formatHex(digest.digest());
         } catch (Exception impossible) {
             throw new IllegalStateException(impossible);

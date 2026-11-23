@@ -1,5 +1,7 @@
 package com.lyreo.speechassessment.infrastructure;
 
+import com.lyreo.speechassessment.application.RecordingLimits;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import tools.jackson.databind.ObjectMapper;
 import com.lyreo.ai.application.execution.AiInvocationService;
 import com.lyreo.platform.storage.ObjectStoragePort;
@@ -12,6 +14,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 @Configuration
+@EnableConfigurationProperties(RecordingLimits.class)
 public class SpeechAssessmentConfiguration {
     @Bean
     SpeechAssessmentRepository speechAssessmentRepository(NamedParameterJdbcTemplate jdbc) {

@@ -2,7 +2,7 @@
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3.12 python3-pip ffmpeg libsndfile1 \
+    && apt-get install -y --no-install-recommends python3.12 python3-pip ffmpeg libsndfile1 libasound2t64 libssl3t64 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

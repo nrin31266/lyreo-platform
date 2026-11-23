@@ -1,8 +1,9 @@
 # CPU/default image. AI_RUNTIME_MODE=mock is suitable for staging smoke tests without GPU.
-FROM python:3.12-slim
+FROM python:3.12-slim-bookworm
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends espeak-ng && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends espeak-ng libasound2 libssl3 ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir uv
 COPY apps/ai-service/pyproject.toml apps/ai-service/uv.lock ./
 # Install runtime dependencies only; the application is imported directly from /app/app.

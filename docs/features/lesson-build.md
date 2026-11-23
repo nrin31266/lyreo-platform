@@ -110,16 +110,19 @@ sets human-review revisions. Legacy SEMANTIC/IPA jobs stay retired; explicit wri
 unsupported options. GET does not persist normalization. The foundation schema includes CONTENT/profile metadata, auto-continuation, publisher, expiring diagnostics, metadata versions and job results. Published content guards stay intact.
 
 Admin checks a complete YouTube video URL after 350 ms of inactivity, cancels older requests on URL
-changes, and offers checked English captions when inspection finds a usable track. An uploaded
-caption file takes precedence. YouTube metadata inspection caches the available English track kind
+changes, and selects English captions by default when inspection finds a publisher-provided track.
+Auto-generated captions require an explicit selection. An uploaded caption file takes precedence.
+YouTube metadata inspection caches the available English track kind
 and language. Core uses
 yt-dlp to fetch the selected track during PREPARE. Draft timing evidence retains the normalized cue
 anchors and transcript source. An uploaded SRT or WebVTT file is parsed from at most 256 KiB of
 UTF-8 text. Use video-relative timestamps and select a range that contains the complete cues you
 want to include. Common explicit sound labels, such as `(plane roaring)` or `[applause]`, and
 music symbols are removed before making cue windows. Other bracketed speech and lyrics remain
-available for review. The word aligner receives the prepared audio and the cue windows. Existing
-drafts without a caption choice keep their configured STT flow.
+available for review. For automatic YouTube captions, draft sentences follow sentence punctuation
+across cues where possible. A track without sentence boundaries keeps its cue rows for review.
+The word aligner receives the prepared audio and the original cue windows. Existing drafts without
+a caption choice keep their configured STT flow.
 
 Profile estimates use word-weighted CEFR median and a 60% majority for type; otherwise MIXED or
 UNKNOWN. Admin overrides are protected. IPA uses eSpeak raw/display fields and versions. Cloze
@@ -194,7 +197,9 @@ its primary action at the page bottom. A fallback poll reconciles successor jobs
 refetch race. Publication/save menus retain their action label while closing. No mandatory approval checkbox
 remains. Creation options are supplied before inference for all three source modes.
 
-Preview offers View, Dictation support levels and Shadowing playback/karaoke/rate/loop, with no scoring.
+Preview offers View, Dictation support levels and Shadowing playback/karaoke/rate/loop. Each selected
+Shadowing sentence can open the [Admin pronunciation dialog](../requirements/lesson.md#fr-lsn-006a--admin-pronunciation-pilot)
+in the transcript and in Shadowing Preview.
 Readiness comes from server validation. Publish takes an immutable content/activity snapshot atomically
 and records actor/time; retries are idempotent. Metadata is independently editable with version checks.
 Duplicate creates a new editable draft with reused media/results and fresh sentence IDs; no inference

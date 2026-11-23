@@ -24,6 +24,14 @@ prompt/input/options. FastAPI dispatches runtime/provider and returns normalized
 output. Large media should use an authorized URL/file reference rather than embedding base64;
 storage authority remains outside AI.
 
+For `PRONUNCIATION_ASSESSMENT`, Core sends one bounded normalized PCM WAV and `referenceText`
+as multipart to `/v1/speech/pronunciation-assessment`. FastAPI consumes Azure Speech SDK Continuous
+Recognition through end of stream, aligns final words to the reference for omissions and insertions,
+and returns versioned feedback with nullable scores and word/phoneme ranges relative to the WAV.
+Core owns routing and retries. The Azure F0 pilot runs one FastAPI replica with one worker process
+and a one-slot semaphore until recognition stops. The response contract contains normalized feedback.
+Core retains invocation metadata and discards the normalized attempt details when their TTL expires.
+
 ## Runtime and routing
 
 `mock` is deterministic dev/CI capability execution; `local` lazy-loads WhisperX STT and English forced alignment.

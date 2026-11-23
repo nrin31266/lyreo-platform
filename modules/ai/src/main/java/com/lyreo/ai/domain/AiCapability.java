@@ -10,6 +10,7 @@ public enum AiCapability {
     GENERAL_LLM,
     REASONING_LLM,
     TTS,
+    PRONUNCIATION_ASSESSMENT,
     PRONUNCIATION_JUDGE,
     NLP
 }

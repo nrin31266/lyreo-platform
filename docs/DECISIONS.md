@@ -346,3 +346,10 @@ for handoff and wire examples.
 Learners edit their own appearance. Admin can help edit the display name and avatar
 of learners already in the directory. Refer to [profile requirements](requirements/identity-learner.md#fr-idn-006--learner-profile-and-admin-directory)
 and the [HTTP contract](architecture/http-api-contract.md#learner-profile-onboarding-and-admin-directory).
+
+## D-038 — Azure Speech for the Admin pronunciation pilot (2026-11-23)
+
+Use Azure Speech F0 Continuous Recognition for Admin Shadowing trials. Keep the accepted sentence
+revision and private trial data in Core for 24 hours. The pilot establishes evidence for any later
+Learner scoring policy. See [Lesson requirements](requirements/lesson.md#fr-lsn-006a--admin-pronunciation-pilot)
+and the [execution boundary](architecture/ai-execution.md).

@@ -156,7 +156,9 @@ public final class LessonAuthoringJobHandler implements JobHandler {
                 sentence.coarseEndMs=((Number)line.get("end_ms")).longValue();
                 rows.add(sentence);
             }
-            lesson.sentences=rows;lesson.timingStatus="MISSING";
+            lesson.sentences = track != null && track.automatic()
+                ? AuthoringText.joinCaptionCues(rows, lesson.timingEvidence) : rows;
+            lesson.timingStatus="MISSING";
             LessonAuthoringService.alignmentSegments(lesson);
             return;
         }

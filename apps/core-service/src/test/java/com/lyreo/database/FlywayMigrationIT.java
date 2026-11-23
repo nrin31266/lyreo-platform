@@ -106,7 +106,7 @@ class FlywayMigrationIT {
     void verifiesConsolidatedBaselineMigrationsSucceeded() {
         MigrationInfo[] applied = flyway.info().applied();
 
-        assertThat(applied).hasSize(7).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
+        assertThat(applied).hasSize(8).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
@@ -118,7 +118,8 @@ class FlywayMigrationIT {
         assertThat(applied[4].getDescription()).isEqualTo("learner avatars");
         assertThat(applied[5].getDescription()).isEqualTo("learner avatar portraits");
         assertThat(applied[6].getDescription()).isEqualTo("learner avatar catalog");
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("007");
+        assertThat(applied[7].getDescription()).isEqualTo("admin pronunciation attempt");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("008");
     }
 
     @Test
@@ -198,6 +199,7 @@ class FlywayMigrationIT {
             "toeic_attempt",
             "toeic_attempt_answer",
             "speech_attempt",
+            "admin_pronunciation_attempt",
             "curriculum_path",
             "curriculum_section",
             "curriculum_item",

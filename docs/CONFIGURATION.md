@@ -69,6 +69,22 @@ Install that binary for host execution; the AI Docker image includes it. Admin c
 a US/UK target reference accent and disabled/on-demand/pregenerate timing policy per draft.
 AI uses the configured free-eligible GENERAL_LLM route. Accent selection does not detect source accent.
 
+### Admin pronunciation pilot
+
+Use an Azure Speech F0 resource and append `AZURE_SPEECH` to Core's
+`AI_CONFIRMED_FREE_PROVIDERS`. In **Admin → AI settings → Providers**, save and enable
+`AZURE_SPEECH` with its key. Add an enabled `PRONUNCIATION_ASSESSMENT` route with model
+`pronunciation-assessment`, priority 0 and fallback disabled. Core encrypts and forwards the key.
+FastAPI uses the resource region, `en-US`, and disabled Prosody. Run a single FastAPI replica
+with a single worker process against the F0 resource.
+
+`lyreo.speech-assessment.recording` defines `speed-factor`, `buffer-seconds`, `min-seconds`,
+`hard-cap-seconds`, and `max-upload-bytes`. The default recording window is twice the sample
+duration plus six seconds, clamped to 12–60 seconds, with an 8 MiB upload limit. Core allows 1.5
+extra seconds when validating decoded audio. Core blocks access at 24 hours and its scheduled
+cleanup removes expired objects and details. The pilot review uses 40–60 samples annotated separately
+by two listeners. Record observations within the 24-hour window and retain aggregate results.
+
 ### Kokoro voice previews
 
 Keep Kokoro library 0.9.4 / `hexgrad/Kokoro-82M` v1.0 for the English catalog.

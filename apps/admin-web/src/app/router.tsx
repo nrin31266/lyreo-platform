@@ -63,6 +63,7 @@ export function AppRouter() {
         <Route path="lessons/channels" element={<Navigate to="/lessons/organization?tab=channels" replace />} />
         <Route path="lessons/new" element={<LessonBuilderPage />} />
         <Route path="lessons/:lessonId" element={<LessonDetailPage />} />
+        <Route path="lessons/:lessonId/pronunciation" element={<Navigate to=".." relative="path" replace />} />
         <Route path="jobs" element={<JobsPage />} />
         <Route path="learners" element={<LearnersPage />} />
         <Route path="learners/:learnerId" element={<LearnerDetailPage />} />

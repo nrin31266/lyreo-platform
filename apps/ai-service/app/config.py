@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     deepseek_base_url: str = 'https://api.deepseek.com'
     gemini_base_url: str = 'https://generativelanguage.googleapis.com'
 
+    azure_speech_region: str = ''
+    azure_speech_endpoint: str = ''
+    azure_speech_language: str = 'en-US'
+    azure_speech_enable_prosody: bool = False
+
     max_request_bytes: int = 10_485_760
 
 

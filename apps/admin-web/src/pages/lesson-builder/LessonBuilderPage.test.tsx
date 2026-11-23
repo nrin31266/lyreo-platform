@@ -8,7 +8,7 @@ import { createInstance } from 'i18next';
 import { I18nextProvider, initReactI18next } from 'react-i18next';
 import { adminI18nResources } from '@lyreo/i18n';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { api as request } from '@/lib/api';
+import { api as request, http } from '@/lib/api';
 import { LessonBuilderPage } from './LessonBuilderPage';
 import * as api from './lesson-builder.api';
 import * as catalog from '@/pages/lessons/catalog.api';
@@ -72,6 +72,20 @@ it('sends the new sentence with a boolean cloze flag before running processing',
 it('retains local input on save conflict and background refetch',async()=>{vi.mocked(api.saveChanges).mockRejectedValue(new Error('Revision conflict'));const client=await show();fireEvent.change(screen.getByRole('textbox',{name:'Translation'}),{target:{value:'Keep this edit'}});fireEvent.keyDown(document,{key:'s',metaKey:true});await screen.findByText('Revision conflict');client.setQueryData(['authoring','lesson-a'],{...original,revision:9});await waitFor(()=>expect(screen.getByRole('textbox',{name:'Translation'})).toHaveValue('Keep this edit'));});
 it('saves before explicit update and states which steps will run',async()=>{await show({...structuredClone(original),alignmentRequired:true,contentComplete:false,contentNeeded:true});fireEvent.change(screen.getByRole('textbox',{name:'Sentence 1'}),{target:{value:'Hello again.'}});fireEvent.click(screen.getByRole('button',{name:'Update affected parts'}));expect(await screen.findByText(/Will run: alignment/)).toBeInTheDocument();expect(api.runLesson).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:'Start processing'}));await waitFor(()=>expect(api.runLesson).toHaveBeenCalledWith('lesson-a',2));});
 it('preview shows real blockers and does not require confirmation checkboxes',async()=>{vi.mocked(api.fetchReadiness).mockResolvedValue({ready:false,blockers:['IPA_MISSING:1']});await show();fireEvent.click(screen.getByRole('button',{name:'Preview & publish'}));expect(await screen.findByText(/IPA missing: edit manually/)).toBeInTheDocument();expect(screen.getByRole('button',{name:'Publish lesson'})).toBeDisabled();expect(screen.queryByRole('checkbox',{name:/checked/})).not.toBeInTheDocument();});
+it('shows that Preview is opening and restores the action when readiness fails', async () => {
+  let rejectReadiness: (failure: Error) => void = () => {};
+  vi.mocked(api.fetchReadiness).mockImplementationOnce(() => new Promise((_, reject) => { rejectReadiness = reject; }));
+  await show();
+  fireEvent.click(screen.getByRole('button', { name: 'Preview & publish' }));
+  const opening = screen.getByRole('button', { name: 'Opening preview…' });
+  expect(opening).toBeDisabled();
+  expect(opening).toHaveAttribute('aria-busy', 'true');
+  await waitFor(() => expect(api.fetchReadiness).toHaveBeenCalledTimes(1));
+  rejectReadiness(new Error('Readiness unavailable'));
+  expect(await screen.findByText('Readiness unavailable')).toBeVisible();
+  await userEvent.click(screen.getByRole('button', { name: 'Preview & publish' }));
+  expect(await screen.findByRole('dialog', { name: 'Preview & publish' })).toBeVisible();
+});
 it('publishes the current revision from a ready preview',async()=>{vi.mocked(api.publishLesson).mockResolvedValue({...original,status:'PUBLISHED',revision:2});await show();fireEvent.click(screen.getByRole('button',{name:'Preview & publish'}));fireEvent.click(await screen.findByRole('button',{name:'Publish lesson'}));await waitFor(()=>expect(api.publishLesson).toHaveBeenCalledWith('lesson-a',1));});
 it('shows published lessons without another publish action or readiness request',async()=>{
   await show({...structuredClone(original),status:'PUBLISHED'});
@@ -81,6 +95,79 @@ it('shows published lessons without another publish action or readiness request'
   expect(screen.queryByRole('button',{name:'Publish lesson'})).not.toBeInTheDocument();
   expect(api.fetchReadiness).not.toHaveBeenCalled();
   expect(api.publishLesson).not.toHaveBeenCalled();
+});
+it('tests the selected sentence in place and submits its saved revision', async () => {
+  const queued = { status: 'QUEUED', revision: 1 };
+  let attempt: object = queued;
+  vi.mocked(request).mockImplementation(async path => path.startsWith('/api/v1/admin/lesson-authoring/')
+    ? { revision: 1, maxDurationSeconds: 12, maxUploadBytes: 8388608, startMs: 0, endMs: 1000 }
+    : attempt);
+  const expiresAt = new Date(Date.now() + 86_400_000).toISOString();
+  const submit = vi.spyOn(http, 'post').mockResolvedValue({ data: { attemptId: 'attempt', jobId: 'job', expiresAt } });
+  const recording = vi.spyOn(http, 'get').mockResolvedValue({ data: new Blob(['wave'], { type: 'audio/wav' }) });
+  const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+  vi.stubGlobal('URL', class extends URL {
+    static createObjectURL = () => 'blob:test';
+    static revokeObjectURL = () => {};
+  });
+  try {
+    const client = await show({ ...original, status: 'PUBLISHED' });
+    await userEvent.click(screen.getByRole('button', { name: 'Test pronunciation for sentence 1' }));
+    const editorDialog = within(await screen.findByRole('dialog', { name: 'Test pronunciation' }));
+    expect(editorDialog.getByText('Hello world.')).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    expect(await screen.findByRole('button', { name: 'Preview' })).toBeVisible();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    const preview = within(await screen.findByRole('dialog'));
+    await userEvent.click(preview.getByRole('button', { name: 'Shadowing' }));
+    await userEvent.click(preview.getByRole('button', { name: 'Test pronunciation' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Test pronunciation' }));
+    expect(dialog.getByText('Hello world.')).toBeVisible();
+    expect(await dialog.findByText('Record or upload up to 12 seconds.')).toBeInTheDocument();
+    await userEvent.upload(dialog.getByLabelText('Upload audio'), new File(['wave'], 'test.wav', { type: 'audio/wav' }));
+    expect(await dialog.findByRole('group', { name: 'Preview the recording before submitting' })).toBeInTheDocument();
+    await userEvent.click(dialog.getByRole('button', { name: 'Assess recording' }));
+    expect(await screen.findByText('Waiting to assess')).toBeInTheDocument();
+    expect(submit.mock.calls[0][0]).toContain('/sentences/s1/pronunciation-attempts');
+    expect((submit.mock.calls[0][1] as FormData).get('revision')).toBe('1');
+    expect(submit.mock.calls[0][2]?.headers?.['Idempotency-Key']).toEqual(expect.any(String));
+
+    attempt = {
+      status: 'SUCCEEDED', revision: 1, referenceText: 'Hello world.',
+      result: {
+        outcome: 'SCORED', durationMs: 1000, transcript: 'Hello',
+        scores: { overall: 80, accuracy: 90, fluency: 90, completeness: 50 },
+        words: [
+          { text: 'Hello', referenceIndex: 0, error: 'NONE', startMs: 0, endMs: 400, phonemes: [] },
+          { text: 'world', referenceIndex: 1, error: 'OMISSION', startMs: null, endMs: null, phonemes: [] },
+        ],
+      },
+    };
+    await client.invalidateQueries({ queryKey: ['job', 'job'] });
+    const results = within(await screen.findByRole('region', { name: 'Assessment results' }));
+    expect(results.getByRole('button', { name: /Review “Hello”/ })).toBeInTheDocument();
+    const missingWord = results.getByRole('button', { name: /Review “world”.*Missing/ });
+    missingWord.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(missingWord).toHaveAttribute('aria-pressed', 'true');
+    expect(missingWord).toHaveTextContent('Missing');
+    expect(results.getByText('No matching segment in your recording.')).toBeInTheDocument();
+    expect(results.queryByRole('button', { name: 'Play world' })).not.toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(await preview.findByRole('button', { name: 'Words to review · 1' }));
+    expect(await screen.findByRole('button', { name: /Review “world”.*Missing/ })).toBeVisible();
+    client.setQueryData(['authoring', 'lesson-a'], { ...original, status: 'PUBLISHED', revision: 2 });
+    expect(await screen.findByText(/This assessment uses revision 1/)).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    expect(await preview.findByRole('button', { name: 'Test pronunciation' })).toBeVisible();
+  } finally {
+    cleanup();
+    submit.mockRestore();
+    recording.mockRestore();
+    pause.mockRestore();
+    vi.unstubAllGlobals();
+  }
 });
 it('shows the backend failure immediately in history and renders output as text',async()=>{const job={jobId:'job1',operation:'CONTENT',status:'FAILED',errorCode:'CONTENT_PARTIAL',errorMessage:'sentence=41: translation missing',usage:[]};vi.mocked(api.fetchDiagnostics).mockResolvedValue([{payload:{output:'<script>alert(1)</script>'}}]);const {container}=await (async()=>{await show({...original,jobs:[job]});return {container:document.body};})();fireEvent.click(screen.getByRole('button',{name:/Jobs for this lesson/}));expect(await screen.findByText(/CONTENT_PARTIAL: sentence=41/)).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Debug'}));await screen.findByText(/<script>alert/);expect(container.querySelector('script')).toBeNull();});
 it('returns to a clean state when an edit is reverted',async()=>{
