@@ -12,7 +12,7 @@ then open only the linked canonical context. Do not scan all documentation for a
 | Identity, auth, OIDC, onboarding, learner profile | [requirements/identity-learner.md](requirements/identity-learner.md) |
 | Lesson content, build, dictation, shadowing | [requirements/lesson.md](requirements/lesson.md), [features/lesson-build.md](features/lesson-build.md) |
 | AI provider, routing, credentials, invocation | [requirements/ai.md](requirements/ai.md), [architecture/ai-execution.md](architecture/ai-execution.md) |
-| Lexicon search, vocabulary SRS, review | [requirements/lexicon-vocabulary.md](requirements/lexicon-vocabulary.md) |
+| Lexicon search, vocabulary catalog, SRS | [requirements/lexicon-vocabulary.md](requirements/lexicon-vocabulary.md) |
 | Grammar/TOEIC practice, scoring, import | [requirements/grammar-toeic.md](requirements/grammar-toeic.md) |
 | Curriculum paths, gamification, XP/Diamond/missions | [requirements/curriculum-gamification.md](requirements/curriculum-gamification.md) |
 | Analytics, notification, chat | [requirements/analytics-notification-chat.md](requirements/analytics-notification-chat.md) |

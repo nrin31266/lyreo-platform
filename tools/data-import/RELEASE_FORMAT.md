@@ -149,3 +149,33 @@ A private Drive file can contain a JSON index with `format=lyreo.archive-parts.v
 part bounds and hashes, concatenates in order and verifies the original archive SHA before normal
 package validation. Remote index children must be HTTPS Drive files. Index URLs are not package
 content or credentials. An archive split never changes its package/manifest version or checksum.
+
+## Vocabulary clean schema 1.0.0
+
+`packs.jsonl` stores bilingual titles and a source topic. `units.jsonl` stores the pack ID,
+CEFR level, position and title. `entries.jsonl` stores the unit ID, position, source word ID,
+term, English study content and media roles. Study content carries IPA for UK and US, ordered
+senses and examples, collocations, word family, synonyms and antonyms. Vietnamese meanings
+are nullable and initially empty. Media roles are `image`, `ukAudio`, `usAudio`, `exampleAudio`
+and optional `secondExampleAudio`. References point to SHA-256 IDs in `assets.jsonl`, whose
+rows retain the package-relative path, MIME type, size and matched source paths.
+
+Source topic, unit identity and word ID remain stable for the pinned revision. The archive
+root is `vocabulary-1.0.0/`. The license and validation report are included. See the
+[operator workflow](README.md#vocabulary-word-atlas) for the pinned input and installation.
+
+
+### Vocabulary catalog 1.3.0
+
+The catalog transport contains the manifest, license, report and four JSONL collections.
+Its manifest authenticates the media inventory, while the installer reads the bytes from shared R2
+by hash and verifies size and SHA-256. The separately built 1.0.0 base may carry all media bytes
+for maintainer provisioning. It is the pinned source for enriched releases.
+
+Entries carry normalized dotless part-of-speech tags, Vietnamese `meaningVi` by sense, `examplesVi` and `collocationsVi` lists parallel to
+English text, enriched `synonyms`, `antonyms` and `family` items, and a boolean `needsReview` flag
+for exception follow-up. Small CEFR buckets within a topic are merged with adjacent levels and split
+into balanced 17–30 word study units. The TOEIC pack reuses base media and adds `contextNotes` with a part of speech,
+Vietnamese gloss and source group IDs. Release provenance pins the base manifest, offline
+translation file and model, and TOEIC group inventory. The stable `toeic:<source-id>` distinguishes
+TOEIC study entries from their general vocabulary counterparts.

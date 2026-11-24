@@ -26,6 +26,7 @@ const LessonBuilderPage = lazy(() =>
 const OrganizationPage = lazy(() => import("@/pages/lessons/OrganizationPage").then(m => ({default: m.OrganizationPage})));
 const LearnersPage = lazy(() => import("@/pages/learners/LearnersPage").then(m => ({ default: m.LearnersPage })));
 const LearnerDetailPage = lazy(() => import("@/pages/learners/LearnersPage").then(m => ({ default: m.LearnerDetailPage })));
+const VocabularyPage = lazy(() => import("@/pages/vocabulary/VocabularyPage").then(m => ({ default: m.VocabularyPage })));
 const LexiconPage = lazy(() => import("@/pages/lexicon/LexiconPage").then(m => ({ default: m.LexiconPage })));
 const LexiconDetailPage = lazy(() => import("@/pages/lexicon/LexiconDetailPage").then(m => ({ default: m.LexiconDetailPage })));
 const PhoneticsPage = lazy(() => import("@/pages/phonetics/PhoneticsPage").then(m => ({ default: m.PhoneticsPage })));
@@ -69,6 +70,7 @@ export function AppRouter() {
         <Route path="learners/:learnerId" element={<LearnerDetailPage />} />
         <Route path="settings/ai" element={<AiSettingsPage />} />
         <Route path="curriculum" element={<CurriculumPage />} />
+        <Route path="vocabulary" element={<VocabularyPage />} />
         <Route path="lexicon" element={<LexiconPage />} />
         <Route path="lexicon/:id" element={<LexiconDetailPage />} />
         <Route path="phonetics" element={<PhoneticsPage />} />

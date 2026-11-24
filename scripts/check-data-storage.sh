@@ -30,16 +30,20 @@ PY
 
 case "${1:-}" in
   --database-only) ;;
-  '')
+  ''|--require-r2)
     core_storage=$(storage_identity apps/core-service local)
     data_storage=$(storage_identity tools/data-import r2)
     [[ "$core_storage" == "$data_storage" ]] || {
       echo 'Core and importer target different storage. Align STORAGE_MODE and the local root or R2 endpoint/bucket in both .env files before importing.' >&2
       exit 1
     }
+    if [[ "${1:-}" == --require-r2 && "$core_storage" != r2:* ]]; then
+      echo 'Vocabulary setup requires the shared R2 storage. Set STORAGE_MODE=r2 in Core and importer .env files.' >&2
+      exit 1
+    fi
     echo "Core and importer storage match (${core_storage%%:*}); existing media will be verified and reused."
     ;;
-  *) echo 'Usage: check-data-storage.sh [--database-only]' >&2; exit 2 ;;
+  *) echo 'Usage: check-data-storage.sh [--database-only|--require-r2]' >&2; exit 2 ;;
 esac
 
 database_identity() (

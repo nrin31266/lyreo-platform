@@ -106,7 +106,7 @@ class FlywayMigrationIT {
     void verifiesConsolidatedBaselineMigrationsSucceeded() {
         MigrationInfo[] applied = flyway.info().applied();
 
-        assertThat(applied).hasSize(8).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
+        assertThat(applied).hasSize(9).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
@@ -119,7 +119,8 @@ class FlywayMigrationIT {
         assertThat(applied[5].getDescription()).isEqualTo("learner avatar portraits");
         assertThat(applied[6].getDescription()).isEqualTo("learner avatar catalog");
         assertThat(applied[7].getDescription()).isEqualTo("admin pronunciation attempt");
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("008");
+        assertThat(applied[8].getDescription()).isEqualTo("admin vocabulary catalog");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("009");
     }
 
     @Test
@@ -175,6 +176,9 @@ class FlywayMigrationIT {
             "lexicon_sense",
             "lexicon_pronunciation",
             "lexicon_translation",
+            "vocabulary_pack",
+            "vocabulary_unit",
+            "vocabulary_unit_entry",
             "vocabulary_card",
             "vocabulary_review",
             "media_blob",

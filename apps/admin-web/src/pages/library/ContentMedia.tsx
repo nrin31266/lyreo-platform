@@ -9,12 +9,12 @@ import { CatalogError } from "@/pages/lessons/CatalogFeedback";
 import { RiDeleteBinLine, RiArrowGoBackLine, RiCloseLine } from "@remixicon/react";
 import type { Media } from "./library.types";
 
-export function MediaPreview({ assetId, role }: Media) {
+export function MediaPreview({ assetId, role, autoPlay, compact = false }: Media & { autoPlay?: boolean; compact?: boolean }) {
   const { t } = useTranslation("admin");
   const [url, setUrl] = useState("");
   const query = useQuery({ queryKey: ["content-media", assetId], queryFn: async ({ signal }) => (await http.get<Blob>(`/api/v1/admin/content-media/${assetId}/file`, { responseType: "blob", signal })).data, staleTime: Infinity, gcTime: 0 });
   useEffect(() => { if (!query.data) { setUrl(""); return; } const next = URL.createObjectURL(query.data); setUrl(next); return () => URL.revokeObjectURL(next); }, [query.data]);
-  return <><CatalogError error={query.error} retry={() => void query.refetch()} />{query.isPending && <p role="status" className="text-xs text-muted-foreground">{t("library.loadingMedia")}</p>}{url && (role === "audio" ? <AudioPlayer src={url} aria-label={t("library.audioPreview")} /> : <img className="max-h-64 rounded-lg object-contain" src={url} alt={t("library.imagePreview")} />)}</>;
+  return <>{!compact && <CatalogError error={query.error} retry={() => void query.refetch()} />}{query.isPending && !compact && <p role="status" className="text-xs text-muted-foreground">{t("library.loadingMedia")}</p>}{url && (role === "audio" ? <AudioPlayer src={url} autoPlay={autoPlay} aria-label={t("library.audioPreview")} /> : <img className="max-h-64 rounded-lg object-contain" src={url} alt={t("library.imagePreview")} />)}</>;
 }
 
 export function MediaEditor({ value, onChange, kind }: { value: Media[]; onChange: (value: Media[]) => void; kind?: Media['role'] }) {

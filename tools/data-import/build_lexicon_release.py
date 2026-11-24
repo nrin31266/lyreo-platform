@@ -17,7 +17,6 @@ import resource
 import shutil
 import sqlite3
 import sys
-import tarfile
 import time
 import unicodedata
 import uuid
@@ -27,6 +26,7 @@ from typing import Iterator
 from lexicon_pronunciation import accent as source_accent, pronunciation_metadata
 from lexicon_vi_baseline import stage_record
 import source_repairs
+from common import package_release
 
 from lexicon_vi_context import (
     inventory_raw_record,
@@ -233,22 +233,6 @@ def init_staging_db(db_path: Path) -> sqlite3.Connection:
         )"""
     )
     return conn
-
-
-def package_release(release: Path, archive: Path, root_name: str) -> str:
-    archive.parent.mkdir(parents=True, exist_ok=True)
-    with archive.open("wb") as output, gzip.GzipFile(filename="", mode="wb", fileobj=output, mtime=0, compresslevel=6) as compressed, tarfile.open(fileobj=compressed, mode="w") as tar:
-        for path in sorted(release.rglob("*")):
-            if not path.is_file():
-                continue
-            info = tar.gettarinfo(str(path), arcname=f"{root_name}/{path.relative_to(release).as_posix()}")
-            info.uid = info.gid = 0
-            info.uname = info.gname = ""
-            info.mtime = 0
-            info.mode = 0o644
-            with path.open("rb") as stream:
-                tar.addfile(info, stream)
-    return sha256_file(archive)
 
 
 def build(

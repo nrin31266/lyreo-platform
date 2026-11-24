@@ -9,8 +9,10 @@ forms/lemma, senses, pronunciation, source/license và Vietnamese translation st
 
 ### BR-LEX-001 — Lexicon không phải Vocabulary
 
-Lexicon là global knowledge; Vocabulary là learner-owned SRS card tham chiếu
-`headwordId` trường tồn qua các release. Vocabulary không sở hữu dictionary definition.
+Lexicon sở hữu mục từ và nghĩa phục vụ tra cứu toàn hệ thống. Vocabulary sở hữu
+nội dung học theo chủ đề và trạng thái học cá nhân. Cùng một chữ có thể mang nghĩa
+khác nhau theo ngữ cảnh. Liên kết từ điển phải tùy chọn và có căn cứ ở mức nghĩa.
+Sổ SRS hiện tại còn yêu cầu `headwordId`; danh mục bộ học hoạt động độc lập.
 
 ### FR-LEX-002 — Contextual lexical resolution
 
@@ -82,6 +84,30 @@ không tạo publication/audit mới. Phục hồi nội dung khác tạo revisi
 công bố và không có tham chiếu. Learner chỉ thấy bản công bố hoặc nguồn chưa sửa, không thấy nháp.
 Đổi release phải đối soát nguồn và bản sửa theo [Data Pipelines](../DATA_PIPELINES.md).
 
+### FR-VOC-003 — Admin quản lý bộ từ vựng
+
+Một bộ là một chủ đề, gồm các unit có cấp CEFR và thứ tự. Một mục học giữ từ,
+nghĩa Anh–Việt theo từ loại, IPA theo giọng, ví dụ và cụm từ song ngữ, ảnh và audio.
+Danh mục có 19 chủ đề Word Atlas chia theo CEFR và bộ TOEIC riêng dựa trên chú
+giải trong gói TOEIC Lyreo. Mỗi unit tối đa 30 từ. Mỗi bộ có một ảnh đại diện lấy từ ảnh minh họa Word Atlas cùng bộ, không sao chép ảnh của ByeTOEIC. Danh mục ưu tiên nghĩa Việt khi
+ngôn ngữ hệ thống là tiếng Việt. Các bản dịch tiếng Việt và từ liên quan được chuẩn bị sẵn qua gói dữ liệu đã kiểm tra; không bắt buộc duyệt thủ công từng từ. Admin có thể lọc bộ và unit, tìm từ hoặc nghĩa,
+nghe bản ghi ngay trên danh sách hoặc trong mục chi tiết, xem ảnh, đối chiếu từ điển, sửa nội dung, đánh dấu mục cần xem lại và ẩn/hiện mục, unit hoặc bộ.
+Admin có thể đổi tên, ẩn bộ hoặc unit và cập nhật CEFR của unit. Bộ hoặc unit ẩn
+được phản ánh ở từng mục thuộc phạm vi đó. Admin lọc mục cần xem lại, mục thiếu nghĩa Việt hoặc thiếu từ liên quan để rà soát ngoại lệ.
+Danh mục hỗ trợ mở truy vấn Lexicon theo từ đang sửa. Sửa câu ví dụ gỡ bản ghi đã gắn
+với câu cũ. Khi biên tập có thể cập nhật bản dịch đi cùng câu mới. Tệp release nguồn vẫn giữ nội dung, bản ghi và giấy phép ban đầu.
+
+### Thứ tự triển khai Vocabulary
+
+1. Nạp danh mục đã làm sạch một lần, quản lý và kiểm tra nội dung trong Admin.
+2. Cấp API Learner duyệt bộ/unit và học thẻ. Dùng từ, nghĩa Việt, audio và ví dụ
+   để tạo bài chọn nghĩa, chọn từ, sắp xếp chữ, nghe–viết và điền theo ngữ cảnh.
+   Chỉ tạo điền từ từ ví dụ khớp được đáp án; lựa chọn nhiễu sinh từ nhóm học đủ
+   từ phù hợp. Tiến độ đi theo mục học và unit. Lượt chơi giải trí không đổi lịch ôn.
+3. Cho phép lưu từ từ bộ học, Lesson và Lexicon. Lưu nghĩa/ngữ cảnh đã chọn cùng
+   nguồn tham chiếu. ID Lexicon là thông tin bổ sung khi xác minh được. Chuyển đổi
+   sổ SRS cũ có giữ lịch sử, sau đó chốt hợp đồng Learner trước bàn giao frontend.
+
 ### FR-VOC-001 — Save and review card
 
 Learner lưu lexical unit cùng optional context, review và nhận next scheduling
@@ -90,8 +116,6 @@ state/history/mastery.
 ### BR-VOC-001 — Scheduler abstraction
 
 Domain dùng `SpacedRepetitionScheduler` port để có thể benchmark/migrate.
-Implementation hiện tại là starter FSRS-compatible, không được mô tả là FSRS đầy đủ.
-
 ### BR-VOC-002 — Review fact
 
 Review state thuộc Vocabulary; successful review fact có thể được Analytics và

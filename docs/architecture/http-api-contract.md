@@ -156,6 +156,28 @@ and restoration is hidden. Shared source/media and learning history are retained
 sentence identities. Source edits invalidate generated audio/timing/review; saving never invokes AI.
 The source action may save and then explicitly enqueue `/synthesize` with the returned revision.
 
+## Admin vocabulary catalog
+
+Admin routes under `/api/v1/admin/vocabulary` operate on the imported study catalog.
+
+| Method and route | Contract |
+| --- | --- |
+| `GET /packs` | Ordered packs, bilingual titles, unit and entry counts, visibility and revision. |
+| `GET /packs/{id}/units` | Ordered units, CEFR level, entry count, visibility and revision. |
+| `GET /entries` | Optional `packId`, `unitId`, and literal, case-insensitive `q` of at most 120 characters for word or meaning. Zero-based `page` defaults to 0. Returns `{items,total}` with 30 rows per page. |
+| `GET /entries/{id}` | Bilingual definitions, examples and collocations, optional TOEIC context notes, opaque media IDs, visibility and revision. Load media through the authorized content-media file endpoint. |
+| `PUT /packs/{id}`, `PUT /units/{id}`, `PUT /entries/{id}` | Replace editable fields with the read revision. Returns 204 when saved and 409 if the revision conflicts. After editing an example, its prior recording is detached. |
+
+The catalog endpoints require Admin authorization. The Learner SRS API keeps its existing contract.
+
+The entry list accepts `review` values `ALL`, `NEEDS_REVIEW`, `MISSING_VI`,
+`MISSING_SYNONYMS`, `MISSING_ANTONYMS`, and `HIDDEN`. Entries are ready for study by
+default; `NEEDS_REVIEW` filters items explicitly flagged by an administrator for
+follow-up. The entry summary reports pronunciation preview, sense count, and effective
+visibility, including its parent pack and unit. Unit edits accept an optional CEFR level
+and preserve the existing level when omitted.
+
+
 ## Library administration and learner cutover
 
 Admin library roots are `/admin/lexicon`, `/admin/grammar/{topic|subtopic|bank}`,
