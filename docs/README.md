@@ -32,6 +32,7 @@ then open only the linked canonical context. Do not scan all documentation for a
 | Agent workflow and optional code navigation | [CodeGraph pilot](DEVELOPMENT.md#codegraph-pilot), [engineering contract](../AGENTS.md) |
 | Testing strategy, test types, CI mapping | [TESTING.md](TESTING.md) |
 | Configuration model, env ownership | [CONFIGURATION.md](CONFIGURATION.md) |
+| Generated Core API documentation | [API_DOCS.md](API_DOCS.md) |
 | Data pipelines, dataset import | [DATA_PIPELINES.md](DATA_PIPELINES.md) |
 | Documentation governance, drift rules | [DOCUMENTATION.md](DOCUMENTATION.md) |
 | Coursework / academic evidence | [coursework/](coursework/) |
