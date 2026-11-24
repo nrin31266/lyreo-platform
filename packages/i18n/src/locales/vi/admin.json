@@ -1057,11 +1057,8 @@
     "ukAudio": "Giọng Anh–Anh",
     "usAudio": "Giọng Anh–Mỹ",
     "exampleAudio": "Audio ví dụ {{index}}",
-    "senses": "Nghĩa của từ",
     "pos": "Từ loại",
     "example": "Ví dụ {{index}}",
-    "exampleHelp": "Khi sửa câu ví dụ, audio của câu gốc sẽ được gỡ khỏi mục.",
-    "related": "Từ và cụm từ liên quan",
     "collocations": "Cụm từ thường gặp",
     "family": "Họ từ",
     "synonyms": "Từ đồng nghĩa",
@@ -1070,16 +1067,22 @@
     "lookupDictionary": "Tra từ điển",
     "exampleVi": "Dịch ví dụ {{index}}",
     "toeicContext": "Nghĩa trong ngữ cảnh TOEIC",
-    "translationDraft": "Kiểm tra nghĩa, ví dụ và cụm từ tiếng Việt trước khi xác nhận.",
     "collocationEn": "Cụm từ tiếng Anh {{index}}",
     "collocationVi": "Nghĩa Việt của cụm {{index}}",
     "removeCollocation": "Bỏ cụm từ {{index}}",
     "addCollocation": "Thêm cụm từ",
+    "exampleEn": "Ví dụ {{index}} (tiếng Anh)",
+    "phraseEn": "Cụm tiếng Anh",
+    "validation": {
+      "ipaRequired": "Nhập đủ IPA Anh–Anh và Anh–Mỹ.",
+      "senseRequired": "Mỗi nghĩa cần từ loại và định nghĩa tiếng Anh.",
+      "exampleRequired": "Câu ví dụ tiếng Anh không được để trống.",
+      "collocationRequired": "Cụm từ tiếng Anh không được để trống; hãy điền hoặc xóa dòng đó.",
+      "listLimit": "Họ từ, đồng nghĩa và trái nghĩa tối đa 12 mục, mỗi mục tối đa 200 ký tự."
+    },
     "studyReadiness": "Sẵn sàng bài tập",
     "clozeReady": "Điền ngữ cảnh",
-    "clozeMissing": "Chưa khớp điền từ",
-    "audioReady": "Đủ audio từ",
-    "relatedSummary": "{{collocations}} cụm · {{synonyms}} đồng nghĩa · {{antonyms}} trái nghĩa"
+    "clozeMissing": "Chưa khớp điền từ"
   },
   "phonetics": {
     "howTo": "Cách phát âm",

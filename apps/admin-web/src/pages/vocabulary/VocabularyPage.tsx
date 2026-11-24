@@ -282,6 +282,7 @@ export function VocabularyPage() {
           </div>
         </div>
 
+        {speech.failedId && <p role="alert" className="text-sm text-destructive">{t('audioPlayer.failed')}</p>}
         <CatalogError error={units.error ?? entries.error} retry={() => {
           if (units.error) void units.refetch();
           else void entries.refetch();

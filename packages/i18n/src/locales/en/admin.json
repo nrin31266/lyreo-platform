@@ -1057,11 +1057,8 @@
     "ukAudio": "UK audio",
     "usAudio": "US audio",
     "exampleAudio": "Example {{index}} audio",
-    "senses": "Meanings",
     "pos": "Part of speech",
     "example": "Example {{index}}",
-    "exampleHelp": "Editing an example detaches its original recording.",
-    "related": "Related words and phrases",
     "collocations": "Collocations",
     "family": "Word family",
     "synonyms": "Synonyms",
@@ -1070,16 +1067,22 @@
     "lookupDictionary": "Look up in dictionary",
     "exampleVi": "Example {{index}} in Vietnamese",
     "toeicContext": "TOEIC contextual meanings",
-    "translationDraft": "Check Vietnamese meanings, examples and collocations before marking the entry reviewed.",
     "collocationEn": "English collocation {{index}}",
     "collocationVi": "Vietnamese collocation {{index}}",
     "removeCollocation": "Remove collocation {{index}}",
     "addCollocation": "Add collocation",
+    "exampleEn": "Example {{index}} (English)",
+    "phraseEn": "English phrase",
+    "validation": {
+      "ipaRequired": "Enter both UK and US IPA.",
+      "senseRequired": "Each meaning needs a part of speech and an English definition.",
+      "exampleRequired": "English example sentences cannot be empty.",
+      "collocationRequired": "An English collocation is empty; fill it in or remove the row.",
+      "listLimit": "Word family, synonyms and antonyms allow up to 12 items of 200 characters each."
+    },
     "studyReadiness": "Practice readiness",
     "clozeReady": "Cloze ready",
-    "clozeMissing": "No exact cloze match",
-    "audioReady": "Word audio ready",
-    "relatedSummary": "{{collocations}} collocations · {{synonyms}} synonyms · {{antonyms}} antonyms"
+    "clozeMissing": "No exact cloze match"
   },
   "phonetics": {
     "howTo": "How to say it",

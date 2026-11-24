@@ -204,10 +204,27 @@ function EntryForm({ entry, onClose, save }: Pick<EditorActions, 'onClose'> & { 
 
   const exampleTracks = [original.media.exampleAudio, original.media.secondExampleAudio];
 
-  return <form className="flex min-h-0 flex-1 flex-col gap-3" onSubmit={(event) => {
+  const [tab, setTab] = useState('meanings');
+  const [invalid, setInvalid] = useState<string | null>(null);
+
+  return <form className="flex min-h-0 flex-1 flex-col gap-3" noValidate onSubmit={(event) => {
     event.preventDefault();
     speech.stop();
     const lists = Object.fromEntries(wordLists.map((key) => [key, parseList(wordListsText[key])]));
+    // Inactive tabs are unmounted, so browser `required` checks cannot see them: validate here.
+    const problem: [string, string] | null =
+      !content.ipaUk.trim() || !content.ipaUs.trim() ? ['meanings', 'ipaRequired']
+      : content.senses.some((sense) => !sense.pos.trim() || !sense.definitionEn.trim()) ? ['meanings', 'senseRequired']
+      : content.examples.some((example) => !example.trim()) ? ['examples', 'exampleRequired']
+      : collocations.some(({ en }) => !en.trim()) ? ['related', 'collocationRequired']
+      : wordLists.some((key) => lists[key].length > 12 || lists[key].some((item) => item.length > 200)) ? ['related', 'listLimit']
+      : null;
+    if (problem) {
+      setTab(problem[0]);
+      setInvalid(problem[1]);
+      return;
+    }
+    setInvalid(null);
     save.mutate({ revision: original.revision, hidden, content: {
       ...content, ...lists, needsReview,
       ipaUk: content.ipaUk.trim(), ipaUs: content.ipaUs.trim(),
@@ -250,7 +267,7 @@ function EntryForm({ entry, onClose, save }: Pick<EditorActions, 'onClose'> & { 
       </div>
     </div>
 
-    <Tabs defaultValue="meanings" className="min-h-0 flex-1">
+    <Tabs value={tab} onValueChange={setTab} className="min-h-0 flex-1">
       <TabsList className="w-full justify-start sm:w-fit">
         <TabsTrigger value="meanings">
           {t('vocabulary.tabMeanings')}
@@ -317,10 +334,9 @@ function EntryForm({ entry, onClose, save }: Pick<EditorActions, 'onClose'> & { 
                 </div>
               </div>
               <div className="grid gap-2.5 sm:grid-cols-2">
-                <Field label={t('vocabulary.titleEn')}>
+                <Field label={t('vocabulary.exampleEn', { index: index + 1 })}>
                   <Textarea lang="en" rows={2} required maxLength={500} value={example} onChange={(event) => setContent({
                     ...content, examples: content.examples.map((item, i) => i === index ? event.target.value : item),
-                    examplesVi: content.examples.map((_, i) => i === index ? null : content.examplesVi?.[i] ?? null),
                   })} />
                 </Field>
                 <Field label={t('vocabulary.exampleVi', { index: index + 1 })}>
@@ -339,11 +355,11 @@ function EntryForm({ entry, onClose, save }: Pick<EditorActions, 'onClose'> & { 
           <fieldset className="grid gap-2 rounded-xl border p-3">
             <legend className="px-1 text-xs font-semibold text-muted-foreground">{t('vocabulary.collocations')}</legend>
             {collocations.length > 0 && <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.25rem] gap-2 text-xs text-muted-foreground">
-              <span>{t('vocabulary.titleEn')}</span><span>{t('vocabulary.meaningVi')}</span><span />
+              <span>{t('vocabulary.phraseEn')}</span><span>{t('vocabulary.meaningVi')}</span><span />
             </div>}
             {collocations.map(({ en, vi }, index) => <div key={index} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
               <Input lang="en" required maxLength={200} value={en} aria-label={t('vocabulary.collocationEn', { index: index + 1 })}
-                onChange={(event) => setCollocations((current) => current.map((row, i) => i === index ? { en: event.target.value, vi: '' } : row))} />
+                onChange={(event) => setCollocations((current) => current.map((row, i) => i === index ? { ...row, en: event.target.value } : row))} />
               <Input lang="vi" maxLength={500} value={vi} aria-label={t('vocabulary.collocationVi', { index: index + 1 })}
                 onChange={(event) => setCollocations((current) => current.map((row, i) => i === index ? { ...row, vi: event.target.value } : row))} />
               <Button type="button" variant="ghost" size="icon-sm" aria-label={t('vocabulary.removeCollocation', { index: index + 1 })}
@@ -380,6 +396,7 @@ function EntryForm({ entry, onClose, save }: Pick<EditorActions, 'onClose'> & { 
         </div>
         <SaveActions saving={save.isPending} onClose={() => { speech.stop(); onClose(); }} />
       </div>
+      {invalid && <p role="alert" className="text-sm text-destructive">{t(`vocabulary.validation.${invalid}`)}</p>}
       <CatalogError error={save.error} />
     </div>
   </form>;
