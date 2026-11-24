@@ -1,6 +1,6 @@
 # Bàn giao gói dữ liệu qua Drive
 
-Hai archive để upload nằm trong `.data/releases/`. Upload đúng hai file này vào thư mục Drive của nhóm.
+Hai archive dùng Drive nằm trong `.data/releases/`. Upload đúng hai file này vào thư mục Drive của nhóm.
 
 | Archive | SHA-256 |
 | --- | --- |
@@ -28,4 +28,12 @@ hai URL tại đó vì `make init-env` giữ cấu hình local hiện có.
 - Với Drive riêng tư, đặt `DATA_DRIVE_REMOTE` trong importer env thành tên remote rclone của tài khoản đã được cấp quyền. Để trống biến này khi dùng link có quyền đọc công khai.
 - `DATABASE_URL` của importer và các biến datasource trong `apps/core-service/.env` phải cùng trỏ tới một DB. `make init-env` đồng bộ các giá trị dev từ Docker.
 - Dùng R2 bằng cách đặt `STORAGE_MODE=r2` cùng `R2_ENDPOINT`, `R2_BUCKET`, `R2_REGION`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` trong hai env local. Với storage local, dùng `STORAGE_MODE=local` và cùng một `LOCAL_STORAGE_ROOT`.
-- Từ checkout chưa có cache, chạy `make setup` rồi `make lexicon-fetch data-fetch` để kiểm link và checksum. Cài nội dung bằng `make setup-data DATASET=lexicon`, `make setup-data DATASET=grammar-toeic`, hoặc `make setup-data` để cài cả hai.
+- Từ checkout chưa có cache, chạy `make setup` rồi `make lexicon-fetch data-fetch` để kiểm link và checksum. Cài nội dung bằng `make setup-data DATASET=lexicon`, `make setup-data DATASET=grammar-toeic`, hoặc `make setup-data` để cài toàn bộ dữ liệu.
+
+
+Vocabulary 1.3.0 dùng [archive danh mục trên Drive](https://drive.google.com/file/d/1PzxSDGzxihgs1gNW6FwvOuKI59bl2r0P/view)
+cùng ảnh/audio dùng chung trên R2. SHA-256 của archive `1.3.0` là
+`2fd037e2824c2663edcff72ff1ba48b958acb1d9953aa8e6935511a8551f2c51`.
+Archive mới ở cùng thư mục với hai gói phía trên.
+`make setup-data DATASET=vocabulary` ưu tiên archive local hợp lệ hoặc tự tải từ Drive và xác minh media trên R2.
+Xem [hướng dẫn Vocabulary](README.md#vocabulary-word-atlas).

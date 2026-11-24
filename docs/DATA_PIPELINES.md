@@ -11,13 +11,20 @@ Large datasets are product assets outside Git, not Flyway seed blobs. Flyway own
 An importer validates shape, provenance, license, checksum/version, and referential integrity before apply. A dry-run reports what would change. Apply records dataset identity, counts, status, and errors, and supports controlled reruns without silently duplicating content. Large source files and temporary fixtures remain outside Git.
 
 Fetch/check acquires or verifies a clean release on disk. An importer dry-run validates and plans
-without database or storage writes. APPLY imports into PostgreSQL and, for Grammar/TOEIC, verifies/reuses existing
-media in the configured local storage or R2 bucket, uploading only missing keys. Each domain is installed once after successful verification. See
+without database or storage writes. APPLY imports into PostgreSQL. Grammar/TOEIC verifies/reuses
+media in local storage or R2, uploading missing keys. Vocabulary verifies and reuses prepublished R2 media. Each domain is installed once after successful verification. See
 [Data Import](../tools/data-import/README.md) for the supported commands.
 
 ## Lexicon
 
-Global dictionary entries belong to Lexicon. Vocabulary SRS references Lexicon and owns learner review history. Import normalization, source attribution, and pronunciation variants belong to the Lexicon importer; Lesson lexical annotations can link terms without taking dictionary ownership.
+Global dictionary entries belong to Lexicon. Existing learner SRS cards reference Lexicon headwords and Vocabulary owns review history. Import normalization, source attribution, and pronunciation variants belong to the Lexicon importer; Lesson lexical annotations can link terms without taking dictionary ownership.
+
+## Vocabulary
+
+The Admin learning catalog uses the [bilingual Vocabulary release](../tools/data-import/README.md#vocabulary-word-atlas).
+It includes all 19 Word Atlas topics and a TOEIC pack with contextual notes from Lyreo TOEIC.
+The importer verifies the catalog and shared R2 objects. Vocabulary keeps its own identities and source provenance.
+[Lexicon and Vocabulary requirements](requirements/lexicon-vocabulary.md) own the editorial and learner behavior.
 
 ## Grammar and TOEIC
 
@@ -108,5 +115,5 @@ their immutable learner sessions and editorial overlays.
 See [editorial architecture](architecture/library-editorial.md).
 
 `make setup-data` verifies and installs the selected packages after migration and seed. Use
-`DATASET=lexicon` or `DATASET=grammar-toeic` to install one. Existing R2 keys are verified/reused. Team members need bucket credentials through
+`DATASET=lexicon`, `DATASET=grammar-toeic`, or `DATASET=vocabulary` to install one. Existing R2 keys are verified/reused. Team members need bucket credentials through
 the private environment channel, not files committed to Git. No development database reset is needed.

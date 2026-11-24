@@ -47,7 +47,8 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def validate_clean_release(root: Path, *, domain: str, validator_name: str) -> ReleasePackage:
+def validate_clean_release(root: Path, *, domain: str, validator_name: str,
+                           validator_args: Sequence[str] = ()) -> ReleasePackage:
     """Run the independent domain validator before opening any write transaction."""
     root = root.resolve(strict=True)
     manifest_path = root / "manifest.json"
@@ -65,7 +66,7 @@ def validate_clean_release(root: Path, *, domain: str, validator_name: str) -> R
 
     validator = Path(__file__).resolve().parent / validator_name
     completed = subprocess.run(
-        [sys.executable, str(validator), "--release", str(root)],
+        [sys.executable, str(validator), "--release", str(root), *validator_args],
         cwd=validator.parent,
         check=False,
         capture_output=True,

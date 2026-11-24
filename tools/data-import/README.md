@@ -248,3 +248,30 @@ needs neither repair tooling nor raw corpus.
 
 `import_lexicon.py`, `import_grammar.py` and `import_toeic.py` remain maintainer diagnostics.
 Team setup uses the clean package importers.
+
+## Vocabulary (Word Atlas)
+
+After `make setup`, run `make setup-data DATASET=vocabulary` to install the pinned bilingual catalog.
+The archive is downloaded from the shared Drive URL in `.env.example`. R2 stores only the shared
+images and audio under `media/sha256/{prefix}/{sha256}`. The importer verifies all 30,203 media
+objects by size and SHA-256, then installs catalog rows in one transaction. A rerun inserts zero
+rows and performs no uploads.
+
+The 1.3.0 catalog contains 19 Word Atlas topic packs plus a TOEIC pack, 305 balanced units (17–30 words per unit) and 7,917
+entries. Vietnamese meanings, example translations, collocation translations and word-relation
+additions are generated offline with `deepseek-flash` and validated before packaging; entries are
+ready for study by default, with an explicit `needsReview` flag for Admin exception follow-up. TOEIC contextual notes are matched by term and part of
+speech across at least three groups from Lyreo Grammar/TOEIC 2.0.12. Pack covers reuse one
+licensed Word Atlas illustration from the first stable entry in each pack.
+
+Word Atlas contributors provide its text, illustrations and recordings under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+The pinned source and its transformation retain attribution and checksums. The source content is
+not an official IELTS list.
+
+The runtime needs no translation model. Maintainers can rebuild with `build_vocabulary_release.py`,
+run `translate_vocabulary_release.py` on the local GPU, then use `enrich_vocabulary_release.py`.
+The translation model is a maintainer-only input and is not downloaded by team setup. For the
+default release pass, export the base `entries.jsonl` and run `translate_vocabulary_deepseek.py` with
+the key in the ignored `.env`. It uses `deepseek-flash` with thinking disabled, sends 25 indexed entries per request by default, returns compact JSON,
+uses atomic batch and per-entry caches, strips redundant POS prefixes, and includes high-confidence synonym, antonym and word-family additions. Never put the key in a release,
+Drive archive, R2 object, or log.

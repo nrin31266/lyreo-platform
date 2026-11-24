@@ -3,7 +3,7 @@
         android-check android-emulator-create android-emulator mobile-android-install \
         ai-local clean \
         test-java verify-java test-ai test-data-import test-tooling test-frontend typecheck build-web validate-docs validate-repo validate check prod-config verify-prod-env down-v \
-        import-clean-lexicon import-clean-grammar-toeic migrate setup-data data-storage-check data-ai-pilot
+        import-clean-lexicon import-clean-grammar-toeic import-clean-vocabulary migrate setup-data data-storage-check data-ai-pilot
 
 help:
 	@printf '%s\n' \
@@ -26,13 +26,14 @@ help:
 	  '  make mobile                      Run Expo Metro bundler (requires Dev Build installed on device/emulator)' \
 	  '' \
 	  'Data' \
-	  '  make setup-data [DATASET=...]     Install lexicon, grammar-toeic or both packages (all)' \
+	  '  make setup-data [DATASET=...]     Install vocabulary, lexicon, grammar-toeic or all packages' \
 	  '  make data-storage-check          Check Core and importer use the same media storage' \
 	  '  make data-ai-pilot ARGS=--execute Run the bounded maintenance pilot (default: dry-run)' \
 	  '  make data-fetch                  Download/verify the versioned Grammar+TOEIC clean release' \
 	  '  make data-check                  Verify the installed Grammar+TOEIC clean release' \
 	  '  make lexicon-fetch               Download/verify the versioned Lexicon clean release' \
 	  '  make lexicon-check               Verify the installed Lexicon clean release' \
+	  '  make import-clean-vocabulary     Prepare/validate the Vocabulary release (ARGS="--apply" to install once)' \
 	  '  make import-clean-lexicon        Validate/dry-run the pinned Lexicon release (ARGS="--apply" to install once)' \
 	  '  make import-clean-grammar-toeic  Validate/dry-run the pinned Grammar+TOEIC release (ARGS="--apply" to install once)' \
 	  '' \
@@ -101,6 +102,9 @@ import-clean-lexicon:
 
 import-clean-grammar-toeic:
 	./tools/data-import/scripts/import-clean-grammar-toeic.sh $(ARGS)
+
+import-clean-vocabulary:
+	./tools/data-import/scripts/import-clean-vocabulary.sh $(ARGS)
 
 data-ai-pilot:
 	./scripts/data-ai-pilot.sh $(ARGS)
@@ -278,6 +282,13 @@ validate:
 	    tools/data-import/clean_import_common.py \
 	    tools/data-import/import_clean_lexicon.py \
 	    tools/data-import/import_clean_grammar_toeic.py \
+	    tools/data-import/import_clean_vocabulary.py \
+	    tools/data-import/build_vocabulary_release.py \
+	    tools/data-import/translate_vocabulary_release.py \
+	    tools/data-import/translate_vocabulary_deepseek.py \
+	    tools/data-import/enrich_vocabulary_release.py \
+	    tools/data-import/validate_vocabulary_release.py \
+	    tools/data-import/release_media.py \
 	    tools/data-import/build_grammar_toeic_release.py \
 	    tools/data-import/validate_grammar_toeic_release.py \
 	    tools/data-import/scripts \

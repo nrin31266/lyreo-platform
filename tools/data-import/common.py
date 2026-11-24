@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
+import tarfile
 import uuid
+from collections.abc import Iterable
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -22,6 +25,23 @@ def checksum(paths: list[Path]) -> str:
             while chunk := stream.read(1024 * 1024):
                 h.update(chunk)
     return h.hexdigest()
+
+
+def package_release(release: Path, archive: Path, root_name: str, *, paths: Iterable[Path] | None = None) -> str:
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    with archive.open("wb") as output, gzip.GzipFile(filename="", mode="wb", fileobj=output, mtime=0, compresslevel=6) as compressed, tarfile.open(fileobj=compressed, mode="w") as tar:
+        for path in sorted(release.rglob("*") if paths is None else paths):
+            if not path.is_file():
+                continue
+            info = tar.gettarinfo(str(path), arcname=f"{root_name}/{path.relative_to(release).as_posix()}")
+            info.uid = info.gid = 0
+            info.uname = info.gname = ""
+            info.mtime = 0
+            info.mode = 0o644
+            with path.open("rb") as stream:
+                tar.addfile(info, stream)
+    with archive.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def load_json(path: Path):
@@ -79,13 +99,14 @@ def fail_import(conn, ident, message: str):
     )
 
 
-def s3_client():
+def s3_client(*, max_pool_connections: int = 10):
     endpoint = os.getenv("R2_ENDPOINT")
     key = os.getenv("R2_ACCESS_KEY_ID")
     secret = os.getenv("R2_SECRET_ACCESS_KEY")
     if not endpoint or not key or not secret:
         return None
     import boto3
+    from botocore.config import Config
 
     return boto3.client(
         "s3",
@@ -93,4 +114,5 @@ def s3_client():
         aws_access_key_id=key,
         aws_secret_access_key=secret,
         region_name=os.getenv("R2_REGION", "auto"),
+        config=Config(max_pool_connections=max_pool_connections),
     )
