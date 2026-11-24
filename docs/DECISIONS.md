@@ -353,3 +353,14 @@ Use Azure Speech F0 Continuous Recognition for Admin Shadowing trials. Keep the 
 revision and private trial data in Core for 24 hours. The pilot establishes evidence for any later
 Learner scoring policy. See [Lesson requirements](requirements/lesson.md#fr-lsn-006a--admin-pronunciation-pilot)
 and the [execution boundary](architecture/ai-execution.md).
+
+## D-039 — Vocabulary owns curated study units (2026-11-24)
+
+- **Decision.** Vocabulary owns the topic, unit, and learning entry identities. The release
+  uses the pinned Word Atlas source, Vietnamese translations, enriched word relations and Lyreo
+  TOEIC context notes. Admin edits the installed catalog and flags exceptions with
+  revision checks, while the release files preserve the source snapshot.
+- **Effect.** A vocabulary entry has its own teaching context. Dictionary search is an optional
+  cross-check. The existing learner SRS contract stays in service until the saved-word model
+  supports entries from multiple contexts.
+- **Owner.** [Lexicon and Vocabulary requirements](requirements/lexicon-vocabulary.md#fr-voc-003--admin-quản-lý-bộ-từ-vựng).

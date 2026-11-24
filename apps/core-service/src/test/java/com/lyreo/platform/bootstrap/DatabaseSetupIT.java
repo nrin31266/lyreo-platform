@@ -126,7 +126,7 @@ class DatabaseSetupIT {
             assertThat(jdbc.queryForObject("SELECT encrypted_api_key FROM ai_provider WHERE code='AZURE_SPEECH' AND enabled", String.class))
                 .isEqualTo("azure-test-ciphertext");
             assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class))
-                .containsExactly("001", "002", "003", "004", "005", "006", "007", "008");
+                .containsExactly("001", "002", "003", "004", "005", "006", "007", "008", "009");
         }
     }
 }
