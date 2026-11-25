@@ -1,4 +1,5 @@
-import { RiVoiceprintLine as AudioLines, RiCloseLine as X } from "@remixicon/react";
+import { RiCloseLine as X } from "@remixicon/react";
+import lyreoBird from "@/assets/brand/lyreo-bird.webp";
 import { Button } from '@/components/ui/button';
 import { SheetClose } from '@/components/ui/sheet';
 import { Link } from 'react-router-dom';
@@ -31,8 +32,8 @@ export function AppSidebar() {
                 onClick={() => setOpenMobile(false)}
                 aria-label={`Lyreo · ${t('admin:workspace')}`}
               >
-                <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-sidebar-primary text-sidebar-primary-foreground [&>img]:size-full [&>img]:object-contain">
-                  <AudioLines aria-hidden="true" />
+                <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-sidebar-primary text-sidebar-primary-foreground [&>img]:size-full [&>img]:object-cover">
+                  <img src={lyreoBird} alt="" aria-hidden="true" className="size-full object-cover" />
                 </span>
                 <span className="flex flex-col group-data-[collapsible=icon]:hidden">
                   <strong>Lyreo</strong>

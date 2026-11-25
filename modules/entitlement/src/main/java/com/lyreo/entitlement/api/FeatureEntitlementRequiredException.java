@@ -6,7 +6,7 @@ import org.springframework.security.access.AccessDeniedException;
 
 /** Access denial raised when a protected capability has no current user grant. */
 @NamedInterface(value = "api", propagate = false)
-public final class FeatureEntitlementRequiredException extends AccessDeniedException {
+public class FeatureEntitlementRequiredException extends AccessDeniedException {
     private final FeatureKey featureKey;
 
     public FeatureEntitlementRequiredException(FeatureKey featureKey) {

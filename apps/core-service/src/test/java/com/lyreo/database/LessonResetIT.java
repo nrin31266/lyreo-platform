@@ -116,8 +116,8 @@ class LessonResetIT {
                       VALUES(gen_random_uuid(),'10000000-0000-0000-0000-000000000004','APPLY','SUCCEEDED',now());
                     INSERT INTO dataset_active_release(domain,release_id,activated_by)
                       VALUES('lexicon','10000000-0000-0000-0000-000000000004','reset-test');
-                    INSERT INTO vocabulary_card(id,learner_id,headword_id,next_review_at)
-                      VALUES(gen_random_uuid(),'10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000006',now());
+                    INSERT INTO vocabulary_card(id,learner_id,headword_id,dedup_key,term,next_review_at)
+                      VALUES(gen_random_uuid(),'10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000006','LEXICON_HEADWORD:10000000-0000-0000-0000-000000000006','learn',now());
                     INSERT INTO vocabulary_review(id,card_id,rating,next_due_at) SELECT gen_random_uuid(),id,'GOOD',now() FROM vocabulary_card;
                     """);
                 String reset=Files.readString(Path.of("../../infra/postgres/reset-lessons.sql"));

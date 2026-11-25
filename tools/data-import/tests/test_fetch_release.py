@@ -167,3 +167,16 @@ def test_missing_canonical_archive_uses_remote_source(tmp_path: Path, canonical_
         fetcher.run(config)
     download.assert_called_once_with(url, mock.ANY)
     assert (release / "manifest.json").read_bytes() == b"{}"
+
+
+def test_catalog_only_flag_propagates_to_verify_release(tmp_path: Path) -> None:
+    archive = tmp_path / "source-catalog.tar.gz"
+    make_archive(archive, [("grammar-toeic-1.0.1/manifest.json", b"{}", "file")])
+    installed = tmp_path / "releases/grammar-toeic/1.0.1"
+    config = Config("1.0.1", "1.0.1", archive.as_uri(), sha256_file(archive), installed, tmp_path / "dataset-fetch")
+    with mock.patch("fetch_release.verify_release") as verify:
+        run(config, catalog_only=True)
+        run(config, check=True, catalog_only=True)
+    assert verify.call_count == 2
+    for call in verify.call_args_list:
+        assert call.kwargs.get("catalog_only") is True

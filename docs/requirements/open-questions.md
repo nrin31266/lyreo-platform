@@ -64,3 +64,8 @@ preserve originals; published deletion is recoverable and retains learner histor
 Still decide learner presentation and dictation/shadowing feedback, missions/achievements and reward
 abuse controls. This phase creates no learner attempts or per-sentence coins. Self-service subscription
 entitlements/default policies are deferred.
+
+<a id="oq-008"></a>
+## OQ-008 — Bộ từ cá nhân
+
+**Status:** open. Chủ sản phẩm cần chốt bộ mặc định cho thao tác lưu nhanh, một nghĩa có thuộc nhiều bộ, chính sách giữ từ khi xóa bộ cuối và phạm vi tùy chỉnh bìa. Bộ cá nhân phục vụ quản lý từ đã lưu. Luồng Học sở hữu phiên học và lịch ôn. [Yêu cầu Vocabulary](lexicon-vocabulary.md#fr-voc-001--save-and-review-card)

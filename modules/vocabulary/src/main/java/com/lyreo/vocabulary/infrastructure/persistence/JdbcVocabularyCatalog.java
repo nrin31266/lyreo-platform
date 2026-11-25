@@ -56,13 +56,15 @@ public class JdbcVocabularyCatalog implements VocabularyCatalog {
                    (SELECT e2.image_id FROM vocabulary_unit_entry e2
                     JOIN vocabulary_unit u2 ON u2.id = e2.unit_id
                     WHERE u2.pack_id = p.id AND e2.image_id IS NOT NULL
-                    ORDER BY u2.position, e2.position LIMIT 1)
+                    ORDER BY u2.position, e2.position LIMIT 1),
+                   p.access_mode, p.required_feature_key
             FROM vocabulary_pack p
             LEFT JOIN vocabulary_unit u ON u.pack_id = p.id
             LEFT JOIN vocabulary_unit_entry e ON e.unit_id = u.id
             GROUP BY p.id ORDER BY p.position
             """, (rs, n) -> new Pack(rs.getObject(1, UUID.class), rs.getString(2), rs.getString(3),
-            rs.getBoolean(4), rs.getLong(5), rs.getLong(6), rs.getLong(7), rs.getObject(8, UUID.class)));
+            rs.getBoolean(4), rs.getLong(5), rs.getLong(6), rs.getLong(7), rs.getObject(8, UUID.class),
+            rs.getString(9), rs.getString(10)));
     }
 
     @Override
@@ -92,7 +94,9 @@ public class JdbcVocabularyCatalog implements VocabularyCatalog {
                    e.content #>> '{senses,0,definitionEn}',
                    COALESCE(e.content #>> '{contextNotes,0,meaningVi}', e.content #>> '{senses,0,meaningVi}'),
                    COALESCE(e.us_audio_id, e.uk_audio_id),
-                   quality.hidden, quality.needs_review, quality.missing_vi
+                   quality.hidden, quality.needs_review, quality.missing_vi,
+                   EXISTS (SELECT 1 FROM vocabulary_release_lineage l
+                           WHERE l.entity_type = 'ENTRY' AND l.entity_id = e.id AND l.conflict_json IS NOT NULL)
             """ + ENTRY_FILTER + """
             ORDER BY lower(e.term) = lower(:query) DESC, p.position, u.position, e.position
             LIMIT :limit OFFSET :offset
@@ -100,7 +104,7 @@ public class JdbcVocabularyCatalog implements VocabularyCatalog {
                 rs.getObject(1, UUID.class), rs.getObject(2, UUID.class), rs.getObject(3, UUID.class),
                 rs.getString(4), rs.getString(5), rs.getString(6), rs.getString(7), rs.getString(8),
                 rs.getInt(9), rs.getString(10), rs.getString(11), rs.getObject(12, UUID.class),
-                rs.getBoolean(13), rs.getBoolean(14), rs.getBoolean(15)));
+                rs.getBoolean(13), rs.getBoolean(14), rs.getBoolean(15), rs.getBoolean(16)));
         return new EntryPage(items, total);
     }
 
@@ -119,12 +123,36 @@ public class JdbcVocabularyCatalog implements VocabularyCatalog {
 
     @Override
     public void savePack(UUID id, PackEdit edit) {
+        String accessMode = edit.accessMode();
+        String requiredFeatureKey = edit.requiredFeatureKey();
+        if ("PUBLIC".equals(accessMode)) {
+            requiredFeatureKey = null;
+        } else if ("FEATURE".equals(accessMode) && (requiredFeatureKey == null || requiredFeatureKey.isBlank())) {
+            throw new RequestValidationException("Feature-gated vocabulary packs require a requiredFeatureKey");
+        }
+        var params = new MapSqlParameterSource()
+            .addValue("id", id)
+            .addValue("en", edit.titleEn().strip())
+            .addValue("vi", edit.titleVi().strip())
+            .addValue("hidden", edit.hidden())
+            .addValue("revision", edit.revision())
+            .addValue("accessMode", accessMode)
+            .addValue("clearFeature", "PUBLIC".equals(accessMode))
+            .addValue("requiredFeatureKey", requiredFeatureKey);
         requireUpdate(jdbc.update("""
             UPDATE vocabulary_pack
-            SET title_en = :en, title_vi = :vi, hidden = :hidden, revision = revision + 1
+            SET title_en = :en,
+                title_vi = :vi,
+                hidden = :hidden,
+                access_mode = COALESCE(:accessMode, access_mode),
+                required_feature_key = CASE
+                    WHEN :clearFeature THEN NULL
+                    WHEN :accessMode = 'FEATURE' THEN :requiredFeatureKey
+                    ELSE required_feature_key
+                END,
+                revision = revision + 1
             WHERE id = :id AND revision = :revision
-            """, Map.of("id", id, "en", edit.titleEn().strip(), "vi", edit.titleVi().strip(),
-            "hidden", edit.hidden(), "revision", edit.revision())));
+            """, params));
     }
 
     @Override

@@ -341,3 +341,47 @@ To edit, send `{"displayName":"Mai","focusArea":"LISTENING","dailyMinutes":15}`.
 The response has the same DTO shape with the new fields and
 `"starterSuggestion":{"topic":"CONVERSATION","difficulty":"BEGINNER","dailyMinutes":15}`.
 A following GET returns the updated DTO in its wrapper.
+
+## Learning, Entitlement, Curriculum, Gamification, Analytics & Chat Extensions
+
+All protected endpoints use `BearerAuth` (`Authorization: Bearer <JWT>`) and return RFC 9457 Problem Details (`LyreoProblemDetail`) with explicit machine-readable error codes and structured extension fields:
+
+| HTTP Status | `code` | Extra Problem Details fields | Client action |
+|---|---|---|---|
+| `401` | `AUTHENTICATION_REQUIRED` | — | Refresh OIDC token once or re-authenticate |
+| `403` | `ACCESS_DENIED` | — | Wrong role (e.g., `LEARNER` calling `/api/v1/admin/**`) |
+| `403` | `FEATURE_ENTITLEMENT_REQUIRED` | `featureKey` | Show feature upgrade / locked state |
+| `403` | `QUOTA_EXCEEDED` | `featureKey`, `limitType`, `limit`, `remaining`, `resetAt` | Display quota limit & UTC ISO-8601 `resetAt` |
+| `409` | `STALE_REVISION` | `currentRevision` | Reload latest server state before retrying edit/save |
+| `409` | `SESSION_EXPIRED` | `expiredAt` | Offer starting a new study/assessment session |
+| `409` | `IDEMPOTENCY_CONFLICT` | — | Reject mutation replay with changed payload under same `Idempotency-Key` |
+| `429` | `RATE_LIMITED` | `Retry-After` header | Respect per-client API rate limit backoff |
+
+### Endpoint Summary by Module Owner
+
+- **Entitlement (`modules/entitlement`)**:
+  - Learner: `GET /api/v1/learner/entitlements` (active grants + remaining period/capacity quotas + `resetAt`).
+  - Admin: `GET /api/v1/admin/entitlements/grants`, `POST /api/v1/admin/entitlements/grants`, `POST /api/v1/admin/entitlements/grants/{grantId}/revoke`, `GET /api/v1/admin/entitlements/features`, `GET/PUT /api/v1/admin/entitlements/quotas`, `GET /api/v1/admin/entitlements/audit`.
+- **Vocabulary (`modules/vocabulary`)**:
+  - Study Catalog & Media: `GET /api/v1/vocabulary/packs`, `GET /api/v1/vocabulary/packs/{packId}/units`, `GET /api/v1/vocabulary/units/{unitId}`, `GET /api/v1/vocabulary/entries/{entryId}/media/{assetId}`.
+  - 6-Mode Sessions (`CHOOSE_MEANING`, `CHOOSE_WORD`, `LETTER_SCRAMBLE`, `MISSING_LETTERS`, `LISTEN_WRITE`, `CONTEXT_CLOZE`): `POST /api/v1/vocabulary/units/{unitId}/sessions`, `GET /api/v1/vocabulary/sessions`, `GET /api/v1/vocabulary/sessions/{id}`, `PUT /api/v1/vocabulary/sessions/{id}/answers`, `POST /api/v1/vocabulary/sessions/{id}/submit`.
+  - Saved Vocabulary & Personal Collections: `POST /api/v1/vocabulary/cards`, `POST /api/v1/vocabulary/saved-items`, `GET /api/v1/vocabulary/due`, `POST /api/v1/vocabulary/cards/{cardId}/review`, `GET/POST /api/v1/vocabulary/collections`, `PATCH/DELETE /api/v1/vocabulary/collections/{id}`, `GET/POST /api/v1/vocabulary/collections/{id}/items`, `DELETE /api/v1/vocabulary/collections/{id}/items/{cardId}`, `POST /api/v1/vocabulary/collections/{id}/move`, `GET /api/v1/vocabulary/saved-items/{cardId}/media/{assetId}`.
+  - Admin Vocabulary Pack & Conflict metadata: `GET/PUT /api/v1/admin/vocabulary/packs/{id}` (`accessMode`: `PUBLIC` | `FEATURE`, `requiredFeatureKey`), `GET /api/v1/admin/vocabulary/entries` (`hasConflict`).
+- **Lesson & Speech Assessment (`modules/lesson`, `modules/speech-assessment`)**:
+  - Learner Lessons: `GET /api/v1/lessons`, `GET /api/v1/lessons/{lessonId}`, `GET /api/v1/lessons/{lessonId}/activities/{activityId}`, `GET /api/v1/lessons/{lessonId}/audio`, `GET /api/v1/lessons/{lessonId}/attempts`, `POST /api/v1/lessons/{lessonId}/activities/{activityId}/dictation/attempts`, `POST /api/v1/lessons/{lessonId}/activities/{activityId}/complete`.
+  - Learner Shadowing: `GET /api/v1/lessons/{lessonId}/activities/{activityId}/shadowing/sentences/{sentenceId}/constraints`, `POST .../attempts` (multipart `audio`, requires `Idempotency-Key` + `revision`, `202` + `Location`), `GET /api/v1/shadowing-attempts/{id}`, `GET /api/v1/shadowing-attempts/{id}/audio`, `POST /api/v1/shadowing-attempts/{id}/cancel`.
+- **Grammar, TOEIC & Assessment (`modules/grammar`, `modules/toeic`, `modules/assessment`)**:
+  - Grammar: `GET /api/v1/grammar/catalogs/{kind}` (+ `parentId`), `GET /api/v1/grammar/catalogs/{kind}/page`, `GET /api/v1/grammar/catalogs/{kind}/{id}`, `POST /api/v1/grammar/catalogs/{kind}/{id}/sessions`.
+  - TOEIC: `GET /api/v1/toeic/catalog`, `GET /api/v1/toeic/catalog/page`, `GET /api/v1/toeic/catalog/{id}` (includes `parts` breakdown), `POST /api/v1/toeic/catalog/{id}/sessions` (supports `parts: [1..7]` for `DRILL`).
+  - Sessions: `GET /api/v1/assessment-sessions?domain=...&status=...&catalogId=...`, `GET/PUT /api/v1/assessment-sessions/{id}/answers`, `POST /api/v1/assessment-sessions/{id}/submit`, `GET /api/v1/assessment-sessions/{id}/media/{assetId}`.
+- **Curriculum (`modules/curriculum`)**:
+  - Learner: `GET /api/v1/curriculum/paths`, `GET /api/v1/curriculum/paths/{id}`, `POST /api/v1/curriculum/paths/{id}/enroll`, `GET /api/v1/curriculum/continue`.
+  - Admin: `GET/POST /api/v1/admin/curriculum/paths`, `GET/PUT/DELETE /api/v1/admin/curriculum/paths/{id}`, `PUT /api/v1/admin/curriculum/paths/{id}/status`, `POST /api/v1/admin/curriculum/paths/{id}/sections`, `POST /api/v1/admin/curriculum/paths/{id}/sections/{sectionId}/items`.
+- **Gamification, Analytics & Chat (`modules/gamification`, `modules/analytics`, `modules/chat`, `modules/assessment`)**:
+  - Learner Gamification: `GET /api/v1/gamification/summary`, `GET /api/v1/gamification/missions`, `GET /api/v1/gamification/achievements`, `GET /api/v1/gamification/ledger`.
+  - Admin Gamification: `GET /api/v1/admin/gamification/learners/{learnerId}`, `POST /api/v1/admin/gamification/learners/{learnerId}/diamonds`, `GET/POST /api/v1/admin/gamification/missions`, `PUT /api/v1/admin/gamification/missions/{id}`, `GET/POST /api/v1/admin/gamification/achievements`, `PUT /api/v1/admin/gamification/achievements/{id}`, `GET/PUT /api/v1/admin/gamification/reward-policy`.
+  - Learner Analytics: `GET /api/v1/analytics/overview`.
+  - Admin Analytics: `GET /api/v1/admin/analytics/summary`, `GET /api/v1/admin/analytics/learners/{learnerId}`.
+  - Learner Chat: `POST /api/v1/chat/ask`, `GET /api/v1/chat/conversations`, `GET /api/v1/chat/conversations/{id}`.
+  - Admin Chat: `GET /api/v1/admin/chat/summary` (privacy-preserving aggregate telemetry & thread metadata only).
+  - Admin Content Media: `GET /api/v1/admin/content-media` (`page`, `size`, `query`, `kind`), `POST /api/v1/admin/content-media`, `GET /api/v1/admin/content-media/{id}`, `GET /api/v1/admin/content-media/{id}/file`.

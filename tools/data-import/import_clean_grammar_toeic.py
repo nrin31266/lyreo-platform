@@ -37,8 +37,8 @@ from clean_import_common import (
     unlock_import_domain,
     validate_clean_release,
 )
-from release_media import media_configuration as _media_configuration
-from release_media import media_object_key, verify_or_upload_media
+from release_media import backup_media, media_configuration as _media_configuration
+from release_media import media_object_key, remote_object_valid, restore_media, verify_or_upload_media
 
 
 COLLECTION_TABLES = {
@@ -512,16 +512,34 @@ def grammar_toeic_orphans(conn, release_id: uuid.UUID) -> dict[str, int]:
 
 
 def _upload_and_insert_assets(conn, package: ReleasePackage, run_id: uuid.UUID, batch_size: int,
-                              client, bucket: str, progress: dict[str, int]) -> tuple[int, int]:
+                              client, bucket: str | None, progress: dict[str, int],
+                              *, catalog_only: bool = False) -> tuple[int, int]:
     uploads = 0
     release_rows_inserted = 0
+    manifest_files = {
+        item["path"]: item
+        for item in getattr(package, "manifest", {}).get("files", [])
+        if "path" in item
+    }
+
     def verify(row):
+        key = media_object_key(row["id"])
+        if catalog_only:
+            meta = manifest_files.get(row["path"])
+            if meta is not None and (
+                meta.get("sha256") != row["id"]
+                or meta.get("bytes", meta.get("size_bytes")) != row["size_bytes"]
+            ):
+                raise ValueError(f"Asset manifest hash mismatch for {row['path']}")
+            if client is not None and bucket:
+                remote_object_valid(client, bucket, key, row["id"], row["size_bytes"])
+            return False
         path = (package.root / row["path"]).resolve(strict=True)
         if not path.is_relative_to(package.root.resolve()):
             raise ValueError(f"Media path escapes release root: {row['path']}")
         return verify_or_upload_media(client, bucket, path, sha256=row["id"],
                                       size_bytes=row["size_bytes"], mime_type=row["mime_type"],
-                                      object_key=media_object_key(row["id"]))
+                                      object_key=key)
 
     with ThreadPoolExecutor(max_workers=8) as workers:
         for batch in chunks(jsonl_rows(package.root / "shared/assets.jsonl"), min(batch_size, 100)):
@@ -623,10 +641,12 @@ def dry_run_report(package: ReleasePackage, batch_size: int) -> dict[str, Any]:
 
 def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
                  storage_client=None,
-                 bucket: str | None = None) -> dict[str, Any]:
+                 bucket: str | None = None,
+                 catalog_only: bool = False,
+                 allow_upgrade: bool = False) -> dict[str, Any]:
     if batch_size < 1:
         raise ValueError("--batch-size must be positive")
-    if storage_client is None or bucket is None:
+    if not catalog_only and (storage_client is None or bucket is None):
         storage_client, bucket = _media_configuration()
 
     conn = connect(database_url)
@@ -635,7 +655,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
     progress = {"records_read": package_record_count(package), "active_rows_read": 0, "records_inserted": 0}
     try:
         lock_import_domain(conn, package.domain)
-        ensure_single_install(conn, package)
+        ensure_single_install(conn, package, allow_upgrade=allow_upgrade)
         register_release(conn, package)
         baseline = not prior_release_exists(conn, package)
         run_id = begin_run(conn, package, "APPLY")
@@ -648,7 +668,8 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
             catalog_counts = seed_catalogs(conn, package, baseline=baseline)
 
         uploads, _ = _upload_and_insert_assets(conn, package, run_id, batch_size,
-                                               storage_client, bucket, progress)
+                                               storage_client, bucket, progress,
+                                               catalog_only=catalog_only)
 
         _process(
             conn, package, run_id, batch_size=batch_size,
@@ -761,7 +782,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int,
             }
             finish_run(conn, run_id, package_record_count(package), progress["records_inserted"], details)
         run_succeeded = True
-        finalize_install(conn, package)
+        finalize_install(conn, package, allow_upgrade=allow_upgrade)
         return {
             "mode": "APPLY",
             "run_id": str(run_id),
@@ -799,26 +820,61 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"))
     parser.add_argument("--batch-size", type=int, default=500)
     parser.add_argument("--apply", action="store_true", help="Write to PostgreSQL/storage; default is a full dry run")
+    parser.add_argument("--catalog-only", action="store_true", help="Install catalog without requiring extracted media on disk")
+    parser.add_argument("--allow-upgrade", action="store_true", help="Cut over dataset_active_release after a SUCCEEDED APPLY")
+    parser.add_argument("--backup-media", type=Path, help="Export manifest-referenced media objects to a backup directory")
+    parser.add_argument("--restore-media", type=Path, help="Restore backed-up media objects to target storage")
+    parser.add_argument("--prefix", default="", help="Optional target storage prefix for --backup-media/--restore-media")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if args.backup_media and args.restore_media:
+        raise SystemExit("Specify at most one of --backup-media or --restore-media")
+    if args.restore_media:
+        client, bucket = _media_configuration()
+        report = restore_media(args.restore_media, client, bucket, release_root=args.release, prefix=args.prefix)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return
     if not args.release:
         raise SystemExit("--release or GRAMMAR_TOEIC_RELEASE_DIR is required")
+    if args.backup_media:
+        package = validate_clean_release(
+            args.release,
+            domain="grammar-toeic",
+            validator_name="validate_grammar_toeic_release.py",
+            validator_args=("--catalog-only",),
+        )
+        try:
+            client, bucket = _media_configuration()
+        except ValueError:
+            client, bucket = None, None
+        report = backup_media(package.root, args.backup_media, client, bucket, prefix=args.prefix)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return
     package = validate_clean_release(
         args.release,
         domain="grammar-toeic",
         validator_name="validate_grammar_toeic_release.py",
+        validator_args=("--catalog-only",) if args.catalog_only else (),
     )
     if args.apply:
-        client, bucket = _media_configuration()
+        if args.catalog_only:
+            try:
+                client, bucket = _media_configuration()
+            except ValueError:
+                client, bucket = None, None
+        else:
+            client, bucket = _media_configuration()
         report = apply_import(
             package,
             database_url=db_url_from_args(args.database_url),
             batch_size=args.batch_size,
             storage_client=client,
             bucket=bucket,
+            catalog_only=args.catalog_only,
+            allow_upgrade=args.allow_upgrade,
         )
     else:
         report = dry_run_report(package, args.batch_size)

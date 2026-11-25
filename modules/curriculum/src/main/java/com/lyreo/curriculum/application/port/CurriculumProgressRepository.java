@@ -1,10 +1,75 @@
 package com.lyreo.curriculum.application.port;
 
+import com.lyreo.curriculum.domain.CurriculumEnrollment;
+import com.lyreo.curriculum.domain.CurriculumItem;
 import com.lyreo.curriculum.domain.CurriculumItem.ContentType;
+import com.lyreo.curriculum.domain.CurriculumItemProgress;
+import com.lyreo.curriculum.domain.CurriculumPath;
+import com.lyreo.curriculum.domain.CurriculumPathSummary;
+import com.lyreo.curriculum.domain.CurriculumSection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface CurriculumProgressRepository {
     List<UUID> itemIdsReferencing(ContentType type, UUID contentReferenceId);
+
+    List<ActiveItemTarget> activeEnrolledItemTargetsReferencing(
+        UUID learnerId,
+        ContentType type,
+        UUID contentReferenceId
+    );
+
     void complete(UUID learnerId, UUID itemId);
+
+    void upsertItemProgressStatus(UUID learnerId, UUID itemId, String status);
+
+    Optional<CurriculumPath> findPathById(UUID pathId);
+
+    List<CurriculumPathSummary> listPublishedPaths(UUID learnerId);
+
+    List<CurriculumPath> listAllPaths();
+
+    List<CurriculumSection> findSectionsByPathId(UUID pathId);
+
+    List<CurriculumItem> findItemsByPathId(UUID pathId);
+
+    Optional<CurriculumEnrollment> findEnrollment(UUID learnerId, UUID pathId);
+
+    List<CurriculumEnrollment> findActivePublishedEnrollments(UUID learnerId);
+
+    List<CurriculumItemProgress> findItemProgressByPath(UUID learnerId, UUID pathId);
+
+    void ensureActiveEnrollment(UUID learnerId, UUID pathId);
+
+    void markEnrollmentCompleted(UUID learnerId, UUID pathId);
+
+    CurriculumPath insertPath(UUID id, String code, String name, String level, String description, String status);
+
+    Optional<CurriculumPath> updatePath(UUID id, String code, String name, String level, String description);
+
+    Optional<CurriculumPath> updatePathStatus(UUID id, String status);
+
+    boolean deletePath(UUID id);
+
+    CurriculumSection insertSection(UUID id, UUID pathId, String title, int position);
+
+    CurriculumItem insertItem(
+        UUID id,
+        UUID sectionId,
+        int position,
+        ContentType contentType,
+        UUID contentReferenceId,
+        boolean required,
+        String unlockRule,
+        String configJson
+    );
+
+    void deleteSectionsByPathId(UUID pathId);
+
+    Optional<CurriculumSection> findSectionById(UUID sectionId);
+
+    boolean existsByCode(String code, UUID excludePathId);
+
+    record ActiveItemTarget(UUID itemId, UUID pathId) {}
 }

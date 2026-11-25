@@ -1,4 +1,4 @@
-.PHONY: help init-env doctor setup setup-media deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset db-recreate seed-dev seed-lessons down dev core ai admin mobile \
+.PHONY: help init-env doctor setup setup-media deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset db-recreate seed-dev seed-lessons seed-demo down dev core ai admin mobile \
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
         ai-local clean \
@@ -43,6 +43,7 @@ help:
 	  '  make db-reset                    Preview lesson-only reset; keeps imported banks and configuration' \
 	  '  make db-recreate                 Preview destructive whole application database recreation' \
 	  '  make seed-dev                    Migrate and seed reference categories in the configured database' \
+	  '  make seed-demo                Seed deterministic demo catalog, learner states, and local media' \
 	  '  make migrate                     Apply Flyway without starting HTTP or workers' \
 	  '  make down-v CONFIRM=lyreo-volumes Delete ALL volumes, including imports and Keycloak' \
 	  '' \
@@ -160,6 +161,9 @@ seed-dev: deps-java
 LESSON_SEED_FILE ?= $(CURDIR)/infra/postgres/seed/lessons.sql
 seed-lessons: seed-dev
 	@$(call seed_database,$(abspath $(LESSON_SEED_FILE)))
+
+seed-demo: deps-java
+	./scripts/seed-demo.sh
 
 migrate: deps-java
 	@$(DB_SETUP)

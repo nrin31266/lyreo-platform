@@ -15,6 +15,8 @@ import { ApiError } from '@/lib/api';
 import { CatalogError, CatalogSkeleton } from '@/pages/lessons/CatalogFeedback';
 import { LearnerAvatarDialog, LearnerNameEditor } from './LearnerAppearanceEditor';
 import { LearnerAvatar } from './LearnerAvatar';
+import { LearnerAccessAndRewards } from './LearnerAccessAndRewards';
+import { LearnerStudyProgress } from './LearnerStudyProgress';
 import { fetchLearner, fetchLearners, type OnboardingStatus } from './learners.api';
 
 function OnboardingBadge({ status }: { status: OnboardingStatus }) {
@@ -180,22 +182,26 @@ export function LearnerDetailPage() {
         <CatalogError error={learner.error} retry={() => void learner.refetch()} retrying={learner.isFetching} />
       )}
       {entry && (
-        <dl className="grid gap-x-8 gap-y-5 rounded-lg border bg-card p-5 sm:grid-cols-2 xl:grid-cols-3">
-          {([
-            ['email', entry.email || missing],
-            ['firstSeen', date.format(new Date(entry.firstSeenAt))],
-            ['completedAt', entry.onboardingCompletedAt ? date.format(new Date(entry.onboardingCompletedAt)) : missing],
-            ['goal', localized('goals', entry.goal)],
-            ['level', localized('levels', entry.currentLevel)],
-            ['minutes', entry.dailyMinutes == null ? missing : t('learnerProfiles.perDay', { minutes: entry.dailyMinutes })],
-            ['focusArea', localized('focus', entry.focusArea)],
-          ] as const).map(([key, value]) => (
-            <div key={key} className="min-w-0">
-              <dt className="text-sm text-muted-foreground">{t(`learnerProfiles.${key}`)}</dt>
-              <dd className="mt-1 break-words font-medium">{value}</dd>
-            </div>
-          ))}
-        </dl>
+        <>
+          <dl className="grid gap-x-8 gap-y-5 rounded-lg border bg-card p-5 sm:grid-cols-2 xl:grid-cols-3">
+            {([
+              ['email', entry.email || missing],
+              ['firstSeen', date.format(new Date(entry.firstSeenAt))],
+              ['completedAt', entry.onboardingCompletedAt ? date.format(new Date(entry.onboardingCompletedAt)) : missing],
+              ['goal', localized('goals', entry.goal)],
+              ['level', localized('levels', entry.currentLevel)],
+              ['minutes', entry.dailyMinutes == null ? missing : t('learnerProfiles.perDay', { minutes: entry.dailyMinutes })],
+              ['focusArea', localized('focus', entry.focusArea)],
+            ] as const).map(([key, value]) => (
+              <div key={key} className="min-w-0">
+                <dt className="text-sm text-muted-foreground">{t(`learnerProfiles.${key}`)}</dt>
+                <dd className="mt-1 break-words font-medium">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <LearnerStudyProgress learnerId={entry.learnerId} />
+          <LearnerAccessAndRewards learnerId={entry.learnerId} />
+        </>
       )}
     </section>
   );

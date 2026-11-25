@@ -2,8 +2,12 @@ package com.lyreo.gamification.infrastructure.persistence;
 
 import com.lyreo.gamification.application.port.DiamondLedger;
 import com.lyreo.gamification.domain.DiamondTransaction;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -33,10 +37,10 @@ public class JdbcDiamondLedger implements DiamondLedger {
             """
             INSERT INTO diamond_transaction(
                 id, learner_id, transaction_type, amount, idempotency_key,
-                reference_type, reference_id, created_at
+                reference_type, reference_id, created_at, reason, rule_version
             ) VALUES (
                 :id, :learnerId, :transactionType, :amount, :idempotencyKey,
-                :referenceType, :referenceId, :createdAt
+                :referenceType, :referenceId, :createdAt, :reason, :ruleVersion
             )
             ON CONFLICT(idempotency_key) DO NOTHING
             """,
@@ -49,6 +53,8 @@ public class JdbcDiamondLedger implements DiamondLedger {
                 .addValue("referenceType", transaction.referenceType())
                 .addValue("referenceId", transaction.referenceId())
                 .addValue("createdAt", Timestamp.from(transaction.createdAt()))
+                .addValue("reason", transaction.reason())
+                .addValue("ruleVersion", transaction.ruleVersion())
         );
 
         // Never apply the wallet delta twice when the idempotency key already existed.
@@ -75,5 +81,54 @@ public class JdbcDiamondLedger implements DiamondLedger {
             (rs, rowNumber) -> rs.getInt("cached_balance")
         );
         return balances.isEmpty() ? 0 : balances.getFirst();
+    }
+
+    @Override
+    public Optional<DiamondTransaction> findByIdempotencyKey(String idempotencyKey) {
+        return jdbc.query(
+            """
+            SELECT id, learner_id, transaction_type, amount, idempotency_key,
+                   reference_type, reference_id, created_at, reason, rule_version
+            FROM diamond_transaction
+            WHERE idempotency_key = :key
+            """,
+            Map.of("key", idempotencyKey),
+            (rs, rowNum) -> mapTransaction(rs)
+        ).stream().findFirst();
+    }
+
+    @Override
+    public List<DiamondTransaction> listByLearner(UUID learnerId, int page, int size) {
+        return jdbc.query(
+            """
+            SELECT id, learner_id, transaction_type, amount, idempotency_key,
+                   reference_type, reference_id, created_at, reason, rule_version
+            FROM diamond_transaction
+            WHERE learner_id = :learnerId
+            ORDER BY created_at DESC, id DESC
+            LIMIT :limit OFFSET :offset
+            """,
+            Map.of(
+                "learnerId", learnerId,
+                "limit", size,
+                "offset", (long) page * size
+            ),
+            (rs, rowNum) -> mapTransaction(rs)
+        );
+    }
+
+    private static DiamondTransaction mapTransaction(ResultSet rs) throws SQLException {
+        return new DiamondTransaction(
+            rs.getObject("id", UUID.class),
+            rs.getObject("learner_id", UUID.class),
+            DiamondTransaction.Type.valueOf(rs.getString("transaction_type")),
+            rs.getInt("amount"),
+            rs.getString("idempotency_key"),
+            rs.getString("reference_type"),
+            rs.getObject("reference_id", UUID.class),
+            rs.getTimestamp("created_at").toInstant(),
+            rs.getString("reason"),
+            rs.getString("rule_version")
+        );
     }
 }

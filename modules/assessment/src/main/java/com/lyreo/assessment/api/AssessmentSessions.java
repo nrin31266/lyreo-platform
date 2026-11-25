@@ -4,11 +4,15 @@ import com.lyreo.assessment.application.port.SessionRepository;
 import com.lyreo.assessment.domain.QuestionContent;
 import com.lyreo.contracts.errors.*;
 import com.lyreo.contracts.grammar.GrammarQuestionAnsweredEvent;
+import com.lyreo.contracts.grammar.GrammarSessionCompletedEvent;
 import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent;
+import com.lyreo.platform.config.application.OperationIdempotencyService;
 import com.lyreo.platform.content.AssetStore;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.modulith.NamedInterface;
 import org.springframework.stereotype.Service;
@@ -19,11 +23,31 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 @NamedInterface(value="api",propagate=false)
 public class AssessmentSessions {
+    private static final String START_OPERATION = "assessment.session.start";
+
     private final SessionRepository repository;
     private final ObjectMapper json;
     private final ApplicationEventPublisher events;
     private final AssetStore assets;
-    public AssessmentSessions(SessionRepository repository,ObjectMapper json,ApplicationEventPublisher events,AssetStore assets) {this.repository=repository;this.json=json;this.events=events;this.assets=assets;}
+    private final OperationIdempotencyService idempotency;
+
+    public AssessmentSessions(SessionRepository repository,ObjectMapper json,ApplicationEventPublisher events,AssetStore assets) {
+        this(repository,json,events,assets,(OperationIdempotencyService) null);
+    }
+
+    public AssessmentSessions(SessionRepository repository,ObjectMapper json,ApplicationEventPublisher events,AssetStore assets,OperationIdempotencyService idempotency) {
+        this.repository=repository;
+        this.json=json;
+        this.events=events;
+        this.assets=assets;
+        this.idempotency=idempotency;
+    }
+
+    @Autowired
+    public AssessmentSessions(SessionRepository repository,ObjectMapper json,ApplicationEventPublisher events,AssetStore assets,ObjectProvider<OperationIdempotencyService> idempotencyProvider) {
+        this(repository,json,events,assets,idempotencyProvider.getIfAvailable());
+    }
+
     @NamedInterface(value="api",propagate=false)
     public record Item(UUID id,UUID itemId,UUID publicationId,int part,int number,UUID topicId,UUID subtopicId,UUID groupId,QuestionContent content,Integer gapNumber) {}
     @NamedInterface(value="api",propagate=false)
@@ -45,8 +69,42 @@ public class AssessmentSessions {
     @NamedInterface(value="api",propagate=false)
     public record History(UUID id,UUID catalogId,String title,String mode,String status,Instant createdAt,Instant submittedAt,Result result) {}
 
+    public View startWithIdempotency(UUID learnerId,String domain,UUID catalogId,String mode,Snapshot snapshot,String idempotencyKey) {
+        String fingerprint = domain + ":" + catalogId + ":" + mode + ":" + json.writeValueAsString(snapshot);
+        return startWithIdempotency(learnerId,domain,catalogId,mode,snapshot,idempotencyKey,fingerprint);
+    }
+
+    public View startWithIdempotency(UUID learnerId,String domain,UUID catalogId,String mode,Snapshot snapshot,String idempotencyKey,String requestFingerprint) {
+        if(idempotencyKey == null || idempotencyKey.isBlank()) {
+            return start(learnerId,domain,catalogId,mode,snapshot);
+        }
+        String normalizedKey = idempotencyKey.trim();
+        if(normalizedKey.length() > 128) {
+            throw new RequestValidationException("Idempotency-Key must be at most 128 characters");
+        }
+        if(idempotency == null) {
+            throw new IllegalStateException("OperationIdempotencyService is not configured");
+        }
+        validateStart(domain, snapshot);
+        return idempotency.execute(
+            learnerId,
+            START_OPERATION,
+            normalizedKey,
+            requestFingerprint,
+            View.class,
+            () -> start(learnerId,domain,catalogId,mode,snapshot)
+        );
+    }
+
     @Transactional
     public View start(UUID learnerId,String domain,UUID catalogId,String mode,Snapshot snapshot) {
+        validateStart(domain, snapshot);
+        UUID id=UUID.randomUUID();
+        repository.insert(id,learnerId,domain,catalogId,mode,json.writeValueAsString(snapshot));
+        return get(learnerId,id);
+    }
+
+    private void validateStart(String domain, Snapshot snapshot) {
         if(domain==null || !Set.of("grammar","toeic").contains(domain) || snapshot==null || snapshot.title()==null || snapshot.groups()==null || snapshot.items()==null || snapshot.items().isEmpty() || snapshot.items().size()>200) throw new RequestValidationException("Choose between 1 and 200 questions");
         var ids=new HashSet<UUID>();var groups=new HashSet<UUID>();
         for(var group:snapshot.groups()) {
@@ -58,10 +116,8 @@ public class AssessmentSessions {
             if(item==null || item.id()==null || item.itemId()==null || !ids.add(item.id()) || item.groupId()!=null && !groups.contains(item.groupId())) throw new RequestValidationException("Invalid session questions");
             AssessmentLibrary.validate(item.content(),true);
         }
-        UUID id=UUID.randomUUID();
-        repository.insert(id,learnerId,domain,catalogId,mode,json.writeValueAsString(snapshot));
-        return get(learnerId,id);
     }
+
     public View get(UUID learnerId,UUID id) {return view(owned(learnerId,id,false));}
 
     @Transactional
@@ -89,19 +145,32 @@ public class AssessmentSessions {
         var result=new Result(listening,listeningTotal,reading,readingTotal,correctTotal,feedback.size(),null,null,feedback,snapshot.groups());
         repository.submit(id,json.writeValueAsString(result));
         Instant now=Instant.now();
-        if(row.domain().equals("toeic")) events.publishEvent(new ToeicAttemptCompletedEvent(learnerId,id,row.catalogId(),row.mode(),listening,listeningTotal,reading,readingTotal,null,null,now));
-        else for(int index=0;index<snapshot.items().size();index++) {
-            var item=snapshot.items().get(index);var score=feedback.get(index);
-            UUID answerId=UUID.nameUUIDFromBytes((id+":"+item.id()).getBytes(StandardCharsets.UTF_8));
-            events.publishEvent(new GrammarQuestionAnsweredEvent(learnerId,answerId,item.itemId(),item.topicId(),item.subtopicId(),item.content().difficultyLevel()==null?1:item.content().difficultyLevel(),score.correct(),now));
+        if("toeic".equals(row.domain())) {
+            events.publishEvent(new ToeicAttemptCompletedEvent(learnerId,id,row.catalogId(),row.mode(),listening,listeningTotal,reading,readingTotal,null,null,now));
+        } else if("grammar".equals(row.domain())) {
+            for(int index=0;index<snapshot.items().size();index++) {
+                var item=snapshot.items().get(index);var score=feedback.get(index);
+                UUID answerId=UUID.nameUUIDFromBytes((id+":"+item.id()).getBytes(StandardCharsets.UTF_8));
+                events.publishEvent(new GrammarQuestionAnsweredEvent(learnerId,answerId,item.itemId(),item.topicId(),item.subtopicId(),item.content().difficultyLevel()==null?1:item.content().difficultyLevel(),score.correct(),now));
+            }
+            events.publishEvent(new GrammarSessionCompletedEvent(row.id(),learnerId,row.catalogId(),row.mode(),result.correct(),result.total(),now));
         }
         return get(learnerId,id);
     }
 
     public List<History> history(UUID learnerId,String domain,int page,int size) {
-        if(!Set.of("grammar","toeic").contains(domain) || page<0 || page>100000 || size<1 || size>100) throw new RequestValidationException("Invalid history page");
-        return repository.history(learnerId,domain,page,size).stream().map(row->new History(row.id(),row.catalogId(),snapshot(row).title(),row.mode(),status(row),row.createdAt(),row.submittedAt(),result(row))).toList();
+        return history(learnerId,domain,null,null,page,size);
     }
+
+    public List<History> history(UUID learnerId,String domain,String status,UUID catalogId,int page,int size) {
+        if(domain==null || !Set.of("grammar","toeic").contains(domain) || page<0 || page>100000 || size<1 || size>100) throw new RequestValidationException("Invalid history page");
+        String normalizedStatus = (status == null || status.isBlank()) ? null : status.trim().toUpperCase(Locale.ROOT);
+        if(normalizedStatus != null && !Set.of("OPEN","SUBMITTED","EXPIRED").contains(normalizedStatus)) {
+            throw new RequestValidationException("Invalid session status filter");
+        }
+        return repository.history(learnerId,domain,normalizedStatus,catalogId,page,size).stream().map(row->new History(row.id(),row.catalogId(),snapshot(row).title(),row.mode(),status(row),row.createdAt(),row.submittedAt(),result(row))).toList();
+    }
+
     public AssetStore.Asset media(UUID learnerId,UUID sessionId,UUID assetId) {
         var snapshot=snapshot(owned(learnerId,sessionId,false));
         boolean present=snapshot.items().stream().flatMap(item->item.content().media().stream())
@@ -118,8 +187,8 @@ public class AssessmentSessions {
     }
     private void open(SessionRepository.Row row,long revision) {
         if(row.submittedAt()!=null) throw new StateConflictException("Session is already submitted");
-        if(!row.expiresAt().isAfter(Instant.now())) throw new StateConflictException("Session expired after 24 hours");
-        if(row.revision()!=revision) throw new StateConflictException("Session changed; reload before continuing");
+        if(!row.expiresAt().isAfter(Instant.now())) throw new SessionExpiredException("Session expired after 24 hours",row.expiresAt());
+        if(row.revision()!=revision) throw new StaleRevisionException("Session changed; reload before continuing",row.revision());
     }
     private SessionRepository.Row owned(UUID learnerId,UUID id,boolean lock) {return repository.find(id,learnerId,lock).orElseThrow(()->new ResourceNotFoundException("Session not found"));}
     private Snapshot snapshot(SessionRepository.Row row) {return json.readValue(row.snapshot(),Snapshot.class);}

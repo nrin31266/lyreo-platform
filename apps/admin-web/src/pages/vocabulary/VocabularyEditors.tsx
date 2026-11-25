@@ -104,6 +104,9 @@ export function VocabularyNameDialog({ value, onSaved, onClose }: EditorActions 
   const [vi, setVi] = useState(pack ? value.titleVi : '');
   const [level, setLevel] = useState(pack ? '' : value.level);
   const [hidden, setHidden] = useState(value.hidden);
+  const [accessMode, setAccessMode] = useState<'PUBLIC' | 'FEATURE'>(
+    pack && value.accessMode === 'FEATURE' ? 'FEATURE' : 'PUBLIC',
+  );
   const save = useSave(`/${pack ? 'packs' : 'units'}/${value.id}`, onSaved);
   const heading = t(pack ? 'vocabulary.editPack' : 'vocabulary.editUnit');
 
@@ -116,7 +119,17 @@ export function VocabularyNameDialog({ value, onSaved, onClose }: EditorActions 
       <form className="grid gap-4" onSubmit={(event) => {
         event.preventDefault();
         const edit = { revision: value.revision, hidden };
-        save.mutate(pack ? { ...edit, titleEn: name.trim(), titleVi: vi.trim() } : { ...edit, title: name.trim(), level });
+        save.mutate(
+          pack
+            ? {
+                ...edit,
+                titleEn: name.trim(),
+                titleVi: vi.trim(),
+                accessMode,
+                requiredFeatureKey: accessMode === 'FEATURE' ? 'vocabulary.plus-packs' : null,
+              }
+            : { ...edit, title: name.trim(), level },
+        );
       }}>
         <Field label={t(pack ? 'vocabulary.titleEn' : 'vocabulary.unitName')}>
           <Input required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} />
@@ -124,6 +137,16 @@ export function VocabularyNameDialog({ value, onSaved, onClose }: EditorActions 
         {pack && <Field label={t('vocabulary.titleVi')}>
           <Input required maxLength={120} value={vi} onChange={(event) => setVi(event.target.value)} />
         </Field>}
+        {pack && <div className="grid gap-1.5">
+          <Label htmlFor="vocabulary-pack-access" className="text-xs font-medium text-muted-foreground">{t('vocabulary.accessMode')}</Label>
+          <Select value={accessMode} onValueChange={selected => setAccessMode(selected as 'PUBLIC' | 'FEATURE')}>
+            <SelectTrigger id="vocabulary-pack-access" className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="PUBLIC">{t('vocabulary.accessPublic')}</SelectItem>
+              <SelectItem value="FEATURE">{t('vocabulary.accessPlus')}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>}
         {!pack && <div className="grid gap-1.5">
           <Label htmlFor="vocabulary-cefr" className="text-xs font-medium text-muted-foreground">{t('vocabulary.cefrLevel')}</Label>
           <Select value={level} onValueChange={setLevel}>

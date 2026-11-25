@@ -1,9 +1,14 @@
 package com.lyreo.platform.web;
 
+import com.lyreo.contracts.errors.IdempotencyConflictException;
 import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
-import com.lyreo.contracts.errors.StateConflictException;
 import com.lyreo.contracts.errors.ServiceUnavailableException;
+import com.lyreo.contracts.errors.SessionExpiredException;
+import com.lyreo.contracts.errors.StaleRevisionException;
+import com.lyreo.contracts.errors.StateConflictException;
+import com.lyreo.entitlement.api.FeatureEntitlementRequiredException;
+import com.lyreo.entitlement.api.QuotaExceededException;
 import com.lyreo.platform.observability.CorrelationIdAccessor;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
@@ -18,7 +23,6 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
-import com.lyreo.entitlement.api.FeatureEntitlementRequiredException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -244,15 +248,36 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(StateConflictException.class)
     public ResponseEntity<ProblemDetail> handleStateConflict(StateConflictException ex, HttpServletRequest request) {
+        String slug = "state-conflict";
+        String title = "State conflict";
+        String code = ApiErrorCodes.STATE_CONFLICT;
+        if (ex instanceof StaleRevisionException) {
+            slug = "stale-revision";
+            title = "Stale revision";
+            code = ApiErrorCodes.STALE_REVISION;
+        } else if (ex instanceof SessionExpiredException) {
+            slug = "session-expired";
+            title = "Session expired";
+            code = ApiErrorCodes.SESSION_EXPIRED;
+        } else if (ex instanceof IdempotencyConflictException) {
+            slug = "idempotency-conflict";
+            title = "Idempotency conflict";
+            code = ApiErrorCodes.IDEMPOTENCY_CONFLICT;
+        }
         ProblemDetail problem = ApiProblemFactory.create(
             HttpStatus.CONFLICT,
-            "state-conflict",
-            "State conflict",
+            slug,
+            title,
             ex.getMessage(),
-            ApiErrorCodes.STATE_CONFLICT,
+            code,
             request,
             null
         );
+        if (ex instanceof StaleRevisionException stale && stale.currentRevision() != null) {
+            problem.setProperty("currentRevision", stale.currentRevision());
+        } else if (ex instanceof SessionExpiredException expired && expired.expiredAt() != null) {
+            problem.setProperty("expiredAt", expired.expiredAt().toString());
+        }
         return ResponseEntity.status(HttpStatus.CONFLICT)
             .contentType(ApiProblemWriter.APPLICATION_PROBLEM_JSON)
             .body(problem);
@@ -276,13 +301,52 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ProblemDetail> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
-        String code = ex instanceof FeatureEntitlementRequiredException
-            ? ApiErrorCodes.FEATURE_ENTITLEMENT_REQUIRED : ApiErrorCodes.ACCESS_DENIED;
+        String code = ApiErrorCodes.ACCESS_DENIED;
+        String detail = "Access is denied to this resource.";
+        if (ex instanceof QuotaExceededException quota) {
+            code = ApiErrorCodes.QUOTA_EXCEEDED;
+            detail = "Usage quota or capacity limit exceeded for this feature.";
+            ProblemDetail problem = ApiProblemFactory.create(
+                HttpStatus.FORBIDDEN,
+                "access-denied",
+                "Quota exceeded",
+                detail,
+                code,
+                request,
+                null
+            );
+            problem.setProperty("featureKey", quota.featureKey().value());
+            problem.setProperty("limitType", quota.limitType());
+            problem.setProperty("limit", quota.limit());
+            problem.setProperty("remaining", quota.remaining());
+            if (quota.resetAt() != null) {
+                problem.setProperty("resetAt", quota.resetAt().toString());
+            }
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .contentType(ApiProblemWriter.APPLICATION_PROBLEM_JSON)
+                .body(problem);
+        }
+        if (ex instanceof FeatureEntitlementRequiredException required) {
+            code = ApiErrorCodes.FEATURE_ENTITLEMENT_REQUIRED;
+            ProblemDetail problem = ApiProblemFactory.create(
+                HttpStatus.FORBIDDEN,
+                "access-denied",
+                "Access denied",
+                detail,
+                code,
+                request,
+                null
+            );
+            problem.setProperty("featureKey", required.featureKey().value());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .contentType(ApiProblemWriter.APPLICATION_PROBLEM_JSON)
+                .body(problem);
+        }
         ProblemDetail problem = ApiProblemFactory.create(
             HttpStatus.FORBIDDEN,
             "access-denied",
             "Access denied",
-            "Access is denied to this resource.",
+            detail,
             code,
             request,
             null

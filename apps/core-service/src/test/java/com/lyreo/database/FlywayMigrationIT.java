@@ -106,7 +106,7 @@ class FlywayMigrationIT {
     void verifiesConsolidatedBaselineMigrationsSucceeded() {
         MigrationInfo[] applied = flyway.info().applied();
 
-        assertThat(applied).hasSize(9).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
+        assertThat(applied).hasSize(10).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
@@ -120,7 +120,8 @@ class FlywayMigrationIT {
         assertThat(applied[6].getDescription()).isEqualTo("learner avatar catalog");
         assertThat(applied[7].getDescription()).isEqualTo("admin pronunciation attempt");
         assertThat(applied[8].getDescription()).isEqualTo("admin vocabulary catalog");
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("009");
+        assertThat(applied[9].getDescription()).isEqualTo("learner platform core");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("010");
     }
 
     @Test
@@ -218,7 +219,25 @@ class FlywayMigrationIT {
             "learner_skill_summary",
             "learner_weakness",
             "chat_conversation",
-            "chat_message"
+            "chat_message",
+            "operation_idempotency_record",
+            "consumer_event_receipt",
+            "entitlement_quota_policy",
+            "entitlement_usage_counter",
+            "entitlement_usage_reservation",
+            "entitlement_audit_log",
+            "vocabulary_release_lineage",
+            "vocabulary_entry_progress",
+            "vocabulary_study_session",
+            "vocabulary_collection",
+            "vocabulary_collection_item",
+            "learner_pronunciation_attempt",
+            "xp_transaction",
+            "achievement_definition",
+            "learner_achievement",
+            "learner_achievement_item",
+            "learner_streak_day",
+            "learner_streak"
         );
         assertThat(tables).doesNotContain(
             "dataset_import", "grammar_topic", "grammar_subtopic", "grammar_bank_set",
@@ -510,6 +529,7 @@ class FlywayMigrationIT {
         jdbcTemplate.update("""
             INSERT INTO entitlement_feature(feature_key,display_name)
             VALUES('grammar.advanced','Advanced grammar')
+            ON CONFLICT (feature_key) DO NOTHING
             """);
         jdbcTemplate.update("""
             INSERT INTO user_entitlement_grant(

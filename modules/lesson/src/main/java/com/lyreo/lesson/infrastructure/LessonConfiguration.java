@@ -3,10 +3,12 @@ package com.lyreo.lesson.infrastructure;
 import tools.jackson.databind.ObjectMapper;
 import com.lyreo.ai.application.execution.AiInvocationService;
 import com.lyreo.ai.application.routing.AiRoutingSnapshotService;
+import com.lyreo.lesson.api.LearnerShadowingCompletionPort;
 import com.lyreo.lesson.application.build.CreateLessonBuildService;
 import com.lyreo.lesson.application.build.LessonBuildJobHandler;
 import com.lyreo.lesson.application.build.LessonBuildPlanner;
 import com.lyreo.lesson.application.build.LessonPromptFactory;
+import com.lyreo.lesson.application.port.LearnerLessonQuery;
 import com.lyreo.lesson.application.port.LessonActivityWriter;
 import com.lyreo.lesson.application.port.LessonBuildStateRepository;
 import com.lyreo.lesson.application.port.LessonEnrichmentWriter;
@@ -16,15 +18,20 @@ import com.lyreo.lesson.application.port.LessonProcessingPolicyRepository;
 import com.lyreo.lesson.application.port.LessonRepository;
 import com.lyreo.lesson.application.port.LessonSourceMaterializer;
 import com.lyreo.lesson.application.practice.DictationScoringPolicy;
+import com.lyreo.lesson.application.practice.LearnerLessonService;
+import com.lyreo.lesson.application.practice.LearnerShadowingCompletionService;
 import com.lyreo.lesson.application.practice.LessonPracticeService;
 import com.lyreo.lesson.application.preview.LessonPreviewService;
+import com.lyreo.lesson.domain.practice.DictationMaskingPolicy;
 import com.lyreo.lesson.infrastructure.integration.ExternalCommandYoutubeSourceMaterializer;
+import com.lyreo.lesson.infrastructure.persistence.JdbcLearnerLessonQuery;
 import com.lyreo.lesson.infrastructure.persistence.JdbcLessonActivityWriter;
 import com.lyreo.lesson.infrastructure.persistence.JdbcLessonBuildStateRepository;
 import com.lyreo.lesson.infrastructure.persistence.JdbcLessonEnrichmentWriter;
 import com.lyreo.lesson.infrastructure.persistence.JdbcLessonPracticeRepository;
 import com.lyreo.lesson.infrastructure.persistence.JdbcLessonPreviewQuery;
 import com.lyreo.lesson.infrastructure.persistence.JdbcLessonRepository;
+import com.lyreo.platform.config.application.OperationIdempotencyService;
 import com.lyreo.platform.config.application.RuntimeConfigService;
 import com.lyreo.platform.jobs.application.BackgroundJobService;
 import com.lyreo.platform.storage.ObjectStoragePort;
@@ -83,13 +90,44 @@ public class LessonConfiguration {
     }
 
     @Bean
+    DictationMaskingPolicy dictationMaskingPolicy() {
+        return new DictationMaskingPolicy();
+    }
+
+    @Bean
+    LearnerLessonQuery learnerLessonQuery(
+        NamedParameterJdbcTemplate jdbc,
+        ObjectMapper mapper
+    ) {
+        return new JdbcLearnerLessonQuery(jdbc, mapper);
+    }
+
+    @Bean
+    LearnerLessonService learnerLessonService(
+        LearnerLessonQuery query,
+        DictationMaskingPolicy maskingPolicy,
+        ObjectStoragePort storage
+    ) {
+        return new LearnerLessonService(query, maskingPolicy, storage);
+    }
+
+    @Bean
     LessonPracticeService lessonPracticeService(
         LessonPracticeRepository repository,
         DictationScoringPolicy scoring,
         ApplicationEventPublisher events,
-        ObjectMapper mapper
+        ObjectMapper mapper,
+        OperationIdempotencyService idempotency
     ) {
-        return new LessonPracticeService(repository, scoring, events, mapper);
+        return new LessonPracticeService(repository, scoring, events, mapper, idempotency);
+    }
+
+    @Bean
+    LearnerShadowingCompletionPort learnerShadowingCompletionPort(
+        LessonPracticeRepository repository,
+        ApplicationEventPublisher events
+    ) {
+        return new LearnerShadowingCompletionService(repository, events);
     }
 
     @Bean

@@ -1,6 +1,7 @@
 package com.lyreo.assessment.api;
 
 import com.lyreo.platform.content.AssetStore;
+import com.lyreo.platform.content.CatalogPage;
 import java.util.UUID;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.*;
@@ -14,6 +15,14 @@ import org.springframework.security.oauth2.jwt.Jwt;
 public class ContentMediaController {
     private final AssetStore assets;
     public ContentMediaController(AssetStore assets) {this.assets=assets;}
+    @GetMapping public CatalogPage<AssetStore.AssetSummary> list(
+        @RequestParam(defaultValue="0") int page,
+        @RequestParam(defaultValue="24") int size,
+        @RequestParam(defaultValue="") String query,
+        @RequestParam(defaultValue="") String kind
+    ) {
+        return assets.list(page,size,query,kind);
+    }
     @PostMapping @ResponseStatus(HttpStatus.CREATED)
     public AssetStore.Asset upload(@RequestParam MultipartFile file,@AuthenticationPrincipal Jwt jwt) throws java.io.IOException {
         return assets.upload(file.getOriginalFilename(),file.getBytes(),false,jwt.getSubject());

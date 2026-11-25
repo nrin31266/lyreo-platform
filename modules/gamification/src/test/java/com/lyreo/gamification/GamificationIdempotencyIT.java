@@ -1,0 +1,334 @@
+package com.lyreo.gamification;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.lyreo.contracts.errors.IdempotencyConflictException;
+import com.lyreo.contracts.errors.RequestValidationException;
+import com.lyreo.contracts.errors.ResourceNotFoundException;
+import com.lyreo.contracts.errors.StateConflictException;
+import com.lyreo.contracts.grammar.GrammarQuestionAnsweredEvent;
+import com.lyreo.contracts.lesson.LessonActivityCompletedEvent;
+import com.lyreo.contracts.lesson.LessonCompletedEvent;
+import com.lyreo.gamification.application.LessonRewardListener;
+import com.lyreo.gamification.application.MissionEventListener;
+import com.lyreo.gamification.application.StreakService;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.persistence.autoconfigure.EntityScan;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.WebApplicationContext;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+import tools.jackson.databind.ObjectMapper;
+
+@SpringBootTest(classes = GamificationIdempotencyIT.TestConfig.class)
+class GamificationIdempotencyIT {
+
+    @ServiceConnection
+    static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.6-alpine");
+
+    static {
+        postgres.start();
+    }
+
+    @DynamicPropertySource
+    static void flywayLocation(DynamicPropertyRegistry registry) {
+        Path migrations = Path.of("../../apps/core-service/src/main/resources/db/migration")
+            .toAbsolutePath()
+            .normalize();
+        registry.add("spring.flyway.locations", () -> "filesystem:" + migrations);
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @EnableAutoConfiguration
+    @EnableMethodSecurity
+    @EnableJpaRepositories(basePackages = "com.lyreo.identity")
+    @EntityScan(basePackages = "com.lyreo.identity")
+    @ComponentScan(basePackages = {
+        "com.lyreo.gamification",
+        "com.lyreo.identity",
+        "com.lyreo.platform.config"
+    })
+    static class TestConfig {
+        @Bean
+        SecurityFilterChain testSecurity(HttpSecurity http) throws Exception {
+            return http
+                .csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(auth -> auth
+                    .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                    .anyRequest().authenticated()
+                )
+                .build();
+        }
+
+        @RestControllerAdvice
+        static class TestErrors {
+            @ExceptionHandler(ResourceNotFoundException.class)
+            ResponseEntity<java.util.Map<String, String>> notFound(ResourceNotFoundException ex) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(java.util.Map.of("detail", ex.getMessage()));
+            }
+
+            @ExceptionHandler({StateConflictException.class, IdempotencyConflictException.class})
+            ResponseEntity<java.util.Map<String, String>> conflict(StateConflictException ex) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(java.util.Map.of("detail", ex.getMessage()));
+            }
+
+            @ExceptionHandler(RequestValidationException.class)
+            ResponseEntity<java.util.Map<String, String>> badRequest(RequestValidationException ex) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(java.util.Map.of("detail", ex.getMessage()));
+            }
+        }
+    }
+
+    @Autowired
+    private WebApplicationContext context;
+
+    @Autowired
+    private MissionEventListener missionListener;
+
+    @Autowired
+    private LessonRewardListener lessonRewardListener;
+
+    @Autowired
+    private StreakService streakService;
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    @Autowired
+    private ObjectMapper mapper;
+
+    private MockMvc mvc;
+
+    @BeforeEach
+    void setupMvc() {
+        mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
+    }
+
+    @Test
+    void deduplicatesPartialMissionProgressAwardsXpAndDiamondsOnceAndEvaluatesStreaksAchievementsAndCutover() throws Exception {
+        String subject = "gam-learner-" + UUID.randomUUID();
+        var learnerAuth = auth(subject, "LEARNER");
+        var adminAuth = auth("gam-admin-" + UUID.randomUUID(), "ADMIN");
+
+        // Provision learner via summary endpoint
+        mvc.perform(get("/api/v1/gamification/summary").with(learnerAuth))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.level").value(1))
+            .andExpect(jsonPath("$.xp").value(0))
+            .andExpect(jsonPath("$.diamondBalance").value(0));
+
+        UUID learnerId = jdbc.queryForObject(
+            "SELECT id FROM app_user WHERE keycloak_subject = ?",
+            UUID.class,
+            subject
+        );
+
+        // 1. Mission deduplication at 1/5 (DAILY_GRAMMAR_5)
+        Instant day1 = Instant.parse("2026-11-26T10:00:00Z");
+        UUID grammarAttempt1 = UUID.randomUUID();
+        UUID grammarItem1 = UUID.randomUUID();
+        var grammar1 = new GrammarQuestionAnsweredEvent(
+            learnerId, grammarAttempt1, grammarItem1, UUID.randomUUID(), UUID.randomUUID(), 2, true, day1
+        );
+        missionListener.grammar(grammar1);
+        // Replay at 1/5 -> must stay 1/5!
+        missionListener.grammar(grammar1);
+
+        Integer progressAfterReplay = jdbc.queryForObject(
+            """
+            SELECT progress FROM mission_progress
+            WHERE learner_id = ? AND mission_id = '10000000-0000-0000-0000-000000000004'
+            """,
+            Integer.class,
+            learnerId
+        );
+        assertThat(progressAfterReplay).isEqualTo(1);
+
+        // Complete remaining 4 distinct grammar answers
+        for (int i = 2; i <= 5; i++) {
+            var evt = new GrammarQuestionAnsweredEvent(
+                learnerId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), 2, true, day1
+            );
+            missionListener.grammar(evt);
+            if (i == 5) {
+                // Replay after completion
+                missionListener.grammar(evt);
+            }
+        }
+
+        // DAILY_GRAMMAR_5: 10 XP, 2 Diamonds, snapshot populated
+        String snapshotJson = jdbc.queryForObject(
+            "SELECT reward_snapshot_json::text FROM mission_progress WHERE learner_id = ? AND mission_id = '10000000-0000-0000-0000-000000000004'",
+            String.class,
+            learnerId
+        );
+        var snapshotNode = mapper.readTree(snapshotJson);
+        assertThat(snapshotNode.get("xp").asInt()).isEqualTo(10);
+        assertThat(snapshotNode.get("diamonds").asInt()).isEqualTo(2);
+        assertThat(snapshotNode.get("missionCode").asString()).isEqualTo("DAILY_GRAMMAR_5");
+
+        // 2. Cutover policy on LessonRewardListener
+        // Pre-cutover event (< 2026-11-25T00:00:00Z) awards legacy 2 diamonds
+        lessonRewardListener.on(new LessonActivityCompletedEvent(
+            UUID.randomUUID(), learnerId, UUID.randomUUID(), UUID.randomUUID(),
+            "SHADOWING", 85, Instant.parse("2026-11-24T23:59:59Z")
+        ));
+        // Post-cutover event (>= 2026-11-25T00:00:00Z) awards 0 diamonds when disabled
+        lessonRewardListener.on(new LessonActivityCompletedEvent(
+            UUID.randomUUID(), learnerId, UUID.randomUUID(), UUID.randomUUID(),
+            "SHADOWING", 95, Instant.parse("2026-11-25T12:00:00Z")
+        ));
+        assertThat(jdbc.queryForObject(
+            "SELECT count(*) FROM diamond_transaction WHERE learner_id = ? AND transaction_type = 'LESSON_REWARD'",
+            Integer.class,
+            learnerId
+        )).isEqualTo(1);
+
+        // 3. Achievements: FIRST_LESSON (badge-only 0 diamonds, 20 XP) & FIVE_LESSONS (5 distinct lessons -> 50 XP, 5 diamonds)
+        UUID repeatedLesson = UUID.randomUUID();
+        missionListener.lesson(new LessonCompletedEvent(UUID.randomUUID(), learnerId, repeatedLesson, day1));
+        // Completing the same lesson again must NOT advance FIVE_LESSONS past 1/5
+        missionListener.lesson(new LessonCompletedEvent(UUID.randomUUID(), learnerId, repeatedLesson, day1));
+
+        Integer fiveLessonsProgress = jdbc.queryForObject(
+            """
+            SELECT progress FROM learner_achievement
+            WHERE learner_id = ? AND achievement_id = '40000000-0000-0000-0000-000000000002'
+            """,
+            Integer.class,
+            learnerId
+        );
+        assertThat(fiveLessonsProgress).isEqualTo(1);
+        // FIRST_LESSON has diamond_reward = 0, so no ACHIEVEMENT_REWARD diamond tx yet
+        assertThat(jdbc.queryForObject(
+            "SELECT count(*) FROM diamond_transaction WHERE learner_id = ? AND transaction_type = 'ACHIEVEMENT_REWARD'",
+            Integer.class,
+            learnerId
+        )).isZero();
+
+        for (int i = 0; i < 4; i++) {
+            missionListener.lesson(new LessonCompletedEvent(UUID.randomUUID(), learnerId, UUID.randomUUID(), day1));
+        }
+        assertThat(jdbc.queryForObject(
+            "SELECT count(*) FROM diamond_transaction WHERE learner_id = ? AND transaction_type = 'ACHIEVEMENT_REWARD'",
+            Integer.class,
+            learnerId
+        )).isEqualTo(1);
+
+        // 4. StreakService UTC across same-day, midnight, late/out-of-order, and skipped-day
+        UUID streakLearner = UUID.randomUUID();
+        jdbc.update("INSERT INTO app_user(id, keycloak_subject) VALUES (?, ?)", streakLearner, "streak-" + streakLearner);
+        streakService.recordActivity(UUID.randomUUID(), streakLearner, Instant.parse("2026-11-20T01:00:00Z"));
+        var sameDay = streakService.recordActivity(UUID.randomUUID(), streakLearner, Instant.parse("2026-11-20T22:00:00Z"));
+        assertThat(sameDay.currentStreak()).isEqualTo(1);
+        assertThat(sameDay.longestStreak()).isEqualTo(1);
+
+        var midnight = streakService.recordActivity(UUID.randomUUID(), streakLearner, Instant.parse("2026-11-21T00:00:01Z"));
+        assertThat(midnight.currentStreak()).isEqualTo(2);
+
+        // Late/out-of-order fact for Nov 19 arriving after Nov 21 heals streak to 3!
+        var lateOutOfOrder = streakService.recordActivity(UUID.randomUUID(), streakLearner, Instant.parse("2026-11-19T23:59:59Z"));
+        assertThat(lateOutOfOrder.currentStreak()).isEqualTo(3);
+        assertThat(lateOutOfOrder.longestStreak()).isEqualTo(3);
+        assertThat(lateOutOfOrder.lastStudyDate()).isEqualTo(LocalDate.of(2026, 11, 21));
+
+        // Skipped Nov 22, study on Nov 23 -> currentStreak resets to 1, longest stays 3
+        var skippedDay = streakService.recordActivity(UUID.randomUUID(), streakLearner, Instant.parse("2026-11-23T08:00:00Z"));
+        assertThat(skippedDay.currentStreak()).isEqualTo(1);
+        assertThat(skippedDay.longestStreak()).isEqualTo(3);
+
+        // Trigger STREAK_3_DAYS achievement on main learner across 3 UTC days
+        missionListener.lesson(new LessonCompletedEvent(
+            UUID.randomUUID(), learnerId, UUID.randomUUID(), Instant.parse("2026-11-27T00:05:00Z")
+        ));
+        missionListener.lesson(new LessonCompletedEvent(
+            UUID.randomUUID(), learnerId, UUID.randomUUID(), Instant.parse("2026-11-28T00:05:00Z")
+        ));
+
+        // 5. Admin diamond adjustment requires reason + idempotencyKey and detects conflict
+        mvc.perform(post("/api/v1/admin/gamification/learners/{id}/diamonds", learnerId)
+                .with(adminAuth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\":15,\"reason\":\"\",\"idempotencyKey\":\"adj-1\"}"))
+            .andExpect(status().isBadRequest());
+
+        mvc.perform(post("/api/v1/admin/gamification/learners/{id}/diamonds", learnerId)
+                .with(adminAuth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\":15,\"reason\":\"QA bonus\",\"idempotencyKey\":\"adj-1\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.amount").value(15));
+
+        // Idempotent replay succeeds with same balance
+        mvc.perform(post("/api/v1/admin/gamification/learners/{id}/diamonds", learnerId)
+                .with(adminAuth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\":15,\"reason\":\"QA bonus\",\"idempotencyKey\":\"adj-1\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.amount").value(15));
+
+        // Conflicting payload with same idempotencyKey fails with 409
+        mvc.perform(post("/api/v1/admin/gamification/learners/{id}/diamonds", learnerId)
+                .with(adminAuth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\":20,\"reason\":\"QA bonus\",\"idempotencyKey\":\"adj-1\"}"))
+            .andExpect(status().isConflict());
+
+        // 6. Learner read endpoints return accurate summary, missions, achievements, and ledger
+        mvc.perform(get("/api/v1/gamification/summary").with(learnerAuth))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.level").value(2))
+            .andExpect(jsonPath("$.currentStreak").value(3))
+            .andExpect(jsonPath("$.longestStreak").value(3));
+
+        mvc.perform(get("/api/v1/gamification/missions").with(learnerAuth))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].code").isNotEmpty());
+
+        mvc.perform(get("/api/v1/gamification/achievements").with(learnerAuth))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(3));
+
+        mvc.perform(get("/api/v1/gamification/ledger").with(learnerAuth))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.transactions").isArray());
+    }
+
+    private static RequestPostProcessor auth(String subject, String role) {
+        return jwt()
+            .jwt(token -> token.subject(subject).claim("email", subject + "@example.test"))
+            .authorities(new SimpleGrantedAuthority("ROLE_" + role));
+    }
+}

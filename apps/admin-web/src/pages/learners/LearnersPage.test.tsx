@@ -6,14 +6,38 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { i18n } from '@/i18n';
 import { ApiError } from '@/lib/api';
 import { LearnerDetailPage, LearnersPage } from './LearnersPage';
-import { fetchLearner, fetchLearners, type LearnerEntry } from './learners.api';
-import { updateLearnerAppearance } from './learners.api';
+import {
+  adjustLearnerDiamonds,
+  createLearnerGrant,
+  fetchLearner,
+  fetchLearnerGamification,
+  fetchLearnerGrants,
+  fetchLearners,
+  revokeLearnerGrant,
+  updateLearnerAppearance,
+  type LearnerEntry,
+} from './learners.api';
 import { learnerAvatarColor, learnerInitials } from './LearnerAvatar';
 import { avatarPackIds, avatarPortraitSource, portraitPacks } from './learner-avatar-presets';
+import { fetchLearnerAnalytics } from '@/pages/overview/admin-ops.api';
 
-vi.mock('./learners.api', () => ({
-  fetchLearners: vi.fn(), fetchLearner: vi.fn(), updateLearnerAppearance: vi.fn(),
-  fetchLearnerAvatar: vi.fn(), uploadLearnerAvatar: vi.fn(),
+vi.mock('@/pages/overview/admin-ops.api', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/pages/overview/admin-ops.api')>()),
+  fetchLearnerAnalytics: vi.fn(),
+}));
+
+vi.mock('./learners.api', async importOriginal => ({
+  ...(await importOriginal<typeof import('./learners.api')>()),
+  fetchLearners: vi.fn(),
+  fetchLearner: vi.fn(),
+  updateLearnerAppearance: vi.fn(),
+  fetchLearnerAvatar: vi.fn(),
+  uploadLearnerAvatar: vi.fn(),
+  fetchLearnerGrants: vi.fn(),
+  createLearnerGrant: vi.fn(),
+  revokeLearnerGrant: vi.fn(),
+  fetchLearnerGamification: vi.fn(),
+  adjustLearnerDiamonds: vi.fn(),
 }));
 
 const ada: LearnerEntry = {
@@ -50,6 +74,26 @@ beforeEach(async () => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.mocked(fetchLearners).mockResolvedValue({ items: [ada], total: 41, page: 0, size: 20 });
   vi.mocked(fetchLearner).mockResolvedValue(ada);
+  vi.mocked(fetchLearnerGrants).mockResolvedValue([]);
+  vi.mocked(fetchLearnerAnalytics).mockResolvedValue({
+    hasHistory: false,
+    today: { fromDate: '2026-11-26', toDate: '2026-11-26', activeDays: 0, studySeconds: 0, lessonCount: 0, vocabularyReviewCount: 0, grammarAnswerCount: 0, toeicQuestionCount: 0 },
+    week: { fromDate: '2026-11-20', toDate: '2026-11-26', activeDays: 0, studySeconds: 0, lessonCount: 0, vocabularyReviewCount: 0, grammarAnswerCount: 0, toeicQuestionCount: 0 },
+    skills: [],
+    weaknesses: [],
+  });
+  vi.mocked(fetchLearnerGamification).mockResolvedValue({
+    learnerId: ada.learnerId,
+    xp: 120,
+    level: 2,
+    xpIntoLevel: 20,
+    xpForNextLevel: 100,
+    diamondBalance: 15,
+    currentStreak: 3,
+    longestStreak: 5,
+    lastActiveDate: '2026-11-25',
+    transactions: [],
+  });
 });
 
 afterEach(() => {
@@ -177,4 +221,105 @@ it('uses initials when a saved avatar is absent from the catalog', async () => {
   fireEvent.click(avatar);
   expect(screen.getByRole('button', { name: 'Initials' })).toHaveAttribute('aria-pressed', 'true');
   expect(updateLearnerAppearance).not.toHaveBeenCalled();
+});
+
+it('grants and revokes an entitlement with a reason and adjusts diamonds', async () => {
+  const activeGrant = {
+    id: 'grant-1',
+    userId: ada.learnerId,
+    featureKey: 'vocabulary.plus-packs',
+    status: 'ACTIVE',
+    validFrom: '2026-11-25T00:00:00Z',
+    validUntil: null,
+    sourceType: 'ADMIN_MANUAL',
+    sourceReference: 'VIP QA',
+    createdBy: 'admin',
+    createdAt: '2026-11-25T00:00:00Z',
+    revokedAt: null,
+    revokedBy: null,
+    revocationReason: null,
+  };
+  vi.mocked(fetchLearnerGrants).mockResolvedValueOnce([]).mockResolvedValue([activeGrant]);
+  vi.mocked(createLearnerGrant).mockResolvedValueOnce(activeGrant);
+  vi.mocked(revokeLearnerGrant).mockResolvedValueOnce({
+    ...activeGrant,
+    status: 'REVOKED',
+    revokedAt: '2026-11-25T01:00:00Z',
+    revokedBy: 'admin',
+    revocationReason: 'Expired trial',
+  });
+  const adjustedSummary = {
+    learnerId: ada.learnerId,
+    xp: 120,
+    level: 2,
+    xpIntoLevel: 20,
+    xpForNextLevel: 100,
+    diamondBalance: 40,
+    currentStreak: 3,
+    longestStreak: 5,
+    lastActiveDate: '2026-11-25',
+    transactions: [
+      {
+        id: 'tx-1',
+        amount: 25,
+        balanceAfter: 40,
+        reason: 'Manual QA credit',
+        sourceType: 'ADMIN_ADJUSTMENT',
+        sourceReference: 'tx-1',
+        createdAt: '2026-11-25T01:00:00Z',
+      },
+    ],
+  };
+  vi.mocked(adjustLearnerDiamonds).mockImplementation(async () => {
+    vi.mocked(fetchLearnerGamification).mockResolvedValue(adjustedSummary);
+    return {
+      transactionId: 'tx-1',
+      learnerId: ada.learnerId,
+      amount: 25,
+      balance: 40,
+      reason: 'Manual QA credit',
+      idempotencyKey: 'key-1',
+      ruleVersion: 'dev-v1',
+      createdAt: '2026-11-25T01:00:00Z',
+    };
+  });
+
+  show(`/learners/${ada.learnerId}`);
+  expect(await screen.findByText('Entitlement grants')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Grant feature' }));
+  fireEvent.change(screen.getByLabelText('Reference note (optional)'), { target: { value: 'VIP QA' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save grant' }));
+  await waitFor(() =>
+    expect(createLearnerGrant).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: ada.learnerId,
+        featureKey: 'vocabulary.plus-packs',
+        sourceType: 'ADMIN_MANUAL',
+        sourceReference: 'VIP QA',
+      }),
+    ),
+  );
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Revoke' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Revoke grant' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Enter a reason before submitting.');
+  fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Expired trial' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Revoke grant' }));
+  await waitFor(() => expect(revokeLearnerGrant).toHaveBeenCalledWith('grant-1', 'Expired trial'));
+
+  fireEvent.click(screen.getByRole('button', { name: 'Adjust diamonds' }));
+  fireEvent.change(screen.getByLabelText('Diamond delta (+ / -)'), { target: { value: '25' } });
+  fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Manual QA credit' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Apply adjustment' }));
+  await waitFor(() =>
+    expect(adjustLearnerDiamonds).toHaveBeenCalledWith(
+      ada.learnerId,
+      expect.objectContaining({
+        amount: 25,
+        reason: 'Manual QA credit',
+      }),
+    ),
+  );
+  expect(await screen.findByText('Manual QA credit')).toBeInTheDocument();
 });

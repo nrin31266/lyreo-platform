@@ -110,8 +110,7 @@ với câu cũ. Khi biên tập có thể cập nhật bản dịch đi cùng c�
 
 ### FR-VOC-001 — Save and review card
 
-Learner lưu lexical unit cùng optional context, review và nhận next scheduling
-state/history/mastery.
+Learner tạo, đổi tên và quản lý bộ từ cá nhân. Khi lưu từ Lesson, Lexicon hoặc bộ học, learner chọn bộ đích và giữ nghĩa, ngữ cảnh, tham chiếu nguồn. Màn hình bộ cá nhân phục vụ xem, tìm và sắp xếp từ đã lưu. Thao tác lưu hoặc gỡ từ chỉ thay đổi thư viện cá nhân. Phiên học và lịch SRS thuộc luồng Học.
 
 ### BR-VOC-001 — Scheduler abstraction
 
@@ -175,8 +174,7 @@ Là learner, tôi muốn lưu lexical unit và review để nhận lịch tiếp
 
 #### AC-VOC-001 — Save/review
 
-Given Lexicon entry và authenticated learner, when save/review , then
-card/history/scheduling state thuộc learner được cập nhật và review fact  được publish một lần theo contract.
+Lưu nghĩa vào bộ rồi mở lại phải thấy đúng nghĩa và nguồn của learner đó. Số lượt ôn và XP giữ nguyên. Khi learner thực hiện review trong luồng Học, cập nhật lịch và phát review fact đúng một lần.
 
 #### AC-VOC-002 — Scheduler replaceability
 

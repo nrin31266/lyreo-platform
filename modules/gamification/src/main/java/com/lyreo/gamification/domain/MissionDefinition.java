@@ -16,7 +16,8 @@ public record MissionDefinition(
         LESSON_COMPLETED,
         SHADOWING_SENTENCE,
         VOCABULARY_REVIEW,
-        TOEIC_DRILL_COMPLETED
+        TOEIC_DRILL_COMPLETED,
+        GRAMMAR_ANSWER
     }
 
     public enum Recurrence { DAILY, WEEKLY, ONE_TIME }

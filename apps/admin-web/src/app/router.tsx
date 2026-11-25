@@ -25,7 +25,13 @@ const LessonBuilderPage = lazy(() =>
 
 const OrganizationPage = lazy(() => import("@/pages/lessons/OrganizationPage").then(m => ({default: m.OrganizationPage})));
 const LearnersPage = lazy(() => import("@/pages/learners/LearnersPage").then(m => ({ default: m.LearnersPage })));
+const LearnerProgressPage = lazy(() => import("@/pages/learners/LearnerProgressPage").then(m => ({ default: m.LearnerProgressPage })));
 const LearnerDetailPage = lazy(() => import("@/pages/learners/LearnersPage").then(m => ({ default: m.LearnerDetailPage })));
+const ActivitiesPage = lazy(() => import("@/pages/activities/ActivitiesPage").then(m => ({ default: m.ActivitiesPage })));
+const RewardsPage = lazy(() => import("@/pages/rewards/RewardsPage").then(m => ({ default: m.RewardsPage })));
+const NotificationsPage = lazy(() => import("@/pages/notifications/NotificationsPage").then(m => ({ default: m.NotificationsPage })));
+const ConversationsPage = lazy(() => import("@/pages/conversations/ConversationsPage").then(m => ({ default: m.ConversationsPage })));
+const MediaLibraryPage = lazy(() => import("@/pages/media/MediaLibraryPage").then(m => ({ default: m.MediaLibraryPage })));
 const VocabularyPage = lazy(() => import("@/pages/vocabulary/VocabularyPage").then(m => ({ default: m.VocabularyPage })));
 const LexiconPage = lazy(() => import("@/pages/lexicon/LexiconPage").then(m => ({ default: m.LexiconPage })));
 const LexiconDetailPage = lazy(() => import("@/pages/lexicon/LexiconDetailPage").then(m => ({ default: m.LexiconDetailPage })));
@@ -66,8 +72,14 @@ export function AppRouter() {
         <Route path="lessons/new" element={<LessonBuilderPage />} />
         <Route path="lessons/:lessonId" element={<LessonDetailPage />} />
         <Route path="jobs" element={<JobsPage />} />
+        <Route path="activities" element={<ActivitiesPage />} />
         <Route path="learners" element={<LearnersPage />} />
+        <Route path="learners/progress" element={<LearnerProgressPage />} />
         <Route path="learners/:learnerId" element={<LearnerDetailPage />} />
+        <Route path="rewards" element={<RewardsPage />} />
+        <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="conversations" element={<ConversationsPage />} />
+        <Route path="media" element={<MediaLibraryPage />} />
         <Route path="settings/ai" element={<AiSettingsPage />} />
         <Route path="curriculum" element={<CurriculumPage />} />
         <Route path="vocabulary" element={<VocabularyPage />} />

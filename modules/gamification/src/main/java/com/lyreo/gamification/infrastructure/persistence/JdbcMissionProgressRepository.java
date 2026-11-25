@@ -1,9 +1,18 @@
 package com.lyreo.gamification.infrastructure.persistence;
 
 import com.lyreo.gamification.application.port.MissionProgressRepository;
+import com.lyreo.gamification.domain.AdminMissionDefinition;
+import com.lyreo.gamification.domain.MissionDefinition;
+import com.lyreo.gamification.domain.MissionView;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 public final class JdbcMissionProgressRepository implements MissionProgressRepository {
@@ -27,6 +36,28 @@ public final class JdbcMissionProgressRepository implements MissionProgressRepos
                 rs.getInt("target"),
                 rs.getString("recurrence"),
                 rs.getInt("diamond_reward")
+            )
+        );
+    }
+
+    @Override
+    public List<MissionRewardTarget> activeRewardTargetsByMetric(String metric) {
+        return jdbc.query(
+            """
+            SELECT id, code, title, target, recurrence, diamond_reward, xp_reward, rule_version
+              FROM mission_definition
+             WHERE enabled = true AND metric = :metric
+            """,
+            Map.of("metric", metric),
+            (rs, rowNumber) -> new MissionRewardTarget(
+                rs.getObject("id", UUID.class),
+                rs.getString("code"),
+                rs.getString("title"),
+                rs.getInt("target"),
+                rs.getString("recurrence"),
+                rs.getInt("diamond_reward"),
+                rs.getInt("xp_reward"),
+                rs.getString("rule_version")
             )
         );
     }
@@ -60,20 +91,202 @@ public final class JdbcMissionProgressRepository implements MissionProgressRepos
 
     @Override
     public boolean markClaimedIfCompleted(UUID learnerId, UUID missionId, String periodKey) {
+        return markClaimedIfCompleted(learnerId, missionId, periodKey, null);
+    }
+
+    @Override
+    public boolean markClaimedIfCompleted(
+        UUID learnerId,
+        UUID missionId,
+        String periodKey,
+        String rewardSnapshotJson
+    ) {
         var rows = jdbc.query(
             """
             UPDATE mission_progress
-               SET claimed_at=now()
-             WHERE learner_id=:learner
-               AND mission_id=:mission
-               AND period_key=:period
+               SET claimed_at = now(),
+                   reward_snapshot_json = COALESCE(CAST(:snapshot AS jsonb), reward_snapshot_json)
+             WHERE learner_id = :learner
+               AND mission_id = :mission
+               AND period_key = :period
                AND completed_at IS NOT NULL
                AND claimed_at IS NULL
             RETURNING 1
             """,
-            Map.of("learner", learnerId, "mission", missionId, "period", periodKey),
+            new MapSqlParameterSource()
+                .addValue("learner", learnerId)
+                .addValue("mission", missionId)
+                .addValue("period", periodKey)
+                .addValue("snapshot", rewardSnapshotJson),
             (rs, rowNumber) -> rs.getInt(1)
         );
         return !rows.isEmpty();
+    }
+
+    @Override
+    public List<MissionView> listActiveMissionsForLearner(
+        UUID learnerId,
+        String dailyPeriodKey,
+        String weeklyPeriodKey,
+        Instant dailyEndsAt,
+        Instant weeklyEndsAt
+    ) {
+        return jdbc.query(
+            """
+            SELECT
+                md.id,
+                md.code,
+                md.title,
+                md.metric,
+                md.recurrence,
+                md.target,
+                md.xp_reward,
+                md.diamond_reward,
+                md.rule_version,
+                CASE
+                    WHEN md.recurrence = 'WEEKLY' THEN :weeklyPeriodKey
+                    WHEN md.recurrence = 'ONE_TIME' THEN 'ONE_TIME'
+                    ELSE :dailyPeriodKey
+                END AS resolved_period_key,
+                COALESCE(mp.progress, 0) AS progress,
+                mp.completed_at,
+                mp.claimed_at
+            FROM mission_definition md
+            LEFT JOIN mission_progress mp
+                ON mp.mission_id = md.id
+               AND mp.learner_id = :learnerId
+               AND mp.period_key = CASE
+                   WHEN md.recurrence = 'WEEKLY' THEN :weeklyPeriodKey
+                   WHEN md.recurrence = 'ONE_TIME' THEN 'ONE_TIME'
+                   ELSE :dailyPeriodKey
+               END
+            WHERE md.enabled = true
+            ORDER BY md.code ASC
+            """,
+            Map.of(
+                "learnerId", learnerId,
+                "dailyPeriodKey", dailyPeriodKey,
+                "weeklyPeriodKey", weeklyPeriodKey
+            ),
+            (rs, rowNum) -> {
+                String recurrence = rs.getString("recurrence");
+                Timestamp completedTs = rs.getTimestamp("completed_at");
+                Timestamp claimedTs = rs.getTimestamp("claimed_at");
+                Instant periodEndsAt = switch (recurrence) {
+                    case "DAILY" -> dailyEndsAt;
+                    case "WEEKLY" -> weeklyEndsAt;
+                    default -> null;
+                };
+                return new MissionView(
+                    rs.getObject("id", UUID.class),
+                    rs.getString("code"),
+                    rs.getString("title"),
+                    rs.getString("metric"),
+                    recurrence,
+                    rs.getInt("target"),
+                    rs.getInt("progress"),
+                    completedTs != null,
+                    completedTs == null ? null : completedTs.toInstant(),
+                    claimedTs != null,
+                    claimedTs == null ? null : claimedTs.toInstant(),
+                    rs.getInt("xp_reward"),
+                    rs.getInt("diamond_reward"),
+                    rs.getString("resolved_period_key"),
+                    periodEndsAt,
+                    rs.getString("rule_version")
+                );
+            }
+        );
+    }
+
+    @Override
+    public List<AdminMissionDefinition> listAllMissions() {
+        return jdbc.query(
+            """
+            SELECT id, code, title, metric, target, xp_reward, diamond_reward, recurrence, rule_version, enabled
+            FROM mission_definition
+            ORDER BY code ASC
+            """,
+            (rs, rowNum) -> mapAdminMission(rs)
+        );
+    }
+
+    @Override
+    public Optional<AdminMissionDefinition> findMissionById(UUID id) {
+        return jdbc.query(
+            """
+            SELECT id, code, title, metric, target, xp_reward, diamond_reward, recurrence, rule_version, enabled
+            FROM mission_definition
+            WHERE id = :id
+            """,
+            Map.of("id", id),
+            (rs, rowNum) -> mapAdminMission(rs)
+        ).stream().findFirst();
+    }
+
+    @Override
+    public AdminMissionDefinition createMission(AdminMissionDefinition mission) {
+        jdbc.update(
+            """
+            INSERT INTO mission_definition(
+                id, code, title, metric, target, xp_reward, diamond_reward, recurrence, rule_version, enabled
+            ) VALUES (
+                :id, :code, :title, :metric, :target, :xpReward, :diamondReward, :recurrence, :ruleVersion, :enabled
+            )
+            """,
+            missionParams(mission)
+        );
+        return mission;
+    }
+
+    @Override
+    public Optional<AdminMissionDefinition> updateMission(AdminMissionDefinition mission) {
+        return jdbc.query(
+            """
+            UPDATE mission_definition
+            SET code = :code,
+                title = :title,
+                metric = :metric,
+                target = :target,
+                xp_reward = :xpReward,
+                diamond_reward = :diamondReward,
+                recurrence = :recurrence,
+                rule_version = :ruleVersion,
+                enabled = :enabled
+            WHERE id = :id
+            RETURNING id, code, title, metric, target, xp_reward, diamond_reward, recurrence, rule_version, enabled
+            """,
+            missionParams(mission),
+            (rs, rowNum) -> mapAdminMission(rs)
+        ).stream().findFirst();
+    }
+
+    private static AdminMissionDefinition mapAdminMission(ResultSet rs) throws SQLException {
+        return new AdminMissionDefinition(
+            rs.getObject("id", UUID.class),
+            rs.getString("code"),
+            rs.getString("title"),
+            MissionDefinition.Metric.valueOf(rs.getString("metric")),
+            rs.getInt("target"),
+            rs.getInt("xp_reward"),
+            rs.getInt("diamond_reward"),
+            MissionDefinition.Recurrence.valueOf(rs.getString("recurrence")),
+            rs.getString("rule_version"),
+            rs.getBoolean("enabled")
+        );
+    }
+
+    private static MapSqlParameterSource missionParams(AdminMissionDefinition mission) {
+        return new MapSqlParameterSource()
+            .addValue("id", mission.id())
+            .addValue("code", mission.code())
+            .addValue("title", mission.title())
+            .addValue("metric", mission.metric().name())
+            .addValue("target", mission.target())
+            .addValue("xpReward", mission.xpReward())
+            .addValue("diamondReward", mission.diamondReward())
+            .addValue("recurrence", mission.recurrence().name())
+            .addValue("ruleVersion", mission.ruleVersion())
+            .addValue("enabled", mission.enabled());
     }
 }

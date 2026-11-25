@@ -16,8 +16,41 @@ public class AssetStore {
     private final NamedParameterJdbcTemplate jdbc;private final ObjectStoragePort storage;private final ObjectMapper json;
     public AssetStore(NamedParameterJdbcTemplate jdbc,ObjectStoragePort storage,ObjectMapper json) {this.jdbc=jdbc;this.storage=storage;this.json=json;}
     public record Asset(UUID id,String mimeType,long sizeBytes,String filename,boolean synthetic) {}
+    public record AssetSummary(UUID id,String mimeType,long sizeBytes,String filename,boolean synthetic,String createdBy,Instant createdAt) {}
     public Asset get(UUID id) {return jdbc.query("SELECT id,mime_type,size_bytes,filename,synthetic FROM content_asset WHERE id=:id",Map.of("id",id),
         (rs,n)->new Asset(id,rs.getString(2),rs.getLong(3),rs.getString(4),rs.getBoolean(5))).stream().findFirst().orElseThrow(()->new ResourceNotFoundException("Media not found"));}
+    public CatalogPage<AssetSummary> list(int page,int size,String query,String kind) {
+        int clampedPage=Math.max(0,page);
+        int clampedSize=Math.max(1,Math.min(size,100));
+        String pattern=query==null||query.isBlank()?"%":"%"+query.trim().toLowerCase(Locale.ROOT)+"%";
+        String mimePrefix=switch(kind==null?"":kind.trim().toLowerCase(Locale.ROOT)) {
+            case "audio" -> "audio/%";
+            case "image" -> "image/%";
+            default -> "%";
+        };
+        var params=Map.<String,Object>of("pattern",pattern,"mime",mimePrefix,"limit",clampedSize,"offset",(long)clampedPage*clampedSize);
+        Long total=jdbc.queryForObject(
+            "SELECT count(*) FROM content_asset WHERE lower(filename) LIKE :pattern AND mime_type LIKE :mime",
+            params,
+            Long.class
+        );
+        List<AssetSummary> items=jdbc.query(
+            "SELECT id,mime_type,size_bytes,filename,synthetic,created_by,created_at FROM content_asset "
+                +"WHERE lower(filename) LIKE :pattern AND mime_type LIKE :mime "
+                +"ORDER BY created_at DESC, id DESC LIMIT :limit OFFSET :offset",
+            params,
+            (rs,n)->new AssetSummary(
+                rs.getObject("id",UUID.class),
+                rs.getString("mime_type"),
+                rs.getLong("size_bytes"),
+                rs.getString("filename"),
+                rs.getBoolean("synthetic"),
+                rs.getString("created_by"),
+                rs.getTimestamp("created_at").toInstant()
+            )
+        );
+        return new CatalogPage<>(items,total==null?0L:total,clampedPage,clampedSize);
+    }
     public boolean exists(UUID id) {try{return storage.exists(key(id));}catch(ResourceNotFoundException missing){return false;}}
     public Map<UUID,Asset> available(Collection<UUID> ids) {
         if(ids.isEmpty()) return Map.of();

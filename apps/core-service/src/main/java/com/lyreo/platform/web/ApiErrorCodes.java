@@ -9,8 +9,12 @@ public final class ApiErrorCodes {
     public static final String AUTHENTICATION_REQUIRED = "AUTHENTICATION_REQUIRED";
     public static final String ACCESS_DENIED = "ACCESS_DENIED";
     public static final String FEATURE_ENTITLEMENT_REQUIRED = "FEATURE_ENTITLEMENT_REQUIRED";
+    public static final String QUOTA_EXCEEDED = "QUOTA_EXCEEDED";
     public static final String RESOURCE_NOT_FOUND = "RESOURCE_NOT_FOUND";
     public static final String STATE_CONFLICT = "STATE_CONFLICT";
+    public static final String STALE_REVISION = "STALE_REVISION";
+    public static final String SESSION_EXPIRED = "SESSION_EXPIRED";
+    public static final String IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT";
     public static final String METHOD_NOT_ALLOWED = "METHOD_NOT_ALLOWED";
     public static final String UNSUPPORTED_MEDIA_TYPE = "UNSUPPORTED_MEDIA_TYPE";
     public static final String RATE_LIMITED = "RATE_LIMITED";

@@ -5,7 +5,10 @@ import com.lyreo.vocabulary.application.VocabularyCommandService;
 import com.lyreo.vocabulary.application.port.SpacedRepetitionScheduler;
 import com.lyreo.vocabulary.domain.VocabularyCard;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -15,6 +18,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -41,6 +45,16 @@ public class VocabularyController {
         );
     }
 
+    @PostMapping("/saved-items")
+    public VocabularyCommandService.SavedItemResult saveItem(
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+        @Valid @RequestBody SaveVocabularyItemRequest request
+    ) {
+        UUID learnerId = learnerId(jwt);
+        return vocabulary.saveItem(learnerId, request.toCommand(), idempotencyKey);
+    }
+
     @GetMapping("/due")
     public List<VocabularyCardResponse> due(
         @AuthenticationPrincipal Jwt jwt,
@@ -55,9 +69,14 @@ public class VocabularyController {
     public VocabularyReviewResponse review(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable UUID cardId,
+        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
         @Valid @RequestBody ReviewRequest request
     ) {
-        var result = vocabulary.review(learnerId(jwt), cardId, request.rating());
+        UUID learnerId = learnerId(jwt);
+        boolean hasIdempotency = idempotencyKey != null && !idempotencyKey.isBlank();
+        var result = (!hasIdempotency && request.expectedReviewCount() == null)
+            ? vocabulary.review(learnerId, cardId, request.rating())
+            : vocabulary.review(learnerId, cardId, request.rating(), request.expectedReviewCount(), idempotencyKey);
         return new VocabularyReviewResponse(
             cardId,
             result.nextReviewAt(),
@@ -77,10 +96,57 @@ public class VocabularyController {
         UUID sourceContextId
     ) {}
 
+    public record SaveVocabularyItemRequest(
+        UUID headwordId,
+        @Size(max = 200) String term,
+        @Size(max = 64) String partOfSpeech,
+        @Size(max = 1000) String meaningVi,
+        @Size(max = 1000) String definitionEn,
+        @Size(max = 120) String ipa,
+        @Size(max = 1000) String contextSentence,
+        @Size(max = 1000) String contextTranslationVi,
+        @Size(max = 64) String sourceContextType,
+        UUID sourceContextId,
+        UUID sourceEntryId,
+        @Min(0) @Max(50) Integer senseIndex,
+        UUID lexiconSenseId,
+        @Min(0) Long sourceRevision,
+        UUID audioAssetId,
+        UUID imageAssetId,
+        @Size(max = 50) List<UUID> collectionIds
+    ) {
+        VocabularyCommandService.SaveItemCommand toCommand() {
+            return new VocabularyCommandService.SaveItemCommand(
+                headwordId,
+                term,
+                partOfSpeech,
+                meaningVi,
+                definitionEn,
+                ipa,
+                contextSentence,
+                contextTranslationVi,
+                sourceContextType,
+                sourceContextId,
+                sourceEntryId,
+                senseIndex,
+                lexiconSenseId,
+                sourceRevision,
+                audioAssetId,
+                imageAssetId,
+                collectionIds
+            );
+        }
+    }
+
     public record ReviewRequest(
         @NotNull(message = "rating is required")
-        SpacedRepetitionScheduler.Rating rating
-    ) {}
+        SpacedRepetitionScheduler.Rating rating,
+        @Min(0) Integer expectedReviewCount
+    ) {
+        public ReviewRequest(SpacedRepetitionScheduler.Rating rating) {
+            this(rating, null);
+        }
+    }
 
     public record VocabularyReviewResponse(
         UUID cardId,

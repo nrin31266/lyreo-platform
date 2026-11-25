@@ -56,3 +56,112 @@ export async function fetchLearnerAvatar(id: string, signal?: AbortSignal) {
   const response = await http.get<Blob>(`${base}/${encodeURIComponent(id)}/avatar`, { signal, responseType: 'blob' });
   return response.data;
 }
+
+export const entitlementFeatureKeys = [
+  'vocabulary.plus-packs',
+  'vocabulary.saved-cards',
+  'speech.shadowing',
+  'toeic.full-access',
+  'grammar.advanced',
+  'chat.tutor',
+] as const;
+
+export type EntitlementFeatureKey = (typeof entitlementFeatureKeys)[number];
+
+export type EntitlementGrantEntry = {
+  id: string;
+  userId: string;
+  featureKey: string;
+  status: 'ACTIVE' | 'REVOKED' | 'EXPIRED' | string;
+  validFrom: string;
+  validUntil: string | null;
+  sourceType: string | null;
+  sourceReference: string | null;
+  createdBy: string;
+  createdAt: string;
+  revokedAt: string | null;
+  revokedBy: string | null;
+  revocationReason: string | null;
+};
+
+export type CreateEntitlementGrantInput = {
+  userId: string;
+  featureKey: string;
+  validFrom?: string;
+  validUntil?: string | null;
+  sourceType?: string;
+  sourceReference?: string;
+};
+
+export type DiamondTransactionEntry = {
+  id: string;
+  amount: number;
+  balanceAfter?: number;
+  reason: string;
+  sourceType?: string | null;
+  sourceReference?: string | null;
+  createdAt: string;
+};
+
+export type LearnerGamificationSummary = {
+  learnerId: string;
+  xp: number;
+  level: number;
+  xpIntoLevel: number;
+  xpForNextLevel: number;
+  diamondBalance: number;
+  currentStreak: number;
+  longestStreak: number;
+  lastActiveDate: string | null;
+  transactions: DiamondTransactionEntry[];
+};
+
+export type AdjustLearnerDiamondsInput = {
+  amount: number;
+  reason: string;
+  idempotencyKey: string;
+};
+
+export type AdjustDiamondsResponse = {
+  transactionId: string;
+  learnerId: string;
+  amount: number;
+  balance: number;
+  reason: string;
+  idempotencyKey: string;
+  ruleVersion: string;
+  createdAt: string;
+};
+
+const entitlementsBase = '/api/v1/admin/entitlements/grants';
+const gamificationBase = '/api/v1/admin/gamification/learners';
+
+export function fetchLearnerGrants(userId: string, signal?: AbortSignal) {
+  const params = new URLSearchParams({ userId });
+  return api<EntitlementGrantEntry[]>(`${entitlementsBase}?${params}`, { signal });
+}
+
+export function createLearnerGrant(input: CreateEntitlementGrantInput) {
+  return api<EntitlementGrantEntry>(entitlementsBase, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function revokeLearnerGrant(grantId: string, reason: string) {
+  return api<EntitlementGrantEntry>(`${entitlementsBase}/${encodeURIComponent(grantId)}/revoke`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function fetchLearnerGamification(learnerId: string, signal?: AbortSignal) {
+  return api<LearnerGamificationSummary>(`${gamificationBase}/${encodeURIComponent(learnerId)}`, { signal });
+}
+
+export function adjustLearnerDiamonds(learnerId: string, input: AdjustLearnerDiamondsInput) {
+  return api<AdjustDiamondsResponse>(`${gamificationBase}/${encodeURIComponent(learnerId)}/diamonds`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}

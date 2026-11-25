@@ -39,30 +39,30 @@ export const adminNavGroups: { key: string; items: AdminNavItem[] }[] = [
   {
     key: "learning",
     items: [
-      { key: "curriculum", icon: Layers },
-      { key: "activities", icon: BookOpen },
+      { key: "curriculum", icon: Layers, path: "/curriculum" },
+      { key: "activities", icon: BookOpen, path: "/activities" },
     ],
   },
   {
     key: "learners",
     items: [
       { key: "profiles", icon: Users, path: "/learners" },
-      { key: "progress", icon: ChartNoAxesCombined },
+      { key: "progress", icon: ChartNoAxesCombined, path: "/learners/progress" },
     ],
   },
   {
     key: "engagement",
     items: [
-      { key: "rewards", icon: Trophy },
-      { key: "notifications", icon: Bell },
-      { key: "conversations", icon: MessagesSquare },
+      { key: "rewards", icon: Trophy, path: "/rewards" },
+      { key: "notifications", icon: Bell, path: "/notifications" },
+      { key: "conversations", icon: MessagesSquare, path: "/conversations" },
     ],
   },
   {
     key: "operations",
     items: [
       { key: "jobs", icon: ListChecks, path: "/jobs" },
-      { key: "media", icon: Images },
+      { key: "media", icon: Images, path: "/media" },
     ],
   },
   {

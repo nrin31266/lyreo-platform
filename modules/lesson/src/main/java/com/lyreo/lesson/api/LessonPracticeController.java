@@ -11,6 +11,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -34,6 +35,7 @@ public class LessonPracticeController {
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable UUID lessonId,
         @PathVariable UUID activityId,
+        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
         @Valid @RequestBody DictationAttemptRequest request
     ) {
         UUID learnerId = users.provision(
@@ -41,13 +43,24 @@ public class LessonPracticeController {
             jwt.getClaimAsString("email")
         ).id();
 
-        return DictationAttemptResponse.from(practice.submitDictation(
-            learnerId,
-            lessonId,
-            activityId,
-            request.sentenceId(),
-            request.answer()
-        ));
+        var result = (idempotencyKey == null || idempotencyKey.isBlank())
+            ? practice.submitDictation(
+                learnerId,
+                lessonId,
+                activityId,
+                request.sentenceId(),
+                request.answer()
+            )
+            : practice.submitDictation(
+                learnerId,
+                lessonId,
+                activityId,
+                request.sentenceId(),
+                request.answer(),
+                idempotencyKey
+            );
+
+        return DictationAttemptResponse.from(result);
     }
 
     public record DictationAttemptRequest(

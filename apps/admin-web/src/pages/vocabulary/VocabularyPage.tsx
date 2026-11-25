@@ -103,6 +103,7 @@ export function VocabularyPage() {
 
   function renderStatus(entry: EntrySummary) {
     if (entry.hidden) return <Badge variant="secondary">{t('vocabulary.hidden')}</Badge>;
+    if (entry.hasConflict) return <Badge variant="warning">{t('vocabulary.upgradeConflict')}</Badge>;
     if (entry.missingVietnamese) return <Badge variant="warning">{t('vocabulary.reviews.MISSING_VI')}</Badge>;
     if (entry.needsReview) return <Badge variant="warning">{t('vocabulary.reviews.NEEDS_REVIEW')}</Badge>;
     return <span className="text-xs text-muted-foreground">{t('vocabulary.statusReady')}</span>;
@@ -241,6 +242,7 @@ export function VocabularyPage() {
                 {unit ? `${localeTitle(pack!)} · ${unit.title}` : (pack ? localeTitle(pack) : t('vocabulary.allPacks'))}
               </h2>
               {unit && <Badge variant="outline">{unit.level}</Badge>}
+              {pack?.accessMode === 'FEATURE' && <Badge variant="outline">{t('vocabulary.accessPlus')}</Badge>}
               {(unit?.hidden || pack?.hidden) && <Badge variant="secondary">{t('vocabulary.hidden')}</Badge>}
               <span className="text-xs tabular-nums text-muted-foreground">
                 {t('vocabulary.resultCount', { number: number.format(total) })}
