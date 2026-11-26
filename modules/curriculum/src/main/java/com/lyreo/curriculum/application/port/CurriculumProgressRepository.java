@@ -5,6 +5,7 @@ import com.lyreo.curriculum.domain.CurriculumItem;
 import com.lyreo.curriculum.domain.CurriculumItem.ContentType;
 import com.lyreo.curriculum.domain.CurriculumItemProgress;
 import com.lyreo.curriculum.domain.CurriculumPath;
+import com.lyreo.curriculum.domain.CurriculumPathDiagnostic;
 import com.lyreo.curriculum.domain.CurriculumPathSummary;
 import com.lyreo.curriculum.domain.CurriculumSection;
 import java.util.List;
@@ -44,13 +45,44 @@ public interface CurriculumProgressRepository {
 
     void markEnrollmentCompleted(UUID learnerId, UUID pathId);
 
-    CurriculumPath insertPath(UUID id, String code, String name, String level, String description, String status);
+    default CurriculumPath insertPath(UUID id, String code, String name, String level, String description, String status) {
+        return insertPath(id, code, name, level, description, status, null, "PUBLIC", null);
+    }
 
-    Optional<CurriculumPath> updatePath(UUID id, String code, String name, String level, String description);
+    CurriculumPath insertPath(
+        UUID id,
+        String code,
+        String name,
+        String level,
+        String description,
+        String status,
+        UUID coverAssetId,
+        String accessMode,
+        String requiredFeatureKey
+    );
+
+    default Optional<CurriculumPath> updatePath(UUID id, String code, String name, String level, String description) {
+        return updatePath(id, code, name, level, description, null, null, null);
+    }
+
+    Optional<CurriculumPath> updatePath(
+        UUID id,
+        String code,
+        String name,
+        String level,
+        String description,
+        UUID coverAssetId,
+        String accessMode,
+        String requiredFeatureKey
+    );
 
     Optional<CurriculumPath> updatePathStatus(UUID id, String status);
 
     boolean deletePath(UUID id);
+
+    default CurriculumPathDiagnostic diagnosePath(UUID pathId) {
+        return new CurriculumPathDiagnostic(pathId, 0, 0, 0, 0, List.of());
+    }
 
     CurriculumSection insertSection(UUID id, UUID pathId, String title, int position);
 

@@ -1,11 +1,28 @@
-import { RiBookOpenLine as BookOpen, RiBroadcastLine as Radio, RiBookShelfLine as Library, RiStackLine as Layers, RiGroupLine as Users, RiLineChartLine as ChartNoAxesCombined, RiTrophyLine as Trophy, RiNotification3Line as Bell, RiDiscussLine as MessagesSquare, RiListCheck3 as ListChecks, RiImage2Line as Images, RiEqualizerLine as Settings2, RiDashboardLine as LayoutDashboard } from "@remixicon/react";
+import {
+  RiAwardLine as Award,
+  RiBookOpenLine as BookOpen,
+  RiBookShelfLine as Library,
+  RiDashboardLine as LayoutDashboard,
+  RiEqualizerLine as Settings2,
+  RiFlagLine as Target,
+  RiGroupLine as Users,
+  RiImage2Line as Images,
+  RiLineChartLine as ChartNoAxesCombined,
+  RiListCheck3 as ListChecks,
+  RiMicLine as Mic,
+  RiNotification3Line as Bell,
+  RiStackLine as Layers,
+  RiVipCrownLine as Crown,
+} from "@remixicon/react";
 import type { RemixiconComponentType } from "@remixicon/react";
+
 export type AdminNavItem = {
   key: string;
   icon: RemixiconComponentType;
   path?: string;
   children?: { key: string; path?: string }[];
 };
+
 export const adminNavGroups: { key: string; items: AdminNavItem[] }[] = [
   {
     key: "general",
@@ -34,13 +51,17 @@ export const adminNavGroups: { key: string; items: AdminNavItem[] }[] = [
           { key: "toeic", path: "/toeic" },
         ],
       },
+      { key: "conversations", icon: Mic, path: "/conversations" },
+      { key: "curriculum", icon: Layers, path: "/curriculum" },
     ],
   },
   {
-    key: "learning",
+    key: "engagement",
     items: [
-      { key: "curriculum", icon: Layers, path: "/curriculum" },
-      { key: "activities", icon: BookOpen, path: "/activities" },
+      { key: "plans", icon: Crown, path: "/plans" },
+      { key: "missions", icon: Target, path: "/missions" },
+      { key: "achievements", icon: Award, path: "/achievements" },
+      { key: "notifications", icon: Bell, path: "/notifications" },
     ],
   },
   {
@@ -48,14 +69,6 @@ export const adminNavGroups: { key: string; items: AdminNavItem[] }[] = [
     items: [
       { key: "profiles", icon: Users, path: "/learners" },
       { key: "progress", icon: ChartNoAxesCombined, path: "/learners/progress" },
-    ],
-  },
-  {
-    key: "engagement",
-    items: [
-      { key: "rewards", icon: Trophy, path: "/rewards" },
-      { key: "notifications", icon: Bell, path: "/notifications" },
-      { key: "conversations", icon: MessagesSquare, path: "/conversations" },
     ],
   },
   {
@@ -67,20 +80,20 @@ export const adminNavGroups: { key: string; items: AdminNavItem[] }[] = [
   },
   {
     key: "configuration",
-    items: [
-      { key: "aiSettings", icon: Settings2, path: "/settings/ai" },
-    ],
+    items: [{ key: "aiSettings", icon: Settings2, path: "/settings/ai" }],
   },
 ];
+
 export const adminNavItems = adminNavGroups
   .flatMap((g) => g.items.flatMap((i) => i.children ?? [i]))
   .filter((i) => i.path)
   .map((i) => ({ path: i.path!, labelKey: `admin:navigation.${i.key}` }));
+
 export function getNavTitleKey(pathname: string, hash = ""): string {
   const exact = adminNavItems.find((item) => item.path === pathname + hash);
   if (exact) return exact.labelKey;
   if (["/lessons/categories", "/lessons/channels"].includes(pathname)) return "admin:navigation.organization";
-  if (/^\/lessons\/[^/]+$/.test(pathname)) return 'admin:authoringFlow.editorTitle';
+  if (/^\/lessons\/[^/]+$/.test(pathname)) return "admin:authoringFlow.editorTitle";
   if (/^\/learners\/[^/]+$/.test(pathname)) return "admin:navigation.profiles";
   for (const library of ["lexicon", "grammar", "toeic"]) {
     if (pathname.startsWith(`/${library}/`)) return `admin:navigation.${library}`;

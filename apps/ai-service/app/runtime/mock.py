@@ -30,10 +30,43 @@ class MockRuntime:
         )
 
     async def align(self, request: ExecuteRequest) -> ExecuteResponse:
+        segments = request.input.get("segments")
+        timestamps: list[dict] = []
+        if isinstance(segments, list) and segments:
+            word_index = 0
+            for seg in segments:
+                if not isinstance(seg, dict):
+                    continue
+                seg_text = str(seg.get("text") or "").strip()
+                words = seg_text.split()
+                if not words:
+                    continue
+                start_ms = int(seg.get("start_ms", 0))
+                end_ms = int(seg.get("end_ms", start_ms + len(words) * 300))
+                span = max(len(words) * 20, end_ms - start_ms)
+                step = span / len(words)
+                for local_idx, word in enumerate(words):
+                    w_start = start_ms + int(local_idx * step)
+                    w_end = start_ms + int((local_idx + 1) * step) - 10 if local_idx < len(words) - 1 else start_ms + span
+                    if w_end <= w_start:
+                        w_end = w_start + 15
+                    timestamps.append(
+                        {
+                            "index": word_index,
+                            "word": word,
+                            "start_ms": w_start,
+                            "end_ms": w_end,
+                        }
+                    )
+                    word_index += 1
+            return ExecuteResponse(
+                output={"words": timestamps},
+                metadata={"runtime": "mock"},
+            )
+
         text = str(request.input.get("text") or "")
         words = text.split()
         cursor = 0
-        timestamps: list[dict] = []
 
         for index, word in enumerate(words):
             start = cursor
@@ -55,18 +88,36 @@ class MockRuntime:
 
     async def tts(self, request: ExecuteRequest) -> ExecuteResponse:
         digest = hashlib.sha256(str(request.input.get("text", "")).encode()).hexdigest()[:12]
+        raw_sentences = request.input.get("sentences")
+        segments: list[dict] = []
+        cursor = 0
+        if isinstance(raw_sentences, list) and raw_sentences:
+            for item in raw_sentences:
+                sentence_text = str(item)
+                words = sentence_text.split()
+                duration = max(1200, len(words) * 360)
+                start_ms = cursor
+                end_ms = start_ms + duration
+                segments.append({"text": sentence_text, "start_ms": start_ms, "end_ms": end_ms})
+                cursor = end_ms + 150
+            total_ms = max(1000, cursor + 200)
+        else:
+            total_ms = 1000
+
+        frame_count = max(8000, int(8000 * total_ms / 1000))
         buffer = io.BytesIO()
         with wave.open(buffer, "wb") as audio:
             audio.setnchannels(1)
             audio.setsampwidth(2)
             audio.setframerate(8000)
-            audio.writeframes(b"\0\0" * 8000)
+            audio.writeframes(b"\0\0" * frame_count)
         return ExecuteResponse(
             output={
                 "audio_base64": base64.b64encode(buffer.getvalue()).decode(),
                 "mime_type": "audio/wav",
                 "suggested_artifact_key": f"mock/tts/{digest}.wav",
-                "duration_ms": 1000,
+                "duration_ms": total_ms,
+                "segments": segments,
             },
             metadata={
                 "runtime": "mock",

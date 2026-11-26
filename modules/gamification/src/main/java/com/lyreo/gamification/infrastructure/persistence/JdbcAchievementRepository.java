@@ -49,24 +49,14 @@ public final class JdbcAchievementRepository implements AchievementRepository {
     public List<AchievementDefinition> findEnabledByMetric(String metric) {
         return jdbc.query(
             """
-            SELECT id, code, title, description, metric, target, xp_reward, diamond_reward, rule_version, enabled
+            SELECT id, code, title, description, metric, target, xp_reward, diamond_reward, rule_version, enabled,
+                   badge_asset_id, badge_tier, category
             FROM achievement_definition
             WHERE enabled = true AND metric = :metric
             ORDER BY target ASC, code ASC
             """,
             Map.of("metric", metric),
-            (rs, rowNum) -> new AchievementDefinition(
-                rs.getObject("id", UUID.class),
-                rs.getString("code"),
-                rs.getString("title"),
-                rs.getString("description"),
-                rs.getString("metric"),
-                rs.getInt("target"),
-                rs.getInt("xp_reward"),
-                rs.getInt("diamond_reward"),
-                rs.getString("rule_version"),
-                rs.getBoolean("enabled")
-            )
+            (rs, rowNum) -> mapDefinition(rs)
         );
     }
 
@@ -129,6 +119,9 @@ public final class JdbcAchievementRepository implements AchievementRepository {
                 ad.xp_reward,
                 ad.diamond_reward,
                 ad.rule_version,
+                ad.badge_asset_id,
+                ad.badge_tier,
+                ad.category,
                 COALESCE(la.progress, 0) AS progress,
                 la.unlocked_at
             FROM achievement_definition ad
@@ -140,8 +133,10 @@ public final class JdbcAchievementRepository implements AchievementRepository {
             Map.of("learnerId", learnerId),
             (rs, rowNum) -> {
                 Timestamp unlockedTs = rs.getTimestamp("unlocked_at");
+                UUID achievementId = rs.getObject("id", UUID.class);
+                UUID badgeAssetId = rs.getObject("badge_asset_id", UUID.class);
                 return new AchievementView(
-                    rs.getObject("id", UUID.class),
+                    achievementId,
                     rs.getString("code"),
                     rs.getString("title"),
                     rs.getString("description"),
@@ -152,7 +147,11 @@ public final class JdbcAchievementRepository implements AchievementRepository {
                     unlockedTs == null ? null : unlockedTs.toInstant(),
                     rs.getInt("xp_reward"),
                     rs.getInt("diamond_reward"),
-                    rs.getString("rule_version")
+                    rs.getString("rule_version"),
+                    badgeAssetId,
+                    rs.getString("badge_tier"),
+                    rs.getString("category"),
+                    badgeAssetId != null ? "/api/v1/gamification/achievements/" + achievementId + "/badge" : null
                 );
             }
         );
@@ -162,7 +161,8 @@ public final class JdbcAchievementRepository implements AchievementRepository {
     public List<AchievementDefinition> listAllAchievements() {
         return jdbc.query(
             """
-            SELECT id, code, title, description, metric, target, xp_reward, diamond_reward, rule_version, enabled
+            SELECT id, code, title, description, metric, target, xp_reward, diamond_reward, rule_version, enabled,
+                   badge_asset_id, badge_tier, category
             FROM achievement_definition
             ORDER BY code ASC
             """,
@@ -174,7 +174,8 @@ public final class JdbcAchievementRepository implements AchievementRepository {
     public Optional<AchievementDefinition> findAchievementById(UUID id) {
         return jdbc.query(
             """
-            SELECT id, code, title, description, metric, target, xp_reward, diamond_reward, rule_version, enabled
+            SELECT id, code, title, description, metric, target, xp_reward, diamond_reward, rule_version, enabled,
+                   badge_asset_id, badge_tier, category
             FROM achievement_definition
             WHERE id = :id
             """,
@@ -188,9 +189,11 @@ public final class JdbcAchievementRepository implements AchievementRepository {
         jdbc.update(
             """
             INSERT INTO achievement_definition(
-                id, code, title, description, metric, target, xp_reward, diamond_reward, rule_version, enabled
+                id, code, title, description, metric, target, xp_reward, diamond_reward, rule_version, enabled,
+                badge_asset_id, badge_tier, category
             ) VALUES (
-                :id, :code, :title, :description, :metric, :target, :xpReward, :diamondReward, :ruleVersion, :enabled
+                :id, :code, :title, :description, :metric, :target, :xpReward, :diamondReward, :ruleVersion, :enabled,
+                CAST(:badgeAssetId AS uuid), :badgeTier, :category
             )
             """,
             achievementParams(achievement)
@@ -211,9 +214,13 @@ public final class JdbcAchievementRepository implements AchievementRepository {
                 xp_reward = :xpReward,
                 diamond_reward = :diamondReward,
                 rule_version = :ruleVersion,
-                enabled = :enabled
+                enabled = :enabled,
+                badge_asset_id = CAST(:badgeAssetId AS uuid),
+                badge_tier = :badgeTier,
+                category = :category
             WHERE id = :id
-            RETURNING id, code, title, description, metric, target, xp_reward, diamond_reward, rule_version, enabled
+            RETURNING id, code, title, description, metric, target, xp_reward, diamond_reward, rule_version, enabled,
+                      badge_asset_id, badge_tier, category
             """,
             achievementParams(achievement),
             (rs, rowNum) -> mapDefinition(rs)
@@ -231,7 +238,10 @@ public final class JdbcAchievementRepository implements AchievementRepository {
             rs.getInt("xp_reward"),
             rs.getInt("diamond_reward"),
             rs.getString("rule_version"),
-            rs.getBoolean("enabled")
+            rs.getBoolean("enabled"),
+            rs.getObject("badge_asset_id", UUID.class),
+            rs.getString("badge_tier"),
+            rs.getString("category")
         );
     }
 
@@ -246,6 +256,9 @@ public final class JdbcAchievementRepository implements AchievementRepository {
             .addValue("xpReward", achievement.xpReward())
             .addValue("diamondReward", achievement.diamondReward())
             .addValue("ruleVersion", achievement.ruleVersion())
-            .addValue("enabled", achievement.enabled());
+            .addValue("enabled", achievement.enabled())
+            .addValue("badgeAssetId", achievement.badgeAssetId(), java.sql.Types.OTHER)
+            .addValue("badgeTier", achievement.badgeTier() == null ? "BRONZE" : achievement.badgeTier())
+            .addValue("category", achievement.category() == null ? "MILESTONE" : achievement.category());
     }
 }

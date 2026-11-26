@@ -82,7 +82,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
     var items =
         jdbc.query(
             "SELECT l.*,m.title AS"
-                + " display_title,m.description,m.image_url,m.visible,COALESCE(ch.visible,TRUE) AS channel_visible,GREATEST(m.updated_at,l.updated_at)"
+                + " display_title,m.description,m.image_url,m.visible,m.access_mode,m.required_feature_key,COALESCE(ch.visible,TRUE) AS channel_visible,GREATEST(m.updated_at,l.updated_at)"
                 + " AS metadata_updated_at,s.thumbnail_url,a.source_start_ms,a.source_end_ms,a.lesson_id,s.channel_id,COALESCE(ch.title,s.channel_title)"
                 + " AS channel_title,m.version AS metadata_version,m.deleted_at,a.revision AS authoring_revision,a.content_profile->>'cefr' AS cefr,a.generation_options->'activities' AS activities,                     a.active_job_id IN (:activeJobs) AS processing,                     a.active_job_id IN (:failedJobs) AS ai_failed"
                 + from
@@ -109,7 +109,9 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
                     rs.getBoolean("visible"),rs.getBoolean("channel_visible"),
                     "PUBLISHED".equals(rs.getString("status")) && rs.getBoolean("visible") && rs.getBoolean("channel_visible") && rs.getTimestamp("deleted_at")==null,
                     rs.getLong("metadata_version"),rs.getLong("authoring_revision"),rs.getTimestamp("deleted_at")!=null,
-                    rs.getString("cefr")==null?"UNKNOWN":rs.getString("cefr"),rs.getString("activities")==null?List.of():mapper.readValue(rs.getString("activities"),mapper.getTypeFactory().constructCollectionType(List.class,String.class)),rs.getBoolean("processing"),rs.getBoolean("ai_failed")));
+                    rs.getString("cefr")==null?"UNKNOWN":rs.getString("cefr"),rs.getString("activities")==null?List.of():mapper.readValue(rs.getString("activities"),mapper.getTypeFactory().constructCollectionType(List.class,String.class)),rs.getBoolean("processing"),rs.getBoolean("ai_failed"),
+                    rs.getString("access_mode"),
+                    rs.getString("required_feature_key")));
     if (items.isEmpty()) return new Page(items, total, page, size);
     var memberships =
         jdbc.query(
@@ -147,7 +149,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
                         byLesson.getOrDefault(item.id(), List.of()),
                         item.description(),
                         item.imageUrl(),
-                        item.visible(),item.channelVisible(),item.effectiveVisible(),item.version(),item.revision(),item.deleted(),item.cefr(),item.activities(),item.processing(),item.aiFailed()))
+                        item.visible(),item.channelVisible(),item.effectiveVisible(),item.version(),item.revision(),item.deleted(),item.cefr(),item.activities(),item.processing(),item.aiFailed(),item.accessMode(),item.requiredFeatureKey()))
             .toList(),
         total,
         page,
@@ -405,5 +407,32 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
     jdbc.update(
         "UPDATE lesson_metadata SET visible=:visible,version=version+1,updated_at=now() WHERE lesson_id=:id",
         java.util.Map.of("id", lesson, "visible", visible));
+  }
+
+  @Override
+  @Transactional
+  public void updateAccess(UUID lesson, String accessMode, String requiredFeatureKey) {
+    lock(lesson);
+    String mode = accessMode == null ? "PUBLIC" : accessMode.trim().toUpperCase(java.util.Locale.ROOT);
+    if (!"PUBLIC".equals(mode) && !"FEATURE".equals(mode)) {
+      throw new RequestValidationException("accessMode must be PUBLIC or FEATURE");
+    }
+    String featureKey = null;
+    if ("FEATURE".equals(mode)) {
+      featureKey = (requiredFeatureKey == null || requiredFeatureKey.isBlank())
+          ? "lesson.plus-lessons"
+          : com.lyreo.entitlement.api.FeatureKey.of(requiredFeatureKey.trim()).value();
+    }
+    try {
+      jdbc.update(
+          "UPDATE lesson_metadata SET access_mode=:accessMode, required_feature_key=:featureKey, version=version+1, updated_at=now() WHERE lesson_id=:id",
+          new MapSqlParameterSource()
+              .addValue("id", lesson)
+              .addValue("accessMode", mode)
+              .addValue("featureKey", featureKey, java.sql.Types.VARCHAR)
+      );
+    } catch (org.springframework.dao.DataIntegrityViolationException invalid) {
+      throw new RequestValidationException("Unknown required feature key: " + featureKey);
+    }
   }
 }

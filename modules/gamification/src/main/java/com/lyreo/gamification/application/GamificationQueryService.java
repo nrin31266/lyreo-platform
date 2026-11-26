@@ -99,6 +99,11 @@ public class GamificationQueryService {
     }
 
     @Transactional(readOnly = true)
+    public java.util.Optional<com.lyreo.gamification.domain.AchievementDefinition> findAchievement(UUID id) {
+        return achievementRepository.findAchievementById(id);
+    }
+
+    @Transactional(readOnly = true)
     public LedgerPage ledger(UUID learnerId, int page, int size) {
         if (page < 0 || page > 100000 || size < 1 || size > 100) {
             throw new RequestValidationException("Invalid ledger page or size");

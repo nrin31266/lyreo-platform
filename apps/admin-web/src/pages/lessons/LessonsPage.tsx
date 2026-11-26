@@ -98,6 +98,15 @@ export function LessonsPage() {
     mutationFn: ({ id, visible, version }: { id: string; visible: boolean; version?: number }) => catalog.setVisibility(id, visible, version),
     onSuccess: () => client.invalidateQueries({ queryKey: catalogKeys.all }),
   });
+  const accessMutation = useMutation({
+    mutationFn: ({ id, plus, version }: { id: string; plus: boolean; version?: number }) =>
+      catalog.saveLessonAccess(id, {
+        accessMode: plus ? "FEATURE" : "PUBLIC",
+        requiredFeatureKey: plus ? "lesson.plus-lessons" : null,
+        version,
+      }),
+    onSuccess: () => client.invalidateQueries({ queryKey: catalogKeys.all }),
+  });
   const deletion = useMutation({
     mutationFn: (item: catalog.LessonItem) => catalog.deleteDraft(item.id,item.version),
     onSuccess: async () => {
@@ -237,6 +246,24 @@ export function LessonsPage() {
                       <Badge variant={item.deleted ? "destructive" : item.processing ? "secondary" : item.aiFailed || item.status === "FAILED" ? "destructive" : item.status === "PUBLISHED" ? "success" : "warning"}>
                         {item.deleted ? t("finish.deleted") : item.processing ? t("finish.processingBadge") : item.aiFailed ? t("finish.aiFailed") : t(`lessonAuthoring.labels.${item.status}`, { defaultValue: item.status })}
                       </Badge>
+                      {!item.deleted && (
+                        <div className="flex items-center gap-2">
+                          <Badge variant={item.accessMode === "FEATURE" ? "warning" : "outline"}>
+                            {item.accessMode === "FEATURE" ? "PLUS" : "FREE"}
+                          </Badge>
+                          {item.status === "PUBLISHED" && (
+                            <Switch
+                              size="sm"
+                              aria-label={t("catalog.togglePlusAccess", { title: item.title })}
+                              checked={item.accessMode === "FEATURE"}
+                              disabled={accessMutation.isPending}
+                              onCheckedChange={(plus) =>
+                                accessMutation.mutate({ id: item.id, plus, version: item.version })
+                              }
+                            />
+                          )}
+                        </div>
+                      )}
                       {(item.processing || item.aiFailed) && !item.deleted && <span className="text-xs text-muted-foreground">{t(`lessonAuthoring.labels.${item.status}`, { defaultValue: item.status })}</span>}
                       {item.status === "PUBLISHED" && !item.deleted && <label className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Switch aria-label={t("catalog.lessonVisibility", { title: item.title })} checked={item.visible} disabled={visibility.isPending} onCheckedChange={visible => visibility.mutate({ id: item.id, visible, version: item.version })} />

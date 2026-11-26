@@ -68,6 +68,23 @@ public class GamificationAdminService {
         String ruleVersion,
         boolean enabled
     ) {
+        return createMission(code, title, metric, target, xpReward, diamondReward, recurrence, ruleVersion, enabled, "GENERAL", "NORMAL");
+    }
+
+    @Transactional
+    public AdminMissionDefinition createMission(
+        String code,
+        String title,
+        MissionDefinition.Metric metric,
+        int target,
+        int xpReward,
+        int diamondReward,
+        MissionDefinition.Recurrence recurrence,
+        String ruleVersion,
+        boolean enabled,
+        String category,
+        String difficulty
+    ) {
         if (missions == null) {
             throw new IllegalStateException("MissionProgressRepository is not configured");
         }
@@ -81,7 +98,9 @@ public class GamificationAdminService {
             diamondReward,
             recurrence,
             ruleVersion,
-            enabled
+            enabled,
+            category,
+            difficulty
         );
         try {
             return missions.createMission(toCreate);
@@ -103,6 +122,24 @@ public class GamificationAdminService {
         String ruleVersion,
         boolean enabled
     ) {
+        return updateMission(id, code, title, metric, target, xpReward, diamondReward, recurrence, ruleVersion, enabled, "GENERAL", "NORMAL");
+    }
+
+    @Transactional
+    public AdminMissionDefinition updateMission(
+        UUID id,
+        String code,
+        String title,
+        MissionDefinition.Metric metric,
+        int target,
+        int xpReward,
+        int diamondReward,
+        MissionDefinition.Recurrence recurrence,
+        String ruleVersion,
+        boolean enabled,
+        String category,
+        String difficulty
+    ) {
         if (missions == null) {
             throw new IllegalStateException("MissionProgressRepository is not configured");
         }
@@ -117,7 +154,9 @@ public class GamificationAdminService {
             diamondReward,
             recurrence,
             ruleVersion,
-            enabled
+            enabled,
+            category,
+            difficulty
         );
         try {
             return missions.updateMission(updated)
@@ -143,6 +182,24 @@ public class GamificationAdminService {
         String ruleVersion,
         boolean enabled
     ) {
+        return createAchievement(code, title, description, metric, target, xpReward, diamondReward, ruleVersion, enabled, null, "BRONZE", "MILESTONE");
+    }
+
+    @Transactional
+    public AchievementDefinition createAchievement(
+        String code,
+        String title,
+        String description,
+        String metric,
+        int target,
+        int xpReward,
+        int diamondReward,
+        String ruleVersion,
+        boolean enabled,
+        UUID badgeAssetId,
+        String badgeTier,
+        String category
+    ) {
         if (achievements == null) {
             throw new IllegalStateException("AchievementRepository is not configured");
         }
@@ -156,7 +213,10 @@ public class GamificationAdminService {
             xpReward,
             diamondReward,
             ruleVersion,
-            enabled
+            enabled,
+            badgeAssetId,
+            badgeTier,
+            category
         );
         try {
             return achievements.createAchievement(toCreate);
@@ -178,6 +238,25 @@ public class GamificationAdminService {
         String ruleVersion,
         boolean enabled
     ) {
+        return updateAchievement(id, code, title, description, metric, target, xpReward, diamondReward, ruleVersion, enabled, null, "BRONZE", "MILESTONE");
+    }
+
+    @Transactional
+    public AchievementDefinition updateAchievement(
+        UUID id,
+        String code,
+        String title,
+        String description,
+        String metric,
+        int target,
+        int xpReward,
+        int diamondReward,
+        String ruleVersion,
+        boolean enabled,
+        UUID badgeAssetId,
+        String badgeTier,
+        String category
+    ) {
         if (achievements == null) {
             throw new IllegalStateException("AchievementRepository is not configured");
         }
@@ -192,7 +271,10 @@ public class GamificationAdminService {
             xpReward,
             diamondReward,
             ruleVersion,
-            enabled
+            enabled,
+            badgeAssetId,
+            badgeTier,
+            category
         );
         try {
             return achievements.updateAchievement(updated)
@@ -240,7 +322,9 @@ public class GamificationAdminService {
         int diamondReward,
         MissionDefinition.Recurrence recurrence,
         String ruleVersion,
-        boolean enabled
+        boolean enabled,
+        String category,
+        String difficulty
     ) {
         if (code == null || code.isBlank() || code.trim().length() > 100) {
             throw new RequestValidationException("code is required and must be <= 100 characters");
@@ -257,6 +341,11 @@ public class GamificationAdminService {
         String resolvedVersion = (ruleVersion == null || ruleVersion.isBlank())
             ? RewardPolicyConfig.DEFAULT_RULE_VERSION
             : ruleVersion.trim();
+        String resolvedCategory = (category == null || category.isBlank()) ? "GENERAL" : category.trim().toUpperCase(java.util.Locale.ROOT);
+        String resolvedDifficulty = (difficulty == null || difficulty.isBlank()) ? "NORMAL" : difficulty.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!java.util.Set.of("EASY", "NORMAL", "HARD").contains(resolvedDifficulty)) {
+            throw new RequestValidationException("difficulty must be EASY, NORMAL, or HARD");
+        }
         return new AdminMissionDefinition(
             id,
             code.trim(),
@@ -267,7 +356,9 @@ public class GamificationAdminService {
             diamondReward,
             recurrence,
             resolvedVersion,
-            enabled
+            enabled,
+            resolvedCategory,
+            resolvedDifficulty
         );
     }
 
@@ -281,7 +372,10 @@ public class GamificationAdminService {
         int xpReward,
         int diamondReward,
         String ruleVersion,
-        boolean enabled
+        boolean enabled,
+        UUID badgeAssetId,
+        String badgeTier,
+        String category
     ) {
         if (code == null || code.isBlank() || code.trim().length() > 100) {
             throw new RequestValidationException("code is required and must be <= 100 characters");
@@ -298,6 +392,15 @@ public class GamificationAdminService {
         String resolvedVersion = (ruleVersion == null || ruleVersion.isBlank())
             ? RewardPolicyConfig.DEFAULT_RULE_VERSION
             : ruleVersion.trim();
+        String resolvedTier = (badgeTier == null || badgeTier.isBlank())
+            ? "BRONZE"
+            : badgeTier.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!java.util.Set.of("BRONZE", "SILVER", "GOLD", "PLATINUM", "LEGENDARY").contains(resolvedTier)) {
+            throw new RequestValidationException("badgeTier must be BRONZE, SILVER, GOLD, PLATINUM, or LEGENDARY");
+        }
+        String resolvedCategory = (category == null || category.isBlank())
+            ? "MILESTONE"
+            : category.trim().toUpperCase(java.util.Locale.ROOT);
         return new AchievementDefinition(
             id,
             code.trim(),
@@ -308,7 +411,10 @@ public class GamificationAdminService {
             xpReward,
             diamondReward,
             resolvedVersion,
-            enabled
+            enabled,
+            badgeAssetId,
+            resolvedTier,
+            resolvedCategory
         );
     }
 

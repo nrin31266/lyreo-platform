@@ -12,6 +12,8 @@ import com.lyreo.curriculum.domain.CurriculumPath;
 import com.lyreo.curriculum.domain.CurriculumPathDetail;
 import com.lyreo.curriculum.domain.CurriculumPathSummary;
 import com.lyreo.curriculum.domain.CurriculumSection;
+import com.lyreo.entitlement.api.EntitlementService;
+import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.platform.config.application.ConsumerReceiptStore;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,19 +31,35 @@ public class CurriculumService {
 
     private final CurriculumProgressRepository repository;
     private final ConsumerReceiptStore receipts;
+    private final EntitlementService entitlements;
 
     public CurriculumService(CurriculumProgressRepository repository) {
-        this(repository, null);
+        this(repository, null, null);
     }
 
     public CurriculumService(CurriculumProgressRepository repository, ConsumerReceiptStore receipts) {
+        this(repository, receipts, null);
+    }
+
+    public CurriculumService(
+        CurriculumProgressRepository repository,
+        ConsumerReceiptStore receipts,
+        EntitlementService entitlements
+    ) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.receipts = receipts;
+        this.entitlements = entitlements;
     }
 
     @Transactional(readOnly = true)
     public List<CurriculumPathSummary> listPublishedPaths(UUID learnerId) {
-        return repository.listPublishedPaths(learnerId);
+        List<CurriculumPathSummary> paths = repository.listPublishedPaths(learnerId);
+        if (entitlements == null || learnerId == null) {
+            return paths;
+        }
+        return paths.stream()
+            .map(summary -> summary.withLocked(isLocked(learnerId, summary.accessMode(), summary.requiredFeatureKey())))
+            .toList();
     }
 
     @Transactional(readOnly = true)
@@ -61,6 +79,9 @@ public class CurriculumService {
             .orElseThrow(() -> new ResourceNotFoundException("Curriculum path not found"));
         if (!path.isPublished()) {
             throw new StateConflictException("Curriculum path is not published");
+        }
+        if (entitlements != null && "FEATURE".equals(path.accessMode()) && path.requiredFeatureKey() != null) {
+            entitlements.requireFeature(learnerId, FeatureKey.of(path.requiredFeatureKey()));
         }
 
         repository.ensureActiveEnrollment(learnerId, pathId);
@@ -268,7 +289,8 @@ public class CurriculumService {
                     item.required(),
                     item.unlockRule(),
                     itemStatus,
-                    progress != null ? progress.completedAt() : null
+                    progress != null ? progress.completedAt() : null,
+                    item.config()
                 ));
             }
             sectionViews.add(new CurriculumPathDetail.SectionView(
@@ -279,6 +301,7 @@ public class CurriculumService {
             ));
         }
 
+        boolean locked = learnerId != null && isLocked(learnerId, path.accessMode(), path.requiredFeatureKey());
         return new CurriculumPathDetail(
             path.id(),
             path.code(),
@@ -286,6 +309,10 @@ public class CurriculumService {
             path.level(),
             path.description(),
             path.status(),
+            path.coverAssetId(),
+            path.accessMode(),
+            path.requiredFeatureKey(),
+            locked,
             path.createdAt(),
             path.updatedAt(),
             enrollment != null ? enrollment.status() : null,
@@ -295,6 +322,13 @@ public class CurriculumService {
             totalRequired,
             sectionViews
         );
+    }
+
+    private boolean isLocked(UUID learnerId, String accessMode, String requiredFeatureKey) {
+        if (entitlements == null || !"FEATURE".equals(accessMode) || requiredFeatureKey == null || requiredFeatureKey.isBlank()) {
+            return false;
+        }
+        return !entitlements.hasFeature(learnerId, FeatureKey.of(requiredFeatureKey));
     }
 
     private static boolean isOpenRule(String unlockRule) {

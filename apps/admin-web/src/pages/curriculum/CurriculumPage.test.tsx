@@ -4,24 +4,32 @@ import { I18nextProvider } from 'react-i18next';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { i18n } from '@/i18n';
+import { fetchContentMediaList } from '@/pages/overview/admin-ops.api';
 import { CurriculumPage } from './CurriculumPage';
 import {
   createAdminCurriculumPath,
   deleteAdminCurriculumPath,
   fetchAdminCurriculumPath,
   fetchAdminCurriculumPaths,
+  fetchCurriculumPathDiagnostics,
   updateAdminCurriculumPath,
   type AdminCurriculumPath,
   type AdminCurriculumPathSummary,
 } from './curriculum.api';
 
-vi.mock('./curriculum.api', async importOriginal => ({
+vi.mock('./curriculum.api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./curriculum.api')>()),
   fetchAdminCurriculumPaths: vi.fn(),
   fetchAdminCurriculumPath: vi.fn(),
+  fetchCurriculumPathDiagnostics: vi.fn(),
   createAdminCurriculumPath: vi.fn(),
   updateAdminCurriculumPath: vi.fn(),
   deleteAdminCurriculumPath: vi.fn(),
+}));
+
+vi.mock('@/pages/overview/admin-ops.api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/pages/overview/admin-ops.api')>()),
+  fetchContentMediaList: vi.fn(),
 }));
 
 const summary: AdminCurriculumPathSummary = {
@@ -31,6 +39,9 @@ const summary: AdminCurriculumPathSummary = {
   level: 'A2',
   description: 'Core onboarding steps',
   status: 'DRAFT',
+  coverAssetId: null,
+  accessMode: 'PUBLIC',
+  requiredFeatureKey: null,
 };
 
 const samplePath: AdminCurriculumPath = {
@@ -48,6 +59,7 @@ const samplePath: AdminCurriculumPath = {
           contentReferenceId: '01950000-0000-7000-8000-000000000201',
           required: true,
           unlockRule: 'NONE',
+          config: { activityType: 'SHADOWING' },
         },
       ],
     },
@@ -62,6 +74,20 @@ beforeEach(async () => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.mocked(fetchAdminCurriculumPaths).mockResolvedValue([summary]);
   vi.mocked(fetchAdminCurriculumPath).mockResolvedValue(samplePath);
+  vi.mocked(fetchCurriculumPathDiagnostics).mockResolvedValue({
+    pathId: samplePath.id,
+    totalItems: 1,
+    validItems: 1,
+    missingItems: 0,
+    lockedForFreeUsers: 0,
+    checks: [],
+  });
+  vi.mocked(fetchContentMediaList).mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 0,
+    size: 50,
+  });
 });
 
 afterEach(() => {
@@ -119,7 +145,9 @@ it('validates content UUIDs and creates a new path with sections and items', asy
   fireEvent.change(screen.getByLabelText('Path name'), { target: { value: 'TOEIC Sprint' } });
   fireEvent.change(screen.getByLabelText('Path code'), { target: { value: 'TOEIC_SPRINT' } });
   fireEvent.change(screen.getByLabelText('Section 1 title'), { target: { value: 'Listening' } });
-  fireEvent.change(screen.getByLabelText('Content reference ID (UUID)'), { target: { value: 'not-a-uuid' } });
+  fireEvent.change(screen.getByLabelText('Content reference ID (UUID)'), {
+    target: { value: 'not-a-uuid' },
+  });
 
   fireEvent.click(screen.getByRole('button', { name: 'Save path' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Enter a valid UUID');

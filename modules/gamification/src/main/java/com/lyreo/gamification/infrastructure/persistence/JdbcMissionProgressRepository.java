@@ -143,6 +143,8 @@ public final class JdbcMissionProgressRepository implements MissionProgressRepos
                 md.xp_reward,
                 md.diamond_reward,
                 md.rule_version,
+                md.category,
+                md.difficulty,
                 CASE
                     WHEN md.recurrence = 'WEEKLY' THEN :weeklyPeriodKey
                     WHEN md.recurrence = 'ONE_TIME' THEN 'ONE_TIME'
@@ -193,7 +195,9 @@ public final class JdbcMissionProgressRepository implements MissionProgressRepos
                     rs.getInt("diamond_reward"),
                     rs.getString("resolved_period_key"),
                     periodEndsAt,
-                    rs.getString("rule_version")
+                    rs.getString("rule_version"),
+                    rs.getString("category"),
+                    rs.getString("difficulty")
                 );
             }
         );
@@ -203,7 +207,8 @@ public final class JdbcMissionProgressRepository implements MissionProgressRepos
     public List<AdminMissionDefinition> listAllMissions() {
         return jdbc.query(
             """
-            SELECT id, code, title, metric, target, xp_reward, diamond_reward, recurrence, rule_version, enabled
+            SELECT id, code, title, metric, target, xp_reward, diamond_reward, recurrence, rule_version, enabled,
+                   category, difficulty
             FROM mission_definition
             ORDER BY code ASC
             """,
@@ -215,7 +220,8 @@ public final class JdbcMissionProgressRepository implements MissionProgressRepos
     public Optional<AdminMissionDefinition> findMissionById(UUID id) {
         return jdbc.query(
             """
-            SELECT id, code, title, metric, target, xp_reward, diamond_reward, recurrence, rule_version, enabled
+            SELECT id, code, title, metric, target, xp_reward, diamond_reward, recurrence, rule_version, enabled,
+                   category, difficulty
             FROM mission_definition
             WHERE id = :id
             """,
@@ -229,9 +235,11 @@ public final class JdbcMissionProgressRepository implements MissionProgressRepos
         jdbc.update(
             """
             INSERT INTO mission_definition(
-                id, code, title, metric, target, xp_reward, diamond_reward, recurrence, rule_version, enabled
+                id, code, title, metric, target, xp_reward, diamond_reward, recurrence, rule_version, enabled,
+                category, difficulty
             ) VALUES (
-                :id, :code, :title, :metric, :target, :xpReward, :diamondReward, :recurrence, :ruleVersion, :enabled
+                :id, :code, :title, :metric, :target, :xpReward, :diamondReward, :recurrence, :ruleVersion, :enabled,
+                :category, :difficulty
             )
             """,
             missionParams(mission)
@@ -252,9 +260,12 @@ public final class JdbcMissionProgressRepository implements MissionProgressRepos
                 diamond_reward = :diamondReward,
                 recurrence = :recurrence,
                 rule_version = :ruleVersion,
-                enabled = :enabled
+                enabled = :enabled,
+                category = :category,
+                difficulty = :difficulty
             WHERE id = :id
-            RETURNING id, code, title, metric, target, xp_reward, diamond_reward, recurrence, rule_version, enabled
+            RETURNING id, code, title, metric, target, xp_reward, diamond_reward, recurrence, rule_version, enabled,
+                      category, difficulty
             """,
             missionParams(mission),
             (rs, rowNum) -> mapAdminMission(rs)
@@ -272,7 +283,9 @@ public final class JdbcMissionProgressRepository implements MissionProgressRepos
             rs.getInt("diamond_reward"),
             MissionDefinition.Recurrence.valueOf(rs.getString("recurrence")),
             rs.getString("rule_version"),
-            rs.getBoolean("enabled")
+            rs.getBoolean("enabled"),
+            rs.getString("category"),
+            rs.getString("difficulty")
         );
     }
 
@@ -287,6 +300,8 @@ public final class JdbcMissionProgressRepository implements MissionProgressRepos
             .addValue("diamondReward", mission.diamondReward())
             .addValue("recurrence", mission.recurrence().name())
             .addValue("ruleVersion", mission.ruleVersion())
-            .addValue("enabled", mission.enabled());
+            .addValue("enabled", mission.enabled())
+            .addValue("category", mission.category() == null ? "GENERAL" : mission.category())
+            .addValue("difficulty", mission.difficulty() == null ? "NORMAL" : mission.difficulty());
     }
 }

@@ -76,7 +76,7 @@ for sha, payload in expected:
 
 assets_dir = Path("infra/postgres/seed/assets")
 if assets_dir.is_dir():
-    for asset_path in sorted(assets_dir.iterdir()):
+    for asset_path in sorted(assets_dir.rglob("*")):
         if not asset_path.is_file() or asset_path.suffix.lower() not in {".webp", ".wav", ".png", ".jpg"}:
             continue
         payload = asset_path.read_bytes()
@@ -112,7 +112,7 @@ candidates: list[tuple[Path, str]] = [
 ]
 assets_dir = Path("infra/postgres/seed/assets")
 if assets_dir.is_dir():
-    for asset_path in sorted(assets_dir.iterdir()):
+    for asset_path in sorted(assets_dir.rglob("*")):
         if not asset_path.is_file() or asset_path.suffix.lower() not in {".webp", ".wav", ".png", ".jpg"}:
             continue
         mime = mimetypes.guess_type(asset_path.name)[0] or "application/octet-stream"

@@ -166,7 +166,9 @@ public class AdminGamificationController {
             request.diamondReward(),
             request.recurrence(),
             request.ruleVersion(),
-            request.enabled()
+            request.enabled(),
+            request.category(),
+            request.difficulty()
         ));
     }
 
@@ -185,7 +187,9 @@ public class AdminGamificationController {
             request.diamondReward(),
             request.recurrence(),
             request.ruleVersion(),
-            request.enabled()
+            request.enabled(),
+            request.category(),
+            request.difficulty()
         );
     }
 
@@ -205,7 +209,10 @@ public class AdminGamificationController {
             request.xpReward(),
             request.diamondReward(),
             request.ruleVersion(),
-            request.enabled()
+            request.enabled(),
+            request.badgeAssetId(),
+            request.badgeTier(),
+            request.category()
         ));
     }
 
@@ -224,7 +231,10 @@ public class AdminGamificationController {
             request.xpReward(),
             request.diamondReward(),
             request.ruleVersion(),
-            request.enabled()
+            request.enabled(),
+            request.badgeAssetId(),
+            request.badgeTier(),
+            request.category()
         );
     }
 
@@ -252,8 +262,24 @@ public class AdminGamificationController {
         @Min(0) int diamondReward,
         @NotNull MissionDefinition.Recurrence recurrence,
         String ruleVersion,
-        boolean enabled
-    ) {}
+        boolean enabled,
+        String category,
+        String difficulty
+    ) {
+        public SaveMissionRequest(
+            String code,
+            String title,
+            MissionDefinition.Metric metric,
+            int target,
+            int xpReward,
+            int diamondReward,
+            MissionDefinition.Recurrence recurrence,
+            String ruleVersion,
+            boolean enabled
+        ) {
+            this(code, title, metric, target, xpReward, diamondReward, recurrence, ruleVersion, enabled, "GENERAL", "NORMAL");
+        }
+    }
 
     public record SaveAchievementRequest(
         @NotBlank String code,
@@ -264,8 +290,25 @@ public class AdminGamificationController {
         @Min(0) int xpReward,
         @Min(0) int diamondReward,
         String ruleVersion,
-        boolean enabled
-    ) {}
+        boolean enabled,
+        UUID badgeAssetId,
+        String badgeTier,
+        String category
+    ) {
+        public SaveAchievementRequest(
+            String code,
+            String title,
+            String description,
+            String metric,
+            int target,
+            int xpReward,
+            int diamondReward,
+            String ruleVersion,
+            boolean enabled
+        ) {
+            this(code, title, description, metric, target, xpReward, diamondReward, ruleVersion, enabled, null, "BRONZE", "MILESTONE");
+        }
+    }
 
     public record SaveRewardPolicyRequest(
         @NotBlank String ruleVersion,

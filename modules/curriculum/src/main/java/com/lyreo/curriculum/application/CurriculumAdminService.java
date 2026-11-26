@@ -8,12 +8,17 @@ import com.lyreo.curriculum.domain.CurriculumItem;
 import com.lyreo.curriculum.domain.CurriculumItem.ContentType;
 import com.lyreo.curriculum.domain.CurriculumPath;
 import com.lyreo.curriculum.domain.CurriculumPathDetail;
+import com.lyreo.curriculum.domain.CurriculumPathDiagnostic;
 import com.lyreo.curriculum.domain.CurriculumSection;
+import com.lyreo.entitlement.api.FeatureKey;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /** Admin authoring and lifecycle management for curriculum paths, sections, and items. */
 public class CurriculumAdminService {
@@ -25,13 +30,23 @@ public class CurriculumAdminService {
 
     private final CurriculumProgressRepository repository;
     private final CurriculumService curriculumService;
+    private final ObjectMapper mapper;
 
     public CurriculumAdminService(
         CurriculumProgressRepository repository,
         CurriculumService curriculumService
     ) {
+        this(repository, curriculumService, new ObjectMapper());
+    }
+
+    public CurriculumAdminService(
+        CurriculumProgressRepository repository,
+        CurriculumService curriculumService,
+        ObjectMapper mapper
+    ) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.curriculumService = Objects.requireNonNull(curriculumService, "curriculumService");
+        this.mapper = mapper == null ? new ObjectMapper() : mapper;
     }
 
     @Transactional(readOnly = true)
@@ -46,11 +61,21 @@ public class CurriculumAdminService {
         return curriculumService.buildPathDetail(null, path);
     }
 
+    @Transactional(readOnly = true)
+    public CurriculumPathDiagnostic diagnosePath(UUID pathId) {
+        if (repository.findPathById(pathId).isEmpty()) {
+            throw new ResourceNotFoundException("Curriculum path not found");
+        }
+        return repository.diagnosePath(pathId);
+    }
+
     @Transactional
     public CurriculumPathDetail createPath(SavePathCommand command) {
         String code = requireNonBlank(command.code(), "code");
         String name = requireNonBlank(command.name(), "name");
         String status = normalizeStatus(command.status(), CurriculumPath.STATUS_DRAFT);
+        String accessMode = normalizeAccessMode(command.accessMode(), "PUBLIC");
+        String featureKey = resolveFeatureKey(accessMode, command.requiredFeatureKey());
 
         if (repository.existsByCode(code, null)) {
             throw new StateConflictException("Curriculum path code already exists: " + code);
@@ -63,7 +88,10 @@ public class CurriculumAdminService {
             name,
             command.level(),
             command.description(),
-            status
+            status,
+            command.coverAssetId(),
+            accessMode,
+            featureKey
         );
 
         if (command.sections() != null) {
@@ -89,12 +117,21 @@ public class CurriculumAdminService {
             throw new StateConflictException("Curriculum path code already exists: " + code);
         }
 
+        String accessMode = normalizeAccessMode(command.accessMode(), existing.accessMode());
+        String featureKey = resolveFeatureKey(
+            accessMode,
+            command.requiredFeatureKey() != null ? command.requiredFeatureKey() : existing.requiredFeatureKey()
+        );
+
         CurriculumPath updated = repository.updatePath(
             pathId,
             code,
             name,
             command.level() != null ? command.level() : existing.level(),
-            command.description() != null ? command.description() : existing.description()
+            command.description() != null ? command.description() : existing.description(),
+            command.coverAssetId() != null ? command.coverAssetId() : existing.coverAssetId(),
+            accessMode,
+            featureKey
         ).orElseThrow(() -> new ResourceNotFoundException("Curriculum path not found"));
 
         if (command.status() != null && !command.status().isBlank()) {
@@ -154,7 +191,7 @@ public class CurriculumAdminService {
             Objects.requireNonNull(itemSpec.contentReferenceId(), "contentReferenceId is required"),
             itemSpec.required(),
             itemSpec.unlockRule(),
-            "{}"
+            encodeConfig(itemSpec.config())
         );
     }
 
@@ -183,11 +220,43 @@ public class CurriculumAdminService {
                         Objects.requireNonNull(itemSpec.contentReferenceId(), "contentReferenceId is required"),
                         itemSpec.required(),
                         itemSpec.unlockRule(),
-                        "{}"
+                        encodeConfig(itemSpec.config())
                     );
                 }
             }
         }
+    }
+
+    private String encodeConfig(Map<String, Object> config) {
+        if (config == null || config.isEmpty()) {
+            return "{}";
+        }
+        try {
+            return mapper.writeValueAsString(config);
+        } catch (JacksonException e) {
+            throw new RequestValidationException("Invalid item config JSON");
+        }
+    }
+
+    private static String normalizeAccessMode(String raw, String fallback) {
+        if (raw == null || raw.isBlank()) {
+            return fallback != null ? fallback : "PUBLIC";
+        }
+        String mode = raw.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!"PUBLIC".equals(mode) && !"FEATURE".equals(mode)) {
+            throw new RequestValidationException("accessMode must be PUBLIC or FEATURE");
+        }
+        return mode;
+    }
+
+    private static String resolveFeatureKey(String accessMode, String rawFeatureKey) {
+        if (!"FEATURE".equals(accessMode)) {
+            return null;
+        }
+        if (rawFeatureKey == null || rawFeatureKey.isBlank()) {
+            throw new RequestValidationException("requiredFeatureKey is required when accessMode is FEATURE");
+        }
+        return FeatureKey.of(rawFeatureKey.trim()).value();
     }
 
     private static String normalizeStatus(String rawStatus, String fallback) {
@@ -217,8 +286,22 @@ public class CurriculumAdminService {
         String level,
         String description,
         String status,
+        UUID coverAssetId,
+        String accessMode,
+        String requiredFeatureKey,
         List<SectionSpec> sections
-    ) {}
+    ) {
+        public SavePathCommand(
+            String code,
+            String name,
+            String level,
+            String description,
+            String status,
+            List<SectionSpec> sections
+        ) {
+            this(code, name, level, description, status, null, null, null, sections);
+        }
+    }
 
     public record SectionSpec(
         String title,
@@ -231,6 +314,17 @@ public class CurriculumAdminService {
         ContentType contentType,
         UUID contentReferenceId,
         boolean required,
-        String unlockRule
-    ) {}
+        String unlockRule,
+        Map<String, Object> config
+    ) {
+        public ItemSpec(
+            int position,
+            ContentType contentType,
+            UUID contentReferenceId,
+            boolean required,
+            String unlockRule
+        ) {
+            this(position, contentType, contentReferenceId, required, unlockRule, Map.of());
+        }
+    }
 }

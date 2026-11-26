@@ -29,7 +29,11 @@ public interface LessonCatalogPort {
   void deleteDraft(UUID lesson);
 
   default void restore(UUID lesson) {throw new UnsupportedOperationException();}
-  void visibility(UUID lesson, boolean visible);
+  default void visibility(UUID lesson, boolean visible) {}
+
+  default void updateAccess(UUID lesson, String accessMode, String requiredFeatureKey) {
+    throw new UnsupportedOperationException();
+  }
 
   void channelVisibility(String channelId, boolean visible);
 
@@ -63,8 +67,10 @@ public interface LessonCatalogPort {
       String description,
       String imageUrl,
       boolean visible, boolean channelVisible, boolean effectiveVisible,
-      long version,long revision,boolean deleted,String cefr,List<String> activities,boolean processing,boolean aiFailed) {
-    public Item(UUID id,String title,String sourceType,String status,Long startMs,Long endMs,String channelId,String channelTitle,Instant updatedAt,boolean authoring,List<Category> categories,String description,String imageUrl,boolean visible,boolean channelVisible,boolean effectiveVisible) {this(id,title,sourceType,status,startMs,endMs,channelId,channelTitle,updatedAt,authoring,categories,description,imageUrl,visible,channelVisible,effectiveVisible,0,0,false,"UNKNOWN",List.of(),false,false);}
+      long version,long revision,boolean deleted,String cefr,List<String> activities,boolean processing,boolean aiFailed,
+      String accessMode, String requiredFeatureKey) {
+    public Item(UUID id,String title,String sourceType,String status,Long startMs,Long endMs,String channelId,String channelTitle,Instant updatedAt,boolean authoring,List<Category> categories,String description,String imageUrl,boolean visible,boolean channelVisible,boolean effectiveVisible) {this(id,title,sourceType,status,startMs,endMs,channelId,channelTitle,updatedAt,authoring,categories,description,imageUrl,visible,channelVisible,effectiveVisible,0,0,false,"UNKNOWN",List.of(),false,false,"PUBLIC",null);}
+    public Item(UUID id,String title,String sourceType,String status,Long startMs,Long endMs,String channelId,String channelTitle,Instant updatedAt,boolean authoring,List<Category> categories,String description,String imageUrl,boolean visible,boolean channelVisible,boolean effectiveVisible,long version,long revision,boolean deleted,String cefr,List<String> activities,boolean processing,boolean aiFailed) {this(id,title,sourceType,status,startMs,endMs,channelId,channelTitle,updatedAt,authoring,categories,description,imageUrl,visible,channelVisible,effectiveVisible,version,revision,deleted,cefr,activities,processing,aiFailed,"PUBLIC",null);}
   }
 
   record Page(List<Item> items, long total, int page, int size) {}

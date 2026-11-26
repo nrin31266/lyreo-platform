@@ -495,7 +495,9 @@
     "hiddenShort": "Đã ẩn",
     "categoryDefaultName": "Tên mặc định (tiếng Anh)",
     "categoryVietnameseName": "Tên tiếng Việt (tuỳ chọn)",
-    "editMetadataShort": "Sửa"
+    "editMetadataShort": "Sửa",
+    "plusAccessLabel": "Yêu cầu gói Lyreo Plus (lesson.plus-lessons)",
+    "togglePlusAccess": "Chuyển đổi quyền Plus cho {{title}}"
   },
   "waveform": {
     "overview": "Toàn bộ video",
@@ -642,8 +644,8 @@
     "profiles": "Hồ sơ người học",
     "progress": "Tiến độ và kết quả",
     "rewards": "Nhiệm vụ và phần thưởng",
-    "notifications": "Thông báo",
-    "conversations": "Hội thoại AI",
+    "notifications": "Thông báo học viên",
+    "conversations": "Hội thoại AI thực tế",
     "jobs": "Tác vụ xử lý",
     "imports": "Nhập dữ liệu",
     "media": "Kho media",
@@ -651,7 +653,10 @@
     "routes": "Định tuyến AI",
     "soon": "Sắp có",
     "aiSettings": "Cấu hình AI",
-    "organization": "Danh mục & kênh"
+    "organization": "Danh mục & kênh",
+    "plans": "Gói Free & Plus",
+    "missions": "Nhiệm vụ & quy tắc",
+    "achievements": "Thành tích & huy hiệu"
   },
   "captions": {
     "useManualTrack": "Dùng phụ đề tiếng Anh do nhà xuất bản cung cấp",
@@ -1143,8 +1148,18 @@
     "play": "Nghe {{text}}",
     "pauseReference": "Tạm dừng câu mẫu",
     "referenceGroup": "Câu mẫu",
-    "score": { "overall": "Tổng thể", "accuracy": "Độ chính xác", "fluency": "Độ lưu loát", "completeness": "Độ đầy đủ" },
-    "word": { "NONE": "Không phát hiện lỗi", "OMISSION": "Thiếu", "INSERTION": "Thừa", "MISPRONUNCIATION": "Sai phát âm" },
+    "score": {
+      "overall": "Tổng thể",
+      "accuracy": "Độ chính xác",
+      "fluency": "Độ lưu loát",
+      "completeness": "Độ đầy đủ"
+    },
+    "word": {
+      "NONE": "Không phát hiện lỗi",
+      "OMISSION": "Thiếu",
+      "INSERTION": "Thừa",
+      "MISPRONUNCIATION": "Sai phát âm"
+    },
     "loadingLimits": "Đang tải giới hạn thu âm…",
     "preparingAudio": "Đang chuẩn bị bản thu…",
     "inspectWord": "Xem từ “{{word}}” (vị trí {{position}})",
@@ -2189,7 +2204,43 @@
     "deletePath": "Xóa lộ trình",
     "deleteConfirmTitle": "Xóa lộ trình học",
     "deleteConfirmHelp": "Xóa “{{name}}” sẽ gỡ bỏ vĩnh viễn các chương, mục học và tiến độ liên quan.",
-    "confirmDelete": "Xóa vĩnh viễn"
+    "confirmDelete": "Xóa vĩnh viễn",
+    "coverImage": "Ảnh bìa lộ trình",
+    "noCover": "Chưa chọn ảnh bìa",
+    "accessTier": "Phạm vi truy cập",
+    "accessFree": "Miễn phí (tất cả học viên)",
+    "accessPlus": "Lyreo Plus (yêu cầu gói Plus)",
+    "requiredTag": "Bắt buộc",
+    "tabs": {
+      "builder": "Biên tập lộ trình",
+      "map": "Bản đồ tương tác",
+      "diagnostics": "Kiểm tra & chẩn đoán"
+    },
+    "graph": {
+      "simulatorTitle": "Mô phỏng mở khóa lộ trình",
+      "simulatorHelp": "Chuyển đổi giữa Free/Plus hoặc bấm vào từng chặng để kiểm tra điều kiện mở khóa.",
+      "resetSim": "Đặt lại mô phỏng"
+    },
+    "diagnostics": {
+      "total": "Tổng số chặng",
+      "valid": "Tham chiếu hợp lệ",
+      "missing": "Thiếu / lỗi liên kết",
+      "plusLocked": "Chặng yêu cầu Plus",
+      "tableTitle": "Chi tiết kiểm tra liên kết & lát cắt",
+      "tableHelp": "Kiểm tra trực tiếp từ máy chủ đối với từng chặng, lát cắt câu/từ và quyền Free/Plus.",
+      "content": "Nội dung liên kết",
+      "slice": "Kích thước lát cắt"
+    },
+    "slicePicker": {
+      "title": "Chọn & cắt nhỏ nội dung",
+      "description": "Chọn một mục {{type}} đã xuất bản và lọc riêng các từ, câu hoặc phần thi cho chặng học.",
+      "sliceHeading": "Cấu hình lát cắt nội dung",
+      "selectSourceFirst": "Chọn một nguồn nội dung bên trái để thiết lập phần được cắt.",
+      "activityMode": "Chế độ luyện tập",
+      "toeicParts": "Các Part TOEIC áp dụng",
+      "questionCount": "Số câu hỏi / lượt mục tiêu",
+      "applySlice": "Áp dụng lát cắt"
+    }
   },
   "learnerOperations": {
     "entitlementsTitle": "Quyền truy cập & gói tính năng",
@@ -2279,7 +2330,10 @@
       "grammar": "Ngữ pháp",
       "toeic": "TOEIC",
       "duration": "Thời lượng"
-    }
+    },
+    "blankTitle": "Bảng điều khiển đang để trống",
+    "blankSubtitle": "Chọn mục tương ứng ở thanh bên để quản lí bài học, hội thoại AI, lộ trình, gói Plus, nhiệm vụ, thành tích và thông báo.",
+    "blankHint": "Trang tổng quan sẽ được hoàn thiện sau khi toàn bộ các công cụ biên tập và dữ liệu đã ổn định."
   },
   "activitiesHub": {
     "title": "Hoạt động Luyện tập & Bao phủ",
@@ -2336,7 +2390,9 @@
       "key": "Chủ điểm / khóa",
       "severity": "Mức độ",
       "samples": "Số mẫu"
-    }
+    },
+    "chartView": "Xem biểu đồ",
+    "tableView": "Xem bảng"
   },
   "rewardsConsole": {
     "title": "Phần thưởng, Nhiệm vụ & Hạn mức",
@@ -2400,8 +2456,8 @@
     }
   },
   "notificationsCenter": {
-    "title": "Thông báo & Vận hành Thời gian thực",
-    "subtitle": "Trạng thái luồng SSE, sự kiện tác vụ nền và nhật ký kiểm toán quyền truy cập.",
+    "title": "Thông báo & Bảng tin Học viên",
+    "subtitle": "Đăng thông báo dễ hiểu cho học viên Free/Plus và theo dõi hoạt động hệ thống dạng văn bản thân thiện.",
     "scopeTitle": "Luồng sự kiện vận hành",
     "scopeDescription": "Tiến trình tác vụ nền và sự kiện phân quyền được cập nhật trực tiếp tại đây. Kênh gửi push notification tới thiết bị học viên nằm ngoài phạm vi bảng điều khiển web này.",
     "jobsFeedTitle": "Cảnh báo tác vụ gần đây",
@@ -2420,16 +2476,50 @@
       "time": "Thời điểm",
       "feature": "Tính năng",
       "decision": "Quyết định"
+    },
+    "createButton": "Tạo thông báo",
+    "createTitle": "Tạo thông báo mới",
+    "editTitle": "Chỉnh sửa thông báo",
+    "deleteButton": "Xóa thông báo",
+    "deleteConfirm": "Xóa vĩnh viễn thông báo “{{title}}”?",
+    "dialogHelp": "Soạn nội dung ngắn gọn, rõ ràng gửi tới toàn bộ học viên, nhóm Free hoặc nhóm Plus.",
+    "emptyTitle": "Chưa có thông báo nào",
+    "emptyHelp": "Tạo thông báo để hiển thị trong hộp thư ứng dụng học viên.",
+    "publishedTimestamp": "Cập nhật lúc {{time}}",
+    "activityTitle": "Nhật ký sự kiện quyền & hạn mức",
+    "activityHelp": "Tóm tắt dễ đọc các sự kiện cấp quyền và kiểm tra hạn mức gần đây.",
+    "activityEmpty": "Chưa có sự kiện nào được ghi nhận.",
+    "activitySentence": "Tính năng “{{feature}}” được kiểm tra với kết quả: {{decision}}",
+    "tabs": {
+      "announcements": "Thông báo gửi học viên",
+      "activity": "Nhật ký dễ đọc"
+    },
+    "categories": {
+      "SYSTEM": "Hệ thống",
+      "STUDY_REMINDER": "Nhắc học",
+      "REWARD": "Phần thưởng",
+      "PROMO": "Ưu đãi Plus"
+    },
+    "audiences": {
+      "ALL": "Tất cả học viên",
+      "FREE": "Nhóm Free",
+      "PLUS": "Thành viên Plus"
+    },
+    "fields": {
+      "title": "Tiêu đề thông báo",
+      "body": "Nội dung chi tiết",
+      "category": "Phân loại",
+      "audience": "Đối tượng nhận"
     }
   },
   "conversationsConsole": {
-    "title": "Thống kê Hội thoại Gia sư AI",
-    "subtitle": "Tổng hợp lưu lượng và siêu dữ liệu, tuyệt đối không hiển thị nội dung tin nhắn riêng tư.",
+    "title": "Studio Hội thoại AI Voice",
+    "subtitle": "Thiết lập tình huống giao tiếp thực tế theo vai diễn và thử chat trực tiếp với AI trên hệ thống.",
     "privacyTitle": "Dữ liệu bảo vệ quyền riêng tư",
     "privacyDescription": "Tiêu đề hội thoại và nội dung tin nhắn luôn được bảo mật riêng cho từng học viên. Quản trị viên chỉ xem được số lượt tương tác, thời gian và mã luồng.",
     "recentTitle": "Các luồng hoạt động gần đây (chỉ siêu dữ liệu)",
     "recentHelp": "Nhấn vào ID người học để xem hồ sơ và hạn mức chat.tutor.",
-    "empty": "Chưa có hội thoại Gia sư AI nào.",
+    "empty": "Chưa có tình huống hội thoại nào.",
     "metrics": {
       "totalConversations": "Tổng số luồng",
       "activeLearners": "Học viên sử dụng",
@@ -2441,6 +2531,40 @@
       "learner": "ID người học",
       "messages": "Số tin nhắn",
       "updatedAt": "Hoạt động cuối"
+    },
+    "createScenario": "Tạo tình huống mới",
+    "editScenario": "Sửa tình huống",
+    "deleteScenario": "Xóa tình huống",
+    "deleteConfirm": "Xóa tình huống hội thoại “{{name}}”? Lịch sử luyện tập trước đó của học viên vẫn được giữ lại.",
+    "dialogHelp": "Thiết lập vai AI, bối cảnh, mục tiêu giao tiếp, giọng đọc TTS và quyền Free/Plus.",
+    "rosterTitle": "Danh sách tình huống",
+    "emptyHelp": "Tạo tình huống thực tế mới hoặc chạy script nạp dữ liệu mẫu.",
+    "turnsSummary": "{{turns}} lượt mục tiêu · ~{{minutes}} phút",
+    "fields": {
+      "code": "Mã tình huống",
+      "category": "Chủ đề",
+      "titleEn": "Tiêu đề tiếng Anh",
+      "titleVi": "Tiêu đề tiếng Việt",
+      "voice": "Giọng đọc AI (TTS)",
+      "aiRole": "Vai diễn của AI",
+      "learnerRole": "Vai diễn của học viên",
+      "aiPersona": "Tính cách / vai trò AI",
+      "setting": "Bối cảnh tình huống",
+      "openingLine": "Câu mở đầu của AI",
+      "systemPrompt": "Chỉ dẫn nhập vai (System Prompt)",
+      "objectives": "Mục tiêu giao tiếp (mỗi dòng 1 ý)",
+      "targetTurns": "Số lượt hội thoại mục tiêu",
+      "estimatedMinutes": "Thời lượng ước tính (phút)",
+      "plusOnly": "Yêu cầu gói Lyreo Plus (speaking.roleplay)"
+    },
+    "playground": {
+      "title": "Chạy thử tình huống trực tiếp",
+      "help": "Nhập câu trả lời như một học viên để kiểm tra phản hồi AI và gợi ý sửa câu.",
+      "reset": "Làm mới hội thoại",
+      "coachingTips": "Gợi ý phản xạ từ AI",
+      "inputPlaceholder": "Nhập câu trả lời tiếng Anh để thử vai cùng AI…",
+      "send": "Gửi lượt",
+      "sending": "Đang phản hồi…"
     }
   },
   "mediaLibrary": {
@@ -2460,5 +2584,54 @@
       "image": "Hình ảnh",
       "audio": "Âm thanh"
     }
+  },
+  "authRedirectError": "Không thể tự động chuyển sang trang đăng nhập.",
+  "signInAction": "Đăng nhập",
+  "plansConsole": {
+    "title": "Quản lí Gói Free & Lyreo Plus",
+    "subtitle": "Cấu hình đặc quyền từng gói, hạn mức AI hằng ngày và gắn nhãn nội dung Free/Plus.",
+    "freeCard": {
+      "title": "Gói Free",
+      "description": "Trải nghiệm học tập nền tảng với các bài cơ bản và hạn mức AI tiêu chuẩn mỗi ngày.",
+      "item1": "Học đầy đủ bài khởi động, lộ trình A2–B1 nền tảng và bảng IPA",
+      "item2": "Bộ từ vựng SRS cốt lõi & đề luyện TOEIC khởi đầu",
+      "item3": "Hạn mức hằng ngày cho Gia sư AI, chấm phát âm Shadowing và Hội thoại"
+    },
+    "plusCard": {
+      "title": "Lyreo Plus",
+      "description": "Mở khóa toàn bộ bộ đề TOEIC, lộ trình công sở chuyên sâu, bộ từ vựng mở rộng và hạn mức AI cao.",
+      "item1": "Toàn bộ bộ đề TOEIC L&R và bài luyện tình huống B1–C1 nâng cao",
+      "item2": "Bộ từ vựng Công sở, Công nghệ & đầy đủ tình huống Voice Roleplay",
+      "item3": "Hạn mức rộng mở hằng ngày cho AI Voice Roleplay và Gia sư AI",
+      "item4": "Tăng giới hạn lưu trữ thẻ từ vựng cá nhân"
+    },
+    "contentMatrixTitle": "Ma trận phân quyền nội dung Free / Plus",
+    "contentMatrixHelp": "Bật hoặc tắt quyền Plus cho từng bài học, bộ từ vựng, lộ trình và tình huống hội thoại.",
+    "tierColumn": "Gói yêu cầu",
+    "plusToggle": "Chỉ dành cho Plus",
+    "packTitle": "Bộ từ vựng",
+    "scenarioTitle": "Tình huống hội thoại",
+    "tabs": {
+      "lessons": "Bài học",
+      "vocab": "Bộ từ vựng",
+      "paths": "Lộ trình học",
+      "speaking": "Hội thoại AI"
+    }
+  },
+  "missionsConsole": {
+    "title": "Nhiệm vụ & Quy tắc Thưởng",
+    "subtitle": "Thiết lập nhiệm vụ hằng ngày/hằng tuần, độ khó và chính sách XP/Kim cương.",
+    "category": "Nhóm",
+    "difficulty": "Độ khó"
+  },
+  "achievementsConsole": {
+    "title": "Thành tích & Huy hiệu Hồ sơ",
+    "subtitle": "Quản lí các mốc thành tích theo cấp bậc và biểu tượng huy hiệu WebP gắn vào hồ sơ học viên.",
+    "emptyTitle": "Không có thành tích phù hợp",
+    "emptyHelp": "Thử đổi bộ lọc nhóm hoặc thêm thành tích mới.",
+    "tier": "Hạng huy hiệu",
+    "badgeAsset": "Ảnh huy hiệu (WebP)",
+    "noBadge": "Dùng biểu tượng mặc định",
+    "threshold": "{{metric}} ≥ {{target}}"
   }
 }

@@ -89,6 +89,18 @@ public class LessonCatalogController {
     catalog.assertVersion(id,request.version(),false);catalog.visibility(id, request.visible());
   }
 
+  @org.springframework.transaction.annotation.Transactional
+  @PutMapping("/lessons/{id}/access")
+  public LessonCatalogPort.Item access(@PathVariable UUID id, @RequestBody AccessRequest request) {
+    if (request.version() != null) {
+      catalog.assertVersion(id, request.version(), false);
+    }
+    catalog.updateAccess(id, request.accessMode(), request.requiredFeatureKey());
+    return catalog.get(id);
+  }
+
+  public record AccessRequest(String accessMode, String requiredFeatureKey, Long version) {}
+
   @PutMapping("/lesson-channels/{id}/visibility")
   public void channelVisibility(@PathVariable String id, @RequestBody Visibility request) {
     catalog.channelVisibility(id, request.visible());

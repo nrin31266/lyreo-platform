@@ -85,6 +85,9 @@ export const achievementMetrics = [
   'TOEIC_DRILL_COMPLETED',
 ] as const;
 
+export const badgeTiers = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'LEGENDARY'] as const;
+export const missionDifficulties = ['EASY', 'NORMAL', 'HARD'] as const;
+
 export type AdminMissionDefinition = {
   id: string;
   code: string;
@@ -96,6 +99,8 @@ export type AdminMissionDefinition = {
   recurrence: MissionRecurrence;
   ruleVersion: string;
   enabled: boolean;
+  category?: string;
+  difficulty?: string;
 };
 
 export type SaveMissionInput = {
@@ -108,6 +113,8 @@ export type SaveMissionInput = {
   recurrence: MissionRecurrence;
   ruleVersion?: string;
   enabled: boolean;
+  category?: string;
+  difficulty?: string;
 };
 
 export type AdminAchievementDefinition = {
@@ -121,6 +128,9 @@ export type AdminAchievementDefinition = {
   diamondReward: number;
   ruleVersion: string;
   enabled: boolean;
+  badgeAssetId?: string | null;
+  badgeTier?: string;
+  category?: string;
 };
 
 export type SaveAchievementInput = {
@@ -133,6 +143,9 @@ export type SaveAchievementInput = {
   diamondReward: number;
   ruleVersion?: string;
   enabled: boolean;
+  badgeAssetId?: string | null;
+  badgeTier?: string;
+  category?: string;
 };
 
 export type RewardPolicyConfig = {

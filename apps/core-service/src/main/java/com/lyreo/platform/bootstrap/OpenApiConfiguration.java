@@ -84,8 +84,8 @@ public class OpenApiConfiguration {
                 new Tag().name("Curriculum").description("Learning paths, section progression and admin authoring"),
                 new Tag().name("Gamification").description("Missions, achievements, streaks, XP and Diamond ledger"),
                 new Tag().name("Analytics").description("Learner study overview, metrics and weakness projections"),
-                new Tag().name("Chat").description("English tutor conversation"),
-                new Tag().name("Realtime").description("Admin realtime SSE feeds")
+                new Tag().name("Chat").description("English tutor conversation and AI voice roleplay scenarios"),
+                new Tag().name("Realtime").description("Admin realtime SSE feeds and learner notifications")
             ));
     }
 

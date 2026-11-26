@@ -228,6 +228,42 @@ def test_mock_editorial_suggestions_keep_answer_and_sense_contracts():
     assert output["candidates"] == []
 
 
+def test_mock_tts_with_sentences_returns_segments_and_matching_align_bounds():
+    sentences = ["Good morning, welcome in.", "Could I get an oat latte?"]
+    tts_response = client.post(
+        "/v1/tts",
+        headers=AUTH,
+        json=request(
+            provider="LOCAL_KOKORO",
+            model="hexgrad/Kokoro-82M",
+            input={"text": " ".join(sentences), "sentences": sentences},
+            options={"voice": "af_heart"},
+        ),
+    )
+    assert tts_response.status_code == 200
+    output = tts_response.json()["output"]
+    segments = output["segments"]
+    assert len(segments) == 2
+    assert segments[0]["start_ms"] == 0
+    assert segments[0]["end_ms"] > segments[0]["start_ms"]
+    assert segments[1]["start_ms"] > segments[0]["end_ms"]
+    assert output["duration_ms"] >= segments[1]["end_ms"]
+
+    align_response = client.post(
+        "/v1/align",
+        headers=AUTH,
+        json=request(
+            provider="LOCAL_WHISPERX",
+            input={"audio_url": "https://example.invalid/audio.wav", "text": " ".join(sentences), "segments": segments},
+        ),
+    )
+    assert align_response.status_code == 200
+    words = align_response.json()["output"]["words"]
+    assert len(words) == 10
+    assert words[0]["start_ms"] >= segments[0]["start_ms"]
+    assert words[-1]["end_ms"] <= output["duration_ms"]
+
+
 def test_dictionary_mock_matches_candidates_by_scope_and_keeps_example_operation_separate():
     source = {"senses": [{"id": "sense", "itemId": "noun", "definitionEn": "Printed pages"}],
               "candidates": [{"id": "verb", "itemId": "verb", "wordVi": "đặt chỗ"},

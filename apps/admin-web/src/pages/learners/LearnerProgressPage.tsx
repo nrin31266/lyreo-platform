@@ -2,7 +2,22 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { RiArrowRightUpLine, RiBarChart2Line, RiSearchLine } from '@remixicon/react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import {
+  RiArrowRightUpLine,
+  RiBarChart2Line,
+  RiSearchLine,
+  RiTableLine,
+} from '@remixicon/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,10 +34,19 @@ function formatMinutes(seconds: number) {
   return `${Math.round(seconds / 60)}m`;
 }
 
+const tooltipStyle = {
+  backgroundColor: 'var(--popover)',
+  borderColor: 'var(--border)',
+  color: 'var(--popover-foreground)',
+  borderRadius: 'var(--radius)',
+  fontSize: '12px',
+};
+
 export function LearnerProgressPage() {
   const { t } = useTranslation('admin');
   const [search, setSearch] = useState('');
   const [selectedLearnerId, setSelectedLearnerId] = useState<string>('');
+  const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
 
   const summaryQuery = useQuery({
     queryKey: ['admin-analytics-summary'],
@@ -35,7 +59,9 @@ export function LearnerProgressPage() {
   });
 
   const activeLearnerId = selectedLearnerId || learnersQuery.data?.items[0]?.learnerId || '';
-  const selectedLearner = learnersQuery.data?.items.find((item) => item.learnerId === activeLearnerId);
+  const selectedLearner = learnersQuery.data?.items.find(
+    (item) => item.learnerId === activeLearnerId,
+  );
 
   const learnerAnalyticsQuery = useQuery({
     queryKey: ['admin-learner-analytics', activeLearnerId],
@@ -43,11 +69,48 @@ export function LearnerProgressPage() {
     enabled: Boolean(activeLearnerId),
   });
 
+  const dailyChartData = (summaryQuery.data?.dailySeries ?? []).map((row) => ({
+    date: row.activityDate.slice(5),
+    lessons: row.lessonCount,
+    vocab: row.vocabularyReviewCount,
+    grammar: row.grammarAnswerCount,
+    toeic: row.toeicQuestionCount,
+    studyMinutes: Math.round(row.studySeconds / 60),
+    activeLearners: row.activeLearners,
+  }));
+
+  const skillChartData = (learnerAnalyticsQuery.data?.skills ?? []).map((s) => ({
+    skill: s.skillCode,
+    score: Number(Number(s.score).toFixed(1)),
+  }));
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t('learnerProgress.title')}</h1>
-        <p className="text-sm text-muted-foreground">{t('learnerProgress.subtitle')}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('learnerProgress.title')}</h1>
+          <p className="text-sm text-muted-foreground">{t('learnerProgress.subtitle')}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={viewMode === 'chart' ? 'default' : 'outline'}
+            onClick={() => setViewMode('chart')}
+          >
+            <RiBarChart2Line data-icon="inline-start" aria-hidden="true" />
+            {t('learnerProgress.chartView')}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={viewMode === 'table' ? 'default' : 'outline'}
+            onClick={() => setViewMode('table')}
+          >
+            <RiTableLine data-icon="inline-start" aria-hidden="true" />
+            {t('learnerProgress.tableView')}
+          </Button>
+        </div>
       </div>
 
       {summaryQuery.error ? (
@@ -60,7 +123,11 @@ export function LearnerProgressPage() {
             <CardDescription>{t('learnerProgress.metrics.active7d')}</CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold tabular-nums">
-            {summaryQuery.isPending ? <Skeleton className="h-7 w-16" /> : summaryQuery.data?.activeLearners7d ?? 0}
+            {summaryQuery.isPending ? (
+              <Skeleton className="h-7 w-16" />
+            ) : (
+              summaryQuery.data?.activeLearners7d ?? 0
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -80,7 +147,11 @@ export function LearnerProgressPage() {
             <CardDescription>{t('learnerProgress.metrics.lessons7d')}</CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold tabular-nums">
-            {summaryQuery.isPending ? <Skeleton className="h-7 w-16" /> : summaryQuery.data?.lessonsCompleted7d ?? 0}
+            {summaryQuery.isPending ? (
+              <Skeleton className="h-7 w-16" />
+            ) : (
+              summaryQuery.data?.lessonsCompleted7d ?? 0
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -88,7 +159,11 @@ export function LearnerProgressPage() {
             <CardDescription>{t('learnerProgress.metrics.vocab7d')}</CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold tabular-nums">
-            {summaryQuery.isPending ? <Skeleton className="h-7 w-16" /> : summaryQuery.data?.vocabularyReviews7d ?? 0}
+            {summaryQuery.isPending ? (
+              <Skeleton className="h-7 w-16" />
+            ) : (
+              summaryQuery.data?.vocabularyReviews7d ?? 0
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -104,6 +179,100 @@ export function LearnerProgressPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('overviewDashboard.dailyActivityTitle')}</CardTitle>
+          <CardDescription>{t('overviewDashboard.dailyActivityHelp')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {summaryQuery.isPending ? (
+            <Skeleton className="h-64 w-full" />
+          ) : dailyChartData.length === 0 ? (
+            <Empty className="border py-8">
+              <EmptyHeader>
+                <EmptyTitle>{t('overviewDashboard.noDailyTitle')}</EmptyTitle>
+                <EmptyDescription>{t('overviewDashboard.noDailyHelp')}</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : viewMode === 'chart' ? (
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dailyChartData}>
+                  <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="date" stroke="var(--muted-foreground)" fontSize={12} />
+                  <YAxis stroke="var(--muted-foreground)" fontSize={12} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Legend wrapperStyle={{ fontSize: '12px' }} />
+                  <Bar
+                    dataKey="lessons"
+                    name={t('overviewDashboard.columns.lessons')}
+                    fill="var(--chart-1)"
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="vocab"
+                    name={t('overviewDashboard.columns.vocab')}
+                    fill="var(--chart-2)"
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="grammar"
+                    name={t('overviewDashboard.columns.grammar')}
+                    fill="var(--chart-3)"
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="toeic"
+                    name={t('overviewDashboard.columns.toeic')}
+                    fill="var(--chart-4)"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('overviewDashboard.columns.date')}</TableHead>
+                  <TableHead className="text-right">
+                    {t('overviewDashboard.columns.learners')}
+                  </TableHead>
+                  <TableHead className="text-right">
+                    {t('overviewDashboard.columns.lessons')}
+                  </TableHead>
+                  <TableHead className="text-right">
+                    {t('overviewDashboard.columns.vocab')}
+                  </TableHead>
+                  <TableHead className="text-right">
+                    {t('overviewDashboard.columns.grammar')}
+                  </TableHead>
+                  <TableHead className="text-right">
+                    {t('overviewDashboard.columns.toeic')}
+                  </TableHead>
+                  <TableHead className="text-right">
+                    {t('overviewDashboard.columns.duration')}
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {dailyChartData.map((row) => (
+                  <TableRow key={row.date}>
+                    <TableCell className="font-mono text-xs">{row.date}</TableCell>
+                    <TableCell className="text-right tabular-nums">{row.activeLearners}</TableCell>
+                    <TableCell className="text-right tabular-nums">{row.lessons}</TableCell>
+                    <TableCell className="text-right tabular-nums">{row.vocab}</TableCell>
+                    <TableCell className="text-right tabular-nums">{row.grammar}</TableCell>
+                    <TableCell className="text-right tabular-nums">{row.toeic}</TableCell>
+                    <TableCell className="text-right tabular-nums">{row.studyMinutes}m</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-12">
         <Card className="lg:col-span-5">
@@ -169,7 +338,9 @@ export function LearnerProgressPage() {
           <CardHeader className="flex flex-row items-start justify-between gap-3">
             <div>
               <CardTitle>
-                {selectedLearner?.displayName || selectedLearner?.email || t('learnerProgress.inspectorTitle')}
+                {selectedLearner?.displayName ||
+                  selectedLearner?.email ||
+                  t('learnerProgress.inspectorTitle')}
               </CardTitle>
               <CardDescription>{t('learnerProgress.inspectorHelp')}</CardDescription>
             </div>
@@ -205,7 +376,9 @@ export function LearnerProgressPage() {
               <>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-xl border bg-muted/20 p-3">
-                    <p className="text-xs text-muted-foreground">{t('learnerProgress.todayWindow')}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t('learnerProgress.todayWindow')}
+                    </p>
                     <p className="mt-1 text-lg font-semibold tabular-nums">
                       {formatMinutes(learnerAnalyticsQuery.data.today.studySeconds)} ·{' '}
                       {t('learnerProgress.windowSummary', {
@@ -215,7 +388,9 @@ export function LearnerProgressPage() {
                     </p>
                   </div>
                   <div className="rounded-xl border bg-muted/20 p-3">
-                    <p className="text-xs text-muted-foreground">{t('learnerProgress.weekWindow')}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t('learnerProgress.weekWindow')}
+                    </p>
                     <p className="mt-1 text-lg font-semibold tabular-nums">
                       {formatMinutes(learnerAnalyticsQuery.data.week.studySeconds)} ·{' '}
                       {t('learnerProgress.windowSummary', {
@@ -230,6 +405,33 @@ export function LearnerProgressPage() {
                   <h2 className="mb-2 text-sm font-medium">{t('learnerProgress.skillsTitle')}</h2>
                   {learnerAnalyticsQuery.data.skills.length === 0 ? (
                     <p className="text-sm text-muted-foreground">{t('learnerProgress.noSkills')}</p>
+                  ) : viewMode === 'chart' ? (
+                    <div className="h-52 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={skillChartData} layout="vertical">
+                          <CartesianGrid
+                            stroke="var(--border)"
+                            strokeDasharray="3 3"
+                            horizontal={false}
+                          />
+                          <XAxis
+                            type="number"
+                            domain={[0, 100]}
+                            stroke="var(--muted-foreground)"
+                            fontSize={12}
+                          />
+                          <YAxis
+                            type="category"
+                            dataKey="skill"
+                            width={110}
+                            stroke="var(--muted-foreground)"
+                            fontSize={11}
+                          />
+                          <Tooltip contentStyle={tooltipStyle} />
+                          <Bar dataKey="score" fill="var(--chart-2)" radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   ) : (
                     <div className="space-y-3">
                       {learnerAnalyticsQuery.data.skills.map((skill) => (
@@ -248,17 +450,25 @@ export function LearnerProgressPage() {
                 </div>
 
                 <div>
-                  <h2 className="mb-2 text-sm font-medium">{t('learnerProgress.weaknessesTitle')}</h2>
+                  <h2 className="mb-2 text-sm font-medium">
+                    {t('learnerProgress.weaknessesTitle')}
+                  </h2>
                   {learnerAnalyticsQuery.data.weaknesses.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">{t('learnerProgress.noWeaknesses')}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {t('learnerProgress.noWeaknesses')}
+                    </p>
                   ) : (
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>{t('learnerProgress.columns.type')}</TableHead>
                           <TableHead>{t('learnerProgress.columns.key')}</TableHead>
-                          <TableHead className="text-right">{t('learnerProgress.columns.severity')}</TableHead>
-                          <TableHead className="text-right">{t('learnerProgress.columns.samples')}</TableHead>
+                          <TableHead className="text-right">
+                            {t('learnerProgress.columns.severity')}
+                          </TableHead>
+                          <TableHead className="text-right">
+                            {t('learnerProgress.columns.samples')}
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -269,7 +479,9 @@ export function LearnerProgressPage() {
                             <TableCell className="text-right tabular-nums">
                               {Number(w.severity).toFixed(1)}%
                             </TableCell>
-                            <TableCell className="text-right tabular-nums">{w.sampleCount}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {w.sampleCount}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

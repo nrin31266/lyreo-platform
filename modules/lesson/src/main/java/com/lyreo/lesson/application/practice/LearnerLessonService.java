@@ -3,6 +3,8 @@ package com.lyreo.lesson.application.practice;
 import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.errors.ServiceUnavailableException;
+import com.lyreo.entitlement.api.EntitlementService;
+import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.lesson.application.port.LearnerLessonQuery;
 import com.lyreo.lesson.domain.authoring.AuthoringSentence;
 import com.lyreo.lesson.domain.practice.DictationMaskingPolicy;
@@ -16,15 +18,26 @@ public class LearnerLessonService {
     private final LearnerLessonQuery query;
     private final DictationMaskingPolicy maskingPolicy;
     private final ObjectStoragePort storage;
+    private final EntitlementService entitlements;
 
     public LearnerLessonService(
         LearnerLessonQuery query,
         DictationMaskingPolicy maskingPolicy,
         ObjectStoragePort storage
     ) {
+        this(query, maskingPolicy, storage, null);
+    }
+
+    public LearnerLessonService(
+        LearnerLessonQuery query,
+        DictationMaskingPolicy maskingPolicy,
+        ObjectStoragePort storage,
+        EntitlementService entitlements
+    ) {
         this.query = query;
         this.maskingPolicy = maskingPolicy;
         this.storage = storage;
+        this.entitlements = entitlements;
     }
 
     public LearnerLessonQuery.CatalogPage listCatalog(
@@ -41,7 +54,7 @@ public class LearnerLessonService {
         if (q != null && q.length() > 200) {
             throw new RequestValidationException("Search query must be at most 200 characters");
         }
-        return query.listPublishedCatalog(
+        var result = query.listPublishedCatalog(
             learnerId,
             categoryId,
             normalizeFilter(cefr),
@@ -51,11 +64,26 @@ public class LearnerLessonService {
             page,
             size
         );
+        if (entitlements == null || result.items().isEmpty()) {
+            return result;
+        }
+        var items = result.items().stream()
+            .map(item -> {
+                if ("FEATURE".equals(item.accessMode()) && item.requiredFeatureKey() != null) {
+                    boolean granted = entitlements.hasFeature(learnerId, FeatureKey.of(item.requiredFeatureKey()));
+                    return item.withLocked(!granted);
+                }
+                return item;
+            })
+            .toList();
+        return new LearnerLessonQuery.CatalogPage(items, result.total(), result.page(), result.size());
     }
 
     public LearnerLessonQuery.LessonDetail getLessonDetail(UUID learnerId, UUID lessonId) {
-        return query.findPublishedDetail(learnerId, lessonId)
+        var detail = query.findPublishedDetail(learnerId, lessonId)
             .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
+        requireLessonAccess(learnerId, detail.accessMode(), detail.requiredFeatureKey());
+        return detail;
     }
 
     public ActivityView getActivity(
@@ -65,6 +93,7 @@ public class LearnerLessonService {
         String hintLevelRaw,
         Boolean properNounHintsOverride
     ) {
+        enforceLessonAccess(learnerId, lessonId);
         DictationMaskingPolicy.HintLevel hintLevel = DictationMaskingPolicy.HintLevel.parse(hintLevelRaw);
         var context = query.findActivityContext(learnerId, lessonId, activityId)
             .orElseThrow(() -> new ResourceNotFoundException("Lesson activity not found"));
@@ -93,6 +122,7 @@ public class LearnerLessonService {
     }
 
     public LessonAudio readAudio(UUID learnerId, UUID lessonId) {
+        enforceLessonAccess(learnerId, lessonId);
         var asset = query.findAudioForLearner(learnerId, lessonId)
             .orElseThrow(() -> new ResourceNotFoundException("Lesson audio not found"));
         if (!storage.exists(asset.objectKey())) {
@@ -205,6 +235,17 @@ public class LearnerLessonService {
     private static void validatePage(int page, int size) {
         if (page < 0 || size < 1 || size > 100) {
             throw new RequestValidationException("page must be >= 0 and size must be between 1 and 100");
+        }
+    }
+
+    private void enforceLessonAccess(UUID learnerId, UUID lessonId) {
+        query.findLessonAccess(lessonId)
+            .ifPresent(access -> requireLessonAccess(learnerId, access.accessMode(), access.requiredFeatureKey()));
+    }
+
+    private void requireLessonAccess(UUID learnerId, String accessMode, String requiredFeatureKey) {
+        if (entitlements != null && "FEATURE".equals(accessMode) && requiredFeatureKey != null && !requiredFeatureKey.isBlank()) {
+            entitlements.requireFeature(learnerId, FeatureKey.of(requiredFeatureKey));
         }
     }
 

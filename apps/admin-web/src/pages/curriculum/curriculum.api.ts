@@ -3,6 +3,7 @@ import { api } from '@/lib/api';
 export const curriculumKey = ['admin-curriculum'] as const;
 
 export type CurriculumStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+export type CurriculumAccessMode = 'PUBLIC' | 'FEATURE';
 export type CurriculumContentType =
   | 'LESSON'
   | 'VOCABULARY_REVIEW'
@@ -23,6 +24,16 @@ export const curriculumContentTypes: CurriculumContentType[] = [
 ];
 export const curriculumUnlockRules: CurriculumUnlockRule[] = ['NONE', 'PREVIOUS_REQUIRED'];
 
+export type ItemSliceConfig = {
+  entryIds?: string[];
+  sentenceIds?: string[];
+  activityType?: 'SHADOWING' | 'DICTATION';
+  parts?: number[];
+  questionCount?: number;
+  targetTurns?: number;
+  [key: string]: unknown;
+};
+
 export type AdminCurriculumItem = {
   id: string;
   position: number;
@@ -30,6 +41,7 @@ export type AdminCurriculumItem = {
   contentReferenceId: string;
   required: boolean;
   unlockRule: CurriculumUnlockRule;
+  config?: ItemSliceConfig;
 };
 
 export type AdminCurriculumSection = {
@@ -46,11 +58,15 @@ export type AdminCurriculumPathSummary = {
   level: string | null;
   description: string | null;
   status: CurriculumStatus;
+  coverAssetId?: string | null;
+  accessMode?: CurriculumAccessMode;
+  requiredFeatureKey?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };
 
 export type AdminCurriculumPath = AdminCurriculumPathSummary & {
+  locked?: boolean;
   sections: AdminCurriculumSection[];
 };
 
@@ -60,6 +76,7 @@ export type SaveCurriculumItemInput = {
   contentReferenceId: string;
   required: boolean;
   unlockRule: CurriculumUnlockRule;
+  config?: ItemSliceConfig;
 };
 
 export type SaveCurriculumSectionInput = {
@@ -74,7 +91,34 @@ export type SaveCurriculumPathInput = {
   level: string | null;
   description: string | null;
   status: CurriculumStatus;
+  coverAssetId?: string | null;
+  accessMode?: CurriculumAccessMode;
+  requiredFeatureKey?: string | null;
   sections: SaveCurriculumSectionInput[];
+};
+
+export type CurriculumItemDiagnosticCheck = {
+  itemId: string;
+  sectionPosition: number;
+  itemPosition: number;
+  contentType: CurriculumContentType;
+  contentReferenceId: string;
+  title: string | null;
+  exists: boolean;
+  accessMode: string;
+  requiredFeatureKey: string | null;
+  sliceValid: boolean;
+  sliceCount: number;
+  message: string;
+};
+
+export type CurriculumPathDiagnostic = {
+  pathId: string;
+  totalItems: number;
+  validItems: number;
+  missingItems: number;
+  lockedForFreeUsers: number;
+  checks: CurriculumItemDiagnosticCheck[];
 };
 
 const base = '/api/v1/admin/curriculum/paths';
@@ -85,6 +129,10 @@ export function fetchAdminCurriculumPaths(signal?: AbortSignal) {
 
 export function fetchAdminCurriculumPath(pathId: string, signal?: AbortSignal) {
   return api<AdminCurriculumPath>(`${base}/${encodeURIComponent(pathId)}`, { signal });
+}
+
+export function fetchCurriculumPathDiagnostics(pathId: string, signal?: AbortSignal) {
+  return api<CurriculumPathDiagnostic>(`${base}/${encodeURIComponent(pathId)}/diagnostics`, { signal });
 }
 
 export function createAdminCurriculumPath(body: SaveCurriculumPathInput) {

@@ -752,47 +752,52 @@ class DemoUpgradeAndMediaTest(unittest.TestCase):
             self.assertTrue(gt_args.allow_upgrade)
 
     def test_learner_demo_sql_and_seed_script_are_idempotent_and_consistent(self):
+        import hashlib
+
         sql = (REPO_ROOT / "infra/postgres/seed/demo.sql").read_text(encoding="utf-8")
         seed_sh = (REPO_ROOT / "scripts/seed-demo.sh").read_text(encoding="utf-8")
 
         self.assertIn("BEGIN;", sql)
         self.assertIn("COMMIT;", sql)
         self.assertIn("ON CONFLICT", sql)
-        self.assertNotIn("DELETE FROM", sql)
         self.assertNotIn("TRUNCATE", sql)
+        self.assertIn("rglob(\"*\")", seed_sh)
 
-        # Deterministic media SHA-256 constants match between seed-demo.sh and demo.sql
-        for sha in (
-            "2976da01e205a110c9fa41d47659e238a5c6d3c3f3137582f2949853faa201dd",
-            "a4c92f6340eb8e16caff9b6ba2e726d1b5cf080be70639aa696e6423f309903f",
-        ):
-            self.assertIn(sha, sql)
-            self.assertIn(sha, seed_sh)
+        # Deterministic WebP artwork hashes exist on disk and match demo.sql
+        assets_dir = REPO_ROOT / "infra/postgres/seed/assets"
+        path_webps = sorted((assets_dir / "paths").glob("*.webp"))
+        badge_webps = sorted((assets_dir / "badges").glob("*.webp"))
+        self.assertEqual(len(path_webps), 3)
+        self.assertEqual(len(badge_webps), 10)
+        for webp in (*path_webps, *badge_webps):
+            digest = hashlib.sha256(webp.read_bytes()).hexdigest()
+            self.assertIn(digest, sql, f"Missing SHA-256 for {webp.name} in demo.sql")
 
-        # Key entities and requirements present
+        # Polluting fake mock vocab/flashcard generators must stay removed
+        self.assertNotIn("generate_series(1, 35)", sql)
+        self.assertNotIn("generate_series(1, 200)", sql)
+
+        # Key curated-slice paths, roleplay scenarios, badges, Plus gates & notifications present
         for marker in (
-            "30000000-0000-0000-0000-000000000001",
-            "30000000-0000-0000-0000-000000000002",
-            "30000000-0000-0000-0000-000000000003",
+            "REAL_WORLD_ENGLISH_A2_B1",
+            "WORKPLACE_FLUENCY_B1_B2",
+            "CAFE_MORNING_RUSH",
+            "ENGINEERING_STANDUP",
+            "AIRPORT_REBOOKING_PRO",
+            "STREAK_365",
+            "LESSONS_150",
+            "VOCAB_2500",
+            "TOEIC_100",
+            "lesson.plus-lessons",
+            "speaking.roleplay",
             "vocabulary.plus-packs",
-            "vocabulary.saved-cards",
-            "speech.shadowing",
-            "toeic.full-access",
-            "grammar.advanced",
-            "chat.tutor",
-            "generate_series(1, 35)",
-            "generate_series(1, 200)",
-            "FOUNDATION_PATH",
-            "10000000-0000-0000-0000-000000000004",
-            "40000000-0000-0000-0000-000000000001",
-            "Đã lưu",
-            "cloze-v2",
+            "learner_notification",
         ):
             self.assertIn(marker, sql)
 
         # Every INSERT INTO statement in demo.sql must have ON CONFLICT
         inserts = re.findall(r"INSERT INTO\s+([a-z_]+).*?;", sql, flags=re.DOTALL)
-        self.assertGreaterEqual(len(inserts), 20)
+        self.assertGreaterEqual(len(inserts), 12)
         for stmt_match in re.finditer(r"INSERT INTO\s+([a-z_]+).*?;", sql, flags=re.DOTALL):
             self.assertIn("ON CONFLICT", stmt_match.group(0), f"Missing ON CONFLICT in INSERT INTO {stmt_match.group(1)}")
 

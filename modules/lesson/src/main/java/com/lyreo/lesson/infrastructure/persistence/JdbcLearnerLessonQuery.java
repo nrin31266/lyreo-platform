@@ -103,6 +103,8 @@ public final class JdbcLearnerLessonQuery implements LearnerLessonQuery {
                    s.channel_id,
                    COALESCE(ch.title, s.channel_title) AS channel_title,
                    GREATEST(m.updated_at, COALESCE(l.updated_at, m.updated_at)) AS updated_at,
+                   m.access_mode,
+                   m.required_feature_key,
                    COALESCE(lp.status, 'NOT_STARTED') AS progress_status,
                    lp.started_at,
                    lp.completed_at,
@@ -152,7 +154,9 @@ public final class JdbcLearnerLessonQuery implements LearnerLessonQuery {
                     rs.getInt("total_practice_activities")
                 ),
                 rs.getInt("sentence_count"),
-                readStringList(rs.getString("activities_json"))
+                readStringList(rs.getString("activities_json")),
+                rs.getString("access_mode"),
+                rs.getString("required_feature_key")
             ));
 
         if (rows.isEmpty()) {
@@ -181,7 +185,10 @@ public final class JdbcLearnerLessonQuery implements LearnerLessonQuery {
                 row.activities(),
                 row.sentenceCount(),
                 row.progress(),
-                row.updatedAt()
+                row.updatedAt(),
+                row.accessMode(),
+                row.requiredFeatureKey(),
+                false
             ))
             .toList();
 
@@ -208,6 +215,8 @@ public final class JdbcLearnerLessonQuery implements LearnerLessonQuery {
                    s.channel_id,
                    COALESCE(ch.title, s.channel_title) AS channel_title,
                    GREATEST(m.updated_at, COALESCE(l.updated_at, m.updated_at)) AS updated_at,
+                   m.access_mode,
+                   m.required_feature_key,
                    COALESCE(lp.status, 'NOT_STARTED') AS progress_status,
                    lp.started_at,
                    lp.completed_at,
@@ -241,7 +250,9 @@ public final class JdbcLearnerLessonQuery implements LearnerLessonQuery {
                 rs.getString("progress_status"),
                 toInstant(rs.getTimestamp("started_at")),
                 toInstant(rs.getTimestamp("completed_at")),
-                toInstant(rs.getTimestamp("last_activity_at"))
+                toInstant(rs.getTimestamp("last_activity_at")),
+                rs.getString("access_mode"),
+                rs.getString("required_feature_key")
             ));
 
         if (rows.isEmpty()) {
@@ -288,8 +299,26 @@ public final class JdbcLearnerLessonQuery implements LearnerLessonQuery {
             ),
             activities,
             sentences,
-            header.updatedAt()
+            header.updatedAt(),
+            header.accessMode(),
+            header.requiredFeatureKey(),
+            false
         ));
+    }
+
+    @Override
+    public Optional<LessonAccess> findLessonAccess(UUID lessonId) {
+        var rows = jdbc.query(
+            """
+            SELECT m.access_mode, m.required_feature_key
+              FROM lesson_metadata m
+             WHERE m.lesson_id = :lessonId
+               AND m.deleted_at IS NULL
+            """,
+            Map.of("lessonId", lessonId),
+            (rs, rowNum) -> new LessonAccess(rs.getString("access_mode"), rs.getString("required_feature_key"))
+        );
+        return rows.stream().findFirst();
     }
 
     @Override
@@ -926,7 +955,9 @@ public final class JdbcLearnerLessonQuery implements LearnerLessonQuery {
         Instant updatedAt,
         ProgressSummary progress,
         int sentenceCount,
-        List<String> activities
+        List<String> activities,
+        String accessMode,
+        String requiredFeatureKey
     ) {}
 
     private record DetailHeader(
@@ -950,7 +981,9 @@ public final class JdbcLearnerLessonQuery implements LearnerLessonQuery {
         String progressStatus,
         Instant startedAt,
         Instant completedAt,
-        Instant lastActivityAt
+        Instant lastActivityAt,
+        String accessMode,
+        String requiredFeatureKey
     ) {}
 
     private record ActivityLessonHeader(

@@ -1,6 +1,6 @@
 # Development Seed Media Assets
 
-Deterministic local audio and editorial illustrations materialized into content-addressed local storage by `scripts/seed-demo.sh` (`make seed-demo`).
+Deterministic editorial illustrations materialized into content-addressed local and object storage by `scripts/seed-demo.sh` (`make seed-demo`).
 
 ## Editorial Illustrations (`256 x 256` stripped WebP)
 - `vocab-finance-bank.webp` — Financial bank building & vault (`bank` financial institution sense)
@@ -10,8 +10,19 @@ Deterministic local audio and editorial illustrations materialized into content-
 - `vocab-office-standup.webp` — Software studio standup & Kanban schedule
 - `vocab-hotel-concierge.webp` — Hotel concierge desk & travel suitcase
 
-## Synthesized English Speech (`16 kHz` mono PCM WAV via `espeak-ng` + `ffmpeg`)
-- `lesson-coffee-shop.wav` (`7,354 ms`) — Two-sentence coffee ordering dialogue
-- `lesson-standup-update.wav` (`8,041 ms`) — Two-sentence engineering standup update
-- `lesson-airport-checkin.wav` (`6,774 ms`) — Two-sentence airport check-in dialogue
-- `vocab-business-terms.wav` (`5,579 ms`) — Spoken business & travel vocabulary list
+## Learning Path Covers (`512 x 320` stripped WebP)
+- `paths/path-cover-realworld.webp` — Warm editorial illustration of daily city life, cafe & transit scenes
+- `paths/path-cover-workplace.webp` — Modern engineering standup & collaborative office communication scene
+- `paths/path-cover-toeic.webp` — Crisp academic study desk & TOEIC exam preparation scene
+
+## Achievement Badges (`256 x 256` stripped WebP)
+- `badges/badge-streak-7.webp` — Bronze flame streak crest (7-day streak)
+- `badges/badge-streak-30.webp` — Silver phoenix flame medallion (30-day streak)
+- `badges/badge-streak-100.webp` — Gold solar laurel crest (100-day streak)
+- `badges/badge-streak-365.webp` — Legendary cosmic sapphire halo crest (365-day streak)
+- `badges/badge-lessons-10.webp` — Bronze studio headphones & soundwaves (10 lessons)
+- `badges/badge-lessons-50.webp` — Gold vintage microphone & laurels (50 lessons)
+- `badges/badge-lessons-150.webp` — Platinum emerald harp & acoustic ring (150 lessons)
+- `badges/badge-vocab-500.webp` — Silver open book & bookmark crest (500 words)
+- `badges/badge-vocab-2500.webp` — Gold tome & quill wax-seal crest (2,500 words)
+- `badges/badge-toeic-master.webp` — Platinum & gold shield star trophy crest (TOEIC 850+)

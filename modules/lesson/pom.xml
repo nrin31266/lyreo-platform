@@ -55,6 +55,11 @@
     </dependency>
     <dependency>
       <groupId>com.lyreo</groupId>
+      <artifactId>lyreo-module-entitlement</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.lyreo</groupId>
       <artifactId>lyreo-platform-config</artifactId>
       <version>${project.version}</version>
     </dependency>

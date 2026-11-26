@@ -106,9 +106,10 @@ public class LessonConfiguration {
     LearnerLessonService learnerLessonService(
         LearnerLessonQuery query,
         DictationMaskingPolicy maskingPolicy,
-        ObjectStoragePort storage
+        ObjectStoragePort storage,
+        org.springframework.beans.factory.ObjectProvider<com.lyreo.entitlement.api.EntitlementService> entitlements
     ) {
-        return new LearnerLessonService(query, maskingPolicy, storage);
+        return new LearnerLessonService(query, maskingPolicy, storage, entitlements.getIfAvailable());
     }
 
     @Bean

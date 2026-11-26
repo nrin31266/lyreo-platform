@@ -177,7 +177,7 @@ class LearnerPlatformIntegrationIT {
     @BeforeEach
     void setupMvcAndSeedTwice() throws Exception {
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
-        var demoSeed = new ResourceDatabasePopulator(new FileSystemResource("../../infra/postgres/seed/demo.sql"));
+        var demoSeed = new ResourceDatabasePopulator(new org.springframework.core.io.ClassPathResource("seed/it-demo.sql"));
         demoSeed.execute(dataSource);
         demoSeed.execute(dataSource);
     }
@@ -501,7 +501,7 @@ class LearnerPlatformIntegrationIT {
             .andExpect(jsonPath("$.ruleVersion").isNotEmpty());
         mvc.perform(get("/api/v1/admin/entitlements/features").with(ADMIN))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(6));
+            .andExpect(jsonPath("$.length()").value(8));
         mvc.perform(get("/api/v1/admin/entitlements/quotas").with(ADMIN))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[?(@.featureKey=='chat.tutor')]").isNotEmpty());

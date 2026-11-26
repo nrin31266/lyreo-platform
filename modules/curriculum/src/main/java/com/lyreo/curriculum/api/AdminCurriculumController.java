@@ -4,11 +4,13 @@ import com.lyreo.curriculum.application.CurriculumAdminService;
 import com.lyreo.curriculum.domain.CurriculumItem;
 import com.lyreo.curriculum.domain.CurriculumPath;
 import com.lyreo.curriculum.domain.CurriculumPathDetail;
+import com.lyreo.curriculum.domain.CurriculumPathDiagnostic;
 import com.lyreo.curriculum.domain.CurriculumSection;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -44,6 +46,11 @@ public class AdminCurriculumController {
         return adminService.getPath(id);
     }
 
+    @GetMapping("/{id}/diagnostics")
+    public CurriculumPathDiagnostic diagnosePath(@PathVariable UUID id) {
+        return adminService.diagnosePath(id);
+    }
+
     @PostMapping
     public ResponseEntity<CurriculumPathDetail> createPath(@Valid @RequestBody CreatePathRequest request) {
         CurriculumPathDetail created = adminService.createPath(toCommand(
@@ -52,6 +59,9 @@ public class AdminCurriculumController {
             request.level(),
             request.description(),
             request.status(),
+            request.coverAssetId(),
+            request.accessMode(),
+            request.requiredFeatureKey(),
             request.sections()
         ));
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -68,6 +78,9 @@ public class AdminCurriculumController {
             request.level(),
             request.description(),
             request.status(),
+            request.coverAssetId(),
+            request.accessMode(),
+            request.requiredFeatureKey(),
             request.sections()
         ));
     }
@@ -108,7 +121,8 @@ public class AdminCurriculumController {
                 request.contentType(),
                 request.contentReferenceId(),
                 required,
-                request.unlockRule()
+                request.unlockRule(),
+                request.config()
             )));
     }
 
@@ -118,6 +132,9 @@ public class AdminCurriculumController {
         String level,
         String description,
         String status,
+        UUID coverAssetId,
+        String accessMode,
+        String requiredFeatureKey,
         List<SectionRequest> sections
     ) {
         List<CurriculumAdminService.SectionSpec> sectionSpecs = sections == null ? null : sections.stream()
@@ -130,12 +147,15 @@ public class AdminCurriculumController {
                         item.contentType(),
                         item.contentReferenceId(),
                         item.required() == null || item.required(),
-                        item.unlockRule()
+                        item.unlockRule(),
+                        item.config()
                     ))
                     .toList()
             ))
             .toList();
-        return new CurriculumAdminService.SavePathCommand(code, name, level, description, status, sectionSpecs);
+        return new CurriculumAdminService.SavePathCommand(
+            code, name, level, description, status, coverAssetId, accessMode, requiredFeatureKey, sectionSpecs
+        );
     }
 
     public record CreatePathRequest(
@@ -144,8 +164,22 @@ public class AdminCurriculumController {
         String level,
         String description,
         String status,
+        UUID coverAssetId,
+        String accessMode,
+        String requiredFeatureKey,
         @Valid List<SectionRequest> sections
-    ) {}
+    ) {
+        public CreatePathRequest(
+            String code,
+            String name,
+            String level,
+            String description,
+            String status,
+            List<SectionRequest> sections
+        ) {
+            this(code, name, level, description, status, null, null, null, sections);
+        }
+    }
 
     public record UpdatePathRequest(
         String code,
@@ -153,6 +187,9 @@ public class AdminCurriculumController {
         String level,
         String description,
         String status,
+        UUID coverAssetId,
+        String accessMode,
+        String requiredFeatureKey,
         @Valid List<SectionRequest> sections
     ) {
         public UpdatePathRequest(
@@ -162,7 +199,18 @@ public class AdminCurriculumController {
             String description,
             List<SectionRequest> sections
         ) {
-            this(code, name, level, description, null, sections);
+            this(code, name, level, description, null, null, null, null, sections);
+        }
+
+        public UpdatePathRequest(
+            String code,
+            String name,
+            String level,
+            String description,
+            String status,
+            List<SectionRequest> sections
+        ) {
+            this(code, name, level, description, status, null, null, null, sections);
         }
     }
 
@@ -186,6 +234,17 @@ public class AdminCurriculumController {
         @NotNull CurriculumItem.ContentType contentType,
         @NotNull UUID contentReferenceId,
         Boolean required,
-        String unlockRule
-    ) {}
+        String unlockRule,
+        Map<String, Object> config
+    ) {
+        public ItemRequest(
+            int position,
+            CurriculumItem.ContentType contentType,
+            UUID contentReferenceId,
+            Boolean required,
+            String unlockRule
+        ) {
+            this(position, contentType, contentReferenceId, required, unlockRule, Map.of());
+        }
+    }
 }

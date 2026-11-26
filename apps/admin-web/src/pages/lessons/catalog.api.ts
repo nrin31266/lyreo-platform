@@ -22,6 +22,8 @@ export type Channel = {
 };
 export type LessonItem = {
   version?: number; revision?: number; deleted?: boolean; cefr?: string; activities?: string[]; processing?: boolean; aiFailed?: boolean;
+  accessMode?: 'PUBLIC' | 'FEATURE';
+  requiredFeatureKey?: string | null;
   id: string;
   title: string;
   sourceType: string;
@@ -80,6 +82,14 @@ export const fetchChannels = (signal?: AbortSignal) =>
   api<Channel[]>(`${base}/lesson-channels`, { signal });
 export const saveMetadata = (id: string, payload: Metadata & {version?: number}) =>
   api<void>(`${base}/lessons/${id}/metadata`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+export const saveLessonAccess = (
+  id: string,
+  payload: { accessMode: "PUBLIC" | "FEATURE"; requiredFeatureKey?: string | null; version?: number },
+) =>
+  api<LessonItem>(`${base}/lessons/${id}/access`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });

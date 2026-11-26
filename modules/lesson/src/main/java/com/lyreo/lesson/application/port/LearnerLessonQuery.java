@@ -31,6 +31,10 @@ public interface LearnerLessonQuery {
 
     Optional<AudioAsset> findAudioForLearner(UUID learnerId, UUID lessonId);
 
+    default Optional<LessonAccess> findLessonAccess(UUID lessonId) {
+        return Optional.empty();
+    }
+
     AttemptPage listAttempts(
         UUID learnerId,
         UUID lessonId,
@@ -69,8 +73,42 @@ public interface LearnerLessonQuery {
         List<String> activities,
         int sentenceCount,
         ProgressSummary progress,
-        Instant updatedAt
-    ) {}
+        Instant updatedAt,
+        String accessMode,
+        String requiredFeatureKey,
+        boolean locked
+    ) {
+        public CatalogItem(
+            UUID id,
+            String title,
+            String description,
+            String imageUrl,
+            String sourceType,
+            String cefr,
+            String contentType,
+            long revision,
+            Long durationMs,
+            boolean audioReady,
+            String channelId,
+            String channelTitle,
+            List<CategorySummary> categories,
+            List<String> activities,
+            int sentenceCount,
+            ProgressSummary progress,
+            Instant updatedAt
+        ) {
+            this(id, title, description, imageUrl, sourceType, cefr, contentType, revision, durationMs, audioReady,
+                channelId, channelTitle, categories, activities, sentenceCount, progress, updatedAt, "PUBLIC", null, false);
+        }
+
+        public CatalogItem withLocked(boolean lockedValue) {
+            return new CatalogItem(
+                id, title, description, imageUrl, sourceType, cefr, contentType, revision, durationMs, audioReady,
+                channelId, channelTitle, categories, activities, sentenceCount, progress, updatedAt,
+                accessMode, requiredFeatureKey, lockedValue
+            );
+        }
+    }
 
     record CatalogPage(List<CatalogItem> items, long total, int page, int size) {}
 
@@ -98,6 +136,8 @@ public interface LearnerLessonQuery {
         boolean shadowingSelected
     ) {}
 
+    record LessonAccess(String accessMode, String requiredFeatureKey) {}
+
     record LessonDetail(
         UUID id,
         String title,
@@ -119,8 +159,39 @@ public interface LearnerLessonQuery {
         ProgressSummary progress,
         List<ActivityProgressItem> activities,
         List<SentenceSummary> sentences,
-        Instant updatedAt
-    ) {}
+        Instant updatedAt,
+        String accessMode,
+        String requiredFeatureKey,
+        boolean locked
+    ) {
+        public LessonDetail(
+            UUID id,
+            String title,
+            String description,
+            String imageUrl,
+            String sourceType,
+            long revision,
+            String videoId,
+            Long sourceStartMs,
+            Long sourceEndMs,
+            boolean audioReady,
+            String cefr,
+            String contentType,
+            String accent,
+            String locale,
+            String channelId,
+            String channelTitle,
+            List<CategorySummary> categories,
+            ProgressSummary progress,
+            List<ActivityProgressItem> activities,
+            List<SentenceSummary> sentences,
+            Instant updatedAt
+        ) {
+            this(id, title, description, imageUrl, sourceType, revision, videoId, sourceStartMs, sourceEndMs, audioReady,
+                cefr, contentType, accent, locale, channelId, channelTitle, categories, progress, activities, sentences,
+                updatedAt, "PUBLIC", null, false);
+        }
+    }
 
     record LatestSentenceAttempt(
         UUID attemptId,
