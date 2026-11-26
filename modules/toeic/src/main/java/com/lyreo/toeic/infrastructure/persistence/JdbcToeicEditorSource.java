@@ -50,6 +50,22 @@ public class JdbcToeicEditorSource implements ToeicEditorSource {
             """,Map.of("id",id),(rs,n)->new Metadata(new ToeicDraft(rs.getString("name"),"SOURCE-"+rs.getInt("year")+"-"+rs.getInt("test_number"),"FULL_TEST",rs.getInt("year"),rs.getInt("test_number"),rs.getObject("listening_duration_seconds",Integer.class),rs.getObject("reading_duration_seconds",Integer.class),rs.getString("access_mode"),rs.getString("required_feature_key"),List.of(),List.of()),rs.getInt("total_questions"),rs.getBoolean("source_blocked"))).stream().findFirst();
     }
     public String status(UUID id) {return jdbc.queryForObject("SELECT publication_status FROM toeic_test_catalog WHERE id=:id",Map.of("id",id),String.class);}
+    @Override
+    public void updateAccess(UUID id, String accessMode, String requiredFeatureKey) {
+        jdbc.update(
+            """
+            UPDATE toeic_test_catalog
+            SET access_mode = :accessMode,
+                required_feature_key = :featureKey,
+                updated_at = now()
+            WHERE id = :id
+            """,
+            new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("accessMode", accessMode)
+                .addValue("featureKey", requiredFeatureKey)
+        );
+    }
     public List<Summary> list(String query,Integer year,String status,int page,int size) {return list(query,year,status,"","","",page,size);}
     public List<Summary> list(String query,Integer year,String status,String type,String access,String quality,int page,int size) {
         return jdbc.query(catalogQuery(false),parameters(query,year,status,type,access,quality,page,size),

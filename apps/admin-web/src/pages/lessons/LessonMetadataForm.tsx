@@ -4,9 +4,10 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AccessTierOption } from "@/components/AccessTierOption";
+import { ImageAssetEditor } from "@/components/ImageAssetEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -23,7 +24,7 @@ import {
   type Metadata,
 } from "./catalog.api";
 import { catalogKeys, useCategories } from "./catalog.queries";
-import { CatalogError, CatalogImage } from "./CatalogFeedback";
+import { CatalogError } from "./CatalogFeedback";
 
 export function LessonMetadataForm({
   lesson,
@@ -81,7 +82,7 @@ export function LessonMetadataForm({
         />
         <fieldset disabled={mutation.isPending}>
           <FieldGroup className="gap-4">
-            {(["title", "description", "imageUrl"] as const).map((name) => (
+            {(["title", "description"] as const).map((name) => (
               <Field key={name} data-invalid={!!form.formState.errors[name]}>
                 <FieldLabel htmlFor={`metadata-${name}`}>
                   {t(`catalog.${name === "description" ? "descriptionField" : name}`)}
@@ -104,15 +105,34 @@ export function LessonMetadataForm({
                 </FieldError>
               </Field>
             ))}
-            <CatalogImage url={form.watch("imageUrl")} title={form.watch("title")} />
-            <label className="flex items-center justify-between rounded-xl border bg-muted/20 px-3 py-2 text-sm">
-              <span>{t("catalog.plusAccessLabel")}</span>
-              <Switch
-                checked={plusOnly}
-                onCheckedChange={setPlusOnly}
-                disabled={mutation.isPending}
-              />
-            </label>
+            <Controller
+              name="imageUrl"
+              control={form.control}
+              render={({ field }) => (
+                <Field data-invalid={!!form.formState.errors.imageUrl}>
+                  <ImageAssetEditor
+                    mode="url"
+                    aspect={16 / 9}
+                    outputWidth={640}
+                    outputHeight={360}
+                    urlInputId="metadata-imageUrl"
+                    value={field.value || null}
+                    onChange={(next) => field.onChange(next ?? "")}
+                    label={t("catalog.imageUrl")}
+                    alt={form.watch("title") || lesson.title}
+                    disabled={mutation.isPending}
+                  />
+                  <FieldError>
+                    {form.formState.errors.imageUrl && t("catalog.invalidField")}
+                  </FieldError>
+                </Field>
+              )}
+            />
+            <AccessTierOption
+              value={plusOnly ? "FEATURE" : "PUBLIC"}
+              onChange={(next) => setPlusOnly(next === "FEATURE")}
+              disabled={mutation.isPending}
+            />
             <Controller
               name="categoryIds"
               control={form.control}

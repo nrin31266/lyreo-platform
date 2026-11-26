@@ -7,6 +7,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -54,13 +55,14 @@ public class JdbcLearnerNotificationRepository implements LearnerNotificationRep
     }
 
     @Override
-    public Optional<LearnerNotification> findById(UUID id) {
+    public Optional<LearnerNotification> findByIdForUpdate(UUID id) {
         return jdbc.query(
             """
             SELECT id, title, body, category, target_audience, status,
                    published_at, expires_at, created_by, created_at, updated_at
             FROM learner_notification
             WHERE id = :id
+            FOR UPDATE
             """,
             Map.of("id", id),
             (rs, rowNum) -> mapRow(rs)
@@ -122,8 +124,8 @@ public class JdbcLearnerNotificationRepository implements LearnerNotificationRep
             .addValue("category", item.category())
             .addValue("targetAudience", item.targetAudience())
             .addValue("status", item.status())
-            .addValue("publishedAt", item.publishedAt() == null ? null : Timestamp.from(item.publishedAt()), Types.TIMESTAMP_WITH_TIMEZONE)
-            .addValue("expiresAt", item.expiresAt() == null ? null : Timestamp.from(item.expiresAt()), Types.TIMESTAMP_WITH_TIMEZONE)
+            .addValue("publishedAt", item.publishedAt() == null ? null : item.publishedAt().atOffset(ZoneOffset.UTC), Types.TIMESTAMP_WITH_TIMEZONE)
+            .addValue("expiresAt", item.expiresAt() == null ? null : item.expiresAt().atOffset(ZoneOffset.UTC), Types.TIMESTAMP_WITH_TIMEZONE)
             .addValue("createdBy", item.createdBy());
     }
 

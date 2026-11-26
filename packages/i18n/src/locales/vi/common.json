@@ -20,6 +20,24 @@
     "light": "Sáng",
     "dark": "Tối"
   },
+  "weakness": {
+    "title": "Điểm yếu cần luyện",
+    "help": "Dựa trên kết quả luyện tập đã ghi nhận. Điểm càng cao cho thấy phần này càng cần luyện thêm.",
+    "empty": "Chưa ghi nhận điểm yếu cần luyện.",
+    "samples": "{{count}} mẫu",
+    "grammar": "Ngữ pháp",
+    "vocabulary": "Ôn từ vựng",
+    "vocabularyUnit": "Unit từ vựng",
+    "toeicPart": "TOEIC Part {{part}}",
+    "toeicListening": "TOEIC Nghe",
+    "toeicReading": "TOEIC Đọc",
+    "shadowingWords": "Shadowing · Lỗi từ",
+    "shadowingFluency": "Shadowing · Nhịp và độ trôi chảy",
+    "shadowing": "Shadowing",
+    "dictation": "Chép chính tả",
+    "lesson": "Luyện bài học",
+    "study": "Luyện tập"
+  },
   "yes": "Có",
   "no": "Không"
 }

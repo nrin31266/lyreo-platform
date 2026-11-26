@@ -405,7 +405,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
     if (!"PUBLISHED".equals(lock(lesson)))
       throw new StateConflictException("Only published lessons have visibility controls");
     jdbc.update(
-        "UPDATE lesson_metadata SET visible=:visible,version=version+1,updated_at=now() WHERE lesson_id=:id",
+        "UPDATE lesson_metadata SET visible=:visible,version=version+1 WHERE lesson_id=:id",
         java.util.Map.of("id", lesson, "visible", visible));
   }
 
@@ -425,7 +425,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
     }
     try {
       jdbc.update(
-          "UPDATE lesson_metadata SET access_mode=:accessMode, required_feature_key=:featureKey, version=version+1, updated_at=now() WHERE lesson_id=:id",
+          "UPDATE lesson_metadata SET access_mode=:accessMode, required_feature_key=:featureKey, version=version+1 WHERE lesson_id=:id",
           new MapSqlParameterSource()
               .addValue("id", lesson)
               .addValue("accessMode", mode)

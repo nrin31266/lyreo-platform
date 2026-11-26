@@ -128,7 +128,7 @@ public class MissionProgressService {
                     mission.id(),
                     now
                 ),
-                config.normalizedXpPerLevel()
+                config
             );
         }
     }

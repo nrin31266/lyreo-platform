@@ -5,9 +5,9 @@ import { AdminLayout } from '@/app/layout/AdminLayout';
 import { CurriculumPage } from '@/pages/curriculum/CurriculumPage';
 import { OverviewPage } from '@/pages/overview/OverviewPage';
 
-const AiSettingsPage = lazy(() =>
-  import('@/pages/ai-settings/AiSettingsPage').then((module) => ({
-    default: module.AiSettingsPage,
+const AdminSettingsPage = lazy(() =>
+  import('@/pages/settings/AdminSettingsPage').then((module) => ({
+    default: module.AdminSettingsPage,
   })),
 );
 
@@ -29,31 +29,17 @@ const OrganizationPage = lazy(() =>
 const LearnersPage = lazy(() =>
   import('@/pages/learners/LearnersPage').then((m) => ({ default: m.LearnersPage })),
 );
-const LearnerProgressPage = lazy(() =>
-  import('@/pages/learners/LearnerProgressPage').then((m) => ({
-    default: m.LearnerProgressPage,
-  })),
-);
 const LearnerDetailPage = lazy(() =>
   import('@/pages/learners/LearnersPage').then((m) => ({ default: m.LearnerDetailPage })),
 );
 const PlansPage = lazy(() =>
   import('@/pages/plans/PlansPage').then((m) => ({ default: m.PlansPage })),
 );
-const MissionsPage = lazy(() =>
-  import('@/pages/missions/MissionsPage').then((m) => ({ default: m.MissionsPage })),
-);
-const AchievementsPage = lazy(() =>
-  import('@/pages/achievements/AchievementsPage').then((m) => ({ default: m.AchievementsPage })),
+const RewardsHubPage = lazy(() =>
+  import('@/pages/rewards/RewardsHubPage').then((m) => ({ default: m.RewardsHubPage })),
 );
 const NotificationsPage = lazy(() =>
   import('@/pages/notifications/NotificationsPage').then((m) => ({ default: m.NotificationsPage })),
-);
-const ConversationsPage = lazy(() =>
-  import('@/pages/conversations/ConversationsPage').then((m) => ({ default: m.ConversationsPage })),
-);
-const MediaLibraryPage = lazy(() =>
-  import('@/pages/media/MediaLibraryPage').then((m) => ({ default: m.MediaLibraryPage })),
 );
 const VocabularyPage = lazy(() =>
   import('@/pages/vocabulary/VocabularyPage').then((m) => ({ default: m.VocabularyPage })),
@@ -120,15 +106,15 @@ export function AppRouter() {
         <Route path="lessons/:lessonId" element={<LessonDetailPage />} />
         <Route path="jobs" element={<JobsPage />} />
         <Route path="learners" element={<LearnersPage />} />
-        <Route path="learners/progress" element={<LearnerProgressPage />} />
+        <Route path="learners/progress" element={<Navigate to="/learners" replace />} />
         <Route path="learners/:learnerId" element={<LearnerDetailPage />} />
         <Route path="plans" element={<PlansPage />} />
-        <Route path="missions" element={<MissionsPage />} />
-        <Route path="achievements" element={<AchievementsPage />} />
+        <Route path="rewards" element={<RewardsHubPage />} />
+        <Route path="missions" element={<Navigate to="/rewards?tab=missions" replace />} />
+        <Route path="achievements" element={<Navigate to="/rewards?tab=achievements" replace />} />
         <Route path="notifications" element={<NotificationsPage />} />
-        <Route path="conversations" element={<ConversationsPage />} />
-        <Route path="media" element={<MediaLibraryPage />} />
-        <Route path="settings/ai" element={<AiSettingsPage />} />
+        <Route path="settings" element={<AdminSettingsPage />} />
+        <Route path="settings/ai" element={<Navigate to="/settings?tab=ai" replace />} />
         <Route path="curriculum" element={<CurriculumPage />} />
         <Route path="vocabulary" element={<VocabularyPage />} />
         <Route path="lexicon" element={<LexiconPage />} />

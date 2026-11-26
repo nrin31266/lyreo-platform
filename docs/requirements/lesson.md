@@ -349,6 +349,7 @@ including future publications, without modifying individual lesson visibility. R
 keeps individually unlisted lessons hidden. Learner availability requires publication, no deletion,
 individual visibility and channel visibility (when applicable). Text/Audio require no channel.
 Historical attempts/progress remain intact, and Admin retains access for management.
+The lesson list displays the Free/Plus badge. Admin changes Plus access in the lesson editor or plan console.
 
 ### FR-LSN-010 — Evidence-based timing reuse
 

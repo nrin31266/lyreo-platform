@@ -295,11 +295,72 @@ public class GamificationAdminService {
         Instant cutoverEffectiveAt,
         int xpPerLevel
     ) {
+        return updateRewardPolicy(
+            ruleVersion,
+            directLessonActivityDiamondsEnabled,
+            cutoverEffectiveAt,
+            xpPerLevel,
+            RewardPolicyConfig.DEFAULT_XP_GROWTH_PER_LEVEL,
+            RewardPolicyConfig.DEFAULT_MAX_LEVEL
+        );
+    }
+
+    @Transactional
+    public RewardPolicyConfig updateRewardPolicy(
+        String ruleVersion,
+        boolean directLessonActivityDiamondsEnabled,
+        Instant cutoverEffectiveAt,
+        int xpPerLevel,
+        int xpGrowthPerLevel,
+        int maxLevel
+    ) {
+        return updateRewardPolicy(
+            ruleVersion,
+            directLessonActivityDiamondsEnabled,
+            cutoverEffectiveAt,
+            xpPerLevel,
+            xpGrowthPerLevel,
+            maxLevel,
+            RewardPolicyConfig.DEFAULT_XP_LEVEL_MULTIPLIER,
+            RewardPolicyConfig.DEFAULT_MILESTONE_INTERVAL,
+            RewardPolicyConfig.DEFAULT_MILESTONE_DIAMOND_BASE,
+            RewardPolicyConfig.DEFAULT_MILESTONE_DIAMOND_GROWTH
+        );
+    }
+
+    @Transactional
+    public RewardPolicyConfig updateRewardPolicy(
+        String ruleVersion,
+        boolean directLessonActivityDiamondsEnabled,
+        Instant cutoverEffectiveAt,
+        int xpPerLevel,
+        int xpGrowthPerLevel,
+        int maxLevel,
+        double xpLevelMultiplier,
+        int milestoneInterval,
+        int milestoneDiamondBase,
+        int milestoneDiamondGrowth
+    ) {
         if (ruleVersion == null || ruleVersion.isBlank()) {
             throw new RequestValidationException("ruleVersion is required");
         }
         if (xpPerLevel <= 0 || xpPerLevel > 100_000) {
             throw new RequestValidationException("xpPerLevel must be between 1 and 100000");
+        }
+        if (xpGrowthPerLevel < 0 || xpGrowthPerLevel > 10_000) {
+            throw new RequestValidationException("xpGrowthPerLevel must be between 0 and 10000");
+        }
+        if (maxLevel < 1 || maxLevel > RewardPolicyConfig.DEFAULT_MAX_LEVEL) {
+            throw new RequestValidationException("maxLevel must be between 1 and 99");
+        }
+        if (!Double.isFinite(xpLevelMultiplier) || xpLevelMultiplier < 1.0 || xpLevelMultiplier > 1.25) {
+            throw new RequestValidationException("xpLevelMultiplier must be between 1.00 and 1.25");
+        }
+        if (milestoneInterval < 0 || milestoneInterval > 50) {
+            throw new RequestValidationException("milestoneInterval must be between 0 and 50");
+        }
+        if (milestoneDiamondBase < 0 || milestoneDiamondBase > 10_000 || milestoneDiamondGrowth < 0 || milestoneDiamondGrowth > 5_000) {
+            throw new RequestValidationException("milestone diamond values out of range");
         }
         Instant cutover = cutoverEffectiveAt != null
             ? cutoverEffectiveAt
@@ -308,7 +369,13 @@ public class GamificationAdminService {
             ruleVersion.trim(),
             directLessonActivityDiamondsEnabled,
             cutover,
-            xpPerLevel
+            xpPerLevel,
+            xpGrowthPerLevel,
+            maxLevel,
+            xpLevelMultiplier,
+            milestoneInterval,
+            milestoneDiamondBase,
+            milestoneDiamondGrowth
         ));
     }
 

@@ -9,8 +9,7 @@ export type CurriculumContentType =
   | 'VOCABULARY_REVIEW'
   | 'GRAMMAR_PRACTICE'
   | 'TOEIC_DRILL'
-  | 'TOEIC_TEST'
-  | 'SPEAKING_SCENARIO';
+  | 'TOEIC_TEST';
 export type CurriculumUnlockRule = 'NONE' | 'PREVIOUS_REQUIRED';
 
 export const curriculumStatuses: CurriculumStatus[] = ['DRAFT', 'PUBLISHED', 'ARCHIVED'];
@@ -20,7 +19,6 @@ export const curriculumContentTypes: CurriculumContentType[] = [
   'GRAMMAR_PRACTICE',
   'TOEIC_DRILL',
   'TOEIC_TEST',
-  'SPEAKING_SCENARIO',
 ];
 export const curriculumUnlockRules: CurriculumUnlockRule[] = ['NONE', 'PREVIOUS_REQUIRED'];
 

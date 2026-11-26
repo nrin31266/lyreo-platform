@@ -2,6 +2,11 @@ package com.lyreo.analytics.infrastructure.persistence;
 
 import com.lyreo.analytics.application.port.AnalyticsProjectionRepository;
 import com.lyreo.analytics.domain.AdminAnalyticsSummary;
+import com.lyreo.analytics.domain.AdminLearnerStudyProfile;
+import com.lyreo.analytics.domain.AdminLearnerStudyProfile.DailyActivityPoint;
+import com.lyreo.analytics.domain.AdminLearnerStudyProfile.EnrolledPathProgress;
+import com.lyreo.analytics.domain.AdminLearnerStudyProfile.PracticeBreakdown;
+import com.lyreo.analytics.domain.AdminLearnerStudyProfile.UnlockedBadge;
 import com.lyreo.analytics.domain.AnalyticsOverview;
 import com.lyreo.analytics.domain.AnalyticsOverview.ActivityWindow;
 import com.lyreo.analytics.domain.AnalyticsOverview.SkillSummary;
@@ -216,13 +221,31 @@ public final class JdbcAnalyticsProjectionRepository implements AnalyticsProject
             )
         );
 
-        List<WeaknessSummary> weaknesses = jdbc.query(
+        return new AnalyticsOverview(true, todayWindow, weekWindow, skills, loadWeaknesses(learnerId));
+    }
+
+    private List<WeaknessSummary> loadWeaknesses(UUID learnerId) {
+        return jdbc.query(
             """
-            SELECT weakness_type, weakness_key, severity, sample_count, updated_at
-            FROM learner_weakness
-            WHERE learner_id = :learnerId
-              AND severity > 0
-            ORDER BY severity DESC, sample_count DESC, weakness_type ASC, weakness_key ASC
+            SELECT
+                lw.weakness_type,
+                lw.weakness_key,
+                gt.label,
+                gt.label_en,
+                lw.severity,
+                lw.sample_count,
+                lw.updated_at
+            FROM learner_weakness lw
+            LEFT JOIN LATERAL (
+                SELECT COALESCE(NULLIF(gtv.title_vi, ''), gtv.title_en) AS label, gtv.title_en AS label_en
+                FROM grammar_topic_version gtv
+                WHERE gtv.catalog_id::text = lw.weakness_key
+                ORDER BY gtv.id DESC
+                LIMIT 1
+            ) gt ON lw.weakness_type = 'GRAMMAR_TOPIC'
+            WHERE lw.learner_id = :learnerId
+              AND lw.severity > 0
+            ORDER BY lw.severity DESC, lw.sample_count DESC, lw.weakness_type ASC, lw.weakness_key ASC
             """,
             Map.of("learnerId", learnerId),
             (rs, rowNum) -> new WeaknessSummary(
@@ -230,11 +253,179 @@ public final class JdbcAnalyticsProjectionRepository implements AnalyticsProject
                 rs.getString("weakness_key"),
                 rs.getBigDecimal("severity"),
                 rs.getInt("sample_count"),
+                rs.getTimestamp("updated_at").toInstant(),
+                rs.getString("label"),
+                rs.getString("label_en")
+            )
+        );
+    }
+
+    @Override
+    public AdminLearnerStudyProfile loadAdminStudyProfile(UUID learnerId, LocalDate todayUtc) {
+        ActivityWindow todayWindow = loadWindow(learnerId, todayUtc, todayUtc);
+        ActivityWindow weekWindow = loadWindow(learnerId, todayUtc.minusDays(6), todayUtc);
+        ActivityWindow monthWindow = loadWindow(learnerId, todayUtc.minusDays(29), todayUtc);
+
+        List<DailyActivityPoint> dailySeries = jdbc.query(
+            """
+            SELECT
+                d.day::date AS activity_date,
+                COALESCE(lda.study_seconds, 0)::bigint AS study_seconds,
+                COALESCE(lda.lesson_count, 0)::int AS lesson_count,
+                COALESCE(lda.vocabulary_review_count, 0)::int AS vocabulary_review_count,
+                COALESCE(lda.grammar_answer_count, 0)::int AS grammar_answer_count,
+                COALESCE(lda.toeic_question_count, 0)::int AS toeic_question_count
+            FROM generate_series(:fromDate::date, :toDate::date, interval '1 day') AS d(day)
+            LEFT JOIN learner_daily_activity lda
+                ON lda.learner_id = :learnerId
+               AND lda.activity_date = d.day::date
+            ORDER BY d.day ASC
+            """,
+            Map.of(
+                "learnerId", learnerId,
+                "fromDate", Date.valueOf(todayUtc.minusDays(13)),
+                "toDate", Date.valueOf(todayUtc)
+            ),
+            (rs, rowNum) -> new DailyActivityPoint(
+                rs.getDate("activity_date").toLocalDate(),
+                rs.getLong("study_seconds"),
+                rs.getInt("lesson_count"),
+                rs.getInt("vocabulary_review_count"),
+                rs.getInt("grammar_answer_count"),
+                rs.getInt("toeic_question_count")
+            )
+        );
+
+        List<SkillSummary> skills = jdbc.query(
+            """
+            SELECT skill_code, score, sample_count, updated_at
+            FROM learner_skill_summary
+            WHERE learner_id = :learnerId
+            ORDER BY score DESC, skill_code ASC
+            """,
+            Map.of("learnerId", learnerId),
+            (rs, rowNum) -> new SkillSummary(
+                rs.getString("skill_code"),
+                rs.getBigDecimal("score"),
+                rs.getInt("sample_count"),
                 rs.getTimestamp("updated_at").toInstant()
             )
         );
 
-        return new AnalyticsOverview(true, todayWindow, weekWindow, skills, weaknesses);
+        List<WeaknessSummary> weaknesses = loadWeaknesses(learnerId);
+
+        List<EnrolledPathProgress> enrolledPaths = jdbc.query(
+            """
+            SELECT
+                cp.id AS path_id,
+                cp.name AS path_name,
+                COALESCE(cp.level, '') AS level,
+                ce.status,
+                COUNT(DISTINCT ci.id)::int AS total_items,
+                COUNT(DISTINCT CASE WHEN cip.status = 'COMPLETED' THEN ci.id END)::int AS completed_items,
+                ce.started_at
+            FROM curriculum_enrollment ce
+            JOIN curriculum_path cp ON cp.id = ce.path_id
+            LEFT JOIN curriculum_section cs ON cs.path_id = cp.id
+            LEFT JOIN curriculum_item ci ON ci.section_id = cs.id
+            LEFT JOIN curriculum_item_progress cip
+                ON cip.item_id = ci.id
+               AND cip.learner_id = ce.learner_id
+            WHERE ce.learner_id = :learnerId
+            GROUP BY cp.id, cp.name, cp.level, ce.status, ce.started_at
+            ORDER BY ce.started_at DESC
+            """,
+            Map.of("learnerId", learnerId),
+            (rs, rowNum) -> new EnrolledPathProgress(
+                UUID.fromString(rs.getString("path_id")),
+                rs.getString("path_name"),
+                rs.getString("level"),
+                rs.getString("status"),
+                rs.getInt("completed_items"),
+                rs.getInt("total_items"),
+                rs.getTimestamp("started_at").toInstant()
+            )
+        );
+
+        List<UnlockedBadge> unlockedAchievements = jdbc.query(
+            """
+            SELECT
+                ad.id AS achievement_id,
+                ad.code,
+                ad.title,
+                COALESCE(ad.badge_tier, 'BRONZE') AS badge_tier,
+                ad.badge_asset_id,
+                la.unlocked_at
+            FROM learner_achievement la
+            JOIN achievement_definition ad ON ad.id = la.achievement_id
+            WHERE la.learner_id = :learnerId
+              AND la.unlocked_at IS NOT NULL
+            ORDER BY la.unlocked_at DESC, ad.code ASC
+            """,
+            Map.of("learnerId", learnerId),
+            (rs, rowNum) -> {
+                String rawAsset = rs.getString("badge_asset_id");
+                return new UnlockedBadge(
+                    UUID.fromString(rs.getString("achievement_id")),
+                    rs.getString("code"),
+                    rs.getString("title"),
+                    rs.getString("badge_tier"),
+                    rawAsset != null ? UUID.fromString(rawAsset) : null,
+                    rs.getTimestamp("unlocked_at").toInstant()
+                );
+            }
+        );
+
+        PracticeBreakdown breakdown = jdbc.queryForObject(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM lesson_progress WHERE learner_id = :learnerId AND status = 'COMPLETED')::int AS lessons_completed,
+                (SELECT COUNT(*) FROM lesson_progress WHERE learner_id = :learnerId AND status = 'IN_PROGRESS')::int AS lessons_in_progress,
+                (SELECT COUNT(*) FROM vocabulary_card WHERE learner_id = :learnerId AND suspended_at IS NULL)::int AS vocab_cards_total,
+                (SELECT COUNT(*) FROM vocabulary_card WHERE learner_id = :learnerId AND suspended_at IS NULL AND (stability >= 5 OR (review_count >= 3 AND lapse_count = 0)))::int AS vocab_cards_mastered,
+                (SELECT COUNT(*) FROM grammar_practice_attempt WHERE learner_id = :learnerId)::int AS grammar_attempts,
+                COALESCE((SELECT ROUND(AVG(CASE WHEN correct THEN 100.0 ELSE 0.0 END)) FROM grammar_practice_attempt WHERE learner_id = :learnerId), 0)::int AS grammar_accuracy_pct,
+                (SELECT COUNT(*) FROM toeic_attempt WHERE learner_id = :learnerId)::int AS toeic_attempts,
+                (SELECT MAX(COALESCE(listening_score, 0) + COALESCE(reading_score, 0)) FROM toeic_attempt WHERE learner_id = :learnerId AND (listening_score IS NOT NULL OR reading_score IS NOT NULL))::int AS best_toeic_score
+            """,
+            Map.of("learnerId", learnerId),
+            (rs, rowNum) -> new PracticeBreakdown(
+                rs.getInt("lessons_completed"),
+                rs.getInt("lessons_in_progress"),
+                rs.getInt("vocab_cards_total"),
+                rs.getInt("vocab_cards_mastered"),
+                rs.getInt("grammar_attempts"),
+                rs.getInt("grammar_accuracy_pct"),
+                rs.getInt("toeic_attempts"),
+                (Integer) rs.getObject("best_toeic_score")
+            )
+        );
+
+        boolean hasHistory =
+            monthWindow.activeDays() > 0
+                || !skills.isEmpty()
+                || !weaknesses.isEmpty()
+                || !enrolledPaths.isEmpty()
+                || !unlockedAchievements.isEmpty()
+                || (breakdown != null
+                    && (breakdown.lessonsCompleted() > 0
+                        || breakdown.lessonsInProgress() > 0
+                        || breakdown.vocabCardsTotal() > 0
+                        || breakdown.grammarAttempts() > 0
+                        || breakdown.toeicAttempts() > 0));
+
+        return new AdminLearnerStudyProfile(
+            hasHistory,
+            todayWindow,
+            weekWindow,
+            monthWindow,
+            dailySeries,
+            skills,
+            weaknesses,
+            enrolledPaths,
+            unlockedAchievements,
+            breakdown != null ? breakdown : new PracticeBreakdown(0, 0, 0, 0, 0, 0, 0, null)
+        );
     }
 
     @Override

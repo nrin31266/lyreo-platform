@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import {
   RiAddLine,
   RiCheckDoubleLine,
@@ -9,6 +10,7 @@ import {
   RiMegaphoneLine,
   RiShieldKeyholeLine,
 } from '@remixicon/react';
+import { statusBadgeVariant } from '@/components/ContentBadges';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,6 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { CatalogError } from '@/pages/lessons/CatalogFeedback';
 import { fetchEntitlementAudit } from '@/pages/overview/admin-ops.api';
 import {
@@ -49,6 +52,7 @@ type FormState = {
   category: NotificationCategory;
   targetAudience: NotificationAudience;
   status: NotificationStatus;
+  expiresAt: string | null;
 };
 
 function emptyForm(): FormState {
@@ -58,7 +62,8 @@ function emptyForm(): FormState {
     body: '',
     category: 'SYSTEM',
     targetAudience: 'ALL',
-    status: 'PUBLISHED',
+    status: 'DRAFT',
+    expiresAt: null,
   };
 }
 
@@ -70,6 +75,7 @@ function toForm(item: LearnerNotification): FormState {
     category: item.category,
     targetAudience: item.targetAudience,
     status: item.status,
+    expiresAt: item.expiresAt,
   };
 }
 
@@ -80,6 +86,12 @@ function categoryVariant(cat: NotificationCategory): 'default' | 'secondary' | '
   return 'secondary';
 }
 
+function auditVariant(decision: string) {
+  if (decision.startsWith('DENIED') || decision === 'GRANT_REVOKED') return 'destructive';
+  if (['ALLOWED', 'GRANT_CREATED', 'SETTLED'].includes(decision)) return 'success';
+  return 'secondary';
+}
+
 export function NotificationsPage() {
   const { t, i18n } = useTranslation('admin');
   const queryClient = useQueryClient();
@@ -87,6 +99,7 @@ export function NotificationsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<LearnerNotification | null>(null);
+  const [tab, setTab] = useState('announcements');
 
   const notificationsQuery = useQuery({
     queryKey: notificationsKey,
@@ -95,6 +108,7 @@ export function NotificationsPage() {
 
   const auditQuery = useQuery({
     queryKey: ['admin-notifications-activity-feed'],
+    enabled: tab === 'activity',
     queryFn: ({ signal }) => fetchEntitlementAudit({ limit: 30 }, signal),
   });
 
@@ -106,7 +120,7 @@ export function NotificationsPage() {
         category: state.category,
         targetAudience: state.targetAudience,
         status: state.status,
-        publishedAt: state.status === 'PUBLISHED' ? new Date().toISOString() : null,
+        expiresAt: state.expiresAt,
       };
       return state.id
         ? updateAdminNotification(state.id, payload)
@@ -147,19 +161,19 @@ export function NotificationsPage() {
   }
 
   return (
-    <section className="mx-auto grid w-full max-w-6xl gap-5">
+    <section className="grid w-full gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">{t('notificationsCenter.title')}</h1>
           <p className="text-sm text-muted-foreground">{t('notificationsCenter.subtitle')}</p>
         </div>
-        <Button type="button" onClick={openNew}>
+        {tab === 'announcements' && <Button type="button" onClick={openNew}>
           <RiAddLine data-icon="inline-start" aria-hidden="true" />
           {t('notificationsCenter.createButton')}
-        </Button>
+        </Button>}
       </header>
 
-      <Tabs defaultValue="announcements">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="announcements">
             <RiMegaphoneLine className="size-4" aria-hidden="true" />
@@ -172,6 +186,7 @@ export function NotificationsPage() {
         </TabsList>
 
         <TabsContent value="announcements" className="mt-4 space-y-4">
+          <p className="text-sm text-muted-foreground">{t('notificationsCenter.deliveryHelp')}</p>
           <CatalogError
             error={notificationsQuery.error}
             retry={() => void notificationsQuery.refetch()}
@@ -188,8 +203,12 @@ export function NotificationsPage() {
               </EmptyHeader>
             </Empty>
           ) : (
-            <div className="grid gap-3">
-              {notificationsQuery.data.map((item) => (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {notificationsQuery.data.map((item) => {
+                const published = item.status === 'PUBLISHED' && item.publishedAt;
+                const expired = item.status === 'PUBLISHED' && item.expiresAt && Date.parse(item.expiresAt) <= Date.now();
+                const scheduled = published && Date.parse(published) > Date.now();
+                return (
                 <Card key={item.id} size="sm">
                   <CardHeader>
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -205,16 +224,15 @@ export function NotificationsPage() {
                               defaultValue: item.targetAudience,
                             })}
                           </Badge>
-                          <Badge variant={item.status === 'PUBLISHED' ? 'success' : 'secondary'}>
-                            {t(`curriculumWorkspace.statuses.${item.status}`, {
-                              defaultValue: item.status,
-                            })}
+                          <Badge variant={statusBadgeVariant(expired ? 'EXPIRED' : scheduled ? 'SCHEDULED' : item.status)}>
+                            {expired ? t('notificationsCenter.expired') : scheduled ? t('notificationsCenter.scheduled')
+                              : t(`curriculumWorkspace.statuses.${item.status}`, { defaultValue: item.status })}
                           </Badge>
                         </div>
                         <CardTitle className="text-base">{item.title}</CardTitle>
                         <CardDescription className="text-xs">
-                          {t('notificationsCenter.publishedTimestamp', {
-                            time: formatFriendlyTime(item.publishedAt || item.createdAt),
+                          {t(published ? 'notificationsCenter.publishedTimestamp' : 'notificationsCenter.updatedTimestamp', {
+                            time: formatFriendlyTime(published || item.updatedAt),
                           })}
                         </CardDescription>
                       </div>
@@ -242,10 +260,11 @@ export function NotificationsPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm leading-relaxed text-foreground/90">{item.body}</p>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap wrap-anywhere text-foreground/90">{item.body}</p>
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           )}
         </TabsContent>
@@ -268,28 +287,43 @@ export function NotificationsPage() {
                   </EmptyHeader>
                 </Empty>
               ) : (
-                <div className="divide-y rounded-xl border">
-                  {auditQuery.data.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"
-                    >
-                      <div className="space-y-0.5">
-                        <p className="font-medium">
-                          {t('notificationsCenter.activitySentence', {
-                            feature: entry.featureKey,
-                            decision: entry.decision,
-                          })}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatFriendlyTime(entry.occurredAt)}
-                        </p>
-                      </div>
-                      <Badge variant={entry.decision === 'DENIED' ? 'destructive' : 'success'}>
-                        {entry.decision}
-                      </Badge>
-                    </div>
-                  ))}
+                <div className="overflow-hidden rounded-xl border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t('notificationsCenter.columns.time')}</TableHead>
+                        <TableHead>{t('notificationsCenter.columns.feature')}</TableHead>
+                        <TableHead>{t('notificationsCenter.columns.decision')}</TableHead>
+                        <TableHead>{t('notificationsCenter.columns.account')}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {auditQuery.data.map((entry) => (
+                        <TableRow key={entry.id}>
+                          <TableCell className="text-xs tabular-nums text-muted-foreground">
+                            <time dateTime={entry.occurredAt}>{formatFriendlyTime(entry.occurredAt)}</time>
+                          </TableCell>
+                          <TableCell className="whitespace-normal">
+                            {t(`plansConsole.features.${entry.featureKey}`, { defaultValue: entry.featureKey })}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={auditVariant(entry.decision)}>
+                              {t(`notificationsCenter.decisions.${entry.decision}`, { defaultValue: entry.decision })}
+                            </Badge>
+                            {typeof entry.detail?.limit === 'number' &&
+                              <p className="mt-1 text-xs text-muted-foreground">{t('notificationsCenter.auditLimit', { limit: entry.detail.limit })}</p>}
+                          </TableCell>
+                          <TableCell>
+                            {entry.decision === 'QUOTA_UPDATED' ? '—' : (
+                              <Link className="text-xs underline underline-offset-2" to={`/learners/${encodeURIComponent(entry.userId)}`}>
+                                {t('notificationsCenter.learnerLink', { id: entry.userId.slice(-8) })}
+                              </Link>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               )}
             </CardContent>
@@ -317,21 +351,23 @@ export function NotificationsPage() {
             }}
           >
             <div className="grid gap-1">
-              <Label>{t('notificationsCenter.fields.title')}</Label>
+              <Label htmlFor="announcement-title">{t('notificationsCenter.fields.title')}</Label>
               <Input
                 required
-                maxLength={140}
+                maxLength={200}
                 value={form.title}
+                id="announcement-title"
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
               />
             </div>
             <div className="grid gap-1">
-              <Label>{t('notificationsCenter.fields.body')}</Label>
+              <Label htmlFor="announcement-body">{t('notificationsCenter.fields.body')}</Label>
               <Textarea
                 required
                 rows={4}
-                maxLength={1000}
+                maxLength={2000}
                 value={form.body}
+                id="announcement-body"
                 onChange={(e) => setForm({ ...form, body: e.target.value })}
               />
             </div>
@@ -375,12 +411,12 @@ export function NotificationsPage() {
                 </Select>
               </div>
               <div className="grid gap-1">
-                <Label>{t('curriculumWorkspace.status')}</Label>
+                <Label htmlFor="announcement-status">{t('curriculumWorkspace.status')}</Label>
                 <Select
                   value={form.status}
                   onValueChange={(v) => setForm({ ...form, status: v as NotificationStatus })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="announcement-status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

@@ -39,6 +39,16 @@ it('covers all 44 symbols and supplements the duplicate /ʊə/ recording', () =>
   expect(ipaExample('unknown')).toBeUndefined();
 });
 
+it.each(['/phonetics', '/phonetics?sound=unknown'])('opens %s without selecting a sound', async (path) => {
+  const i18n = createInstance();
+  await i18n.use(initReactI18next).init({ resources: adminI18nResources, lng: 'en', ns: ['admin'] });
+  render(<I18nextProvider i18n={i18n}>
+    <MemoryRouter initialEntries={[path]}><PhoneticsPage /></MemoryRouter>
+  </I18nextProvider>);
+  expect(screen.queryByRole('button', { pressed: true })).not.toBeInTheDocument();
+  expect(screen.queryByRole('complementary', { name: 'Sound example' })).not.toBeInTheDocument();
+});
+
 it('plays distinct sounds and words and follows the system language', async () => {
   const sources: string[] = [];
   const players: HTMLMediaElement[] = [];

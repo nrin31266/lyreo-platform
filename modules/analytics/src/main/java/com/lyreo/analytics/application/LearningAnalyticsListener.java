@@ -4,6 +4,7 @@ import com.lyreo.analytics.application.port.AnalyticsProjectionRepository;
 import com.lyreo.contracts.grammar.GrammarQuestionAnsweredEvent;
 import com.lyreo.contracts.lesson.LessonActivityCompletedEvent;
 import com.lyreo.contracts.lesson.LessonCompletedEvent;
+import com.lyreo.contracts.lesson.ShadowingAssessedEvent;
 import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent;
 import com.lyreo.contracts.vocabulary.VocabularyReviewCompletedEvent;
 import com.lyreo.contracts.vocabulary.VocabularyUnitCompletedEvent;
@@ -20,6 +21,11 @@ public class LearningAnalyticsListener {
 
     public LearningAnalyticsListener(AnalyticsProjectionRepository projections) {
         this(new AnalyticsService(projections));
+    }
+
+    @ApplicationModuleListener
+    public void onShadowingAssessed(ShadowingAssessedEvent event) {
+        analytics.onShadowingAssessed(event);
     }
 
     @Autowired
@@ -111,7 +117,8 @@ public class LearningAnalyticsListener {
             event.readingTotal(),
             event.listeningScaledScore(),
             event.readingScaledScore(),
-            event.occurredAt()
+            event.occurredAt(),
+            event.parts()
         );
     }
 

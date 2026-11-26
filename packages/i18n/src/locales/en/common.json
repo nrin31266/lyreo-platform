@@ -20,6 +20,24 @@
     "light": "Light",
     "dark": "Dark"
   },
+  "weakness": {
+    "title": "Areas to practise",
+    "help": "Based on recorded practice. A higher score means more difficulty in the samples shown.",
+    "empty": "No areas to practise have been identified yet.",
+    "samples": "Samples: {{count}}",
+    "grammar": "Grammar",
+    "vocabulary": "Vocabulary review",
+    "vocabularyUnit": "Vocabulary unit",
+    "toeicPart": "TOEIC Part {{part}}",
+    "toeicListening": "TOEIC Listening",
+    "toeicReading": "TOEIC Reading",
+    "shadowingWords": "Shadowing · Word mismatches",
+    "shadowingFluency": "Shadowing · Rhythm and fluency",
+    "shadowing": "Shadowing",
+    "dictation": "Dictation",
+    "lesson": "Lesson practice",
+    "study": "Practice"
+  },
   "yes": "Yes",
   "no": "No"
 }

@@ -27,6 +27,32 @@ public class GrammarCatalogEditor {
         return new Document<>(id,0,source.status(kind,id),null,data,null,null);
     });}
     public Document<GrammarCatalog> save(String kind,UUID id,long revision,GrammarCatalog data,String actor) {validate(kind,data,false);get(kind,id);documents.save(namespace(kind),id,revision,data,actor,GrammarCatalog.class);return get(kind,id);}
+    @Transactional
+    public void updateAccess(String kind, UUID id, String accessMode, String requiredFeatureKey, String actor) {
+        String ns = namespace(kind);
+        String mode = accessMode == null ? "" : accessMode.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("PUBLIC", "FEATURE").contains(mode)) {
+            throw new RequestValidationException("accessMode must be PUBLIC or FEATURE");
+        }
+        String featureKey = "FEATURE".equals(mode) ? "grammar.advanced" : null;
+        if ("FEATURE".equals(mode) && requiredFeatureKey != null && !requiredFeatureKey.isBlank()
+            && !"grammar.advanced".equals(requiredFeatureKey.trim())) {
+            throw new RequestValidationException("requiredFeatureKey must be grammar.advanced");
+        }
+        var current = get(kind, id);
+        source.updateAccess(kind, id, mode, featureKey);
+        if (documents.find(ns, id, GrammarCatalog.class).isPresent()) {
+            var d = current.draft();
+            var updated = new GrammarCatalog(
+                d.title(), d.titleEn(), d.description(), d.descriptionEn(),
+                d.parentId(), d.orderIndex(), mode, featureKey, d.questions()
+            );
+            var saved = documents.save(ns, id, current.revision(), updated, actor, GrammarCatalog.class);
+            if ("PUBLISHED".equals(current.status())) {
+                publish(kind, id, saved.revision(), "Updated access tier", actor);
+            }
+        }
+    }
     @Transactional public Document<GrammarCatalog> publish(String kind,UUID id,long revision,String reason,String actor) {
         var data=get(kind,id).draft();validate(kind,data,true);
         for(var ref:data.questions()) items.validateStandalone(ref.itemId(),ref.publicationId());

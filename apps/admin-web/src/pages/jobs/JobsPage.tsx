@@ -8,6 +8,7 @@ import { RiRefreshLine, RiSearchLine, RiLoader4Line, RiExternalLinkLine, RiFileC
 import { AdminPagination } from '@/components/AdminPagination';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { statusBadgeVariant } from '@/components/ContentBadges';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -30,7 +31,7 @@ const jobTypes = ['LESSON_AUTHORING', 'LESSON_BUILD', 'LESSON_SOURCE_PREVIEW', '
 const authoring = (job: Job) => job.ownerModule === 'lesson' && job.jobType === 'LESSON_AUTHORING' && !!job.ownerReferenceId;
 function JobStatus({ job }: { job: Job }) {
   const { t } = useTranslation('admin');
-  return <Badge variant={job.status === 'FAILED' ? 'destructive' : job.status === 'SUCCEEDED' ? 'success' : active.has(job.status) ? 'secondary' : 'outline'}>
+  return <Badge variant={statusBadgeVariant(job.status)}>
     {active.has(job.status) && <RiLoader4Line className="size-3 motion-safe:animate-spin" aria-hidden="true" />}
     {t(`lessonAuthoring.labels.${job.status}`, { defaultValue: job.status })}
   </Badge>;

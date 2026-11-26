@@ -92,13 +92,14 @@ describe('shared Admin navigation', () => {
     expect(logout).toHaveBeenCalledOnce();
   });
 
-  it('uses one sidebar entry for AI configuration', () => {
+  it('uses one sidebar entry for settings configuration', () => {
     desktop = true;
     show();
-    const link = screen.getByRole('link', { name: 'AI settings' });
-    expect(link).toHaveAttribute('href', '/settings/ai');
+    const link = screen.getByRole('link', { name: 'Settings' });
+    expect(link).toHaveAttribute('href', '/settings');
     expect(screen.queryByRole('link', { name: 'AI routing' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'AI providers' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Media library' })).not.toBeInTheDocument();
   });
 
   it('opens a labelled modal, closes with Escape and restores keyboard focus', async () => {

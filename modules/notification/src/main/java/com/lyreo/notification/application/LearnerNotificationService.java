@@ -47,18 +47,19 @@ public class LearnerNotificationService {
 
     @Transactional
     public LearnerNotification create(SaveCommand cmd, String actor) {
-        LearnerNotification validated = validate(UUID.randomUUID(), cmd, actor == null || actor.isBlank() ? "admin" : actor);
+        LearnerNotification validated = validate(UUID.randomUUID(), cmd, actor == null || actor.isBlank() ? "admin" : actor, null);
         return repository.insert(validated);
     }
 
     @Transactional
     public LearnerNotification update(UUID id, SaveCommand cmd, String actor) {
-        LearnerNotification existing = repository.findById(id)
+        LearnerNotification existing = repository.findByIdForUpdate(id)
             .orElseThrow(() -> new ResourceNotFoundException("Notification not found"));
         LearnerNotification validated = validate(
             id,
             cmd,
-            existing.createdBy() != null ? existing.createdBy() : (actor == null ? "admin" : actor)
+            existing.createdBy() != null ? existing.createdBy() : (actor == null ? "admin" : actor),
+            "PUBLISHED".equals(existing.status()) ? existing.publishedAt() : null
         );
         return repository.update(validated)
             .orElseThrow(() -> new ResourceNotFoundException("Notification not found"));
@@ -71,7 +72,7 @@ public class LearnerNotificationService {
         }
     }
 
-    private static LearnerNotification validate(UUID id, SaveCommand cmd, String actor) {
+    private static LearnerNotification validate(UUID id, SaveCommand cmd, String actor, Instant previousPublication) {
         if (cmd.title() == null || cmd.title().isBlank() || cmd.title().trim().length() > 200) {
             throw new RequestValidationException("title is required and must be <= 200 characters");
         }
@@ -96,9 +97,13 @@ public class LearnerNotificationService {
         if (!STATUSES.contains(status)) {
             throw new RequestValidationException("Invalid notification status: " + status);
         }
-        Instant publishedAt = "PUBLISHED".equals(status)
-            ? (cmd.publishedAt() != null ? cmd.publishedAt() : Instant.now())
-            : cmd.publishedAt();
+        Instant publishedAt = cmd.publishedAt();
+        if ("PUBLISHED".equals(status) && publishedAt == null) {
+            publishedAt = previousPublication != null ? previousPublication : Instant.now();
+        }
+        if (publishedAt != null && cmd.expiresAt() != null && !cmd.expiresAt().isAfter(publishedAt)) {
+            throw new RequestValidationException("expiresAt must be after publishedAt");
+        }
         return new LearnerNotification(
             id,
             cmd.title().trim(),

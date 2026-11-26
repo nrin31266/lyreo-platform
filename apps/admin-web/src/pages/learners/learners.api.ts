@@ -58,6 +58,7 @@ export async function fetchLearnerAvatar(id: string, signal?: AbortSignal) {
 }
 
 export const entitlementFeatureKeys = [
+  'lesson.plus-lessons',
   'vocabulary.plus-packs',
   'vocabulary.saved-cards',
   'speech.shadowing',

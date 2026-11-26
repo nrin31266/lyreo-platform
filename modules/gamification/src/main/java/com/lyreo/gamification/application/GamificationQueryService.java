@@ -12,6 +12,7 @@ import com.lyreo.gamification.domain.DiamondTransaction;
 import com.lyreo.gamification.domain.GamificationSummary;
 import com.lyreo.gamification.domain.LearnerLevel;
 import com.lyreo.gamification.domain.LearnerStreak;
+import com.lyreo.gamification.domain.LevelProgression;
 import com.lyreo.gamification.domain.MissionView;
 import com.lyreo.gamification.domain.RewardPolicyConfig;
 import java.time.Instant;
@@ -51,25 +52,41 @@ public class GamificationQueryService {
     @Transactional(readOnly = true)
     public GamificationSummary summary(UUID learnerId) {
         RewardPolicyConfig config = policyConfig.current();
-        int xpPerLevel = config.normalizedXpPerLevel();
         LearnerLevel level = xpLedger.findLevel(learnerId);
+        LevelProgression.Progress progress = LevelProgression.evaluate(level.xp(), config);
         int diamondBalance = diamondLedger.balance(learnerId);
         LearnerStreak streak = streakRepository.findStreak(learnerId);
-        long xpIntoLevel = level.xp() % xpPerLevel;
-        long xpToNext = xpPerLevel - xpIntoLevel;
+
+        int nextMilestoneLevel = 0;
+        int nextMilestoneDiamonds = 0;
+        for (int lvl = progress.level() + 1; lvl <= progress.maxLevel(); lvl++) {
+            int bonus = LevelProgression.milestoneRewardDiamonds(lvl, config);
+            if (bonus > 0) {
+                nextMilestoneLevel = lvl;
+                nextMilestoneDiamonds = bonus;
+                break;
+            }
+        }
 
         return new GamificationSummary(
             learnerId,
-            level.level(),
+            progress.level(),
             level.xp(),
-            xpPerLevel,
-            xpIntoLevel,
-            xpToNext,
+            progress.xpForCurrentStep(),
+            progress.xpIntoCurrentLevel(),
+            progress.xpToNextLevel(),
             diamondBalance,
             streak.currentStreak(),
             streak.longestStreak(),
             streak.lastStudyDate(),
-            config.normalizedRuleVersion()
+            config.normalizedRuleVersion(),
+            config.normalizedXpGrowthPerLevel(),
+            config.normalizedXpLevelMultiplier(),
+            progress.maxLevel(),
+            progress.maxLevelReached(),
+            config.normalizedMilestoneInterval(),
+            nextMilestoneLevel,
+            nextMilestoneDiamonds
         );
     }
 

@@ -28,6 +28,10 @@ public class ContentMediaController {
         return assets.upload(file.getOriginalFilename(),file.getBytes(),false,jwt.getSubject());
     }
     @GetMapping("/{id}") public AssetStore.Asset get(@PathVariable UUID id) {return assets.get(id);}
+    @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id) {
+        assets.delete(id);
+    }
     @GetMapping("/{id}/file") public ResponseEntity<org.springframework.core.io.Resource> file(@PathVariable UUID id) {
         var asset=assets.get(id);var bytes=assets.bytes(id);
         return ResponseEntity.ok().contentType(MediaType.parseMediaType(asset.mimeType())).cacheControl(CacheControl.noStore())

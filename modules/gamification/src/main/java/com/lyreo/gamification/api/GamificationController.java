@@ -9,7 +9,6 @@ import com.lyreo.gamification.domain.GamificationSummary;
 import com.lyreo.gamification.domain.MissionView;
 import com.lyreo.identity.application.AppUserProvisioningService;
 import com.lyreo.platform.content.AssetStore;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -85,7 +84,8 @@ public class GamificationController {
         byte[] bytes = assets.bytes(achievement.badgeAssetId());
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType(meta.mimeType()))
-            .cacheControl(CacheControl.maxAge(Duration.ofHours(6)))
+            .cacheControl(CacheControl.noCache().mustRevalidate())
+            .eTag("\"" + achievement.badgeAssetId() + "-" + meta.sizeBytes() + "\"")
             .header("X-Content-Type-Options", "nosniff")
             .body(bytes);
     }

@@ -1,6 +1,7 @@
 package com.lyreo.contracts.toeic;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -21,5 +22,21 @@ public record ToeicAttemptCompletedEvent(
     int readingTotal,
     Integer listeningScaledScore,
     Integer readingScaledScore,
-    Instant occurredAt
-) {}
+    Instant occurredAt,
+    List<PartResult> parts
+) {
+    public ToeicAttemptCompletedEvent {
+        parts = parts == null ? List.of() : List.copyOf(parts);
+    }
+
+    public ToeicAttemptCompletedEvent(
+        UUID learnerId, UUID attemptId, UUID testCatalogId, String mode,
+        int listeningCorrect, int listeningTotal, int readingCorrect, int readingTotal,
+        Integer listeningScaledScore, Integer readingScaledScore, Instant occurredAt
+    ) {
+        this(learnerId, attemptId, testCatalogId, mode, listeningCorrect, listeningTotal,
+            readingCorrect, readingTotal, listeningScaledScore, readingScaledScore, occurredAt, List.of());
+    }
+
+    public record PartResult(int part, int correct, int total) {}
+}

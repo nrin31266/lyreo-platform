@@ -17,6 +17,12 @@ public class GrammarAdminController {
     @GetMapping("/{kind}/{id}/check") public List<GrammarCatalogEditor.CheckIssue> check(@PathVariable String kind,@PathVariable UUID id) {return editor.check(kind,id);}
     public record Save(long revision,GrammarCatalog content) {}
     public record Action(long revision,String reason,String status,UUID publicationId) {}
+    public record AccessRequest(String accessMode,String requiredFeatureKey) {}
+    @PutMapping("/{kind}/{id}/access")
+    public DocumentStore.Document<GrammarCatalog> updateAccess(@PathVariable String kind,@PathVariable UUID id,@RequestBody AccessRequest input,@AuthenticationPrincipal Jwt jwt) {
+        editor.updateAccess(kind,id,input.accessMode(),input.requiredFeatureKey(),jwt.getSubject());
+        return editor.get(kind,id);
+    }
     @GetMapping("/{kind}/page") public com.lyreo.platform.content.CatalogPage<GrammarCatalogSource.Summary> page(@PathVariable String kind,@RequestParam(defaultValue="") String q,@RequestParam(required=false) UUID parentId,@RequestParam(defaultValue="") String status,@RequestParam(defaultValue="") String access,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="30") int size) {
         var items=list(kind,q,parentId,status,access,page,size);
         return new com.lyreo.platform.content.CatalogPage<>(items,source.count(kind,q,parentId,status,access),page,size);

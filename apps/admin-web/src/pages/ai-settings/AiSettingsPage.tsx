@@ -294,7 +294,7 @@ export function AiSettingsPage() {
         value={activeTab}
         onValueChange={(value) =>
           navigate(
-            { pathname: location.pathname, hash: `#${value}` },
+            { pathname: location.pathname, search: location.search, hash: `#${value}` },
             { replace: true },
           )
         }
@@ -639,7 +639,7 @@ export function AiSettingsPage() {
                             <TableCell>{r.model || "—"}</TableCell>
                             <TableCell>{r.priority}</TableCell>
                             <TableCell>
-                              <Badge variant={enabled ? "default" : "secondary"}>
+                              <Badge variant={enabled ? "success" : "secondary"}>
                                 {t(`aiSettings.${status}`)}
                               </Badge>
                             </TableCell>

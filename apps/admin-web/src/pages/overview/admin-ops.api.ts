@@ -52,6 +52,8 @@ export type LearnerSkillSummary = {
 export type LearnerWeaknessSummary = {
   weaknessType: string;
   weaknessKey: string;
+  label?: string | null;
+  labelEn?: string | null;
   severity: number;
   sampleCount: number;
   updatedAt: string | null;
@@ -63,6 +65,58 @@ export type LearnerAnalyticsOverview = {
   week: LearnerActivityWindow;
   skills: LearnerSkillSummary[];
   weaknesses: LearnerWeaknessSummary[];
+};
+
+export type DailyActivityPoint = {
+  date: string;
+  studySeconds: number;
+  lessonCount: number;
+  vocabularyReviewCount: number;
+  grammarAnswerCount: number;
+  toeicQuestionCount: number;
+};
+
+export type EnrolledPathProgress = {
+  pathId: string;
+  pathName: string;
+  level: string;
+  status: string;
+  completedItems: number;
+  totalItems: number;
+  startedAt: string;
+};
+
+export type UnlockedBadge = {
+  achievementId: string;
+  code: string;
+  title: string;
+  badgeTier: string;
+  badgeAssetId: string | null;
+  unlockedAt: string;
+};
+
+export type PracticeBreakdown = {
+  lessonsCompleted: number;
+  lessonsInProgress: number;
+  vocabCardsTotal: number;
+  vocabCardsMastered: number;
+  grammarAttempts: number;
+  grammarAccuracyPct: number;
+  toeicAttempts: number;
+  bestToeicScore: number | null;
+};
+
+export type AdminLearnerStudyProfile = {
+  hasHistory: boolean;
+  today: LearnerActivityWindow;
+  week: LearnerActivityWindow;
+  month: LearnerActivityWindow;
+  dailySeries: DailyActivityPoint[];
+  skills: LearnerSkillSummary[];
+  weaknesses: LearnerWeaknessSummary[];
+  enrolledPaths: EnrolledPathProgress[];
+  unlockedAchievements: UnlockedBadge[];
+  breakdown: PracticeBreakdown;
 };
 
 export const missionMetrics = [
@@ -153,6 +207,12 @@ export type RewardPolicyConfig = {
   directLessonActivityDiamondsEnabled: boolean;
   cutoverEffectiveAt: string | null;
   xpPerLevel: number;
+  xpGrowthPerLevel?: number;
+  xpLevelMultiplier?: number;
+  maxLevel?: number;
+  milestoneInterval?: number;
+  milestoneDiamondBase?: number;
+  milestoneDiamondGrowth?: number;
 };
 
 export type FeatureDefinition = {
@@ -330,6 +390,13 @@ export function fetchAdminChatSummary(signal?: AbortSignal) {
   return api<AdminChatSummary>('/api/v1/admin/chat/summary', { signal });
 }
 
+export function fetchLearnerStudyProfile(learnerId: string, signal?: AbortSignal) {
+  return api<AdminLearnerStudyProfile>(
+    `/api/v1/admin/analytics/learners/${encodeURIComponent(learnerId)}/study-profile`,
+    { signal },
+  );
+}
+
 export function fetchContentMediaList(
   options: { page?: number; size?: number; query?: string; kind?: string } = {},
   signal?: AbortSignal,
@@ -361,4 +428,10 @@ export async function fetchContentMediaBlob(id: string, signal?: AbortSignal) {
     { responseType: 'blob', signal },
   );
   return response.data;
+}
+
+export function deleteContentMedia(id: string) {
+  return api<void>(`/api/v1/admin/content-media/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
 }

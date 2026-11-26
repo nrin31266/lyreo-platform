@@ -1,6 +1,7 @@
 import { RiAddLine, RiArrowGoBackLine, RiDeleteBinLine, RiSearchLine } from "@remixicon/react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { PosTag } from "@/components/ContentBadges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -128,7 +129,7 @@ export function SenseEditor({ value, onChange, selectedId, select, document, dir
       {active && item && <section key={active.id} className="grid min-w-0 gap-4" aria-label={t("library.editSense")}>
         <div className="flex flex-wrap items-center gap-2 border-b pb-3">
           <h2 className="font-semibold">{t("library.senseNumber", { number: value.senses.indexOf(active) + 1 })}</h2>
-          <Badge variant="outline">{part(item.partOfSpeech)}</Badge>
+          <PosTag pos={item.partOfSpeech} label={part(item.partOfSpeech)} />
           <Button type="button" className="ml-auto" size="icon-sm" variant="ghost"
             aria-label={t("library.removeSense")} tooltip={t("library.help.removeSense")}
             onClick={() => removeSense(active)}><RiDeleteBinLine aria-hidden="true" /></Button>

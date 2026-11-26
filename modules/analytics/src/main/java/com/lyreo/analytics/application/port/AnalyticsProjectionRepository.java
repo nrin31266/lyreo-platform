@@ -1,6 +1,7 @@
 package com.lyreo.analytics.application.port;
 
 import com.lyreo.analytics.domain.AdminAnalyticsSummary;
+import com.lyreo.analytics.domain.AdminLearnerStudyProfile;
 import com.lyreo.analytics.domain.AnalyticsOverview;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -51,5 +52,9 @@ public interface AnalyticsProjectionRepository {
 
     default AdminAnalyticsSummary summarizePlatform(LocalDate todayUtc) {
         return new AdminAnalyticsSummary(0, 0, 0L, 0, 0, 0, 0, List.of(), List.of());
+    }
+
+    default AdminLearnerStudyProfile loadAdminStudyProfile(UUID learnerId, LocalDate todayUtc) {
+        return AdminLearnerStudyProfile.empty(todayUtc);
     }
 }

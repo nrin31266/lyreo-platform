@@ -36,8 +36,8 @@ public class GamificationConfiguration {
     }
 
     @Bean
-    XpLedger xpLedger(NamedParameterJdbcTemplate jdbc) {
-        return new JdbcXpLedger(jdbc);
+    XpLedger xpLedger(NamedParameterJdbcTemplate jdbc, DiamondLedger diamondLedger) {
+        return new JdbcXpLedger(jdbc, diamondLedger);
     }
 
     @Bean

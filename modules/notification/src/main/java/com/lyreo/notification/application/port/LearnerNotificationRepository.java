@@ -10,7 +10,7 @@ public interface LearnerNotificationRepository {
 
     List<LearnerNotification> listPublishedForAudience(String learnerTier);
 
-    Optional<LearnerNotification> findById(UUID id);
+    Optional<LearnerNotification> findByIdForUpdate(UUID id);
 
     LearnerNotification insert(LearnerNotification item);
 

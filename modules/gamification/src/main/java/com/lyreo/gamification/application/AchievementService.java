@@ -100,7 +100,7 @@ public class AchievementService {
                         def.id(),
                         now
                     ),
-                    config.normalizedXpPerLevel()
+                    config
                 );
             }
 

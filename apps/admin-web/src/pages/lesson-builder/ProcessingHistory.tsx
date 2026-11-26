@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { RiCodeSSlashLine } from '@remixicon/react';
 import { Button } from '@/components/ui/button';
+import { statusBadgeVariant } from '@/components/ContentBadges';
 import { Badge } from '@/components/ui/badge';
 import { CatalogError, CatalogSkeleton } from '@/pages/lessons/CatalogFeedback';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -41,7 +42,7 @@ export function ProcessingHistory({ lessonId, jobs }: { lessonId: string; jobs: 
     const llm = job.usage.filter(call => task(call, job.operation) === 'LLM');
     const queueMs = job.startedAt && job.createdAt ? Math.max(0, Date.parse(job.startedAt) - Date.parse(job.createdAt)) : undefined;
     return <article className="studio-history-job" key={job.jobId}>
-      <header><div><h3>{describe(job.operation)}</h3><Badge variant={job.status === 'FAILED' ? 'destructive' : job.status === 'SUCCEEDED' ? 'success' : 'secondary'}>{describe(job.status)}</Badge></div><Button size="sm" variant="outline" aria-expanded={debugId === job.jobId} onClick={() => setDebugId(debugId === job.jobId ? undefined : job.jobId)}><RiCodeSSlashLine />{t('processingHistory.debug')}</Button></header>
+      <header><div><h3>{describe(job.operation)}</h3><Badge variant={statusBadgeVariant(job.status)}>{describe(job.status)}</Badge></div><Button size="sm" variant="outline" aria-expanded={debugId === job.jobId} onClick={() => setDebugId(debugId === job.jobId ? undefined : job.jobId)}><RiCodeSSlashLine />{t('processingHistory.debug')}</Button></header>
       <div className="studio-history-time">{job.createdAt && <time dateTime={job.createdAt}>{new Date(job.createdAt).toLocaleString(i18n.language, { dateStyle: 'short', timeStyle: 'short' })}</time>}<JobDuration job={job} />{queueMs != null && <span>{t('processingHistory.queue', { seconds: (queueMs / 1000).toFixed(1) })}</span>}{(job.attemptCount ?? 0) > 1 && <span>{t('processingHistory.attempts', { count: job.attemptCount })}</span>}</div>
       {activeJob(job) && <p className="studio-help">{describe(job.currentStep || job.operation)}{job.status === 'RETRY_WAIT' && job.nextRetryAt ? ` · ${t('lessonAuthoring.retryAt', { time: new Date(job.nextRetryAt).toLocaleString(i18n.language) })}` : ''}</p>}
       {job.errorMessage && <p className="studio-history-error">{job.errorCode}: {job.errorMessage}</p>}

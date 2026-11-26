@@ -45,6 +45,8 @@ public record AnalyticsOverview(
         String weaknessKey,
         BigDecimal severity,
         int sampleCount,
-        Instant updatedAt
+        Instant updatedAt,
+        String label,
+        String labelEn
     ) {}
 }

@@ -34,6 +34,12 @@ is 1–100, default 20. Detail/list add nullable `nextRetryAt`, `errorCode`, saf
 and nullable `finishedAt` timestamps from persisted state. Elapsed time semantics and the
 Admin-only SSE event/snapshot boundary are owned by the [jobs protocol](background-jobs.md).
 
+## Learner announcements
+
+`GET /api/v1/notifications` requires LEARNER and returns published, active announcements for
+the learner's current audience. The learner response contains `id`, `title`, `body`, `category`
+and nullable `publishedAt`. Admin authoring uses `/api/v1/admin/notifications`. Editing a
+published item with omitted `publishedAt` preserves its original publication time.
 ## Admin classification and source media
 
 All endpoints below require ADMIN. `/api/v1/admin/lesson-channels/sync-configuration` returns

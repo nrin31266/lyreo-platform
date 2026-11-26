@@ -72,14 +72,25 @@
   "progress": {
     "back": "← Trang chủ",
     "title": "Tiến độ của bạn",
-    "lead": "Analytics là projection tổng hợp. Lesson, TOEIC, Vocabulary và Curriculum vẫn sở hữu progress và lịch sử attempt chi tiết của chúng.",
     "listening": "Nghe",
     "speaking": "Nói",
     "vocabulary": "Từ vựng",
     "grammar": "Ngữ pháp",
     "week": "Tuần này",
-    "weekValue": "2 giờ 45 phút · 5 ngày",
-    "weekMeta": "12 lượt ôn từ · 3 bài học · 1 TOEIC drill"
+    "activitySummary": "{{minutes}} phút học · {{days}} ngày hoạt động",
+    "toeicListening": "TOEIC Nghe",
+    "toeicReading": "TOEIC Đọc"
+  },
+  "notifications": {
+    "title": "Thông báo",
+    "empty": "Chưa có thông báo mới",
+    "emptyHelp": "Thông tin từ Lyreo sẽ xuất hiện tại đây.",
+    "categories": {
+      "SYSTEM": "Hệ thống",
+      "STUDY_REMINDER": "Nhắc học",
+      "REWARD": "Phần thưởng",
+      "PROMO": "Ưu đãi"
+    }
   },
   "settings": {
     "back": "← Trang chủ",

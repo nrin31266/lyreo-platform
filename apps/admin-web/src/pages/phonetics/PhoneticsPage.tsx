@@ -9,9 +9,9 @@ import { useIpaAudio } from './useIpaAudio';
 export function PhoneticsPage() {
   const { t } = useTranslation('admin');
   const [params, setParams] = useSearchParams();
-  const selected = ipaExample(params.get('sound') ?? '') ?? ipaExample('ŋ')!;
+  const selected = ipaExample(params.get('sound') ?? '');
   const audio = useIpaAudio();
-  const credit = ipaAudioCredits[selected.word];
+  const credit = selected && ipaAudioCredits[selected.word];
 
   return <section className="mx-auto grid w-full max-w-7xl gap-6">
     <header className="grid gap-1">
@@ -26,10 +26,10 @@ export function PhoneticsPage() {
           <h2 id={`ipa-${group}`} className="font-semibold">{t(`phonetics.group.${group}`)}</h2>
           <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5 xl:grid-cols-8">
             {examples.map(example => <li key={example.ipa}>
-              <button type="button" aria-pressed={selected.ipa === example.ipa}
+              <button type="button" aria-pressed={selected?.ipa === example.ipa}
                 aria-label={t('phonetics.selectSound', { sound: example.ipa, word: example.word })}
                 className={cn('grid min-h-16 w-full content-center gap-0.5 rounded-lg border px-2 py-1 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
-                  selected.ipa === example.ipa && 'border-primary bg-primary/10')}
+                  selected?.ipa === example.ipa && 'border-primary bg-primary/10')}
                 onClick={() => {
                   setParams({ sound: example.ipa }, { replace: true });
                   audio.toggle(example, 'sequence');
@@ -41,7 +41,7 @@ export function PhoneticsPage() {
           </ul>
         </section>)}
       </div>
-      <aside className="grid gap-4 rounded-xl border p-4 lg:sticky lg:top-4" aria-label={t('phonetics.sample')} id="ipa-sample">
+      {selected && <aside className="grid gap-4 rounded-xl border p-4 lg:sticky lg:top-4" aria-label={t('phonetics.sample')} id="ipa-sample">
         <div className="grid gap-1" role="status">
           <h2 className="text-3xl font-semibold">/{selected.ipa}/</h2>
           <p lang="en-GB"><strong>{selected.word}</strong> <span className="text-muted-foreground">/{selected.transcription}/</span></p>
@@ -59,7 +59,7 @@ export function PhoneticsPage() {
           <a href={selected.soundSource} className="underline" target="_blank" rel="noreferrer">PolyU</a>
           <a href={selected.wordAudio.source} className="underline" target="_blank" rel="noreferrer">Oxford Learner’s Dictionaries</a>
         </p>}
-      </aside>
+      </aside>}
     </div>
   </section>;
 }

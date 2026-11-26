@@ -381,6 +381,10 @@
     "empty": "No matching lessons.",
     "lesson": "Lesson",
     "status": "Status",
+    "level": "Level",
+    "duration": "Duration",
+    "activities": "Activities",
+    "access": "Access",
     "updated": "Updated",
     "actions": "Actions",
     "editMetadata": "Edit information and categories",
@@ -495,9 +499,7 @@
     "hiddenShort": "Hidden",
     "categoryDefaultName": "Default name (English)",
     "categoryVietnameseName": "Vietnamese name (optional)",
-    "editMetadataShort": "Edit",
-    "plusAccessLabel": "Require Lyreo Plus (lesson.plus-lessons)",
-    "togglePlusAccess": "Toggle Plus access for {{title}}"
+    "editMetadataShort": "Edit"
   },
   "waveform": {
     "overview": "Full video",
@@ -616,6 +618,15 @@
       "SPEAKING": "Speaking",
       "VOCABULARY": "Vocabulary",
       "GRAMMAR": "Grammar"
+    },
+    "workspaceHelp": "Search, filter, and manage learner profiles, Free/Plus access, and rewards in one workspace.",
+    "totalCount": "{{count}} learners",
+    "inspectorEmptyTitle": "Select a learner",
+    "inspectorEmptyHelp": "Pick a learner from the directory to view progress, Free/Plus access, and rewards.",
+    "inspectorTabs": {
+      "overview": "Profile & Progress",
+      "plan": "Free & Plus",
+      "rewards": "XP & Diamonds"
     }
   },
   "navigation": {
@@ -644,11 +655,10 @@
     "profiles": "Learner profiles",
     "progress": "Progress and results",
     "rewards": "Missions and rewards",
-    "notifications": "Announcements & feed",
+    "notifications": "Learner announcements",
     "conversations": "AI voice roleplay",
     "jobs": "Processing jobs",
     "imports": "Data imports",
-    "media": "Media library",
     "providers": "AI providers",
     "routes": "AI routing",
     "soon": "Coming soon",
@@ -656,7 +666,8 @@
     "organization": "Categories & channels",
     "plans": "Free & Plus plans",
     "missions": "Missions & rules",
-    "achievements": "Achievements & badges"
+    "achievements": "Achievements & badges",
+    "settings": "Settings"
   },
   "captions": {
     "useManualTrack": "Use publisher-provided English captions",
@@ -882,7 +893,13 @@
     "chooseVoice": "Choose",
     "sampleFailed": "Unable to load this preview. Try listening again.",
     "prepareSamples": "Prepare missing voice previews",
-    "samplesPreparing": "Preparing voice previews"
+    "samplesPreparing": "Preparing voice previews",
+    "ttsSpeed": "Reading speed",
+    "ttsSpeedHelp": "Slower speed helps A1 beginners catch word boundaries cleanly.",
+    "ttsSpeedSlow": "0.8× Slow (Beginner)",
+    "ttsSpeedGentle": "0.9× Gentle",
+    "ttsSpeedNormal": "1.0× Normal",
+    "ttsSpeedBrisk": "1.15× Brisk"
   },
   "authoringPrompt": {
     "trigger": "AI prompt",
@@ -1088,9 +1105,8 @@
     "studyReadiness": "Practice readiness",
     "clozeReady": "Cloze ready",
     "clozeMissing": "No exact cloze match",
-    "accessMode": "Pack access",
     "accessPublic": "Free / Public",
-    "accessPlus": "Plus restricted",
+    "accessPlus": "Lyreo Plus",
     "upgradeConflict": "Upgrade conflict"
   },
   "phonetics": {
@@ -1940,7 +1956,9 @@
     "questionImages": "Images",
     "readingMediaTranslation": "Images & translation",
     "toeicNoPartQuestions": "Part {{part}} has no questions",
-    "toeicNoPartQuestionsHelp": "Check the imported test structure or choose another Part."
+    "toeicNoPartQuestionsHelp": "Check the imported test structure or choose another Part.",
+    "freeBadge": "Free",
+    "plusBadge": "Plus"
   },
   "pagination": {
     "label": "Pagination",
@@ -2207,7 +2225,6 @@
     "confirmDelete": "Delete permanently",
     "coverImage": "Cover image",
     "noCover": "No cover image",
-    "accessTier": "Access tier",
     "accessFree": "Free (available to all learners)",
     "accessPlus": "Lyreo Plus (requires membership)",
     "requiredTag": "Required",
@@ -2218,8 +2235,35 @@
     },
     "graph": {
       "simulatorTitle": "Learner unlock simulator",
-      "simulatorHelp": "Toggle Free/Plus tier or click steps below to test prerequisite unlocks.",
-      "resetSim": "Reset simulation"
+      "simulatorHelp": "Click any stepping stone to inspect or simulate progression across chapters.",
+      "resetSim": "Reset",
+      "simulateFree": "Simulate Free",
+      "simulatePlus": "Simulate Plus",
+      "completedCount": "{{done}} / {{total}} completed",
+      "chapterBadge": "Chapter {{number}}",
+      "startHere": "Play",
+      "bossBadge": "Boss",
+      "bonusSideQuest": "Bonus",
+      "mainTrail": "Main path",
+      "branchTrail": "Side quest",
+      "stageAriaLabel": "Stage {{stage}}: {{title}}",
+      "inspectorTitle": "Stage Inspector",
+      "inspectorHelp": "Select any stepping stone on the level map to preview unlock rules and slice settings.",
+      "statusCompleted": "Completed",
+      "statusUnlocked": "Unlocked",
+      "statusLocked": "Locked",
+      "statusPlusLocked": "Plus Required",
+      "sliceLabel": "Content slice",
+      "fullSlice": "Full item",
+      "sliceSentences": "{{count}} sentences",
+      "sliceWords": "{{count}} words",
+      "sliceQuestions": "Part {{part}} · {{count}} Qs",
+      "sliceTurns": "{{count}} turns",
+      "markCompleted": "Mark stage completed",
+      "markIncomplete": "Mark incomplete",
+      "emptyMap": "Add chapters and items in the Editor tab to build the stepping-stone roadmap.",
+      "yes": "Yes",
+      "no": "No"
     },
     "diagnostics": {
       "total": "Total nodes",
@@ -2229,7 +2273,11 @@
       "tableTitle": "Reference & slice verification",
       "tableHelp": "Server check across all sections, slices, and Free vs Plus gating.",
       "content": "Resolved content",
-      "slice": "Slice size"
+      "slice": "Slice size",
+      "ok": "Valid",
+      "sliceIssue": "Slice issue",
+      "missingRef": "Missing",
+      "allSlice": "All"
     },
     "slicePicker": {
       "title": "Select & slice content",
@@ -2240,7 +2288,8 @@
       "toeicParts": "Included TOEIC parts",
       "questionCount": "Target question / turn count",
       "applySlice": "Use selected slice"
-    }
+    },
+    "uuidToggle": "UUID"
   },
   "learnerOperations": {
     "entitlementsTitle": "Entitlement grants",
@@ -2287,7 +2336,35 @@
     "adjustDialogHelp": "Creates an immutable ADMIN_ADJUSTMENT ledger entry with your audit reason.",
     "invalidAmount": "Enter a non-zero integer amount.",
     "amountDelta": "Diamond delta (+ / -)",
-    "confirmAdjust": "Apply adjustment"
+    "confirmAdjust": "Apply adjustment",
+    "membershipTitle": "Membership Plan",
+    "membershipHelp": "Upgrade this learner to Lyreo Plus across all premium modules or revert back to Free.",
+    "plusPlanBadge": "Lyreo Plus",
+    "freePlanBadge": "Free Plan",
+    "plusActiveUnlimited": "Full Lyreo Plus benefits are currently active with no expiration date.",
+    "plusActiveUntil": "Lyreo Plus active until {{date}}.",
+    "freePlanSummary": "Currently on Free plan with starter lessons and standard daily AI limits.",
+    "upgradeToPlus": "Upgrade to Plus",
+    "downgradeToFree": "Remove Plus (to Free)",
+    "plusPerkLessons": "Unlocks Plus lessons, curated workplace paths, and deep vocab decks",
+    "plusPerkExams": "Full access to TOEIC L&R exams and advanced grammar",
+    "plusPerkAi": "Expanded AI Voice Roleplay, Tutor Chat, and Shadowing daily limits",
+    "historyToggle": "Membership change history ({{count}})",
+    "upgradeDialogTitle": "Upgrade learner to Lyreo Plus",
+    "upgradeDialogHelp": "Activates all Lyreo Plus features immediately for this learner account.",
+    "durationLabel": "Membership duration",
+    "durations": {
+      "UNLIMITED": "Unlimited (no expiry)",
+      "30D": "30 days",
+      "90D": "90 days",
+      "365D": "1 year (365 days)"
+    },
+    "confirmUpgrade": "Confirm Plus upgrade",
+    "downgradeDialogTitle": "Remove Lyreo Plus membership",
+    "downgradeDialogHelp": "Revokes active Plus grants and returns this account to the Free tier immediately.",
+    "reasonOptional": "Reason (optional)",
+    "defaultDowngradeReason": "Admin removed Plus membership",
+    "confirmDowngrade": "Confirm remove Plus"
   },
   "overviewDashboard": {
     "title": "Platform Operations Overview",
@@ -2373,6 +2450,23 @@
     "noHistoryHelp": "This learner has not submitted lessons or practice sessions yet.",
     "todayWindow": "Today (UTC)",
     "weekWindow": "Last 7 days",
+    "monthWindow": "Last 30 days",
+    "activeDaysCount": "{{days}} active days",
+    "dailyChartTitle": "14-day study activity (minutes)",
+    "minutesLabel": "Minutes",
+    "practiceBreakdown": "Practice & milestones",
+    "lessonsDone": "Lessons completed",
+    "lessonsInProgress": "{{count}} in progress",
+    "vocabMastered": "Vocab mastered",
+    "grammarAccuracy": "Grammar accuracy",
+    "attemptsCount": "{{count}} attempts",
+    "toeicBest": "Best TOEIC score",
+    "noToeicYet": "No attempt",
+    "enrolledPathsTitle": "Enrolled learning paths",
+    "noEnrolledPaths": "Not enrolled in any learning path yet.",
+    "pathProgressCount": "{{completed}} / {{total}} stages",
+    "unlockedBadgesTitle": "Unlocked achievement badges",
+    "noBadgesUnlocked": "No achievement badges unlocked yet.",
     "windowSummary": "{{lessons}} lessons · {{vocab}} vocab",
     "skillsTitle": "Skill scores",
     "noSkills": "No skill ratings calculated yet.",
@@ -2392,7 +2486,20 @@
       "samples": "Samples"
     },
     "chartView": "Chart view",
-    "tableView": "Table view"
+    "tableView": "Table view",
+    "skills": {
+      "LISTENING": "Listening",
+      "SPEAKING": "Speaking",
+      "VOCABULARY": "Vocabulary",
+      "GRAMMAR": "Grammar",
+      "TOEIC_LISTENING": "TOEIC Listening",
+      "TOEIC_READING": "TOEIC Reading"
+    },
+    "weaknessTypes": {
+      "LESSON_ACTIVITY": "Lesson activity",
+      "TOEIC_SECTION": "TOEIC section",
+      "GRAMMAR_TOPIC": "Grammar topic"
+    }
   },
   "rewardsConsole": {
     "title": "Rewards, Missions & Feature Quotas",
@@ -2411,7 +2518,7 @@
     "policyTitle": "Global reward policy",
     "policyHelp": "Controls active rule versioning, XP level curve, and direct lesson Diamond rewards.",
     "ruleVersion": "Active rule version",
-    "xpPerLevel": "XP per level",
+    "xpPerLevel": "Base XP (Lv. 1 → Lv. 2)",
     "directDiamonds": "Award direct Diamonds on lesson completion",
     "directDiamondsHelp": "When disabled, Diamonds come exclusively from missions, achievements, and admin adjustments.",
     "saving": "Saving…",
@@ -2453,46 +2560,48 @@
       "occurredAt": "Occurred",
       "decision": "Decision",
       "learnerId": "Learner ID"
-    }
+    },
+    "xpGrowthPerLevel": "XP increase per level",
+    "maxLevel": "Max level cap",
+    "maxLevelHint": "Max level is hard-capped at 99. Each level scales by (Base + (L-1)*Growth) * Multiplier^(L-1), awarding Diamonds at every milestone interval and Lv. 99.",
+    "levelCurveTitle": "Level progression curve preview",
+    "levelCurveHelp": "Each level requires more XP than the last so early milestones feel rewarding while late mastery takes dedication.",
+    "levelStep": "Level milestone",
+    "stepXp": "XP to advance",
+    "cumulativeXp": "Total XP required",
+    "capReachedNote": "Lv. {{max}} reached · Total XP continues growing indefinitely",
+    "paceScenario": "Learner earning ~{{xp}} XP/day",
+    "paceYears": "Reaches the cap in ~{{years}} years",
+    "xpLevelMultiplier": "Level multiplier (1.00–1.25)",
+    "milestoneInterval": "Milestone interval (levels)",
+    "milestoneDiamondBase": "First milestone Diamonds",
+    "milestoneDiamondGrowth": "+Diamonds per milestone tier",
+    "milestoneRewardColumn": "Milestone Bonus"
   },
   "notificationsCenter": {
-    "title": "Learner Announcements & Feed",
-    "subtitle": "Publish clear announcements for Free or Plus learners and review readable platform activity.",
-    "scopeTitle": "Operational event stream",
-    "scopeDescription": "Background jobs and entitlement security events stream live in the console. End-user mobile push notifications remain outside this web admin console.",
-    "jobsFeedTitle": "Recent job alerts",
-    "jobsFeedHelp": "Latest background tasks across content preparation, alignment, and speech scoring.",
-    "securityFeedTitle": "Recent entitlement events",
-    "securityFeedHelp": "Server grant, revocation, and denial audit trail.",
-    "streamStatus": {
-      "connected": "SSE Live",
-      "connecting": "Connecting…",
-      "polling": "Polling fallback"
-    },
+    "title": "Learner announcements",
+    "subtitle": "Manage in-app announcements and look up access and quota events.",
     "columns": {
-      "type": "Job type",
-      "status": "Status",
-      "progress": "Progress",
       "time": "Time",
       "feature": "Feature",
-      "decision": "Decision"
+      "decision": "Event",
+      "account": "Account"
     },
     "createButton": "New announcement",
     "createTitle": "Create announcement",
     "editTitle": "Edit announcement",
     "deleteButton": "Delete announcement",
     "deleteConfirm": "Delete announcement “{{title}}” permanently?",
-    "dialogHelp": "Write a concise message targeted to All learners, Free users, or Plus members.",
-    "emptyTitle": "No announcements published",
-    "emptyHelp": "Create an announcement to reach learners in the mobile inbox.",
-    "publishedTimestamp": "Updated {{time}}",
-    "activityTitle": "Readable access & entitlement events",
-    "activityHelp": "Human-friendly summary of recent grant and quota checks.",
+    "dialogHelp": "Choose an audience and publish to show this message in the Lyreo app. Only admins can see drafts.",
+    "emptyTitle": "No announcements yet",
+    "emptyHelp": "Write the first announcement for learners.",
+    "publishedTimestamp": "Publication time {{time}}",
+    "activityTitle": "Access and quota log",
+    "activityHelp": "The 30 most recent events for checking grants, revocations and quota use by feature. This log is visible to admins only.",
     "activityEmpty": "No recent events recorded.",
-    "activitySentence": "Feature “{{feature}}” checked with outcome: {{decision}}",
     "tabs": {
-      "announcements": "Announcements",
-      "activity": "Activity feed"
+      "announcements": "In-app announcements",
+      "activity": "Access and quota log"
     },
     "categories": {
       "SYSTEM": "System",
@@ -2510,7 +2619,27 @@
       "body": "Message body",
       "category": "Category",
       "audience": "Target audience"
-    }
+    },
+    "decisions": {
+      "GRANT_CREATED": "Access granted",
+      "GRANT_REVOKED": "Access revoked",
+      "QUOTA_UPDATED": "Quota updated",
+      "ALLOWED": "Allowed",
+      "DENIED": "Denied",
+      "DENIED_UNAVAILABLE": "Feature unavailable",
+      "DENIED_GRANT_REQUIRED": "Access required",
+      "DENIED_CAPACITY": "Capacity reached",
+      "DENIED_QUOTA": "Quota exhausted",
+      "RESERVED": "Usage reserved",
+      "SETTLED": "Usage counted",
+      "RELEASED": "Usage returned"
+    },
+    "deliveryHelp": "Published announcements appear when eligible learners open Notifications from Home in the Lyreo app. Drafts stay in Admin. Delivery is in-app only.",
+    "updatedTimestamp": "Updated {{time}}",
+    "expired": "Expired",
+    "scheduled": "Scheduled",
+    "auditLimit": "Limit {{limit}}",
+    "learnerLink": "Profile {{id}}"
   },
   "conversationsConsole": {
     "title": "AI Voice Roleplay Studio",
@@ -2538,7 +2667,7 @@
     "deleteConfirm": "Delete roleplay scenario “{{name}}”? Existing learner history stays preserved.",
     "dialogHelp": "Define persona, setting, objectives, TTS voice, and Free/Plus access.",
     "rosterTitle": "Roleplay scenarios",
-    "emptyHelp": "Create a real-world speaking scenario or run the demo seed script.",
+    "emptyHelp": "Create a real-world speaking scenario to begin.",
     "turnsSummary": "{{turns}} target turns · ~{{minutes}} min",
     "fields": {
       "code": "Scenario code",
@@ -2555,7 +2684,8 @@
       "objectives": "Learner objectives (one per line)",
       "targetTurns": "Target turns",
       "estimatedMinutes": "Estimated minutes",
-      "plusOnly": "Require Lyreo Plus (speaking.roleplay)"
+      "plusOnly": "Require Lyreo Plus (speaking.roleplay)",
+      "objectivesClean": "Conversation goals"
     },
     "playground": {
       "title": "Live roleplay test",
@@ -2564,7 +2694,44 @@
       "coachingTips": "AI coaching tips",
       "inputPlaceholder": "Type a learner response to test the AI roleplay…",
       "send": "Send turn",
-      "sending": "Thinking…"
+      "sending": "Thinking…",
+      "playAudio": "Listen",
+      "loadingAudio": "Generating…",
+      "autoSpeak": "Auto voice",
+      "recordMic": "Speak (Mic)",
+      "stopMic": "Stop",
+      "transcribing": "Recognizing speech…",
+      "micUnsupported": "Browser microphone recording is unavailable here. Type your response below.",
+      "micDenied": "Microphone access was denied or no audio was captured.",
+      "tokensMeta": "{{tokens}} tokens"
+    },
+    "categories": {
+      "DAILY_LIFE": "Daily life",
+      "TRAVEL": "Travel",
+      "WORKPLACE": "Workplace",
+      "HEALTH": "Health",
+      "SHOPPING": "Shopping",
+      "INTERVIEW": "Interview",
+      "BUSINESS": "Business"
+    },
+    "viewTabs": {
+      "learner": "Learner view",
+      "config": "AI & Token config"
+    },
+    "statusLabels": {
+      "DRAFT": "Draft",
+      "PUBLISHED": "Published",
+      "ARCHIVED": "Archived"
+    },
+    "learnerPreview": {
+      "yourMission": "Your role & goals",
+      "settingTitle": "Scene setting",
+      "partnerTitle": "AI Conversation Partner",
+      "listenOpening": "Listen to opening line",
+      "playingVoice": "Playing…",
+      "tokenBudgetTitle": "Low-token Voice pipeline",
+      "tokenBudgetHelp": "Speech recognition (WhisperX) and voice synthesis (Kokoro) run locally at 0 LLM tokens. Only the last 6 turns are sent per LLM request, capped at 160 output tokens.",
+      "estimatedBadge": "~{{minutes}} min · {{turns}} turns"
     }
   },
   "mediaLibrary": {
@@ -2583,40 +2750,116 @@
       "all": "All media",
       "image": "Images",
       "audio": "Audio"
+    },
+    "viewGrid": "Grid",
+    "viewTable": "Table",
+    "delete": "Delete",
+    "deleting": "Deleting…",
+    "deleteTitle": "Delete media asset",
+    "deleteConfirm": "Permanently remove “{{name}}”? Assets referenced by published content cannot be deleted.",
+    "systemAsset": "System",
+    "uploadedAsset": "Uploaded",
+    "columns": {
+      "file": "Asset",
+      "type": "Format",
+      "size": "Size",
+      "source": "Origin",
+      "actions": "Actions"
     }
   },
   "authRedirectError": "Could not redirect automatically to the sign-in screen.",
   "signInAction": "Sign in",
   "plansConsole": {
     "title": "Free vs Lyreo Plus Plans",
-    "subtitle": "Manage tier benefits, daily AI quotas, and content gating across lessons, vocab packs, paths, and roleplay.",
+    "subtitle": "Manage tier benefits, daily AI quotas, and content gating across lessons, vocab packs, TOEIC, grammar, and paths.",
     "freeCard": {
-      "title": "Free Plan",
-      "description": "Core daily learning loop with foundational content and standard daily AI allowances.",
-      "item1": "Full access to starter lessons, core A2–B1 paths, and IPA chart",
-      "item2": "Core Vocabulary SRS decks & TOEIC starter sets",
-      "item3": "Daily quota for AI Tutor chat, shadowing pronunciation, and roleplay"
+      "title": "Start learning English",
+      "description": "Core daily learning loop with foundational content and standard AI allowances.",
+      "item1": "Starter lessons, core A2–B1 paths, and interactive IPA chart",
+      "item2": "Core Vocabulary SRS decks & beginner TOEIC drills",
+      "item3": "Daily quota for Shadowing pronunciation scoring",
+      "item4": "Daily AI Tutor grammar & usage explanations"
     },
     "plusCard": {
       "title": "Lyreo Plus",
-      "description": "Unlocks full TOEIC exams, workplace paths, deep vocabulary packs, and expanded AI limits.",
-      "item1": "Full TOEIC L&R exam simulations and advanced B1–C1 lessons",
-      "item2": "Workplace & Technology vocabulary packs + speaking roleplays",
-      "item3": "Expanded daily limits across AI Voice Roleplay and Tutor chat",
-      "item4": "Expanded vocabulary saved-card capacity"
+      "headline": "Master faster every day",
+      "description": "Unlocks full TOEIC L&R exams, workplace paths, deep vocabulary packs, and 20x AI limits.",
+      "item1": "Full TOEIC L&R exam simulations (Parts 1–7) and B1–C1 lessons",
+      "item2": "Workplace, Business & Technology vocabulary packs",
+      "item3": "100 daily Shadowing evaluations & Studio voice playback",
+      "item4": "200 daily AI Tutor turns + detailed grammar coaching",
+      "item5": "5,000 personal flashcard capacity & priority badge milestones"
     },
     "contentMatrixTitle": "Content access matrix",
     "contentMatrixHelp": "Toggle whether each content item is Free (PUBLIC) or Plus-exclusive (FEATURE).",
     "tierColumn": "Access tier",
     "plusToggle": "Plus only",
+    "requirePlus": "Require Lyreo Plus",
     "packTitle": "Vocabulary pack",
-    "scenarioTitle": "Roleplay scenario",
     "tabs": {
       "lessons": "Lessons",
       "vocab": "Vocab packs",
       "paths": "Learning paths",
-      "speaking": "Voice roleplay"
+      "toeic": "TOEIC tests",
+      "grammar": "Grammar topics"
+    },
+    "tiers": {
+      "FREE": "Free",
+      "PLUS": "Lyreo Plus"
+    },
+    "limitTypes": {
+      "PERIOD_USAGE": "Usage per period",
+      "CAPACITY": "Max capacity"
+    },
+    "periods": {
+      "DAY": "Per day",
+      "NONE": "Lifetime limit"
+    },
+    "features": {
+      "chat.tutor": "English AI Tutor Chat",
+      "grammar.advanced": "Advanced Grammar Practice",
+      "lesson.plus-lessons": "Plus Situational Lessons & Paths",
+      "speech.shadowing": "Shadowing Pronunciation Scoring",
+      "toeic.full-access": "Full TOEIC L&R Exams",
+      "vocabulary.plus-packs": "Plus Vocabulary Packs",
+      "vocabulary.saved-cards": "Saved Flashcard Capacity"
+    },
+    "comparisonTitle": "Free vs Plus Quota Comparison",
+    "comparisonHelp": "Compare and tune limits side by side across both tiers on the same row.",
+    "freeQuota": "Free limit",
+    "plusQuota": "Lyreo Plus limit",
+    "editPairTitle": "Edit feature limits (Free & Plus)",
+    "searchPlaceholder": "Search content title or pack…",
+    "allTiers": "All tiers",
+    "showingCount": "{{count}} items",
+    "questionsCount": "{{count}} Qs",
+    "toeicTest": "TOEIC Test",
+    "grammarTopic": "Grammar Topic",
+    "mainTabs": {
+      "quotas": "Feature Quotas",
+      "matrix": "Content Access Matrix"
+    },
+    "previewDialog": {
+      "trigger": "Preview Free & Plus",
+      "title": "Learner Plan Showcase Preview",
+      "subtitle": "Clean two-column comparison showing Free vs Lyreo Plus perks and live quotas.",
+      "freePrice": "Free forever",
+      "plusPrice": "Lyreo Plus",
+      "recommendedBadge": "Recommended",
+      "freeCta": "Your current plan",
+      "plusCta": "Upgrade to Lyreo Plus"
     }
+  },
+  "imageEditor": {
+    "uploadButton": "Upload & crop image",
+    "clearButton": "Clear",
+    "compressHelp": "PNG/JPEG/WebP up to 4 MB — auto-cropped and compressed to WebP.",
+    "cropTitle": "Crop & compress image",
+    "cropHelp": "Adjust frame and zoom before exporting {{width}}×{{height}} WebP.",
+    "zoomLabel": "Zoom",
+    "uploading": "Uploading…",
+    "confirmUpload": "Crop & upload" ,
+    "fileTooLarge": "Image exceeds 4 MB limit."
   },
   "missionsConsole": {
     "title": "Missions & Reward Rules",
@@ -2633,5 +2876,104 @@
     "badgeAsset": "Badge artwork (WebP)",
     "noBadge": "Default trophy icon",
     "threshold": "{{metric}} ≥ {{target}}"
+  },
+  "rewardsHub": {
+    "title": "Missions, Badges & Reward Rules",
+    "subtitle": "Manage daily and weekly quests, tiered WebP profile badges, and XP progression rules in one workspace.",
+    "diamondsLabel": "Diamonds",
+    "kpis": {
+      "activeMissions": "Active quests",
+      "badgesCatalog": "Profile badges",
+      "xpPolicy": "XP policy"
+    },
+    "categories": {
+      "ALL": "All categories",
+      "GENERAL": "General",
+      "VOCAB": "Vocabulary",
+      "VOCABULARY": "Vocabulary",
+      "LESSON": "Lessons",
+      "LESSONS": "Lessons",
+      "GRAMMAR": "Grammar",
+      "TOEIC": "TOEIC",
+      "STREAK": "Streak",
+      "MASTERY": "Mastery"
+    },
+    "recurrences": {
+      "ALL": "All cycles",
+      "DAILY": "Daily",
+      "WEEKLY": "Weekly",
+      "ONE_TIME": "One-time"
+    },
+    "difficulties": {
+      "EASY": "Easy",
+      "NORMAL": "Standard",
+      "HARD": "Challenging"
+    },
+    "tiers": {
+      "BRONZE": "Bronze",
+      "SILVER": "Silver",
+      "GOLD": "Gold",
+      "PLATINUM": "Platinum",
+      "LEGENDARY": "Legendary"
+    },
+    "metrics": {
+      "LESSON_COMPLETED": "Lessons completed",
+      "DISTINCT_LESSON_COMPLETED": "Distinct lessons",
+      "SHADOWING_SENTENCE": "Shadowing sentences",
+      "VOCABULARY_REVIEW": "Vocab reviews",
+      "TOEIC_DRILL_COMPLETED": "TOEIC drills",
+      "GRAMMAR_ANSWER": "Grammar questions",
+      "STREAK_DAYS": "Streak days"
+    }
+  },
+  "settingsHub": {
+    "title": "Platform Settings",
+    "subtitle": "Unified hub for admin workspace preferences, AI providers & routing, XP progression policy, and plan operations.",
+    "tabs": {
+      "general": "General & Modules",
+      "ai": "AI Providers & Routes",
+      "rewards": "XP & Milestones",
+      "operations": "Quotas & Operations",
+      "preferences": "Preferences"
+    },
+    "languageTitle": "Workspace Language",
+    "languageHelp": "Switch the admin console interface language between Vietnamese and English.",
+    "themeTitle": "Appearance & Theme",
+    "themeHelp": "Select light, dark, or system color appearance for the console.",
+    "themes": {
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "moduleDirectoryTitle": "Connected Platform Modules",
+    "moduleDirectoryHelp": "Direct shortcuts into module-level workflows and operational consoles.",
+    "modules": {
+      "curriculumTitle": "Curriculum Builder",
+      "curriculumDesc": "Configure 4+ TOEIC & fluency learning paths and stepping-stone slices.",
+      "plansTitle": "Plans & Content Matrix",
+      "plansDesc": "Manage Free vs Lyreo Plus limits, card showcase preview, and feature gating.",
+      "rewardsTitle": "Missions, Badges & XP Curve",
+      "rewardsDesc": "Author daily missions, WebP achievement badges, and exponential level rewards.",
+      "notificationsTitle": "Notification Center",
+      "notificationsDesc": "Broadcast announcements and audit outbound push delivery status.",
+      "jobsTitle": "Background Jobs & Imports",
+      "jobsDesc": "Monitor TTS/alignment pipelines and dataset ingestion workers."
+    },
+    "operationsQuotaTitle": "Live Free vs Lyreo Plus Quotas",
+    "operationsQuotaHelp": "Current side-by-side feature allowances enforced across the API.",
+    "manageInPlans": "Edit in Plans Console"
+  },
+  "common": {
+    "accessTierLabel": "Access tier",
+    "tierFree": "Free",
+    "tierPlus": "Lyreo Plus",
+    "accessTierHelp": "Choose whether this item is open to Free learners or requires Lyreo Plus."
+  },
+  "speakingRoleplay": {
+    "fastVoiceReply": "Voice audio reply",
+    "liveVoiceTurn": "Speak live",
+    "recordingHelp": "Recording… tap Stop to send right away",
+    "stopAndSend": "Stop & Send",
+    "micUnavailable": "Microphone access unavailable or permission denied."
   }
 }

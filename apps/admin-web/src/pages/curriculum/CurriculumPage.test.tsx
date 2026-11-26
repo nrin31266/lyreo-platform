@@ -4,7 +4,6 @@ import { I18nextProvider } from 'react-i18next';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { i18n } from '@/i18n';
-import { fetchContentMediaList } from '@/pages/overview/admin-ops.api';
 import { CurriculumPage } from './CurriculumPage';
 import {
   createAdminCurriculumPath,
@@ -25,11 +24,6 @@ vi.mock('./curriculum.api', async (importOriginal) => ({
   createAdminCurriculumPath: vi.fn(),
   updateAdminCurriculumPath: vi.fn(),
   deleteAdminCurriculumPath: vi.fn(),
-}));
-
-vi.mock('@/pages/overview/admin-ops.api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/pages/overview/admin-ops.api')>()),
-  fetchContentMediaList: vi.fn(),
 }));
 
 const summary: AdminCurriculumPathSummary = {
@@ -81,12 +75,6 @@ beforeEach(async () => {
     missingItems: 0,
     lockedForFreeUsers: 0,
     checks: [],
-  });
-  vi.mocked(fetchContentMediaList).mockResolvedValue({
-    items: [],
-    total: 0,
-    page: 0,
-    size: 50,
   });
 });
 
@@ -194,4 +182,20 @@ it('opens delete confirmation dialog and deletes selected curriculum path', asyn
   fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }));
 
   await waitFor(() => expect(deleteAdminCurriculumPath).toHaveBeenCalledWith(samplePath.id));
+});
+
+it('switches to stepping-stone game map preview and simulates completing a stage', async () => {
+  show();
+  expect(await screen.findByDisplayValue('Foundation Path')).toBeInTheDocument();
+
+  const user = (await import('@testing-library/user-event')).default.setup();
+  await user.click(screen.getByRole('tab', { name: 'Interactive map' }));
+
+  expect(await screen.findByText('Chapter 1')).toBeInTheDocument();
+  expect(screen.getAllByText('Week 1').length).toBeGreaterThan(0);
+  const stageBtn = screen.getByRole('button', { name: /Stage 1/i });
+  await user.click(stageBtn);
+  await user.click(screen.getByRole('button', { name: 'Mark stage completed' }));
+
+  expect(screen.getByText('1 / 1 completed')).toBeInTheDocument();
 });

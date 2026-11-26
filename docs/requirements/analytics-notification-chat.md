@@ -16,12 +16,20 @@ models; producer module vẫn sở hữu attempts/progress. Không query reposit
 
 Initial projection dùng facts như Grammar wrong topic, Vocabulary Again, TOEIC
 wrong part và Shadowing mismatch/timing. AI recommendation chờ đủ learner history.
+TOEIC dùng số câu đúng và tổng số câu theo Part từ kết quả đã nộp. Sự kiện cũ chỉ có
+tổng Nghe/Đọc vẫn đọc được. Shadowing lấy tỷ lệ lỗi từ và điểm fluency từ lần chấm
+có điểm, không đưa bản ghi hoặc transcript sang Analytics. Mỗi lần nộp/chấm chỉ
+được tính một lần. Điểm yếu hiển thị cùng số mẫu trên Home/Progress và hồ sơ Admin.
 
 ### FR-NTF-001 — Realtime and notification boundary
 
 Notification truyền job progress/completed/failed, mission completed, level-up và
 system notifications. SSE phù hợp server→client MVP; transport có thể đổi mà không đổi domain event.
 
+Thông báo do Admin soạn xuất hiện trong mục Thông báo trên Trang chủ ứng dụng khi
+đã xuất bản, đến thời điểm đăng, chưa hết hạn và đúng nhóm nhận (tất cả, Free hoặc Plus).
+Ứng dụng tải lại danh sách khi mở mục này. Nhật ký cấp quyền và hạn mức thuộc Admin,
+giữ sự kiện theo tính năng và tài khoản. Thông báo do Admin soạn dùng kênh trong ứng dụng.
 
 ### FR-CHT-001 — English tutor boundary
 

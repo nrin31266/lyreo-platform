@@ -1,5 +1,6 @@
 import { RiRefreshLine as Refresh, RiHistoryLine as History, RiDeleteBinLine as Trash2 } from "@remixicon/react";
 import { Input } from "@/components/ui/input";
+import { statusBadgeVariant } from "@/components/ContentBadges";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -143,7 +144,7 @@ export function ChannelsPage({ embedded = false }: { embedded?: boolean }) {
                 </TableCell>
                 <TableCell className="whitespace-normal">
                   <div className="flex flex-col items-start gap-1">
-                    <Badge variant={active(c.syncStatus) ? "secondary" : c.syncError || c.syncStatus === "FAILED" ? "destructive" : c.syncedAt ? "success" : "outline"}>
+                    <Badge variant={statusBadgeVariant(active(c.syncStatus) ? c.syncStatus : c.syncError || c.syncStatus === "FAILED" ? "FAILED" : c.syncedAt ? "SUCCEEDED" : "UNCHECKED")}>
                       {active(c.syncStatus) ? t(`lessonAuthoring.labels.${c.syncStatus}`) : t(c.syncError || c.syncStatus === "FAILED" ? "lessonAuthoring.labels.FAILED" : c.syncedAt ? "catalog.synced" : "catalog.neverSynced")}
                     </Badge>
                     {c.syncedAt && <span className="text-xs tabular-nums text-muted-foreground">{new Date(c.syncedAt).toLocaleString(i18n.language, { dateStyle: "short", timeStyle: "short" })}</span>}

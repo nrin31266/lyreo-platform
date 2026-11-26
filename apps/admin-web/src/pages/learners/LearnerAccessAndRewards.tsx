@@ -1,10 +1,24 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { RiAddLine, RiCoinsLine, RiShieldCheckLine } from '@remixicon/react';
+import {
+  RiCheckLine,
+  RiCoinsLine,
+  RiShieldCheckLine,
+  RiVipCrownLine,
+} from '@remixicon/react';
+import { AccessTierBadge } from '@/components/ContentBadges';
+import { DiamondIcon } from '@/components/RewardIcons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -25,25 +39,29 @@ import {
   fetchLearnerGamification,
   fetchLearnerGrants,
   revokeLearnerGrant,
-  type EntitlementGrantEntry,
 } from './learners.api';
 
-function grantBadgeVariant(status: string): 'success' | 'destructive' | 'secondary' {
-  if (status === 'ACTIVE') return 'success';
-  if (status === 'REVOKED') return 'destructive';
-  return 'secondary';
+type PlusDurationPreset = 'UNLIMITED' | '30D' | '90D' | '365D';
+
+function computeValidUntil(preset: PlusDurationPreset): string | null {
+  if (preset === 'UNLIMITED') return null;
+  const days = preset === '30D' ? 30 : preset === '90D' ? 90 : 365;
+  return new Date(Date.now() + days * 86_400_000).toISOString();
 }
 
-function toIsoOrUndefined(localValue: string): string | undefined {
-  if (!localValue.trim()) return undefined;
-  const parsed = new Date(localValue);
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
-}
-
-export function LearnerAccessAndRewards({ learnerId }: { learnerId: string }) {
+export function LearnerAccessAndRewards({
+  learnerId,
+  section = 'all',
+}: {
+  learnerId: string;
+  section?: 'all' | 'plan' | 'rewards';
+}) {
   const { t, i18n } = useTranslation('admin');
   const client = useQueryClient();
-  const dateFormatter = new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium', timeStyle: 'short' });
+  const dateFormatter = new Intl.DateTimeFormat(i18n.language, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
   const numberFormatter = new Intl.NumberFormat(i18n.language);
 
   const grants = useQuery({
@@ -55,46 +73,60 @@ export function LearnerAccessAndRewards({ learnerId }: { learnerId: string }) {
     queryFn: ({ signal }) => fetchLearnerGamification(learnerId, signal),
   });
 
-  const [grantOpen, setGrantOpen] = useState(false);
-  const [featureKey, setFeatureKey] = useState<string>(entitlementFeatureKeys[0]);
-  const [validFrom, setValidFrom] = useState('');
-  const [validUntil, setValidUntil] = useState('');
-  const [sourceReference, setSourceReference] = useState('');
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [durationPreset, setDurationPreset] = useState<PlusDurationPreset>('UNLIMITED');
+  const [upgradeNote, setUpgradeNote] = useState('');
 
-  const [revokingGrant, setRevokingGrant] = useState<EntitlementGrantEntry | null>(null);
-  const [revokeReason, setRevokeReason] = useState('');
-  const [revokeError, setRevokeError] = useState<string | null>(null);
+  const [downgradeOpen, setDowngradeOpen] = useState(false);
+  const [downgradeReason, setDowngradeReason] = useState('');
 
   const [diamondOpen, setDiamondOpen] = useState(false);
   const [diamondAmount, setDiamondAmount] = useState('');
   const [diamondReason, setDiamondReason] = useState('');
   const [diamondError, setDiamondError] = useState<string | null>(null);
 
-  const createGrantMutation = useMutation({
-    mutationFn: () =>
-      createLearnerGrant({
-        userId: learnerId,
-        featureKey,
-        validFrom: toIsoOrUndefined(validFrom),
-        validUntil: toIsoOrUndefined(validUntil) ?? null,
-        sourceType: 'ADMIN_MANUAL',
-        sourceReference: sourceReference.trim() || undefined,
-      }),
+  const activeGrants = (grants.data ?? []).filter((g) => g.status === 'ACTIVE');
+  const isPlus = activeGrants.length > 0;
+  const expiryDate = activeGrants.find((g) => g.validUntil)?.validUntil ?? null;
+
+  const upgradeMutation = useMutation({
+    mutationFn: async () => {
+      const existing = grants.data ?? [];
+      const activeKeys = new Set(
+        existing.filter((g) => g.status === 'ACTIVE').map((g) => g.featureKey),
+      );
+      const missingKeys = entitlementFeatureKeys.filter((key) => !activeKeys.has(key));
+      const validUntil = computeValidUntil(durationPreset);
+      const sourceReference = upgradeNote.trim() || 'Admin Plus Membership';
+      await Promise.all(
+        missingKeys.map((key) =>
+          createLearnerGrant({
+            userId: learnerId,
+            featureKey: key,
+            validUntil,
+            sourceType: 'ADMIN_MANUAL',
+            sourceReference,
+          }),
+        ),
+      );
+    },
     onSuccess: () => {
-      setGrantOpen(false);
-      setValidFrom('');
-      setValidUntil('');
-      setSourceReference('');
+      setUpgradeOpen(false);
+      setUpgradeNote('');
+      setDurationPreset('UNLIMITED');
       void client.invalidateQueries({ queryKey: ['learner-entitlement-grants', learnerId] });
     },
   });
 
-  const revokeMutation = useMutation({
-    mutationFn: (input: { grantId: string; reason: string }) => revokeLearnerGrant(input.grantId, input.reason),
+  const downgradeMutation = useMutation({
+    mutationFn: async () => {
+      const reason =
+        downgradeReason.trim() || t('learnerOperations.defaultDowngradeReason');
+      await Promise.all(activeGrants.map((grant) => revokeLearnerGrant(grant.id, reason)));
+    },
     onSuccess: () => {
-      setRevokingGrant(null);
-      setRevokeReason('');
-      setRevokeError(null);
+      setDowngradeOpen(false);
+      setDowngradeReason('');
       void client.invalidateQueries({ queryKey: ['learner-entitlement-grants', learnerId] });
     },
   });
@@ -121,89 +153,129 @@ export function LearnerAccessAndRewards({ learnerId }: { learnerId: string }) {
   const summary = gamification.data;
 
   return (
-    <div className="grid gap-5">
-      <Card size="sm">
+    <div className={section === 'all' ? 'grid gap-5 xl:grid-cols-12' : 'grid gap-5'}>
+      {section !== 'rewards' && (
+      <Card size="sm" className={section === 'all' ? 'xl:col-span-5' : undefined}>
         <CardHeader className="border-b">
           <div className="flex items-center gap-2">
             <RiShieldCheckLine className="size-4 text-muted-foreground" aria-hidden="true" />
-            <CardTitle>{t('learnerOperations.entitlementsTitle')}</CardTitle>
+            <CardTitle>{t('learnerOperations.membershipTitle')}</CardTitle>
           </div>
-          <CardDescription>{t('learnerOperations.entitlementsHelp')}</CardDescription>
-          <CardAction>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                createGrantMutation.reset();
-                setGrantOpen(true);
-              }}
-            >
-              <RiAddLine data-icon="inline-start" aria-hidden="true" />
-              {t('learnerOperations.grantFeature')}
-            </Button>
-          </CardAction>
+          <CardDescription>{t('learnerOperations.membershipHelp')}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3">
-          <CatalogError error={grants.error} retry={() => void grants.refetch()} retrying={grants.isFetching} />
-          {grants.data && grants.data.length === 0 && (
-            <p className="text-sm text-muted-foreground">{t('learnerOperations.noGrants')}</p>
-          )}
+        <CardContent className="grid gap-4 pt-4">
+          <CatalogError
+            error={grants.error}
+            retry={() => void grants.refetch()}
+            retrying={grants.isFetching}
+          />
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/25 p-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <AccessTierBadge accessMode={isPlus ? 'FEATURE' : 'PUBLIC'} />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {isPlus
+                  ? expiryDate
+                    ? t('learnerOperations.plusActiveUntil', {
+                        date: dateFormatter.format(new Date(expiryDate)),
+                      })
+                    : t('learnerOperations.plusActiveUnlimited')
+                  : t('learnerOperations.freePlanSummary')}
+              </p>
+            </div>
+
+            {isPlus ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  downgradeMutation.reset();
+                  setDowngradeReason('');
+                  setDowngradeOpen(true);
+                }}
+              >
+                {t('learnerOperations.downgradeToFree')}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  upgradeMutation.reset();
+                  setDurationPreset('UNLIMITED');
+                  setUpgradeNote('');
+                  setUpgradeOpen(true);
+                }}
+              >
+                <RiVipCrownLine data-icon="inline-start" aria-hidden="true" />
+                {t('learnerOperations.upgradeToPlus')}
+              </Button>
+            )}
+          </div>
+
+          <div className="space-y-1.5 text-xs text-muted-foreground">
+            <p className="flex items-center gap-2">
+              <RiCheckLine className="size-3.5 text-success" aria-hidden="true" />
+              <span>{t('learnerOperations.plusPerkLessons')}</span>
+            </p>
+            <p className="flex items-center gap-2">
+              <RiCheckLine className="size-3.5 text-success" aria-hidden="true" />
+              <span>{t('learnerOperations.plusPerkExams')}</span>
+            </p>
+            <p className="flex items-center gap-2">
+              <RiCheckLine className="size-3.5 text-success" aria-hidden="true" />
+              <span>{t('learnerOperations.plusPerkAi')}</span>
+            </p>
+          </div>
+
           {grants.data && grants.data.length > 0 && (
-            <Table aria-label={t('learnerOperations.entitlementsTitle')}>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t('learnerOperations.featureKey')}</TableHead>
-                  <TableHead>{t('learnerOperations.grantStatus')}</TableHead>
-                  <TableHead>{t('learnerOperations.validity')}</TableHead>
-                  <TableHead>{t('learnerOperations.note')}</TableHead>
-                  <TableHead className="text-right">{t('catalog.actions')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {grants.data.map(grant => (
-                  <TableRow key={grant.id}>
-                    <TableCell className="font-mono text-xs">{grant.featureKey}</TableCell>
-                    <TableCell>
-                      <Badge variant={grantBadgeVariant(grant.status)}>
-                        {t(`learnerOperations.statuses.${grant.status}`, { defaultValue: grant.status })}
+            <details className="rounded-xl border bg-muted/15 px-3 py-2 text-xs">
+              <summary className="cursor-pointer font-medium text-muted-foreground">
+                {t('learnerOperations.historyToggle', { count: grants.data.length })}
+              </summary>
+              <div className="mt-2 divide-y">
+                {grants.data.slice(0, 8).map((grant) => (
+                  <div
+                    key={grant.id}
+                    className="flex flex-wrap items-center justify-between gap-2 py-1.5"
+                  >
+                    <span className="font-medium">
+                      {t(`plansConsole.features.${grant.featureKey}`, {
+                        defaultValue: grant.featureKey,
+                      })}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={
+                          grant.status === 'ACTIVE'
+                            ? 'success'
+                            : grant.status === 'REVOKED'
+                              ? 'destructive'
+                              : 'secondary'
+                        }
+                      >
+                        {t(`learnerOperations.statuses.${grant.status}`, {
+                          defaultValue: grant.status,
+                        })}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground tabular-nums">
-                      {dateFormatter.format(new Date(grant.validFrom))} →{' '}
-                      {grant.validUntil
-                        ? dateFormatter.format(new Date(grant.validUntil))
-                        : t('learnerOperations.noExpiry')}
-                    </TableCell>
-                    <TableCell className="max-w-xs whitespace-normal text-xs">
-                      {grant.revocationReason || grant.sourceReference || t('learnerProfiles.missing')}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {grant.status === 'ACTIVE' && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            revokeMutation.reset();
-                            setRevokeReason('');
-                            setRevokeError(null);
-                            setRevokingGrant(grant);
-                          }}
-                        >
-                          {t('learnerOperations.revoke')}
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
+                      <span className="text-muted-foreground tabular-nums">
+                        {dateFormatter.format(new Date(grant.validFrom))}
+                      </span>
+                    </div>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            </details>
           )}
         </CardContent>
       </Card>
+      )}
 
-      <Card size="sm">
+      {section !== 'plan' && (
+      <Card size="sm" className={section === 'all' ? 'xl:col-span-7' : undefined}>
         <CardHeader className="border-b">
           <div className="flex items-center gap-2">
             <RiCoinsLine className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -225,7 +297,7 @@ export function LearnerAccessAndRewards({ learnerId }: { learnerId: string }) {
             </Button>
           </CardAction>
         </CardHeader>
-        <CardContent className="grid gap-4">
+        <CardContent className="grid gap-4 pt-4">
           <CatalogError
             error={gamification.error}
             retry={() => void gamification.refetch()}
@@ -246,12 +318,17 @@ export function LearnerAccessAndRewards({ learnerId }: { learnerId: string }) {
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">{t('learnerOperations.totalXp')}</dt>
-                  <dd className="mt-1 text-lg font-semibold tabular-nums">{numberFormatter.format(summary.xp)}</dd>
+                  <dd className="mt-1 text-lg font-semibold tabular-nums">
+                    {numberFormatter.format(summary.xp)}
+                  </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">{t('learnerOperations.diamondBalance')}</dt>
-                  <dd className="mt-1 text-lg font-semibold tabular-nums">
-                    {numberFormatter.format(summary.diamondBalance)}
+                  <dt className="text-xs text-muted-foreground">
+                    {t('learnerOperations.diamondBalance')}
+                  </dt>
+                  <dd className="mt-1 inline-flex items-center gap-1.5 text-lg font-semibold tabular-nums">
+                    <DiamondIcon className="size-4" />
+                    <span>{numberFormatter.format(summary.diamondBalance)}</span>
                   </dd>
                 </div>
                 <div>
@@ -272,14 +349,23 @@ export function LearnerAccessAndRewards({ learnerId }: { learnerId: string }) {
                       <TableHead>{t('learnerOperations.amount')}</TableHead>
                       <TableHead>{t('learnerOperations.reason')}</TableHead>
                       <TableHead>{t('learnerOperations.source')}</TableHead>
-                      <TableHead className="text-right">{t('learnerOperations.recordedAt')}</TableHead>
+                      <TableHead className="text-right">
+                        {t('learnerOperations.recordedAt')}
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {summary.transactions.map(tx => (
+                    {summary.transactions.map((tx) => (
                       <TableRow key={tx.id}>
                         <TableCell className="font-semibold tabular-nums">
-                          {tx.amount > 0 ? `+${numberFormatter.format(tx.amount)}` : numberFormatter.format(tx.amount)}
+                          <span className="inline-flex items-center gap-1">
+                            <DiamondIcon className="size-3.5" />
+                            <span>
+                              {tx.amount > 0
+                                ? `+${numberFormatter.format(tx.amount)}`
+                                : numberFormatter.format(tx.amount)}
+                            </span>
+                          </span>
                         </TableCell>
                         <TableCell className="whitespace-normal">{tx.reason}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">
@@ -293,82 +379,74 @@ export function LearnerAccessAndRewards({ learnerId }: { learnerId: string }) {
                   </TableBody>
                 </Table>
               ) : (
-                <p className="text-sm text-muted-foreground">{t('learnerOperations.noTransactions')}</p>
+                <p className="text-sm text-muted-foreground">
+                  {t('learnerOperations.noTransactions')}
+                </p>
               )}
             </>
           )}
         </CardContent>
       </Card>
+      )}
 
-      <Dialog open={grantOpen} onOpenChange={open => { if (!createGrantMutation.isPending) setGrantOpen(open); }}>
-        <DialogContent showCloseButton={!createGrantMutation.isPending}>
+      <Dialog
+        open={upgradeOpen}
+        onOpenChange={(open) => {
+          if (!upgradeMutation.isPending) setUpgradeOpen(open);
+        }}
+      >
+        <DialogContent showCloseButton={!upgradeMutation.isPending}>
           <DialogHeader>
-            <DialogTitle>{t('learnerOperations.grantDialogTitle')}</DialogTitle>
-            <DialogDescription>{t('learnerOperations.grantDialogHelp')}</DialogDescription>
+            <DialogTitle>{t('learnerOperations.upgradeDialogTitle')}</DialogTitle>
+            <DialogDescription>{t('learnerOperations.upgradeDialogHelp')}</DialogDescription>
           </DialogHeader>
           <form
             className="grid gap-4"
-            onSubmit={event => {
+            onSubmit={(event) => {
               event.preventDefault();
-              createGrantMutation.mutate();
+              upgradeMutation.mutate();
             }}
           >
             <div className="grid gap-1.5">
-              <Label htmlFor="grant-feature-key">{t('learnerOperations.featureKey')}</Label>
-              <Select value={featureKey} onValueChange={setFeatureKey}>
-                <SelectTrigger id="grant-feature-key">
+              <Label htmlFor="plus-duration-preset">{t('learnerOperations.durationLabel')}</Label>
+              <Select
+                value={durationPreset}
+                onValueChange={(v) => setDurationPreset(v as PlusDurationPreset)}
+              >
+                <SelectTrigger id="plus-duration-preset">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {entitlementFeatureKeys.map(key => (
-                    <SelectItem key={key} value={key}>
-                      {key}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="UNLIMITED">
+                    {t('learnerOperations.durations.UNLIMITED')}
+                  </SelectItem>
+                  <SelectItem value="30D">{t('learnerOperations.durations.30D')}</SelectItem>
+                  <SelectItem value="90D">{t('learnerOperations.durations.90D')}</SelectItem>
+                  <SelectItem value="365D">{t('learnerOperations.durations.365D')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="grant-valid-from">{t('learnerOperations.validFrom')}</Label>
-                <Input
-                  id="grant-valid-from"
-                  type="datetime-local"
-                  value={validFrom}
-                  onChange={event => setValidFrom(event.target.value)}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="grant-valid-until">{t('learnerOperations.validUntil')}</Label>
-                <Input
-                  id="grant-valid-until"
-                  type="datetime-local"
-                  value={validUntil}
-                  onChange={event => setValidUntil(event.target.value)}
-                />
-              </div>
-            </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="grant-reason">{t('learnerOperations.grantReference')}</Label>
+              <Label htmlFor="plus-upgrade-note">{t('learnerOperations.grantReference')}</Label>
               <Input
-                id="grant-reason"
-                maxLength={500}
-                value={sourceReference}
-                onChange={event => setSourceReference(event.target.value)}
+                id="plus-upgrade-note"
+                maxLength={250}
+                value={upgradeNote}
+                onChange={(event) => setUpgradeNote(event.target.value)}
               />
             </div>
-            <CatalogError error={createGrantMutation.error} />
+            <CatalogError error={upgradeMutation.error} />
             <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
-                disabled={createGrantMutation.isPending}
-                onClick={() => setGrantOpen(false)}
+                disabled={upgradeMutation.isPending}
+                onClick={() => setUpgradeOpen(false)}
               >
                 {t('catalog.cancel')}
               </Button>
-              <Button type="submit" disabled={createGrantMutation.isPending}>
-                {t('learnerOperations.confirmGrant')}
+              <Button type="submit" disabled={upgradeMutation.isPending}>
+                {t('learnerOperations.confirmUpgrade')}
               </Button>
             </DialogFooter>
           </form>
@@ -376,59 +454,60 @@ export function LearnerAccessAndRewards({ learnerId }: { learnerId: string }) {
       </Dialog>
 
       <Dialog
-        open={Boolean(revokingGrant)}
-        onOpenChange={open => { if (!open && !revokeMutation.isPending) setRevokingGrant(null); }}
+        open={downgradeOpen}
+        onOpenChange={(open) => {
+          if (!downgradeMutation.isPending) setDowngradeOpen(open);
+        }}
       >
-        <DialogContent showCloseButton={!revokeMutation.isPending}>
+        <DialogContent showCloseButton={!downgradeMutation.isPending}>
           <DialogHeader>
-            <DialogTitle>{t('learnerOperations.revokeDialogTitle')}</DialogTitle>
-            <DialogDescription>
-              {t('learnerOperations.revokeDialogHelp', { featureKey: revokingGrant?.featureKey ?? '' })}
-            </DialogDescription>
+            <DialogTitle>{t('learnerOperations.downgradeDialogTitle')}</DialogTitle>
+            <DialogDescription>{t('learnerOperations.downgradeDialogHelp')}</DialogDescription>
           </DialogHeader>
           <form
-            noValidate
             className="grid gap-4"
-            onSubmit={event => {
+            onSubmit={(event) => {
               event.preventDefault();
-              if (!revokingGrant) return;
-              if (!revokeReason.trim()) {
-                setRevokeError(t('learnerOperations.reasonRequired'));
-                return;
-              }
-              setRevokeError(null);
-              revokeMutation.mutate({ grantId: revokingGrant.id, reason: revokeReason.trim() });
+              downgradeMutation.mutate();
             }}
           >
             <div className="grid gap-1.5">
-              <Label htmlFor="revoke-grant-reason">{t('learnerOperations.reason')}</Label>
+              <Label htmlFor="plus-downgrade-reason">{t('learnerOperations.reasonOptional')}</Label>
               <Input
-                id="revoke-grant-reason"
-                maxLength={500}
-                value={revokeReason}
-                onChange={event => setRevokeReason(event.target.value)}
+                id="plus-downgrade-reason"
+                maxLength={250}
+                value={downgradeReason}
+                onChange={(event) => setDowngradeReason(event.target.value)}
               />
             </div>
-            {revokeError && <p role="alert" className="text-sm text-destructive">{revokeError}</p>}
-            <CatalogError error={revokeMutation.error} />
+            <CatalogError error={downgradeMutation.error} />
             <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
-                disabled={revokeMutation.isPending}
-                onClick={() => setRevokingGrant(null)}
+                disabled={downgradeMutation.isPending}
+                onClick={() => setDowngradeOpen(false)}
               >
                 {t('catalog.cancel')}
               </Button>
-              <Button type="submit" variant="destructive" disabled={revokeMutation.isPending}>
-                {t('learnerOperations.confirmRevoke')}
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={downgradeMutation.isPending}
+              >
+                {t('learnerOperations.confirmDowngrade')}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={diamondOpen} onOpenChange={open => { if (!adjustMutation.isPending) setDiamondOpen(open); }}>
+      <Dialog
+        open={diamondOpen}
+        onOpenChange={(open) => {
+          if (!adjustMutation.isPending) setDiamondOpen(open);
+        }}
+      >
         <DialogContent showCloseButton={!adjustMutation.isPending}>
           <DialogHeader>
             <DialogTitle>{t('learnerOperations.adjustDialogTitle')}</DialogTitle>
@@ -437,7 +516,7 @@ export function LearnerAccessAndRewards({ learnerId }: { learnerId: string }) {
           <form
             noValidate
             className="grid gap-4"
-            onSubmit={event => {
+            onSubmit={(event) => {
               event.preventDefault();
               const parsed = Number(diamondAmount);
               if (!Number.isInteger(parsed) || parsed === 0) {
@@ -460,7 +539,7 @@ export function LearnerAccessAndRewards({ learnerId }: { learnerId: string }) {
                 step={1}
                 placeholder="25"
                 value={diamondAmount}
-                onChange={event => setDiamondAmount(event.target.value)}
+                onChange={(event) => setDiamondAmount(event.target.value)}
               />
             </div>
             <div className="grid gap-1.5">
@@ -469,10 +548,14 @@ export function LearnerAccessAndRewards({ learnerId }: { learnerId: string }) {
                 id="diamond-adjust-reason"
                 maxLength={250}
                 value={diamondReason}
-                onChange={event => setDiamondReason(event.target.value)}
+                onChange={(event) => setDiamondReason(event.target.value)}
               />
             </div>
-            {diamondError && <p role="alert" className="text-sm text-destructive">{diamondError}</p>}
+            {diamondError && (
+              <p role="alert" className="text-sm text-destructive">
+                {diamondError}
+              </p>
+            )}
             <CatalogError error={adjustMutation.error} />
             <DialogFooter>
               <Button

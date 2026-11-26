@@ -2,12 +2,16 @@ package com.lyreo.analytics.application;
 
 import com.lyreo.analytics.application.port.AnalyticsProjectionRepository;
 import com.lyreo.analytics.domain.AdminAnalyticsSummary;
+import com.lyreo.analytics.domain.AdminLearnerStudyProfile;
 import com.lyreo.analytics.domain.AnalyticsOverview;
+import com.lyreo.contracts.lesson.ShadowingAssessedEvent;
+import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent.PartResult;
 import com.lyreo.platform.config.application.ConsumerReceiptStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
@@ -160,7 +164,8 @@ public class AnalyticsService {
         int readingTotal,
         Integer listeningScaledScore,
         Integer readingScaledScore,
-        Instant occurredAt
+        Instant occurredAt,
+        List<PartResult> parts
     ) {
         if (!recordReceipt(factId)) {
             return;
@@ -177,6 +182,17 @@ public class AnalyticsService {
             timestamp
         );
 
+        if (!parts.isEmpty()) {
+            for (PartResult part : parts) {
+                if (part.part() >= 1 && part.part() <= 7 && part.total() > 0) {
+                    int errorRate = percentage(part.total() - part.correct(), part.total());
+                    projections.recordWeaknessSample(
+                        learnerId, "TOEIC_PART", Integer.toString(part.part()), errorRate, errorRate > 0
+                    );
+                }
+            }
+            return;
+        }
         if (listeningTotal > 0) {
             int errorRate = (int) Math.round(Math.max(0, listeningTotal - listeningCorrect) * 100.0 / listeningTotal);
             projections.recordWeaknessSample(
@@ -199,6 +215,27 @@ public class AnalyticsService {
         }
     }
 
+    @Transactional
+    public void onShadowingAssessed(ShadowingAssessedEvent event) {
+        if (!recordReceipt(event.attemptId())) return;
+        if (event.assessedWords() > 0) {
+            int errorRate = percentage(event.mismatchedWords(), event.assessedWords());
+            projections.recordWeaknessSample(
+                event.learnerId(), "SHADOWING_ASSESSMENT", "WORD_MISMATCH", errorRate, errorRate > 0
+            );
+        }
+        if (event.fluencyScore() != null) {
+            int score = Math.clamp(event.fluencyScore(), 0, 100);
+            projections.recordWeaknessSample(
+                event.learnerId(), "SHADOWING_ASSESSMENT", "FLUENCY", 100 - score, score < 60
+            );
+        }
+    }
+
+    private static int percentage(int count, int total) {
+        return Math.clamp((int) Math.round(count * 100.0 / total), 0, 100);
+    }
+
     @Transactional(readOnly = true)
     public AnalyticsOverview overview(UUID learnerId) {
         LocalDate todayUtc = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
@@ -209,6 +246,12 @@ public class AnalyticsService {
     public AdminAnalyticsSummary platformSummary() {
         LocalDate todayUtc = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
         return projections.summarizePlatform(todayUtc);
+    }
+
+    @Transactional(readOnly = true)
+    public AdminLearnerStudyProfile adminStudyProfile(UUID learnerId) {
+        LocalDate todayUtc = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
+        return projections.loadAdminStudyProfile(learnerId, todayUtc);
     }
 
     private boolean recordReceipt(UUID factId) {

@@ -43,4 +43,5 @@ public interface GrammarCatalogSource {
     }
     long count(String kind,String query,UUID parentId,String status,String access);
     String status(String kind,UUID id);
+    default void updateAccess(String kind,UUID id,String accessMode,String requiredFeatureKey) {}
 }

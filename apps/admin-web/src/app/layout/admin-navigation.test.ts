@@ -14,19 +14,17 @@ it('opens learner profiles from the sidebar and names the detail route', () => {
   expect(getNavTitleKey('/learners/example')).toBe('admin:navigation.profiles');
 });
 
-it('groups curriculum and voice roleplay under content studio', () => {
+it('groups curriculum under content studio', () => {
   const content = adminNavGroups.find((group) => group.key === 'content');
   expect(content?.items.find((item) => item.key === 'curriculum')?.path).toBe('/curriculum');
-  expect(content?.items.find((item) => item.key === 'conversations')?.path).toBe('/conversations');
+  expect(content?.items.find((item) => item.key === 'conversations')).toBeUndefined();
   expect(getNavTitleKey('/curriculum')).toBe('admin:navigation.curriculum');
-  expect(getNavTitleKey('/conversations')).toBe('admin:navigation.conversations');
 });
 
-it('exposes separate plans, missions, achievements, notifications, and analytics routes', () => {
-  expect(getNavTitleKey('/learners/progress')).toBe('admin:navigation.progress');
+it('exposes plans, merged rewards hub, notifications, settings, and unified learners workspace', () => {
+  expect(getNavTitleKey('/learners/progress')).toBe('admin:navigation.profiles');
   expect(getNavTitleKey('/plans')).toBe('admin:navigation.plans');
-  expect(getNavTitleKey('/missions')).toBe('admin:navigation.missions');
-  expect(getNavTitleKey('/achievements')).toBe('admin:navigation.achievements');
+  expect(getNavTitleKey('/rewards')).toBe('admin:navigation.rewards');
   expect(getNavTitleKey('/notifications')).toBe('admin:navigation.notifications');
-  expect(getNavTitleKey('/media')).toBe('admin:navigation.media');
+  expect(getNavTitleKey('/settings')).toBe('admin:navigation.settings');
 });

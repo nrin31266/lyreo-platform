@@ -5,6 +5,7 @@ import com.lyreo.ai.application.execution.AiExecutionResult;
 import com.lyreo.ai.application.execution.AiInvocationService;
 import com.lyreo.ai.domain.AiCapability;
 import com.lyreo.contracts.jobs.JobProgressChangedEvent;
+import com.lyreo.contracts.lesson.ShadowingAssessedEvent;
 import com.lyreo.entitlement.api.EntitlementService;
 import com.lyreo.lesson.api.LearnerShadowingCompletionPort;
 import com.lyreo.platform.jobs.application.BackgroundJobService;
@@ -22,6 +23,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -45,6 +47,7 @@ public class LearnerPronunciationJobHandler implements JobHandler {
     private final LearnerShadowingCompletionPort shadowingCompletion;
     private final ObjectMapper mapper;
     private final TransactionTemplate transaction;
+    private final ApplicationEventPublisher events;
 
     public LearnerPronunciationJobHandler(
         Store store,
@@ -54,7 +57,8 @@ public class LearnerPronunciationJobHandler implements JobHandler {
         EntitlementService entitlements,
         LearnerShadowingCompletionPort shadowingCompletion,
         ObjectMapper mapper,
-        TransactionTemplate transaction
+        TransactionTemplate transaction,
+        ApplicationEventPublisher events
     ) {
         this.store = store;
         this.storage = storage;
@@ -64,6 +68,7 @@ public class LearnerPronunciationJobHandler implements JobHandler {
         this.shadowingCompletion = shadowingCompletion;
         this.mapper = mapper;
         this.transaction = transaction;
+        this.events = events;
     }
 
     @Override
@@ -140,6 +145,7 @@ public class LearnerPronunciationJobHandler implements JobHandler {
                         transcript,
                         mapper.writeValueAsString(output)
                     );
+                    publishAssessmentEvidence(attempt, output);
                 } else {
                     releaseQuotaSafely(attempt, "NO_SPEECH");
                 }
@@ -147,6 +153,28 @@ public class LearnerPronunciationJobHandler implements JobHandler {
         } catch (JobCancelledException cancelled) {
             releaseQuotaSafely(attempt, "CANCELLED");
             throw cancelled;
+        }
+    }
+
+    private void publishAssessmentEvidence(Attempt attempt, JsonNode output) {
+        int assessed = 0;
+        int mismatched = 0;
+        for (JsonNode word : output.path("words")) {
+            switch (word.path("error").asText("")) {
+                case "NONE" -> assessed++;
+                case "MISPRONUNCIATION", "OMISSION", "INSERTION" -> {
+                    assessed++;
+                    mismatched++;
+                }
+                default -> { }
+            }
+        }
+        JsonNode fluency = output.path("scores").path("fluency");
+        Integer fluencyScore = fluency.isNumber()
+            ? Math.clamp(Math.round((float) fluency.asDouble()), 0, 100)
+            : null;
+        if (assessed > 0 || fluencyScore != null) {
+            events.publishEvent(new ShadowingAssessedEvent(attempt.id(), attempt.learnerId(), mismatched, assessed, fluencyScore));
         }
     }
 

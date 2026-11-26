@@ -10,6 +10,7 @@ import com.lyreo.gamification.domain.GamificationSummary;
 import com.lyreo.gamification.domain.MissionDefinition;
 import com.lyreo.gamification.domain.RewardPolicyConfig;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -249,7 +250,25 @@ public class AdminGamificationController {
             request.ruleVersion(),
             request.directLessonActivityDiamondsEnabled(),
             request.cutoverEffectiveAt(),
-            request.xpPerLevel()
+            request.xpPerLevel(),
+            request.xpGrowthPerLevel() != null
+                ? request.xpGrowthPerLevel()
+                : RewardPolicyConfig.DEFAULT_XP_GROWTH_PER_LEVEL,
+            request.maxLevel() != null
+                ? request.maxLevel()
+                : RewardPolicyConfig.DEFAULT_MAX_LEVEL,
+            request.xpLevelMultiplier() != null
+                ? request.xpLevelMultiplier()
+                : RewardPolicyConfig.DEFAULT_XP_LEVEL_MULTIPLIER,
+            request.milestoneInterval() != null
+                ? request.milestoneInterval()
+                : RewardPolicyConfig.DEFAULT_MILESTONE_INTERVAL,
+            request.milestoneDiamondBase() != null
+                ? request.milestoneDiamondBase()
+                : RewardPolicyConfig.DEFAULT_MILESTONE_DIAMOND_BASE,
+            request.milestoneDiamondGrowth() != null
+                ? request.milestoneDiamondGrowth()
+                : RewardPolicyConfig.DEFAULT_MILESTONE_DIAMOND_GROWTH
         );
     }
 
@@ -314,6 +333,12 @@ public class AdminGamificationController {
         @NotBlank String ruleVersion,
         boolean directLessonActivityDiamondsEnabled,
         Instant cutoverEffectiveAt,
-        @Min(1) int xpPerLevel
+        @Min(1) int xpPerLevel,
+        @Min(0) Integer xpGrowthPerLevel,
+        @Min(1) @Max(99) Integer maxLevel,
+        Double xpLevelMultiplier,
+        @Min(0) @Max(50) Integer milestoneInterval,
+        @Min(0) Integer milestoneDiamondBase,
+        @Min(0) Integer milestoneDiamondGrowth
     ) {}
 }

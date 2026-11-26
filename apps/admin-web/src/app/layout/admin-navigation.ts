@@ -4,12 +4,8 @@ import {
   RiBookShelfLine as Library,
   RiDashboardLine as LayoutDashboard,
   RiEqualizerLine as Settings2,
-  RiFlagLine as Target,
   RiGroupLine as Users,
-  RiImage2Line as Images,
-  RiLineChartLine as ChartNoAxesCombined,
   RiListCheck3 as ListChecks,
-  RiMicLine as Mic,
   RiNotification3Line as Bell,
   RiStackLine as Layers,
   RiVipCrownLine as Crown,
@@ -51,7 +47,6 @@ export const adminNavGroups: { key: string; items: AdminNavItem[] }[] = [
           { key: "toeic", path: "/toeic" },
         ],
       },
-      { key: "conversations", icon: Mic, path: "/conversations" },
       { key: "curriculum", icon: Layers, path: "/curriculum" },
     ],
   },
@@ -59,8 +54,7 @@ export const adminNavGroups: { key: string; items: AdminNavItem[] }[] = [
     key: "engagement",
     items: [
       { key: "plans", icon: Crown, path: "/plans" },
-      { key: "missions", icon: Target, path: "/missions" },
-      { key: "achievements", icon: Award, path: "/achievements" },
+      { key: "rewards", icon: Award, path: "/rewards" },
       { key: "notifications", icon: Bell, path: "/notifications" },
     ],
   },
@@ -68,19 +62,15 @@ export const adminNavGroups: { key: string; items: AdminNavItem[] }[] = [
     key: "learners",
     items: [
       { key: "profiles", icon: Users, path: "/learners" },
-      { key: "progress", icon: ChartNoAxesCombined, path: "/learners/progress" },
     ],
   },
   {
     key: "operations",
-    items: [
-      { key: "jobs", icon: ListChecks, path: "/jobs" },
-      { key: "media", icon: Images, path: "/media" },
-    ],
+    items: [{ key: "jobs", icon: ListChecks, path: "/jobs" }],
   },
   {
     key: "configuration",
-    items: [{ key: "aiSettings", icon: Settings2, path: "/settings/ai" }],
+    items: [{ key: "settings", icon: Settings2, path: "/settings" }],
   },
 ];
 
@@ -94,7 +84,7 @@ export function getNavTitleKey(pathname: string, hash = ""): string {
   if (exact) return exact.labelKey;
   if (["/lessons/categories", "/lessons/channels"].includes(pathname)) return "admin:navigation.organization";
   if (/^\/lessons\/[^/]+$/.test(pathname)) return "admin:authoringFlow.editorTitle";
-  if (/^\/learners\/[^/]+$/.test(pathname)) return "admin:navigation.profiles";
+  if (pathname === "/learners/progress" || /^\/learners\/[^/]+$/.test(pathname)) return "admin:navigation.profiles";
   for (const library of ["lexicon", "grammar", "toeic"]) {
     if (pathname.startsWith(`/${library}/`)) return `admin:navigation.${library}`;
   }

@@ -593,7 +593,6 @@ public final class JdbcCurriculumProgressRepository implements CurriculumProgres
             case VOCABULARY_REVIEW -> checkVocabulary(itemId, sectionPos, itemPos, type, refId, config);
             case GRAMMAR_PRACTICE -> checkGrammar(itemId, sectionPos, itemPos, type, refId);
             case TOEIC_DRILL, TOEIC_TEST -> checkToeic(itemId, sectionPos, itemPos, type, refId, config);
-            case SPEAKING_SCENARIO -> checkSpeaking(itemId, sectionPos, itemPos, type, refId);
         };
     }
 
@@ -782,28 +781,6 @@ public final class JdbcCurriculumProgressRepository implements CurriculumProgres
             ? ("OK (" + Math.min(requestedCount, totalAvail) + " / " + totalAvail + " questions)")
             : ("TOEIC status=" + status + ", available=" + totalAvail + ", requested=" + requestedCount);
         return new CurriculumPathDiagnostic.ItemCheck(itemId, sectionPos, itemPos, type, refId, title, true, accessMode, featureKey, sliceValid, Math.min(requestedCount, totalAvail), msg);
-    }
-
-    private CurriculumPathDiagnostic.ItemCheck checkSpeaking(
-        UUID itemId, int sectionPos, int itemPos, ContentType type, UUID refId
-    ) {
-        var found = jdbc.query(
-            "SELECT title, status, access_mode, required_feature_key FROM speaking_scenario WHERE id = :refId",
-            Map.of("refId", refId),
-            (rs, n) -> new Object[] {
-                rs.getString("title"), rs.getString("status"),
-                rs.getString("access_mode"), rs.getString("required_feature_key")
-            }
-        );
-        if (found.isEmpty()) {
-            return new CurriculumPathDiagnostic.ItemCheck(itemId, sectionPos, itemPos, type, refId, null, false, "PUBLIC", null, false, 0, "Referenced speaking scenario not found");
-        }
-        String title = (String) found.getFirst()[0];
-        String status = (String) found.getFirst()[1];
-        String accessMode = (String) found.getFirst()[2];
-        String featureKey = (String) found.getFirst()[3];
-        boolean valid = "PUBLISHED".equals(status);
-        return new CurriculumPathDiagnostic.ItemCheck(itemId, sectionPos, itemPos, type, refId, title, true, accessMode, featureKey, valid, 1, valid ? "OK" : ("Scenario status: " + status));
     }
 
     private Map<String, Object> decodeConfig(String json) {

@@ -7,7 +7,6 @@ import com.lyreo.curriculum.domain.CurriculumPathDetail;
 import com.lyreo.curriculum.domain.CurriculumPathSummary;
 import com.lyreo.identity.application.AppUserProvisioningService;
 import com.lyreo.platform.content.AssetStore;
-import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
@@ -82,7 +81,8 @@ public class CurriculumController {
         byte[] bytes = assets.bytes(detail.coverAssetId());
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType(meta.mimeType()))
-            .cacheControl(CacheControl.maxAge(Duration.ofHours(1)))
+            .cacheControl(CacheControl.noCache().mustRevalidate())
+            .eTag("\"" + detail.coverAssetId() + "-" + meta.sizeBytes() + "\"")
             .header("X-Content-Type-Options", "nosniff")
             .body(bytes);
     }

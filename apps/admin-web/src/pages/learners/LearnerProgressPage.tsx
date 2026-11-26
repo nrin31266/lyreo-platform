@@ -1,3 +1,4 @@
+import { LearnerWeaknesses } from './LearnerWeaknesses';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -80,12 +81,12 @@ export function LearnerProgressPage() {
   }));
 
   const skillChartData = (learnerAnalyticsQuery.data?.skills ?? []).map((s) => ({
-    skill: s.skillCode,
+    skill: t(`learnerProgress.skills.${s.skillCode}`, { defaultValue: s.skillCode }),
     score: Number(Number(s.score).toFixed(1)),
   }));
 
   return (
-    <div className="space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{t('learnerProgress.title')}</h1>
@@ -453,40 +454,7 @@ export function LearnerProgressPage() {
                   <h2 className="mb-2 text-sm font-medium">
                     {t('learnerProgress.weaknessesTitle')}
                   </h2>
-                  {learnerAnalyticsQuery.data.weaknesses.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      {t('learnerProgress.noWeaknesses')}
-                    </p>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>{t('learnerProgress.columns.type')}</TableHead>
-                          <TableHead>{t('learnerProgress.columns.key')}</TableHead>
-                          <TableHead className="text-right">
-                            {t('learnerProgress.columns.severity')}
-                          </TableHead>
-                          <TableHead className="text-right">
-                            {t('learnerProgress.columns.samples')}
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {learnerAnalyticsQuery.data.weaknesses.map((w) => (
-                          <TableRow key={`${w.weaknessType}:${w.weaknessKey}`}>
-                            <TableCell>{w.weaknessType}</TableCell>
-                            <TableCell className="font-medium">{w.weaknessKey}</TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {Number(w.severity).toFixed(1)}%
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {w.sampleCount}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
+                  <LearnerWeaknesses items={learnerAnalyticsQuery.data.weaknesses} />
                 </div>
               </>
             )}

@@ -18,7 +18,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchSpeakingScenarios } from '@/pages/conversations/speaking.api';
 import { fetchLessons } from '@/pages/lessons/catalog.api';
 import type { Summary } from '@/pages/library/library.types';
 import type { CurriculumContentType, ItemSliceConfig } from './curriculum.api';
@@ -84,30 +83,14 @@ async function fetchCandidates(
       meta: `${item.status} · ${item.questionCount ?? 0}Q`,
     }));
   }
-  if (contentType === 'TOEIC_DRILL' || contentType === 'TOEIC_TEST') {
-    const params = new URLSearchParams({ page: '0', size: '30', status: 'PUBLISHED' });
-    if (search) params.set('q', search);
-    const list = await api<Summary[]>(`/api/v1/admin/toeic?${params}`, { signal });
-    return list.map((item) => ({
-      id: item.id,
-      title: item.title,
-      meta: `${item.year ?? ''} · ${item.status}`.trim(),
-    }));
-  }
-  const scenarios = await fetchSpeakingScenarios(signal);
-  return scenarios
-    .filter((sc) => sc.status === 'PUBLISHED')
-    .filter((sc) =>
-      !search
-        ? true
-        : sc.title.toLowerCase().includes(search.toLowerCase()) ||
-          sc.titleVi.toLowerCase().includes(search.toLowerCase()),
-    )
-    .map((sc) => ({
-      id: sc.id,
-      title: sc.titleVi || sc.title,
-      meta: `${sc.cefrLevel} · ${sc.category}`,
-    }));
+  const params = new URLSearchParams({ page: '0', size: '30', status: 'PUBLISHED' });
+  if (search) params.set('q', search);
+  const list = await api<Summary[]>(`/api/v1/admin/toeic?${params}`, { signal });
+  return list.map((item) => ({
+    id: item.id,
+    title: item.title,
+    meta: `${item.year ?? ''} · ${item.status}`.trim(),
+  }));
 }
 
 export function CurriculumSlicePickerDialog({

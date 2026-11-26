@@ -24,11 +24,13 @@ import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.grammar.GrammarQuestionAnsweredEvent;
 import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent;
+import com.lyreo.contracts.lesson.ShadowingAssessedEvent;
 import com.lyreo.contracts.vocabulary.VocabularyReviewCompletedEvent;
 import com.lyreo.entitlement.api.QuotaExceededException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -186,13 +188,19 @@ class AnalyticsAndChatIT {
         analyticsListener.onVocabularyReviewed(vocabAgain);
         analyticsListener.onVocabularyReviewed(vocabAgain);
 
-        // TOEIC attempt with errors in listening -> projects TOEIC_SECTION LISTENING weakness
+        // Only the missed part creates a weakness when part breakdown is available.
         var toeic = new ToeicAttemptCompletedEvent(
             learnerId, UUID.randomUUID(), UUID.randomUUID(), "DRILL",
-            2, 5, 5, 5, null, null, now
+            2, 5, 5, 5, null, null, now,
+            List.of(new ToeicAttemptCompletedEvent.PartResult(2, 2, 5),
+                new ToeicAttemptCompletedEvent.PartResult(5, 5, 5))
         );
         analyticsListener.onToeicCompleted(toeic);
         analyticsListener.onToeicCompleted(toeic);
+
+        var shadowing = new ShadowingAssessedEvent(UUID.randomUUID(), learnerId, 2, 5, 55);
+        analyticsListener.onShadowingAssessed(shadowing);
+        analyticsListener.onShadowingAssessed(shadowing);
 
         mvc.perform(get("/api/v1/analytics/overview").with(learner))
             .andExpect(status().isOk())
@@ -201,7 +209,21 @@ class AnalyticsAndChatIT {
             .andExpect(jsonPath("$.today.vocabularyReviewCount").value(1))
             .andExpect(jsonPath("$.today.toeicQuestionCount").value(10))
             .andExpect(jsonPath("$.skills.length()").value(4))
-            .andExpect(jsonPath("$.weaknesses.length()").value(3));
+            .andExpect(jsonPath("$.weaknesses.length()").value(5))
+            .andExpect(jsonPath("$.weaknesses[?(@.weaknessType=='TOEIC_PART' && @.weaknessKey=='2' && @.sampleCount==1)]").isNotEmpty())
+            .andExpect(jsonPath("$.weaknesses[?(@.weaknessKey=='WORD_MISMATCH' && @.severity==40 && @.sampleCount==1)]").isNotEmpty())
+            .andExpect(jsonPath("$.weaknesses[?(@.weaknessKey=='FLUENCY' && @.severity==45)]").isNotEmpty());
+
+        var admin = jwt()
+            .jwt(token -> token.subject("admin-analytics").claim("email", "admin@lyreo.app"))
+            .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"));
+        mvc.perform(get("/api/v1/admin/analytics/learners/{learnerId}/study-profile", learnerId).with(admin))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.hasHistory").value(true))
+            .andExpect(jsonPath("$.dailySeries.length()").value(14))
+            .andExpect(jsonPath("$.skills.length()").value(4))
+            .andExpect(jsonPath("$.weaknesses.length()").value(5))
+            .andExpect(jsonPath("$.breakdown.lessonsCompleted").value(0));
     }
 
     @Test

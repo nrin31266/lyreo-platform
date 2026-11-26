@@ -25,6 +25,7 @@ vi.mock("./catalog.api", async (original) => ({
   fetchChannels: vi.fn(),
   fetchLessons: vi.fn(),
   saveMetadata: vi.fn(),
+  saveLessonAccess: vi.fn(),
   saveCategory: vi.fn(),
   syncChannels: vi.fn(),
   fetchSyncConfiguration: vi.fn(),
@@ -322,4 +323,28 @@ it("shows one truthful lifecycle badge and keeps deleted or processing lessons p
   const busy=screen.getByRole('row',{name:/Busy lesson/});
   expect(within(busy).getByRole('button',{name:'Delete lesson'})).toBeDisabled();
   expect(within(busy).queryByRole('switch')).not.toBeInTheDocument();
+});
+
+it("shows the Plus badge in the lesson list and edits access through a single switch", async () => {
+  const plusLesson = { ...lesson, accessMode: "FEATURE" as const, version: 3 };
+  vi.mocked(api.fetchLessons).mockResolvedValue({ items: [plusLesson], total: 1, page: 0, size: 20 });
+  vi.mocked(api.saveLessonAccess).mockResolvedValue({ ...plusLesson, accessMode: "PUBLIC" });
+  show(<LessonsPage />);
+
+  const row = within(await screen.findByRole("row", { name: /A lesson/ }));
+  expect(row.getByRole("cell", { name: "Lyreo Plus" })).toBeVisible();
+  const actions = within(row.getAllByRole("cell").at(-1)!);
+  expect(row.getAllByRole("switch")).toEqual([actions.getByRole("switch", { name: "Show A lesson" })]);
+  await userEvent.click(actions.getByRole("button", { name: "Edit information and categories" }));
+
+  const dialog = within(screen.getByRole("dialog"));
+  const plusSwitch = dialog.getByRole("switch", { name: "Require Lyreo Plus" });
+  expect(plusSwitch).toBeChecked();
+  await userEvent.click(dialog.getByText("Require Lyreo Plus"));
+  expect(plusSwitch).not.toBeChecked();
+  await userEvent.click(dialog.getByRole("button", { name: "Save" }));
+
+  expect(api.saveLessonAccess).toHaveBeenCalledWith("lesson-a", {
+    accessMode: "PUBLIC", requiredFeatureKey: null, version: 3,
+  });
 });

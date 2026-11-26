@@ -30,7 +30,6 @@ public record CurriculumItem(
         GRAMMAR_PRACTICE,
         TOEIC_DRILL,
         TOEIC_TEST,
-        VOCABULARY_REVIEW,
-        SPEAKING_SCENARIO
+        VOCABULARY_REVIEW
     }
 }

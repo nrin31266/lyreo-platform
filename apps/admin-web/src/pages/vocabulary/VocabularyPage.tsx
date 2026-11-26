@@ -12,6 +12,8 @@ import {
   RiVolumeUpLine,
 } from '@remixicon/react';
 import { AdminPagination } from '@/components/AdminPagination';
+import { AuthenticatedImage } from '@/components/AuthenticatedImage';
+import { AccessTierBadge, CefrLevelBadge, PosTag } from '@/components/ContentBadges';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,13 +22,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { useDebouncedInput } from '@/hooks/useDebouncedInput';
-import { MediaPreview } from '@/pages/library/ContentMedia';
 import { CatalogError, CatalogSkeleton } from '@/pages/lessons/CatalogFeedback';
 import { useVocabularyAudio } from './useVocabularyAudio';
 import { EntryDialog, VocabularyNameDialog } from './VocabularyEditors';
 import { fetchVocabulary, reviewFilters, vocabularyKey, type EntrySummary, type Pack, type Unit } from './vocabulary-api';
 
 const ALL = 'all';
+
+function PackCover({ assetId, className }: { assetId: Pack['coverImage']; className: string }) {
+  return <span className={cn('block overflow-hidden rounded-xs border bg-muted', className)}>
+    <AuthenticatedImage
+      src={assetId ? `/api/v1/admin/content-media/${encodeURIComponent(assetId)}/file` : null}
+      alt=""
+      className="block size-full object-cover"
+    />
+  </span>;
+}
 
 export function VocabularyPage() {
   const { t, i18n } = useTranslation('admin');
@@ -78,8 +89,9 @@ export function VocabularyPage() {
 
   const vietnamese = i18n.resolvedLanguage?.startsWith('vi');
   const localeTitle = (value: Pack) => vietnamese ? value.titleVi : value.titleEn;
+  const packMeta = (id: string) => packs.data?.find((candidate) => candidate.id === id);
   const packTitle = (id: string) => {
-    const value = packs.data?.find((candidate) => candidate.id === id);
+    const value = packMeta(id);
     return value ? localeTitle(value) : '';
   };
   const openPackOrUnitEditor = (value: Pack | Unit) => {
@@ -109,8 +121,8 @@ export function VocabularyPage() {
     return <span className="text-xs text-muted-foreground">{t('vocabulary.statusReady')}</span>;
   }
 
-  return <section className="mx-auto grid w-full max-w-7xl gap-4">
-    <header className="flex flex-wrap items-baseline justify-between gap-3">
+  return <section className="flex w-full flex-col gap-4 lg:h-full lg:min-h-[32rem]">
+    <header className="flex shrink-0 flex-wrap items-baseline justify-between gap-3">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">{t('vocabulary.title')}</h1>
         {hasPacks && <p className="text-sm tabular-nums text-muted-foreground">{t('vocabulary.catalogCount', {
@@ -129,8 +141,8 @@ export function VocabularyPage() {
       <p className="text-sm text-muted-foreground">{t('vocabulary.emptyHelp')}</p>
     </div>}
 
-    {hasPacks && <div className="grid items-start gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
-      <aside aria-label={t('vocabulary.catalogNavigation')} className="grid min-w-0 gap-3 rounded-xl border bg-card p-3 lg:sticky lg:top-4">
+    {hasPacks && <div className="grid gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[18rem_minmax(0,1fr)]">
+      <aside aria-label={t('vocabulary.catalogNavigation')} className="min-w-0 rounded-xl border bg-card p-3 lg:flex lg:min-h-0 lg:flex-col">
         <div className="grid gap-2.5 lg:hidden">
           <div className="grid gap-1.5">
             <Label htmlFor="vocabulary-pack">{t('vocabulary.pack')}</Label>
@@ -140,7 +152,7 @@ export function VocabularyPage() {
                 <SelectContent>
                   <SelectItem value={ALL}>{t('vocabulary.allPacks')}</SelectItem>
                   {packs.data?.map((item) => <SelectItem key={item.id} value={item.id}>
-                    {localeTitle(item)}{item.hidden ? ` · ${t('vocabulary.hidden')}` : ''}
+                    {localeTitle(item)}{item.accessMode === 'FEATURE' ? ' · PLUS' : ''}{item.hidden ? ` · ${t('vocabulary.hidden')}` : ''}
                   </SelectItem>)}
                 </SelectContent>
               </Select>
@@ -162,12 +174,12 @@ export function VocabularyPage() {
           </div>}
         </div>
 
-        {!pack ? <div className="hidden gap-1.5 lg:grid">
-          <div className="flex items-center justify-between px-2 py-0.5 text-xs font-medium text-muted-foreground">
+        {!pack ? <div className="hidden min-h-0 flex-1 flex-col gap-1.5 lg:flex">
+          <div className="flex shrink-0 items-center justify-between px-2 py-0.5 text-xs font-medium text-muted-foreground">
             <span>{t('vocabulary.pack')}</span>
             <span className="tabular-nums">{number.format(packs.data!.length)}</span>
           </div>
-          <div className="max-h-[calc(100dvh-10rem)] space-y-0.5 overflow-y-auto pr-0.5">
+          <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1">
             <button type="button" aria-pressed={!pack} onClick={() => update({ pack: '', unit: '', page: '' })}
               className="flex min-h-9 w-full items-center justify-between rounded-lg bg-muted px-2.5 py-1.5 text-left text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
               <span>{t('vocabulary.allPacks')}</span>
@@ -178,18 +190,19 @@ export function VocabularyPage() {
             {packs.data?.map((item) => <button type="button" key={item.id} aria-pressed={false}
               onClick={() => update({ pack: item.id, unit: '', page: '' })}
               className="grid w-full grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-muted/70 focus-visible:outline-2 focus-visible:outline-ring">
-              <span className="size-9 overflow-hidden rounded-md border bg-muted [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
-                {item.coverImage && <MediaPreview assetId={item.coverImage} role="image" compact />}
-              </span>
+              <PackCover assetId={item.coverImage} className="size-9" />
               <span className="min-w-0">
                 <span className="block truncate text-sm leading-snug">{localeTitle(item)}</span>
-                {item.hidden && <span className="block text-[11px] text-muted-foreground">{t('vocabulary.hidden')}</span>}
+                <span className="mt-0.5 flex flex-wrap items-center gap-1">
+                  {item.accessMode === 'FEATURE' && <AccessTierBadge accessMode={item.accessMode} size="sm" />}
+                  {item.hidden && <span className="text-[11px] text-muted-foreground">{t('vocabulary.hidden')}</span>}
+                </span>
               </span>
               <span className="text-xs tabular-nums text-muted-foreground">{number.format(item.entryCount)}</span>
             </button>)}
           </div>
-        </div> : <div className="hidden gap-2.5 lg:grid">
-          <div className="grid gap-2 rounded-lg bg-muted/45 p-2.5">
+        </div> : <div className="hidden min-h-0 flex-1 flex-col gap-2.5 lg:flex">
+          <div className="grid shrink-0 gap-2 rounded-lg bg-muted/45 p-2.5">
             <div className="flex items-center justify-between gap-1">
               <button type="button" onClick={() => update({ pack: '', unit: '', page: '' })}
                 className="inline-flex items-center gap-1 rounded-sm text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
@@ -199,9 +212,7 @@ export function VocabularyPage() {
                 onClick={() => openPackOrUnitEditor(pack)}><RiEditLine aria-hidden="true" /></Button>
             </div>
             <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-2.5">
-              <span className="size-10 overflow-hidden rounded-md border bg-muted [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
-                {pack.coverImage && <MediaPreview assetId={pack.coverImage} role="image" compact />}
-              </span>
+              <PackCover assetId={pack.coverImage} className="size-10" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">{localeTitle(pack)}</p>
                 <p className="text-xs tabular-nums text-muted-foreground">
@@ -210,7 +221,7 @@ export function VocabularyPage() {
               </div>
             </div>
           </div>
-          <div className="max-h-[calc(100dvh-15rem)] space-y-0.5 overflow-y-auto pr-0.5">
+          <div key={pack.id} className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1">
             <button type="button" aria-pressed={!unit} onClick={() => chooseUnit(ALL)}
               className={cn('flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-muted/70 focus-visible:outline-2 focus-visible:outline-ring',
                 !unit && 'bg-muted font-medium')}>
@@ -234,15 +245,15 @@ export function VocabularyPage() {
         </div>}
       </aside>
 
-      <div className="grid min-w-0 gap-3">
-        <div className="grid gap-2.5 rounded-xl border bg-card p-3">
+      <div className="flex min-w-0 flex-col gap-3 lg:min-h-0">
+        <div className="grid shrink-0 gap-2.5 rounded-xl border bg-card p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
-              <h2 className="truncate text-base font-semibold">
+              <h2 id="vocabulary-results-heading" className="truncate text-base font-semibold">
                 {unit ? `${localeTitle(pack!)} · ${unit.title}` : (pack ? localeTitle(pack) : t('vocabulary.allPacks'))}
               </h2>
-              {unit && <Badge variant="outline">{unit.level}</Badge>}
-              {pack?.accessMode === 'FEATURE' && <Badge variant="outline">{t('vocabulary.accessPlus')}</Badge>}
+              {unit && <CefrLevelBadge level={unit.level} />}
+              {pack?.accessMode === 'FEATURE' && <AccessTierBadge accessMode={pack.accessMode} />}
               {(unit?.hidden || pack?.hidden) && <Badge variant="secondary">{t('vocabulary.hidden')}</Badge>}
               <span className="text-xs tabular-nums text-muted-foreground">
                 {t('vocabulary.resultCount', { number: number.format(total) })}
@@ -289,12 +300,18 @@ export function VocabularyPage() {
           if (units.error) void units.refetch();
           else void entries.refetch();
         }} />
-        {(entries.isLoading || (pack && units.isPending)) && <CatalogSkeleton />}
-        {entries.data && <div aria-busy={entries.isFetching}>
-          <div className="overflow-hidden rounded-xl border bg-card">
+        {(entries.isLoading || (pack && units.isPending)) && <div className="lg:min-h-0 lg:overflow-hidden"><CatalogSkeleton /></div>}
+        {entries.data && <div aria-busy={entries.isFetching} className="flex min-w-0 flex-col gap-3 lg:min-h-0 lg:flex-1">
+          <div
+            key={search.toString()}
+            role="region"
+            aria-labelledby="vocabulary-results-heading"
+            tabIndex={0}
+            className="overflow-auto rounded-xl border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:min-h-0 lg:flex-1 [&>[data-slot=table-container]]:overflow-visible"
+          >
             <Table>
-              <TableHeader className="bg-muted/40">
-                <TableRow>
+              <TableHeader className="bg-card lg:sticky lg:top-0 lg:z-10">
+                <TableRow className="bg-muted/40">
                   <TableHead className="w-[27%]">{t('vocabulary.term')}</TableHead>
                   <TableHead>{t(vietnamese ? 'vocabulary.meaningVi' : 'vocabulary.meaningEn')}</TableHead>
                   <TableHead className="w-[20%]">{t('vocabulary.unit')}</TableHead>
@@ -323,7 +340,7 @@ export function VocabularyPage() {
                             <span lang="en">{entry.term}</span>
                           </Button>
                           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                            <span lang="en" className="font-medium text-foreground/75">{entry.pos}</span>
+                            <PosTag pos={entry.pos} />
                             {entry.ipa && <span lang="en" className="truncate">{entry.ipa}</span>}
                           </div>
                         </div>
@@ -343,13 +360,18 @@ export function VocabularyPage() {
                       </p>}
                     </TableCell>
                     <TableCell className="whitespace-normal py-2.5">
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-xs font-medium text-muted-foreground">{entry.level}</span>
+                      <div className="flex items-center gap-1.5">
+                        <CefrLevelBadge level={entry.level} className="h-5 px-1.5 text-[10px]" />
                         {unit?.id === entry.unitId ? <span className="truncate text-sm">{entry.unitTitle}</span>
                           : <Button type="button" variant="link" className="h-auto truncate px-0 text-left text-sm"
                             onClick={() => update({ pack: entry.packId, unit: entry.unitId, page: '' })}>{entry.unitTitle}</Button>}
                       </div>
-                      {!pack && <span className="mt-0.5 block truncate text-xs text-muted-foreground">{packTitle(entry.packId)}</span>}
+                      {!pack && <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="truncate">{packTitle(entry.packId)}</span>
+                        {packMeta(entry.packId)?.accessMode === 'FEATURE' && (
+                          <AccessTierBadge accessMode="FEATURE" size="sm" />
+                        )}
+                      </span>}
                     </TableCell>
                     <TableCell className="whitespace-nowrap py-2.5 text-right">
                       <div className="inline-flex items-center justify-end gap-2">
@@ -368,7 +390,7 @@ export function VocabularyPage() {
               </TableBody>
             </Table>
           </div>
-          <footer className="flex flex-wrap items-center justify-between gap-2 pt-3">
+          <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2">
             <p className="text-sm tabular-nums text-muted-foreground" aria-live="polite">
               {t('vocabulary.resultCount', { number: number.format(total) })}
             </p>
@@ -382,7 +404,7 @@ export function VocabularyPage() {
       </div>
     </div>}
 
-    <footer className="border-t pt-3 text-xs text-muted-foreground">
+    <footer className="shrink-0 border-t pt-3 text-xs text-muted-foreground">
       <a href="https://github.com/designfuchen/word-atlas" className="underline underline-offset-2" target="_blank" rel="noreferrer">
         Word Atlas contributors
       </a>{' · '}

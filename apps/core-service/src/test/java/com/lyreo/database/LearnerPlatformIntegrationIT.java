@@ -2,6 +2,8 @@ package com.lyreo.database;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -180,6 +182,47 @@ class LearnerPlatformIntegrationIT {
         var demoSeed = new ResourceDatabasePopulator(new org.springframework.core.io.ClassPathResource("seed/it-demo.sql"));
         demoSeed.execute(dataSource);
         demoSeed.execute(dataSource);
+    }
+
+    @Test
+    void publishesAnnouncementsOnlyForTheCurrentAudienceAndTimeWindow() throws Exception {
+        String all = createAnnouncement("For everyone", "ALL", "PUBLISHED", null, null);
+        createAnnouncement("For Free", "FREE", "PUBLISHED", null, null);
+        createAnnouncement("For Plus", "PLUS", "PUBLISHED", null, null);
+        createAnnouncement("Draft only", "ALL", "DRAFT", null, null);
+        createAnnouncement("Scheduled", "ALL", "PUBLISHED", "2100-01-01T00:00:00Z", null);
+        createAnnouncement("Expired", "ALL", "PUBLISHED", "2020-01-01T00:00:00Z", "2021-01-01T00:00:00Z");
+
+        var published = json.readTree(all);
+        mvc.perform(put("/api/v1/admin/notifications/{id}", published.path("id").asText()).with(ADMIN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Updated for everyone\",\"body\":\"Details\",\"status\":\"PUBLISHED\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.publishedAt").value(published.path("publishedAt").asText()));
+
+        mvc.perform(get("/api/v1/notifications").with(FREE_LEARNER))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[*].title").value(hasItems("Updated for everyone", "For Free")))
+            .andExpect(jsonPath("$[?(@.title=='For Plus' || @.title=='Draft only' || @.title=='Scheduled' || @.title=='Expired')]").isEmpty())
+            .andExpect(jsonPath("$[*].createdBy").isEmpty());
+        mvc.perform(get("/api/v1/notifications").with(PLUS_LEARNER))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[*].title").value(hasItems("Updated for everyone", "For Plus")))
+            .andExpect(jsonPath("$[*].title").value(not(hasItems("For Free"))));
+        mvc.perform(get("/api/v1/notifications").with(ADMIN)).andExpect(status().isForbidden());
+    }
+
+    private String createAnnouncement(String title, String audience, String status, String publishedAt, String expiresAt) throws Exception {
+        var body = new LinkedHashMap<String, Object>();
+        body.put("title", title);
+        body.put("body", "Details");
+        body.put("targetAudience", audience);
+        body.put("status", status);
+        body.put("publishedAt", publishedAt);
+        body.put("expiresAt", expiresAt);
+        return mvc.perform(post("/api/v1/admin/notifications").with(ADMIN)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)))
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
     }
 
     @Test

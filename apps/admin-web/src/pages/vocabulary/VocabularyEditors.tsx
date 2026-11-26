@@ -9,6 +9,8 @@ import {
   RiStopMiniFill,
   RiVolumeUpLine,
 } from '@remixicon/react';
+import { AccessTierOption } from '@/components/AccessTierOption';
+import { CefrLevelBadge, PosTag } from '@/components/ContentBadges';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -137,16 +139,13 @@ export function VocabularyNameDialog({ value, onSaved, onClose }: EditorActions 
         {pack && <Field label={t('vocabulary.titleVi')}>
           <Input required maxLength={120} value={vi} onChange={(event) => setVi(event.target.value)} />
         </Field>}
-        {pack && <div className="grid gap-1.5">
-          <Label htmlFor="vocabulary-pack-access" className="text-xs font-medium text-muted-foreground">{t('vocabulary.accessMode')}</Label>
-          <Select value={accessMode} onValueChange={selected => setAccessMode(selected as 'PUBLIC' | 'FEATURE')}>
-            <SelectTrigger id="vocabulary-pack-access" className="w-full"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="PUBLIC">{t('vocabulary.accessPublic')}</SelectItem>
-              <SelectItem value="FEATURE">{t('vocabulary.accessPlus')}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>}
+        {pack && (
+          <AccessTierOption
+            value={accessMode}
+            onChange={setAccessMode}
+            disabled={save.isPending}
+          />
+        )}
         {!pack && <div className="grid gap-1.5">
           <Label htmlFor="vocabulary-cefr" className="text-xs font-medium text-muted-foreground">{t('vocabulary.cefrLevel')}</Label>
           <Select value={level} onValueChange={setLevel}>
@@ -176,7 +175,7 @@ export function EntryDialog({ summary, onSaved, onClose }: EditorActions & { sum
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="flex flex-wrap items-baseline gap-2">
             <DialogTitle className="text-xl font-semibold"><span lang="en">{summary.term}</span></DialogTitle>
-            <Badge variant="outline">{summary.level}</Badge>
+            <CefrLevelBadge level={summary.level} />
             <span className="text-xs text-muted-foreground">{t('vocabulary.entryContext', { title: summary.unitTitle })}</span>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -312,7 +311,7 @@ function EntryForm({ entry, onClose, save }: Pick<EditorActions, 'onClose'> & { 
             <h3 className="text-xs font-semibold text-muted-foreground">{t('vocabulary.toeicContext')}</h3>
             <ul className="grid gap-1">
               {content.contextNotes.map((note) => <li key={note.pos + note.meaningVi} className="flex flex-wrap items-baseline gap-2 text-sm">
-                <span lang="en" className="text-xs font-medium text-muted-foreground">{note.pos}</span>
+                <PosTag pos={note.pos} />
                 <span lang="vi" className="font-medium">{note.meaningVi}</span>
               </li>)}
             </ul>

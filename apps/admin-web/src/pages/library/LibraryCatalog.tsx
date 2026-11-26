@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { RiSearchLine, RiBook2Line, RiQuestionLine, RiFileList3Line, RiPencilLine, RiFilterOffLine, RiListCheck2, RiEyeLine, RiEyeOffLine } from '@remixicon/react';
 import { api, ApiError } from '@/lib/api';
+import { AccessTierBadge, DifficultyBadge, PosTag, statusBadgeVariant } from '@/components/ContentBadges';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -81,7 +82,7 @@ export function LibraryList({ endpoint, route, title, extra }: { endpoint: strin
     return t(value === 'PUBLISHED' ? 'library.learnerVisible' : value === 'HIDDEN' ? 'library.learnerHidden' : 'library.learnerUnavailable');
   }
   function status(row: Summary) {
-    return <Badge variant={row.status === 'PUBLISHED' ? 'success' : row.status === 'DRAFT' ? 'warning' : 'secondary'}>
+    return <Badge variant={statusBadgeVariant(row.status)}>
       {lexicon ? visibilityLabel(row.status) : t(`library.states.${row.status}`, { defaultValue: row.status })}
     </Badge>;
   }
@@ -124,8 +125,8 @@ export function LibraryList({ endpoint, route, title, extra }: { endpoint: strin
         <TableHead>{t('library.title')}</TableHead><TableHead>{t('library.year')}</TableHead><TableHead>{t('library.content')}</TableHead><TableHead>{t('library.access')}</TableHead><TableHead>{t('library.state')}</TableHead><TableHead>{t('library.qualityFilter')}</TableHead><TableHead className="text-right">{t('catalog.actions')}</TableHead>
       </TableRow></TableHeader><TableBody>{rows?.map(row => <TableRow key={row.id}>
         {bulk && <TableCell>{check(row)}</TableCell>}<TableCell><Link className="font-medium hover:underline" to={`${route}/${row.id}?tab=preview`}>{titleOf(row)}</Link></TableCell>
-        <TableCell className="tabular-nums">{row.year ?? '—'}</TableCell><TableCell>{t('library.questionCount', { count: row.questionCount ?? 0 })}</TableCell><TableCell><Badge variant="outline">{t(row.accessMode === 'FEATURE' ? 'library.restricted' : 'library.public')}</Badge></TableCell><TableCell>{status(row)}</TableCell>
-        <TableCell><Link className="text-sm underline underline-offset-4" to={`${route}/${row.id}?tab=quality`}>{t(`quality.status.${row.qualityStatus ?? 'UNCHECKED'}`)}</Link></TableCell><TableCell className="text-right"><Button tooltip={t("library.help.editTest")} variant="ghost" size="sm" asChild><Link to={`${route}/${row.id}`}><RiPencilLine aria-hidden="true" />{t('library.editTest')}</Link></Button>{visibilityAction(row)}</TableCell>
+        <TableCell className="tabular-nums">{row.year ?? '—'}</TableCell><TableCell>{t('library.questionCount', { count: row.questionCount ?? 0 })}</TableCell><TableCell><AccessTierBadge accessMode={row.accessMode} /></TableCell><TableCell>{status(row)}</TableCell>
+        <TableCell><Badge variant={statusBadgeVariant(row.qualityStatus ?? 'UNCHECKED')} asChild><Link className="underline underline-offset-2" to={`${route}/${row.id}?tab=quality`}>{t(`quality.status.${row.qualityStatus ?? 'UNCHECKED'}`)}</Link></Badge></TableCell><TableCell className="text-right"><Button tooltip={t("library.help.editTest")} variant="ghost" size="sm" asChild><Link to={`${route}/${row.id}`}><RiPencilLine aria-hidden="true" />{t('library.editTest')}</Link></Button>{visibilityAction(row)}</TableCell>
       </TableRow>)}</TableBody></Table></div> :
       <div className="overflow-hidden rounded-xl border"><Table className="library-table"><TableHeader><TableRow>
         {bulk && <TableHead className="w-12"><Checkbox aria-label={t('library.selectPage')} checked={!!rows?.length && rows.every(row => selected.includes(row.id))} onCheckedChange={checked => setSelected(previous => checked === true ? [...new Set([...previous, ...(rows?.map(row => row.id) ?? [])])].slice(0, 100) : previous.filter(id => !rows?.some(row => row.id === id)) )} /></TableHead>}
@@ -135,9 +136,9 @@ export function LibraryList({ endpoint, route, title, extra }: { endpoint: strin
         {!lexicon && !questions && <TableHead>{t('library.state')}</TableHead>}
         <TableHead className="w-44 text-right">{t('catalog.actions')}</TableHead>
       </TableRow></TableHeader><TableBody>{rows?.map(row => <TableRow key={row.id}>
-        {bulk && <TableCell>{check(row)}</TableCell>}<TableCell><Link className="font-medium leading-relaxed hover:underline" to={`${route}/${row.id}`}>{titleOf(row) || t(row.type === 'CLOZE' ? 'library.clozeQuestion' : 'library.untitledQuestion')}</Link>{lexicon && <><p className="mt-1 text-xs text-muted-foreground">{t(`library.types.${row.type}`, {defaultValue:row.type})}{row.partOfSpeech && ` · ${row.partOfSpeech.split(",").map(pos => t(`library.partsOfSpeech.${pos.trim()}`, {defaultValue:pos.trim()})).join(", ")}`} · {t('library.senseCount', { count: row.senseCount ?? 0 })}</p></>}</TableCell>
-        <TableCell>{lexicon ? meaning(row) : questions ? <Badge variant="outline">{row.difficultyLevel ? t('library.difficultyNumber', { number: row.difficultyLevel }) : t('library.unclassified')}</Badge> : <div className="grid gap-2"><Link className="hover:underline" to={`${route}/${row.id}?tab=questions`}>{t('library.questionCount', { count: row.questionCount ?? 0 })}</Link>{kind === 'topic' ? <Link className="text-xs underline underline-offset-4" to={`/grammar/subtopic?parentId=${row.id}`}>{t('library.viewSubtopics')}</Link> : kind === 'subtopic' && row.parentId ? <Link className="text-xs text-muted-foreground hover:underline" to={`/grammar/topic/${row.parentId}`}>{parents.data?.find(parent=>parent.id===row.parentId) ? titleOf(parents.data.find(parent=>parent.id===row.parentId)!) : t('library.parentTopic')}</Link> : null}</div>}</TableCell>
-        <TableCell>{lexicon || questions ? status(row) : <Badge variant={row.accessMode === 'FEATURE' ? 'outline' : 'secondary'}>{t(row.accessMode === 'FEATURE' ? 'library.restricted' : 'library.public')}</Badge>}</TableCell>
+        {bulk && <TableCell>{check(row)}</TableCell>}<TableCell><Link className="font-medium leading-relaxed hover:underline" to={`${route}/${row.id}`}>{titleOf(row) || t(row.type === 'CLOZE' ? 'library.clozeQuestion' : 'library.untitledQuestion')}</Link>{lexicon && <><p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground"><span>{t(`library.types.${row.type}`, {defaultValue:row.type})}</span>{row.partOfSpeech && <><span>·</span>{row.partOfSpeech.split(",").map(pos => <PosTag key={pos.trim()} pos={pos.trim()} label={t(`library.partsOfSpeech.${pos.trim()}`, {defaultValue:pos.trim()})} />)}</>}<span>· {t('library.senseCount', { count: row.senseCount ?? 0 })}</span></p></>}</TableCell>
+        <TableCell>{lexicon ? meaning(row) : questions ? <DifficultyBadge difficulty={row.difficultyLevel} /> : <div className="grid gap-2"><Link className="hover:underline" to={`${route}/${row.id}?tab=questions`}>{t('library.questionCount', { count: row.questionCount ?? 0 })}</Link>{kind === 'topic' ? <Link className="text-xs underline underline-offset-4" to={`/grammar/subtopic?parentId=${row.id}`}>{t('library.viewSubtopics')}</Link> : kind === 'subtopic' && row.parentId ? <Link className="text-xs text-muted-foreground hover:underline" to={`/grammar/topic/${row.parentId}`}>{parents.data?.find(parent=>parent.id===row.parentId) ? titleOf(parents.data.find(parent=>parent.id===row.parentId)!) : t('library.parentTopic')}</Link> : null}</div>}</TableCell>
+        <TableCell>{lexicon || questions ? status(row) : <AccessTierBadge accessMode={row.accessMode} />}</TableCell>
         {!lexicon && !questions && <TableCell>{status(row)}</TableCell>}
         <TableCell className="text-right"><Button tooltip={t("library.help.openEditor")} variant="ghost" size="sm" asChild><Link to={`${route}/${row.id}`}><RiPencilLine aria-hidden="true" />{t('catalog.editMetadataShort')}</Link></Button>{visibilityAction(row)}</TableCell>
       </TableRow>)}</TableBody></Table></div>}

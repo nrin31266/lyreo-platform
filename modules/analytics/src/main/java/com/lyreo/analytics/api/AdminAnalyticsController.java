@@ -2,6 +2,7 @@ package com.lyreo.analytics.api;
 
 import com.lyreo.analytics.application.AnalyticsService;
 import com.lyreo.analytics.domain.AdminAnalyticsSummary;
+import com.lyreo.analytics.domain.AdminLearnerStudyProfile;
 import com.lyreo.analytics.domain.AnalyticsOverview;
 import java.util.UUID;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -29,5 +30,10 @@ public class AdminAnalyticsController {
     @GetMapping("/learners/{learnerId}")
     public AnalyticsOverview learnerOverview(@PathVariable UUID learnerId) {
         return analytics.overview(learnerId);
+    }
+
+    @GetMapping("/learners/{learnerId}/study-profile")
+    public AdminLearnerStudyProfile learnerStudyProfile(@PathVariable UUID learnerId) {
+        return analytics.adminStudyProfile(learnerId);
     }
 }

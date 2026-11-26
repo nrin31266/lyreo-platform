@@ -5,6 +5,7 @@ import { RiErrorWarningLine as AlertCircle, RiEqualizerLine as Settings2 } from 
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { statusBadgeVariant } from "@/components/ContentBadges";
 import { Badge } from "@/components/ui/badge";
 import type { AuthoringJob } from "./lesson-builder.types";
 export const timingErrors = ["TIMING_OUT_OF_BOUNDS", "TIMING_NON_MONOTONIC", "TIMING_COVERAGE_MISMATCH", "TIMING_ZERO_DURATION", "TIMING_OVERLAP", "TIMING_MISSING"];
@@ -117,7 +118,7 @@ export function JobProgress({
   return <article className="authoring-job-card" data-historical={historical} role={historical ? undefined : "status"}>
     <header className="flex flex-wrap items-center gap-2">
       <strong className="font-medium">{describe(job.operation)}</strong>
-      <Badge variant={job.status === "FAILED" ? historical ? "warning" : "destructive" : job.status === "SUCCEEDED" ? "success" : "secondary"}>{describe(job.status)}</Badge>
+      <Badge variant={statusBadgeVariant(job.status)}>{describe(job.status)}</Badge>
       {activeJob(job) && job.currentStep && <span className="text-xs text-muted-foreground">{describe(job.currentStep)}</span>}
       <JobDuration job={job} />
       <div className="authoring-job-actions ml-auto flex items-center gap-1">

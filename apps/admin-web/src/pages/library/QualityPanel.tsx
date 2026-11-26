@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { RiShieldCheckLine, RiRestartLine, RiArrowRightLine } from "@remixicon/react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { statusBadgeVariant } from "@/components/ContentBadges";
 import { Badge } from "@/components/ui/badge";
 import { AdminPagination } from "@/components/AdminPagination";
 import { CatalogError } from "@/pages/lessons/CatalogFeedback";
@@ -34,7 +35,7 @@ function SavedQualityPanel({ endpoint, revision = 0, dirty = false, onOpen }: Qu
   const filtered = issues.filter(issue => filter === "ALL" || issue.severity === filter);
   const activePage = Math.min(page, Math.max(0, Math.ceil(filtered.length / 30) - 1));
   return <section className="grid gap-4" aria-label={t("library.quality")}>
-    <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap items-center gap-3"><Badge variant="outline"><RiShieldCheckLine className="mr-1 size-4" aria-hidden="true" />{t(`quality.status.${status}`)}</Badge>{current?.checkedAt && ["PASSED", "WARNING", "BLOCKED"].includes(status) && <span className="text-xs text-muted-foreground">{new Date(current.checkedAt).toLocaleString(i18n.language)} · {t("library.revision", { revision: current.revision })} · {current.rulesVersion}</span>}</div><div className="flex gap-2">{status === "RUNNING" && !run.isPending && current?.jobId && <Button size="sm" variant="outline" disabled={cancel.isPending} onClick={() => cancel.mutate()}>{t("library.cancel")}</Button>}<Button variant="outline" size="sm" tooltip={t("quality.runHelp")} disabled={dirty || status === "RUNNING" || run.isPending} onClick={() => run.mutate()}><RiRestartLine aria-hidden="true" />{t("quality.run")}</Button></div></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap items-center gap-3"><Badge variant={statusBadgeVariant(status)}><RiShieldCheckLine className="mr-1 size-4" aria-hidden="true" />{t(`quality.status.${status}`)}</Badge>{current?.checkedAt && ["PASSED", "WARNING", "BLOCKED"].includes(status) && <span className="text-xs text-muted-foreground">{new Date(current.checkedAt).toLocaleString(i18n.language)} · {t("library.revision", { revision: current.revision })} · {current.rulesVersion}</span>}</div><div className="flex gap-2">{status === "RUNNING" && !run.isPending && current?.jobId && <Button size="sm" variant="outline" disabled={cancel.isPending} onClick={() => cancel.mutate()}>{t("library.cancel")}</Button>}<Button variant="outline" size="sm" tooltip={t("quality.runHelp")} disabled={dirty || status === "RUNNING" || run.isPending} onClick={() => run.mutate()}><RiRestartLine aria-hidden="true" />{t("quality.run")}</Button></div></div>
     <p className="text-sm text-muted-foreground">{t(dirty ? "library.qualitySaveFirst" : "quality.scope")}</p>
     <CatalogError error={report.error || run.error || cancel.error} retry={() => void refresh()} />
     {status === "RUNNING" && <p role="status" className="text-sm">{t("quality.running")}</p>}

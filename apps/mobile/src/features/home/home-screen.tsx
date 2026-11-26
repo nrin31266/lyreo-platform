@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/card';
 import { Text } from '@/components/ui/text';
 import { AccountSummary } from '@/features/account/account-summary';
+import { LearnerProgress } from '@/features/progress/learner-progress';
 
 export function HomeScreen() {
   const { t } = useTranslation('mobile');
@@ -17,8 +18,15 @@ export function HomeScreen() {
             {t('home.title')}
           </Text>
         </View>
-        <View className="rounded-full bg-secondary px-3 py-2.5">
-          <Text className="font-medium text-secondary-foreground">💎 240</Text>
+        <View className="items-end gap-1">
+          <Link href="/notifications" asChild>
+            <Pressable accessibilityRole="link" className="min-h-12 justify-center">
+              <Text className="font-bold text-primary">{t('notifications.title')}</Text>
+            </Pressable>
+          </Link>
+          <View className="rounded-full bg-secondary px-3 py-2.5">
+            <Text className="font-medium text-secondary-foreground">💎 240</Text>
+          </View>
         </View>
       </View>
 
@@ -50,14 +58,9 @@ export function HomeScreen() {
         <SummaryCard label={t('home.studyTime')} value="25m" note={t('home.activities')} />
       </View>
 
-      <Text className="mt-3 text-[15px] font-semibold text-foreground">{t('home.needsAttention')}</Text>
-      <Card className="p-[18px]">
-        <Text className="text-xl font-bold text-foreground">{t('home.weakTopic')}</Text>
-        <Text className="mt-1 leading-5 text-muted-foreground">{t('home.weakCopy')}</Text>
-        <Text className="mt-2 font-bold text-primary">{t('home.review')}</Text>
-      </Card>
+      <LearnerProgress summary />
 
-      <View className="flex-row justify-between pt-4">
+      <View className="flex-row flex-wrap justify-between gap-x-4 pt-4">
         <Link href="/progress" asChild>
           <Pressable accessibilityRole="link" className="min-h-12 justify-center"><Text className="font-bold text-primary">{t('home.progress')}</Text></Pressable>
         </Link>

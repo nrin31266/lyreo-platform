@@ -19,11 +19,15 @@ import {
 } from './learners.api';
 import { learnerAvatarColor, learnerInitials } from './LearnerAvatar';
 import { avatarPackIds, avatarPortraitSource, portraitPacks } from './learner-avatar-presets';
-import { fetchLearnerAnalytics } from '@/pages/overview/admin-ops.api';
+import {
+  fetchLearnerAnalytics,
+  fetchLearnerStudyProfile,
+} from '@/pages/overview/admin-ops.api';
 
 vi.mock('@/pages/overview/admin-ops.api', async importOriginal => ({
   ...(await importOriginal<typeof import('@/pages/overview/admin-ops.api')>()),
   fetchLearnerAnalytics: vi.fn(),
+  fetchLearnerStudyProfile: vi.fn(),
 }));
 
 vi.mock('./learners.api', async importOriginal => ({
@@ -82,6 +86,21 @@ beforeEach(async () => {
     skills: [],
     weaknesses: [],
   });
+  vi.mocked(fetchLearnerStudyProfile).mockResolvedValue({
+    hasHistory: true,
+    today: { fromDate: '2026-11-26', toDate: '2026-11-26', activeDays: 1, studySeconds: 900, lessonCount: 2, vocabularyReviewCount: 15, grammarAnswerCount: 10, toeicQuestionCount: 5 },
+    week: { fromDate: '2026-11-20', toDate: '2026-11-26', activeDays: 5, studySeconds: 4500, lessonCount: 6, vocabularyReviewCount: 80, grammarAnswerCount: 30, toeicQuestionCount: 20 },
+    month: { fromDate: '2026-10-28', toDate: '2026-11-26', activeDays: 12, studySeconds: 10800, lessonCount: 14, vocabularyReviewCount: 180, grammarAnswerCount: 70, toeicQuestionCount: 45 },
+    dailySeries: [
+      { date: '2026-11-25', studySeconds: 600, lessonCount: 1, vocabularyReviewCount: 10, grammarAnswerCount: 5, toeicQuestionCount: 0 },
+      { date: '2026-11-26', studySeconds: 900, lessonCount: 2, vocabularyReviewCount: 15, grammarAnswerCount: 10, toeicQuestionCount: 5 },
+    ],
+    skills: [{ skillCode: 'LISTENING', score: 82.5, sampleCount: 10, updatedAt: '2026-11-26T00:00:00Z' }],
+    weaknesses: [{ weaknessType: 'GRAMMAR_TOPIC', weaknessKey: 'tenses', label: 'Verb Tenses & Aspect', severity: 64, sampleCount: 12, updatedAt: '2026-11-26T00:00:00Z' }],
+    enrolledPaths: [{ pathId: 'p-1', pathName: 'Core A2–B1 Track', level: 'A2', status: 'IN_PROGRESS', completedItems: 3, totalItems: 8, startedAt: '2026-11-10T00:00:00Z' }],
+    unlockedAchievements: [{ achievementId: 'a-1', code: 'STREAK_7', title: '7-Day Streak', badgeTier: 'BRONZE', badgeAssetId: null, unlockedAt: '2026-11-25T00:00:00Z' }],
+    breakdown: { lessonsCompleted: 5, lessonsInProgress: 2, vocabCardsTotal: 120, vocabCardsMastered: 48, grammarAttempts: 30, grammarAccuracyPct: 83, toeicAttempts: 3, bestToeicScore: 760 },
+  });
   vi.mocked(fetchLearnerGamification).mockResolvedValue({
     learnerId: ada.learnerId,
     xp: 120,
@@ -116,22 +135,26 @@ function show(url = '/learners') {
   );
 }
 
-it('queries the selected status and page, then keeps both when returning from a detail', async () => {
+it('queries the selected status and page, selects inline in inspector, and preserves query on return link', async () => {
   show('/learners?status=COMPLETED&query=ada');
-  await screen.findByRole('link', { name: 'Ada' });
+  await screen.findByRole('button', { name: 'Ada' });
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
   await waitFor(() => expect(fetchLearners).toHaveBeenCalledWith(1, 'ada', 'COMPLETED', expect.any(AbortSignal)));
-  fireEvent.click(screen.getByRole('link', { name: 'Ada' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Ada' }));
   expect(await screen.findByText('10 min/day')).toBeInTheDocument();
   expect(screen.getByText('Conversation')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('link', { name: 'Back to learner profiles' }));
-  expect(await screen.findByRole('searchbox')).toHaveValue('ada');
+  expect(screen.getByRole('searchbox')).toHaveValue('ada');
   expect(screen.getByRole('button', { name: 'Page 2' })).toHaveAttribute('aria-current', 'page');
+
+  cleanup();
+  show(`/learners/${ada.learnerId}?status=COMPLETED&query=ada&page=1`);
+  fireEvent.click(await screen.findByRole('link', { name: 'Back to learner profiles' }));
+  expect(await screen.findByRole('searchbox')).toHaveValue('ada');
 });
 
 it('debounces name or email search and resets to the first page', async () => {
   show('/learners?status=PENDING&page=2');
-  await screen.findByRole('link', { name: 'Ada' });
+  await screen.findByRole('button', { name: 'Ada' });
   fireEvent.change(screen.getByRole('searchbox'), { target: { value: ' new@example.test ' } });
   await waitFor(() => expect(fetchLearners).toHaveBeenCalledWith(0, 'new@example.test', 'PENDING', expect.any(AbortSignal)));
 });
@@ -223,7 +246,7 @@ it('uses initials when a saved avatar is absent from the catalog', async () => {
   expect(updateLearnerAppearance).not.toHaveBeenCalled();
 });
 
-it('grants and revokes an entitlement with a reason and adjusts diamonds', async () => {
+it('upgrades a learner to Plus, downgrades back to Free, and adjusts diamonds', async () => {
   const activeGrant = {
     id: 'grant-1',
     userId: ada.learnerId,
@@ -240,8 +263,8 @@ it('grants and revokes an entitlement with a reason and adjusts diamonds', async
     revocationReason: null,
   };
   vi.mocked(fetchLearnerGrants).mockResolvedValueOnce([]).mockResolvedValue([activeGrant]);
-  vi.mocked(createLearnerGrant).mockResolvedValueOnce(activeGrant);
-  vi.mocked(revokeLearnerGrant).mockResolvedValueOnce({
+  vi.mocked(createLearnerGrant).mockResolvedValue(activeGrant);
+  vi.mocked(revokeLearnerGrant).mockResolvedValue({
     ...activeGrant,
     status: 'REVOKED',
     revokedAt: '2026-11-25T01:00:00Z',
@@ -285,30 +308,33 @@ it('grants and revokes an entitlement with a reason and adjusts diamonds', async
   });
 
   show(`/learners/${ada.learnerId}`);
-  expect(await screen.findByText('Entitlement grants')).toBeInTheDocument();
+  const planTab = await screen.findByRole('tab', { name: 'Free & Plus' });
+  fireEvent.mouseDown(planTab);
+  fireEvent.click(planTab);
+  expect(await screen.findByText('Membership Plan')).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole('button', { name: 'Grant feature' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Upgrade to Plus' }));
   fireEvent.change(screen.getByLabelText('Reference note (optional)'), { target: { value: 'VIP QA' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save grant' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm Plus upgrade' }));
   await waitFor(() =>
     expect(createLearnerGrant).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: ada.learnerId,
-        featureKey: 'vocabulary.plus-packs',
         sourceType: 'ADMIN_MANUAL',
         sourceReference: 'VIP QA',
       }),
     ),
   );
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Revoke' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Revoke grant' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Enter a reason before submitting.');
-  fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Expired trial' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Revoke grant' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove Plus (to Free)' }));
+  fireEvent.change(screen.getByLabelText('Reason (optional)'), { target: { value: 'Expired trial' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm remove Plus' }));
   await waitFor(() => expect(revokeLearnerGrant).toHaveBeenCalledWith('grant-1', 'Expired trial'));
 
-  fireEvent.click(screen.getByRole('button', { name: 'Adjust diamonds' }));
+  const rewardsTab = screen.getByRole('tab', { name: 'XP & Diamonds' });
+  fireEvent.mouseDown(rewardsTab);
+  fireEvent.click(rewardsTab);
+  fireEvent.click(await screen.findByRole('button', { name: 'Adjust diamonds' }));
   fireEvent.change(screen.getByLabelText('Diamond delta (+ / -)'), { target: { value: '25' } });
   fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Manual QA credit' } });
   fireEvent.click(screen.getByRole('button', { name: 'Apply adjustment' }));
@@ -322,4 +348,12 @@ it('grants and revokes an entitlement with a reason and adjusts diamonds', async
     ),
   );
   expect(await screen.findByText('Manual QA credit')).toBeInTheDocument();
+});
+
+it('displays rich study profile with daily series, enrolled paths, unlocked badges, and resolved weakness labels', async () => {
+  show(`/learners/${ada.learnerId}`);
+  expect(await screen.findByText('Core A2–B1 Track')).toBeInTheDocument();
+  expect(screen.getByText('7-Day Streak')).toBeInTheDocument();
+  expect(screen.getByText(/Verb Tenses & Aspect/)).toBeInTheDocument();
+  expect(screen.getByText('760')).toBeInTheDocument();
 });

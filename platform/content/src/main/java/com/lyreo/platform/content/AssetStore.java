@@ -7,8 +7,10 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.security.MessageDigest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 @Service
@@ -88,6 +90,31 @@ public class AssetStore {
             jdbc.update("INSERT INTO content_asset(id,sha256,storage_key,mime_type,size_bytes,filename,synthetic,created_by) VALUES(:id,:sha,:key,:mime,:size,:name,:synthetic,:actor)",Map.of("id",id,"sha",sha,"key",key,"mime",mime,"size",bytes.length,"name",name,"synthetic",synthetic,"actor",actor));
             return get(id);
         } catch(java.security.NoSuchAlgorithmException impossible) {throw new IllegalStateException(impossible);}
+    }
+
+    @Transactional
+    public void delete(UUID id) {
+        String storageKey = key(id);
+        try {
+            int deleted = jdbc.update("DELETE FROM content_asset WHERE id = :id", Map.of("id", id));
+            if (deleted == 0) {
+                throw new ResourceNotFoundException("Media not found");
+            }
+        } catch (DataIntegrityViolationException referenced) {
+            throw new StateConflictException("Media asset is currently referenced by content and cannot be deleted");
+        }
+        Long remaining = jdbc.queryForObject(
+            "SELECT count(*) FROM content_asset WHERE storage_key = :key",
+            Map.of("key", storageKey),
+            Long.class
+        );
+        if (remaining == null || remaining == 0L) {
+            try {
+                storage.delete(storageKey);
+            } catch (RuntimeException ignored) {
+                // Storage blob may have been removed or shared externally
+            }
+        }
     }
     private static String detect(byte[] b) {
         if(b.length>=12) {

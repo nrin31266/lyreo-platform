@@ -28,6 +28,16 @@ public class JdbcGrammarCatalogSource implements GrammarCatalogSource {
         return jdbc.query(("SELECT %s AS title,%s AS english,%s AS description,%s AS description_en,%s AS parent_id,v.order_index,c.access_mode,c.required_feature_key,(SELECT count(DISTINCT item_id) FROM grammar_membership m WHERE m.%s=v.id) AS question_count FROM %s_version v JOIN %s_catalog c ON c.id=v.catalog_id JOIN dataset_active_release a ON a.release_id=v.release_id WHERE a.domain='grammar-toeic' AND c.id=:id").formatted(title,english,description,descriptionEn,parent,field,table,table),Map.of("id",id),(rs,n)->new Metadata(new GrammarCatalog(rs.getString("title"),rs.getString("english"),rs.getString("description"),rs.getString("description_en"),rs.getObject("parent_id",UUID.class),rs.getInt("order_index"),rs.getString("access_mode"),rs.getString("required_feature_key"),List.of()),rs.getInt("question_count"))).stream().findFirst();
     }
     public String status(String kind,UUID id) {return jdbc.queryForObject("SELECT publication_status FROM "+table(kind)+"_catalog WHERE id=:id",Map.of("id",id),String.class);}
+    @Override
+    public void updateAccess(String kind, UUID id, String accessMode, String requiredFeatureKey) {
+        jdbc.update(
+            "UPDATE " + table(kind) + "_catalog SET access_mode = :accessMode, required_feature_key = :featureKey, updated_at = now() WHERE id = :id",
+            new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("accessMode", accessMode)
+                .addValue("featureKey", requiredFeatureKey)
+        );
+    }
     public List<Summary> list(String kind,String query,UUID parentId,String status,int page,int size) {return list(kind,query,parentId,status,"",page,size);}
     public List<Summary> list(String kind,String query,UUID parentId,String status,String access,int page,int size) {
         return jdbc.query(catalogQuery(kind,false),parameters(kind,query,parentId,status,access,page,size),

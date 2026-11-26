@@ -3,6 +3,7 @@ import { RiLoader4Line, RiCheckLine, RiErrorWarningLine, RiRefreshLine, RiCloseC
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { activeJob, authoringJobErrorKey, jobRetryLabelKey, jobProblemSentence, JobDuration, useCodeLabel } from './AuthoringJobProgress';
+import { statusBadgeVariant } from '@/components/ContentBadges';
 import { Badge } from '@/components/ui/badge';
 import type { AuthoringJob } from './lesson-builder.types';
 
@@ -20,7 +21,7 @@ export function ProcessingStatus({ job, label, onRetry, onCancel, onInspectProbl
     <div className="processing-status-heading">
       {running ? <RiLoader4Line className="animate-spin" aria-hidden="true" /> : failed ? <RiErrorWarningLine aria-hidden="true" /> : job?.status === 'CANCELLED' ? <RiCloseCircleLine aria-hidden="true" /> : <RiCheckLine aria-hidden="true" />}
       <div className="processing-status-copy">
-        <div className="processing-status-title" role="status" aria-live="polite"><strong>{title}</strong>{job ? <Badge variant={failed ? 'destructive' : 'secondary'}>{describe(job.status)}</Badge> : <span>{t('twoStep.pleaseWait')}</span>}</div>
+        <div className="processing-status-title" role="status" aria-live="polite"><strong>{title}</strong>{job ? <Badge variant={statusBadgeVariant(job.status)}>{describe(job.status)}</Badge> : <span>{t('twoStep.pleaseWait')}</span>}</div>
         {failed && <p role="alert">{t(`lessonAuthoring.jobErrors.${job && authoringJobErrorKey(job)}`, { defaultValue: job?.errorMessage || t('twoStep.processingFailed') })}</p>}
         {failed && job?.errorMessage && <p className="processing-error-detail">{job.errorCode}: {job.errorMessage}</p>}
         {job?.status === 'RETRY_WAIT' && <p>{job.nextRetryAt ? t('lessonAuthoring.retryAt', { time: new Date(job.nextRetryAt).toLocaleString(i18n.language) }) : t('twoStep.waitingRetry')}</p>}

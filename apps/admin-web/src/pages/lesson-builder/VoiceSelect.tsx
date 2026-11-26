@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
-import { Field, FieldLabel } from '@/components/ui/field';
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CatalogError } from '@/pages/lessons/CatalogFeedback';
 import { fetchVoices, fetchVoiceSample, prepareVoiceSamples, type Voice } from './lesson-builder.api';
 
@@ -82,4 +83,50 @@ export function VoiceSelect({ value, onChange, disabled = false }: { value: stri
       </DialogContent>
     </Dialog>
   </Field>;
+}
+
+const TTS_SPEED_PRESETS = [
+  { value: '0.8', key: 'media.ttsSpeedSlow' },
+  { value: '0.9', key: 'media.ttsSpeedGentle' },
+  { value: '1', key: 'media.ttsSpeedNormal' },
+  { value: '1.15', key: 'media.ttsSpeedBrisk' },
+] as const;
+
+/**
+ * Reading pace selector for text-to-speech lesson synthesis (Kokoro speed).
+ */
+export function TtsSpeedSelect({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value?: number;
+  onChange: (speed: number) => void;
+  disabled?: boolean;
+}) {
+  const { t } = useTranslation('admin');
+  const normalized = String(value ?? 1);
+  const current = TTS_SPEED_PRESETS.some((preset) => preset.value === normalized) ? normalized : '1';
+  return (
+    <Field>
+      <FieldLabel htmlFor="tts-speed">{t('media.ttsSpeed')}</FieldLabel>
+      <Select
+        value={current}
+        disabled={disabled}
+        onValueChange={(next) => onChange(Number(next))}
+      >
+        <SelectTrigger id="tts-speed" aria-label={t('media.ttsSpeed')}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {TTS_SPEED_PRESETS.map((preset) => (
+            <SelectItem key={preset.value} value={preset.value}>
+              {t(preset.key)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <FieldDescription>{t('media.ttsSpeedHelp')}</FieldDescription>
+    </Field>
+  );
 }

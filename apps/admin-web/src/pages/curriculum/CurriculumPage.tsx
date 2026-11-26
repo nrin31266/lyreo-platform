@@ -13,7 +13,6 @@ import {
   RiScissorsCutLine,
   RiShieldCheckLine,
   RiStackLine,
-  RiVipCrownLine,
 } from '@remixicon/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -35,8 +34,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { AccessTierOption } from '@/components/AccessTierOption';
+import { AuthenticatedImage } from '@/components/AuthenticatedImage';
+import { AccessTierBadge, CefrLevelBadge, statusBadgeVariant } from '@/components/ContentBadges';
+import { ImageAssetEditor } from '@/components/ImageAssetEditor';
 import { CatalogError, CatalogSkeleton } from '@/pages/lessons/CatalogFeedback';
-import { fetchContentMediaList } from '@/pages/overview/admin-ops.api';
 import { CurriculumGraphPreview } from './CurriculumGraphPreview';
 import { CurriculumSlicePickerDialog } from './CurriculumSlicePickerDialog';
 import {
@@ -159,12 +161,6 @@ function toDraft(path: AdminCurriculumPath): DraftPath {
   };
 }
 
-function statusVariant(status: CurriculumStatus): 'secondary' | 'success' | 'outline' {
-  if (status === 'PUBLISHED') return 'success';
-  if (status === 'ARCHIVED') return 'outline';
-  return 'secondary';
-}
-
 function moveElement<T>(list: T[], index: number, delta: -1 | 1): T[] {
   const target = index + delta;
   if (target < 0 || target >= list.length) return list;
@@ -201,6 +197,7 @@ export function CurriculumPage() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [expandedUuidKeys, setExpandedUuidKeys] = useState<Record<string, boolean>>({});
   const [pickerTarget, setPickerTarget] = useState<{
     sectionIndex: number;
     itemIndex: number;
@@ -224,11 +221,6 @@ export function CurriculumPage() {
     queryKey: [...curriculumKey, 'diagnostics', draft?.id],
     enabled: Boolean(draft?.id),
     queryFn: ({ signal }) => fetchCurriculumPathDiagnostics(draft!.id!, signal),
-  });
-
-  const mediaQuery = useQuery({
-    queryKey: ['admin-curriculum-cover-media'],
-    queryFn: ({ signal }) => fetchContentMediaList({ kind: 'image', size: 50 }, signal),
   });
 
   const titleLookup = useMemo(() => {
@@ -395,7 +387,7 @@ export function CurriculumPage() {
   }
 
   return (
-    <section className="mx-auto grid w-full max-w-7xl gap-5">
+    <section className="grid w-full gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">{t('curriculumWorkspace.title')}</h1>
@@ -422,7 +414,7 @@ export function CurriculumPage() {
       {paths.isPending && <CatalogSkeleton />}
 
       {paths.data && (
-        <div className="grid items-start gap-5 lg:grid-cols-[19rem_minmax(0,1fr)]">
+        <div className="grid items-start gap-5 lg:grid-cols-[20rem_minmax(0,1fr)] xl:grid-cols-[22rem_minmax(0,1fr)]">
           <aside
             className="grid gap-2 rounded-2xl border bg-card p-3"
             aria-label={t('curriculumWorkspace.pathListLabel')}
@@ -449,24 +441,40 @@ export function CurriculumPage() {
                       aria-pressed={selected}
                       onClick={() => selectPath(path.id)}
                       className={cn(
-                        'grid gap-1.5 rounded-xl border p-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring',
+                        'grid grid-cols-[2.75rem_minmax(0,1fr)] items-start gap-2.5 rounded-xl border p-2.5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring',
                         selected ? 'border-primary bg-muted/70' : 'border-transparent bg-muted/25',
                       )}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="font-medium leading-snug">{path.name}</span>
-                        <Badge variant={statusVariant(path.status)}>
-                          {t(`curriculumWorkspace.statuses.${path.status}`)}
-                        </Badge>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className="font-mono">{path.code}</span>
-                        {path.level ? <span>· {path.level}</span> : null}
-                        {path.accessMode === 'FEATURE' ? (
-                          <Badge variant="warning" className="text-[10px]">
-                            PLUS
+                      <AuthenticatedImage
+                        src={
+                          path.coverAssetId
+                            ? `/api/v1/admin/content-media/${encodeURIComponent(path.coverAssetId)}/file`
+                            : null
+                        }
+                        alt={path.name}
+                        className="size-11 shrink-0 rounded-lg border object-cover"
+                        fallback={
+                          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg border bg-muted text-muted-foreground">
+                            <RiImageLine className="size-4" aria-hidden="true" />
+                          </div>
+                        }
+                      />
+                      <div className="min-w-0 grid gap-1">
+                        <div className="flex items-start justify-between gap-1.5">
+                          <span className="line-clamp-2 text-sm font-medium leading-snug">
+                            {path.name}
+                          </span>
+                          <Badge variant={statusBadgeVariant(path.status)} className="shrink-0">
+                            {t(`curriculumWorkspace.statuses.${path.status}`)}
                           </Badge>
-                        ) : null}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                          <span className="truncate font-mono">{path.code}</span>
+                          {path.level ? <CefrLevelBadge level={path.level} className="h-5 px-1.5 text-[10px]" /> : null}
+                          {path.accessMode === 'FEATURE' ? (
+                            <AccessTierBadge accessMode={path.accessMode} size="sm" />
+                          ) : null}
+                        </div>
                       </div>
                     </button>
                   );
@@ -524,15 +532,8 @@ export function CurriculumPage() {
                             </CardTitle>
                           </div>
                           <div className="flex items-center gap-2">
-                            {draft.accessMode === 'FEATURE' ? (
-                              <Badge variant="warning">
-                                <RiVipCrownLine className="size-3" aria-hidden="true" />
-                                PLUS
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline">FREE</Badge>
-                            )}
-                            <Badge variant={statusVariant(draft.status)}>
+                            <AccessTierBadge accessMode={draft.accessMode} />
+                            <Badge variant={statusBadgeVariant(draft.status)}>
                               {t(`curriculumWorkspace.statuses.${draft.status}`)}
                             </Badge>
                           </div>
@@ -614,68 +615,31 @@ export function CurriculumPage() {
                         </div>
 
                         <div className="grid gap-4 sm:grid-cols-2">
-                          <div className="grid gap-1.5">
-                            <Label>{t('curriculumWorkspace.coverImage')}</Label>
-                            <div className="flex items-center gap-3">
-                              {draft.coverAssetId ? (
-                                <img
-                                  src={`/api/v1/admin/content-media/${encodeURIComponent(draft.coverAssetId)}/file`}
-                                  alt={draft.name}
-                                  className="size-12 rounded-lg border object-cover"
-                                />
-                              ) : (
-                                <div className="flex size-12 items-center justify-center rounded-lg border bg-muted text-muted-foreground">
-                                  <RiImageLine className="size-5" aria-hidden="true" />
-                                </div>
-                              )}
-                              <Select
-                                value={draft.coverAssetId || 'NONE'}
-                                onValueChange={(value) => {
-                                  setDraft({
-                                    ...draft,
-                                    coverAssetId: value === 'NONE' ? null : value,
-                                  });
-                                  setSavedNotice(false);
-                                }}
-                              >
-                                <SelectTrigger className="flex-1">
-                                  <SelectValue placeholder={t('curriculumWorkspace.noCover')} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="NONE">
-                                    {t('curriculumWorkspace.noCover')}
-                                  </SelectItem>
-                                  {(mediaQuery.data?.items ?? []).map((asset) => (
-                                    <SelectItem key={asset.id} value={asset.id}>
-                                      {asset.filename || asset.id}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
+                          <ImageAssetEditor
+                            mode="asset"
+                            aspect={16 / 9}
+                            outputWidth={640}
+                            outputHeight={360}
+                            value={draft.coverAssetId}
+                            onChange={(coverAssetId) => {
+                              setDraft({ ...draft, coverAssetId });
+                              setSavedNotice(false);
+                            }}
+                            label={t('curriculumWorkspace.coverImage')}
+                            alt={draft.name}
+                          />
 
-                          <div className="grid gap-1.5">
-                            <Label>{t('curriculumWorkspace.accessTier')}</Label>
-                            <div className="flex items-center justify-between rounded-xl border bg-muted/20 px-3 py-2 text-sm">
-                              <span>
-                                {draft.accessMode === 'FEATURE'
-                                  ? t('curriculumWorkspace.accessPlus')
-                                  : t('curriculumWorkspace.accessFree')}
-                              </span>
-                              <Switch
-                                checked={draft.accessMode === 'FEATURE'}
-                                onCheckedChange={(checked) => {
-                                  setDraft({
-                                    ...draft,
-                                    accessMode: checked ? 'FEATURE' : 'PUBLIC',
-                                    requiredFeatureKey: checked ? 'lesson.plus-lessons' : null,
-                                  });
-                                  setSavedNotice(false);
-                                }}
-                              />
-                            </div>
-                          </div>
+                          <AccessTierOption
+                            value={draft.accessMode}
+                            onChange={(next) => {
+                              setDraft({
+                                ...draft,
+                                accessMode: next,
+                                requiredFeatureKey: next === 'FEATURE' ? 'lesson.plus-lessons' : null,
+                              });
+                              setSavedNotice(false);
+                            }}
+                          />
                         </div>
 
                         <div className="grid gap-1.5">
@@ -907,35 +871,71 @@ export function CurriculumPage() {
                                       <Label htmlFor={`item-ref-${item.key}`}>
                                         {t('curriculumWorkspace.contentReferenceId')}
                                       </Label>
-                                      <div className="flex items-center gap-2">
-                                        <Input
-                                          id={`item-ref-${item.key}`}
-                                          placeholder="00000000-0000-0000-0000-000000000000"
-                                          className="font-mono text-xs"
-                                          value={item.contentReferenceId}
-                                          onChange={(event) =>
-                                            updateItem(sectionIndex, itemIndex, {
-                                              contentReferenceId: event.target.value,
-                                            })
-                                          }
-                                        />
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() =>
-                                            setPickerTarget({
-                                              sectionIndex,
-                                              itemIndex,
-                                              contentType: item.contentType,
-                                              currentId: item.contentReferenceId,
-                                              currentConfig: item.config ?? {},
-                                            })
-                                          }
-                                        >
-                                          {t('curriculumWorkspace.browseContent')}
-                                        </Button>
-                                      </div>
+                                      {resolvedTitle && !expandedUuidKeys[item.key] ? (
+                                        <div className="flex items-center gap-2">
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            className="flex-1 justify-start truncate font-normal"
+                                            onClick={() =>
+                                              setPickerTarget({
+                                                sectionIndex,
+                                                itemIndex,
+                                                contentType: item.contentType,
+                                                currentId: item.contentReferenceId,
+                                                currentConfig: item.config ?? {},
+                                              })
+                                            }
+                                          >
+                                            <span className="truncate">{resolvedTitle}</span>
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className="shrink-0 font-mono text-[11px] text-muted-foreground"
+                                            onClick={() =>
+                                              setExpandedUuidKeys((prev) => ({
+                                                ...prev,
+                                                [item.key]: true,
+                                              }))
+                                            }
+                                          >
+                                            UUID
+                                          </Button>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-2">
+                                          <Input
+                                            id={`item-ref-${item.key}`}
+                                            placeholder="00000000-0000-0000-0000-000000000000"
+                                            className="font-mono text-xs"
+                                            value={item.contentReferenceId}
+                                            onChange={(event) =>
+                                              updateItem(sectionIndex, itemIndex, {
+                                                contentReferenceId: event.target.value,
+                                              })
+                                            }
+                                          />
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
+                                              setPickerTarget({
+                                                sectionIndex,
+                                                itemIndex,
+                                                contentType: item.contentType,
+                                                currentId: item.contentReferenceId,
+                                                currentConfig: item.config ?? {},
+                                              })
+                                            }
+                                          >
+                                            {t('curriculumWorkspace.browseContent')}
+                                          </Button>
+                                        </div>
+                                      )}
                                     </div>
                                     <div className="grid gap-1">
                                       <Label htmlFor={`item-unlock-${item.key}`}>
@@ -1155,18 +1155,24 @@ export function CurriculumPage() {
                                     </div>
                                   </TableCell>
                                   <TableCell className="tabular-nums text-xs">
-                                    {chk.sliceCount > 0 ? chk.sliceCount : 'All'}
+                                    {chk.sliceCount > 0
+                                      ? chk.sliceCount
+                                      : t('curriculumWorkspace.diagnostics.allSlice')}
                                   </TableCell>
                                   <TableCell>
                                     {chk.exists && chk.sliceValid ? (
                                       <Badge variant="success">
                                         <RiCheckDoubleLine className="size-3" aria-hidden="true" />
-                                        OK
+                                        {t('curriculumWorkspace.diagnostics.ok')}
                                       </Badge>
                                     ) : (
                                       <Badge variant="destructive">
                                         <RiAlertLine className="size-3" aria-hidden="true" />
-                                        {chk.exists ? 'Slice issue' : 'Missing'}
+                                        {t(
+                                          chk.exists
+                                            ? 'curriculumWorkspace.diagnostics.sliceIssue'
+                                            : 'curriculumWorkspace.diagnostics.missingRef',
+                                        )}
                                       </Badge>
                                     )}
                                   </TableCell>

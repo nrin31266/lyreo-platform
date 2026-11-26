@@ -146,7 +146,21 @@ public class AssessmentSessions {
         repository.submit(id,json.writeValueAsString(result));
         Instant now=Instant.now();
         if("toeic".equals(row.domain())) {
-            events.publishEvent(new ToeicAttemptCompletedEvent(learnerId,id,row.catalogId(),row.mode(),listening,listeningTotal,reading,readingTotal,null,null,now));
+            var partCounts = new TreeMap<Integer, int[]>();
+            for (Feedback answer : feedback) {
+                if (answer.part() < 1 || answer.part() > 7) continue;
+                int[] counts = partCounts.computeIfAbsent(answer.part(), ignored -> new int[2]);
+                if (answer.correct()) counts[0]++;
+                counts[1]++;
+            }
+            var parts = partCounts.entrySet().stream()
+                .map(entry -> new ToeicAttemptCompletedEvent.PartResult(
+                    entry.getKey(), entry.getValue()[0], entry.getValue()[1]))
+                .toList();
+            events.publishEvent(new ToeicAttemptCompletedEvent(
+                learnerId, id, row.catalogId(), row.mode(), listening, listeningTotal,
+                reading, readingTotal, null, null, now, parts
+            ));
         } else if("grammar".equals(row.domain())) {
             for(int index=0;index<snapshot.items().size();index++) {
                 var item=snapshot.items().get(index);var score=feedback.get(index);

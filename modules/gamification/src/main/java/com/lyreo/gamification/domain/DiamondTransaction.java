@@ -33,6 +33,7 @@ public record DiamondTransaction(
         MISSION_REWARD,
         STREAK_REWARD,
         ACHIEVEMENT_REWARD,
+        LEVEL_MILESTONE,
         ADMIN_ADJUSTMENT,
         PURCHASE,
         AI_FEATURE_SPEND

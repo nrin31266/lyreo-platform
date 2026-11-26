@@ -767,8 +767,8 @@ class DemoUpgradeAndMediaTest(unittest.TestCase):
         assets_dir = REPO_ROOT / "infra/postgres/seed/assets"
         path_webps = sorted((assets_dir / "paths").glob("*.webp"))
         badge_webps = sorted((assets_dir / "badges").glob("*.webp"))
-        self.assertEqual(len(path_webps), 3)
-        self.assertEqual(len(badge_webps), 10)
+        self.assertEqual(len(path_webps), 4)
+        self.assertEqual(len(badge_webps), 14)
         for webp in (*path_webps, *badge_webps):
             digest = hashlib.sha256(webp.read_bytes()).hexdigest()
             self.assertIn(digest, sql, f"Missing SHA-256 for {webp.name} in demo.sql")
@@ -777,19 +777,19 @@ class DemoUpgradeAndMediaTest(unittest.TestCase):
         self.assertNotIn("generate_series(1, 35)", sql)
         self.assertNotIn("generate_series(1, 200)", sql)
 
-        # Key curated-slice paths, roleplay scenarios, badges, Plus gates & notifications present
+        # Key curated-slice paths, badges, Plus gates & notifications present
         for marker in (
             "REAL_WORLD_ENGLISH_A2_B1",
             "WORKPLACE_FLUENCY_B1_B2",
-            "CAFE_MORNING_RUSH",
-            "ENGINEERING_STANDUP",
-            "AIRPORT_REBOOKING_PRO",
+            "TOEIC_500_FOUNDATION",
+            "TOEIC_800_MASTERY",
+            "xpLevelMultiplier",
+            "milestoneInterval",
             "STREAK_365",
             "LESSONS_150",
             "VOCAB_2500",
             "TOEIC_100",
             "lesson.plus-lessons",
-            "speaking.roleplay",
             "vocabulary.plus-packs",
             "learner_notification",
         ):

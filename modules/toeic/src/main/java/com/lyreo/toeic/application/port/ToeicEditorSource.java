@@ -44,4 +44,5 @@ public interface ToeicEditorSource {
     }
     long count(String query,Integer year,String status,String type,String access,String quality);
     String status(UUID id);
+    default void updateAccess(UUID id,String accessMode,String requiredFeatureKey) {}
 }

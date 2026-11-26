@@ -4,6 +4,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RiMicLine, RiPlayLine, RiTimeLine, RiMoreLine, RiSettings3Line, RiLoader4Line, RiHistoryLine, RiArrowGoBackLine, RiScissorsCutLine, RiGitMergeLine } from '@remixicon/react';
+import { AccessTierOption } from '@/components/AccessTierOption';
+import { AccessTierBadge } from '@/components/ContentBadges';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,13 +16,13 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { useJobConnection } from '@/lib/realtime/JobRealtimeProvider';
 import { CatalogError, CatalogSkeleton } from '@/pages/lessons/CatalogFeedback';
 import { useMetadata } from '@/pages/lessons/catalog.queries';
-import { deleteDraft, saveMetadata, setVisibility, metadataSchema, type Metadata } from '@/pages/lessons/catalog.api';
+import { deleteDraft, saveLessonAccess, saveMetadata, setVisibility, metadataSchema, type Metadata } from '@/pages/lessons/catalog.api';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CreateMetadataFields } from './CreateMetadataFields';
 import { CreateLessonPage } from './CreateLessonPage';
 import { LessonPlayer } from './AudioPreview';
-import { VoiceSelect } from './VoiceSelect';
+import { TtsSpeedSelect, VoiceSelect } from './VoiceSelect';
 import { TimingEditor } from './TimingEditor';
 import { TranscriptList } from './TranscriptList';
 import { isSelectedShadowingSentence, isSoundCueForActivity, mergeSentence } from './authoring-editor';
@@ -83,9 +85,17 @@ function LessonEditorPage({ lessonId }: { lessonId: string }) {
   const [controlsHost, setControlsHost] = useState<HTMLDivElement | null>(null), [previewControlsHost, setPreviewControlsHost] = useState<HTMLDivElement | null>(null), [available, setAvailable] = useState(false);
   const [undoSelection, setUndoSelection] = useState<{ field: 'dictationSelected' | 'shadowingSelected'; values: Map<string, boolean> }>();
   const metadata = useMetadata(lessonId);
+  const initialAccessMode: 'PUBLIC' | 'FEATURE' = metadata.data?.accessMode === 'FEATURE' ? 'FEATURE' : 'PUBLIC';
+  const [accessMode, setAccessMode] = useState<'PUBLIC' | 'FEATURE'>(initialAccessMode);
   const form = useForm<Metadata>({ resolver: zodResolver(metadataSchema), defaultValues: { title: '', description: '', imageUrl: '', categoryIds: [] } });
-  const metadataDirty = form.formState.isDirty;
-  useEffect(() => { if (metadata.data && !form.formState.isDirty) form.reset({ title: metadata.data.title, description: metadata.data.description, imageUrl: metadata.data.imageUrl ?? '', categoryIds: metadata.data.categories.map(c => c.id) }); }, [metadata.data, form]);
+  const accessDirty = Boolean(metadata.data) && accessMode !== initialAccessMode;
+  const metadataDirty = form.formState.isDirty || accessDirty;
+  useEffect(() => {
+    if (metadata.data && !form.formState.isDirty) {
+      form.reset({ title: metadata.data.title, description: metadata.data.description, imageUrl: metadata.data.imageUrl ?? '', categoryIds: metadata.data.categories.map(c => c.id) });
+      setAccessMode(metadata.data.accessMode === 'FEATURE' ? 'FEATURE' : 'PUBLIC');
+    }
+  }, [metadata.data, form]);
   const query = useQuery({ queryKey: ['authoring', lessonId], queryFn: ({ signal }) => authoring.fetchDraft(lessonId, signal), refetchInterval: q => q.state.data?.jobs.some(activeJob) ? connection === 'connected' ? 5000 : 2500 : false });
   const accept = useCallback((next: LessonDraft) => {
     persisted.current = next; latest.current = next; setDraft(next); dirtyRef.current = new Set(); setDirty(new Set()); setUndoSelection(undefined);
@@ -130,12 +140,30 @@ function LessonEditorPage({ lessonId }: { lessonId: string }) {
   async function save() {
     const current = latest.current!;
     const changes = dirtyRef.current;
-    if (!changes.size && !form.formState.isDirty) return current;
+    if (!changes.size && !metadataDirty) return current;
     const m = form.formState.isDirty ? await new Promise<Metadata | undefined>(resolve => { void form.handleSubmit(value => resolve(value), () => resolve(undefined))(); }) : undefined;
     if (form.formState.isDirty && !m) { setSettings(true); throw new Error(t('catalog.invalidField')); }
-    if (current.status==='PUBLISHED' && m) { await saveMetadata(lessonId,{...m,version: metadata.data?.version ?? 0});form.reset(m);await metadata.refetch();return current; }
+    if (current.status==='PUBLISHED') {
+      if (m) { await saveMetadata(lessonId,{...m,version: metadata.data?.version ?? 0}); form.reset(m); }
+      if (accessDirty) {
+        await saveLessonAccess(lessonId, {
+          accessMode,
+          requiredFeatureKey: accessMode === 'FEATURE' ? 'lesson.plus-lessons' : null,
+          version: m ? undefined : metadata.data?.version,
+        });
+      }
+      await metadata.refetch();
+      return current;
+    }
     const next = await authoring.saveChanges(lessonId, current, changes, changes.has('_options'), changes.has('_profile'), m ? {...m,version:metadata.data?.version ?? 0}:undefined);
-    accept(next); if (m) { form.reset(m); void metadata.refetch(); }
+    if (accessDirty) {
+      await saveLessonAccess(lessonId, {
+        accessMode,
+        requiredFeatureKey: accessMode === 'FEATURE' ? 'lesson.plus-lessons' : null,
+        version: m ? undefined : metadata.data?.version,
+      });
+    }
+    accept(next); if (m || accessDirty) { if (m) form.reset(m); void metadata.refetch(); }
     return next;
   }
   const saveRef = useRef<() => void>(() => {}); saveRef.current = () => { if (!busy && !pending && hasChanges && (!published || metadataDirty)) void perform(async () => { await save(); }); };
@@ -157,7 +185,7 @@ function LessonEditorPage({ lessonId }: { lessonId: string }) {
     if (!persisted.current || busyRef.current || pending) return;
     pause();
     const restored={...structuredClone(persisted.current),jobs:draft?.jobs ?? persisted.current.jobs};
-    latest.current=restored;setDraft(restored);dirtyRef.current=new Set();setDirty(new Set());form.reset();
+    latest.current=restored;setDraft(restored);dirtyRef.current=new Set();setDirty(new Set());form.reset();setAccessMode(initialAccessMode);
     setUndoSelection(undefined);setClozeEditing(false);setMode('view');setLevel('easy');setActiveId(null);
     setPreview(false);setReadiness([]);setConfirmOpen(false);setSettings(false);setError('');setSplitErrorId(null);setEditorEpoch(value=>value+1);
     setPronunciation(undefined);
@@ -233,7 +261,7 @@ function LessonEditorPage({ lessonId }: { lessonId: string }) {
   const nextSteps = !draft.audioReady || dirty.has('_voice') || draft.sourceType === 'TEXT' && dirty.has('_transcript') ? `${draft.sourceType === 'TEXT' ? 'TTS' : 'STT'} → alignment → ${t('finish.contentStep')}` : draft.alignmentRequired || dirty.has('_transcript') ? `alignment → ${t('finish.contentStep')}` : t('finish.missingFeatures');
   return <section ref={studioRef} className="lesson-studio">
     <UnsavedChangesGuard dirty={hasChanges} />
-    <header className="studio-heading"><div><Link to="/lessons" className="text-sm text-muted-foreground">{t('catalog.lessons')}</Link><h1>{form.watch('title') || draft.title}</h1>{published && <Badge variant="success">{t("catalog.published")}</Badge>}</div><div className="studio-heading-actions"><Button variant="outline" disabled={busy || pending} onClick={() => setSettings(true)}><RiSettings3Line />{t('finish.settings')}</Button><Button variant="outline" onClick={() => setHistory(true)}><RiHistoryLine />{t('finish.lessonJobs')} <span className="studio-job-count">{draft.jobs.length}</span></Button><Button disabled={busy || pending || openingPreview} aria-busy={openingPreview} onClick={() => void openPreview()}>
+    <header className="studio-heading"><div><Link to="/lessons" className="text-sm text-muted-foreground">{t('catalog.lessons')}</Link><h1>{form.watch('title') || draft.title}</h1><div className="mt-1 flex flex-wrap items-center gap-2">{published && <Badge variant="success">{t("catalog.published")}</Badge>}<AccessTierBadge accessMode={accessMode} /></div></div><div className="studio-heading-actions"><Button variant="outline" disabled={busy || pending} onClick={() => setSettings(true)}><RiSettings3Line />{t('finish.settings')}</Button><Button variant="outline" onClick={() => setHistory(true)}><RiHistoryLine />{t('finish.lessonJobs')} <span className="studio-job-count">{draft.jobs.length}</span></Button><Button disabled={busy || pending || openingPreview} aria-busy={openingPreview} onClick={() => void openPreview()}>
       {openingPreview && <RiLoader4Line aria-hidden="true" className="motion-safe:animate-spin" />}
       {t(openingPreview ? 'finish.openingPreview' : published ? 'finish.previewPublished' : 'finish.previewPublish')}
     </Button><span role="status" className="sr-only">{openingPreview ? t('finish.openingPreview') : ''}</span><DropdownMenu><DropdownMenuTrigger asChild><Button size="icon" variant="ghost" aria-label={t('catalog.actions')}><RiMoreLine /></Button></DropdownMenuTrigger><DropdownMenuContent>{published && <DropdownMenuItem disabled={busy || pending || hasChanges} onSelect={() => void perform(async () => { await setVisibility(lessonId,!metadata.data?.visible,metadata.data?.version);await metadata.refetch(); })}>{t(metadata.data?.visible ? "catalog.unlist" : "catalog.relist")}</DropdownMenuItem>}<DropdownMenuItem disabled={busy || pending || hasChanges} onSelect={() => void perform(async () => { const copy = await authoring.duplicateLesson(lessonId, draft.revision); navigate(`/lessons/${copy.id}`); })}>{t('finish.duplicate')}</DropdownMenuItem><DropdownMenuItem disabled={busy || pending} onSelect={() => openConfirm('delete')}>{t('finish.delete')}</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div></header>
@@ -291,7 +319,7 @@ function LessonEditorPage({ lessonId }: { lessonId: string }) {
       {!draft.sentences.length && pending ? <TranscriptSkeleton /> : !draft.sentences.length && <p className="py-8 text-muted-foreground">{t('finish.noTranscript')}</p>}
       </div></div>
     <footer className="studio-dock"><div ref={setControlsHost} className="studio-transport" />{!pending && <span role="status">{busy && <RiLoader4Line className="animate-spin size-3" aria-hidden="true" />}{busy ? t('finish.working') : hasChanges ? t('finish.unsaved') : t('finish.saved')}</span>}<div className="studio-dock-actions">{hasChanges && <Button variant="ghost" tooltip={t('library.discardHelp')} disabled={busy || pending} onClick={discardChanges}><RiArrowGoBackLine aria-hidden="true" />{t('library.discard')}</Button>}<Button variant="outline" disabled={busy || pending || !hasChanges || published && !metadataDirty} onClick={() => void perform(async () => { await save(); })}>{t('finish.save')} <kbd>⌘/Ctrl S</kbd></Button>{!pending && <Button disabled={blocked || !needsUpdate} onClick={() => openConfirm('run')}>{draft.audioReady ? t('finish.updateAffected') : t('finish.create')}</Button>}</div></footer>
-    <Sheet open={settings} onOpenChange={setSettings}><SheetContent className="studio-sheet"><SheetHeader><SheetTitle>{t('finish.settings')}</SheetTitle><SheetDescription>{t('finish.settingsHelp')}</SheetDescription></SheetHeader><section><h3>{t('finish.lessonInfo')}</h3><fieldset disabled={busy || pending}><CreateMetadataFields form={form} /></fieldset><ContentProfile draft={draft} disabled={blocked} onChange={profile => changeDraft({ profile }, '_profile')} /></section>{draft.sourceType === 'TEXT' && <VoiceSelect value={draft.ttsVoice ?? ''} disabled={blocked} onChange={ttsVoice => changeDraft({ ttsVoice }, '_voice')} />}<ContentOptionsPanel draft={draft} disabled={blocked} onChange={options => changeDraft({ options }, '_options')} /><Button disabled={busy || pending || !hasChanges || published && !metadataDirty} onClick={() => void perform(async () => { await save(); setSettings(false); })}>{t('finish.save')}</Button></SheetContent></Sheet>
+    <Sheet open={settings} onOpenChange={setSettings}><SheetContent className="studio-sheet"><SheetHeader><SheetTitle>{t('finish.settings')}</SheetTitle><SheetDescription>{t('finish.settingsHelp')}</SheetDescription></SheetHeader><section className="space-y-4"><h3>{t('finish.lessonInfo')}</h3><fieldset disabled={busy || pending}><CreateMetadataFields form={form} /></fieldset><AccessTierOption value={accessMode} onChange={setAccessMode} disabled={busy || pending} /><ContentProfile draft={draft} disabled={blocked} onChange={profile => changeDraft({ profile }, '_profile')} /></section>{draft.sourceType === 'TEXT' && <><VoiceSelect value={draft.ttsVoice ?? ''} disabled={blocked} onChange={ttsVoice => changeDraft({ ttsVoice }, '_voice')} /><TtsSpeedSelect value={options.ttsSpeed ?? 1} disabled={blocked} onChange={speed => changeDraft({ options: speed === 1 ? (({ ttsSpeed: _removed, ...rest }) => rest)(options) : { ...options, ttsSpeed: speed } }, '_options')} /></>}<ContentOptionsPanel draft={draft} disabled={blocked} onChange={options => changeDraft({ options }, '_options')} /><Button disabled={busy || pending || !hasChanges || published && !metadataDirty} onClick={() => void perform(async () => { await save(); setSettings(false); })}>{t('finish.save')}</Button></SheetContent></Sheet>
     <Sheet open={history} onOpenChange={setHistory}><SheetContent className="studio-sheet studio-history"><SheetHeader><SheetTitle>{t('finish.lessonJobs')}</SheetTitle><SheetDescription>{t('finish.historyHelp')}</SheetDescription></SheetHeader><ProcessingHistory lessonId={lessonId} jobs={draft.jobs} /></SheetContent></Sheet>
     <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}><DialogContent><DialogHeader><DialogTitle>{t(confirm === 'run' ? 'finish.updateAffected' : 'finish.delete')}</DialogTitle><DialogDescription>{confirm === 'run' ? t('finish.runSteps', { steps: nextSteps }) : t(published ? 'finish.softDeleteHelp' : 'finish.deleteHelp', { title: draft.title })}</DialogDescription></DialogHeader>{error && <p role="alert" className="text-destructive">{error}</p>}<Button variant={confirm === 'delete' ? 'destructive' : 'default'} disabled={busy} onClick={() => void perform(async () => { if (confirm === 'delete') { await deleteDraft(lessonId, metadata.data?.version); navigate('/lessons'); } else { const next = await save(); await authoring.runLesson(lessonId, next.revision); const response=await query.refetch(); if(response.data) accept(response.data); } setConfirmOpen(false); })}>{t(confirm === 'run' ? 'finish.runConfirm' : 'finish.delete')}</Button></DialogContent></Dialog>
     <Sheet open={preview} onOpenChange={setPreview}><SheetContent className="studio-sheet studio-preview"><SheetHeader><SheetTitle>{t(published ? 'finish.previewPublished' : 'finish.previewPublish')}</SheetTitle><SheetDescription>{t(published ? 'finish.publishedHelp' : 'finish.previewHelp')}</SheetDescription></SheetHeader><h2>{draft.title}</h2><p className="studio-help">{draft.statistics && t('finish.statistics', { sentences: draft.statistics.sentenceCount, words: draft.statistics.wordCount, duration: timecode(draft.statistics.durationMs), pace: draft.statistics.wordsPerMinute ?? '—' })} · {draft.profile?.cefr ?? 'UNKNOWN'} · {t(`contentAuthoring.types.${draft.profile?.contentType ?? 'UNKNOWN'}`)} · {options.activities.map(activity => `${t(`contentAuthoring.${activity}`)}: ${draft.sentences.filter(row => row[activity === 'DICTATION' ? 'dictationSelected' : 'shadowingSelected']).length}`).join(' · ')}</p>{metadata.data?.description && <p className="studio-help">{metadata.data.description}</p>}<div ref={setPreviewControlsHost} className="studio-preview-transport" /><div className="studio-bulk">{(['view', 'DICTATION', 'SHADOWING'] as const).filter(value => value === 'view' || options.activities.includes(value)).map(value => <Button size="sm" variant={mode === value ? 'secondary' : 'outline'} key={value} onClick={() => setMode(value)}>{t(value === 'view' ? 'finish.view' : `contentAuthoring.${value}`)}</Button>)}</div>{mode === 'DICTATION' && <div className="studio-bulk">{(['easy', 'medium', 'full'] as const).map(value => <Button size="sm" variant={level === value ? 'secondary' : 'ghost'} key={value} onClick={() => setLevel(value)}>{t(`finish.${value}`)}</Button>)}</div>}

@@ -72,14 +72,25 @@
   "progress": {
     "back": "← Home",
     "title": "Your progress",
-    "lead": "Analytics is a projection. Lesson, TOEIC, Vocabulary and Curriculum remain the owners of their detailed progress and attempt history.",
     "listening": "Listening",
     "speaking": "Speaking",
     "vocabulary": "Vocabulary",
     "grammar": "Grammar",
     "week": "This week",
-    "weekValue": "2h 45m · 5 days",
-    "weekMeta": "12 vocabulary reviews · 3 lessons · 1 TOEIC drill"
+    "activitySummary": "{{minutes}} min of study · {{days}} active days",
+    "toeicListening": "TOEIC Listening",
+    "toeicReading": "TOEIC Reading"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No announcements yet",
+    "emptyHelp": "Updates from Lyreo will appear here.",
+    "categories": {
+      "SYSTEM": "System",
+      "STUDY_REMINDER": "Study reminder",
+      "REWARD": "Reward",
+      "PROMO": "Offer"
+    }
   },
   "settings": {
     "back": "← Home",

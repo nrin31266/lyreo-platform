@@ -1,3 +1,4 @@
+import { AccessTierOption } from "@/components/AccessTierOption";
 import { LibrarySelect } from "../library/LibrarySelect";
 import { AdminPagination } from "@/components/AdminPagination";
 import { RiFolder2Line, RiFolderOpenLine, RiStackLine, RiQuestionLine, RiAlertLine, RiEyeLine, RiAddLine, RiArrowUpLine, RiArrowDownLine, RiSubtractLine, RiEditLine } from "@remixicon/react";
@@ -36,8 +37,7 @@ export function GrammarPage() {
 }
 
 export function AccessFields({ value, feature, onChange }: { value: { accessMode: "PUBLIC" | "FEATURE"; requiredFeatureKey: string | null }; feature: string; onChange: (patch: { accessMode: "PUBLIC" | "FEATURE"; requiredFeatureKey: string | null }) => void }) {
-  const { t } = useTranslation("admin");
-  return <LibrarySelect label={t("library.access")} value={value.accessMode} onValueChange={next => onChange({ accessMode: next as "PUBLIC" | "FEATURE", requiredFeatureKey: next === "FEATURE" ? feature : null })} options={[{ value: "PUBLIC", label: t("library.public") }, { value: "FEATURE", label: t("library.restricted") }]} />;
+  return <AccessTierOption value={value.accessMode} onChange={next => onChange({ accessMode: next, requiredFeatureKey: next === "FEATURE" ? feature : null })} />;
 }
 
 export function ReferenceList({ value, onChange }: { value: QuestionRef[]; onChange: (value: QuestionRef[]) => void }) {
