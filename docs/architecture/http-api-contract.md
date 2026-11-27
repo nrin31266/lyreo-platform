@@ -281,6 +281,7 @@ Account routes under `/api/v1/admin/learners/{learnerId}/account` require a Lyre
 `GET` returns `management`, `locked` and `syncPending`.
 `PUT /password` accepts `password` and `changeOnNextLogin` and returns 204.
 `PUT /lock` requires `locked` and accepts an optional `reason` of up to 500 characters.
+If the current Keycloak account eligibility cannot be verified, Core returns `503` without changing the lock.
 A response with `syncPending: true`
 means Core has blocked access and the Keycloak operation requires a retry.
 Locked accounts and tokens issued before the account was reopened receive `401`.

@@ -24,6 +24,18 @@ run_seed() {
     -Dspring-boot.run.arguments="--seed-dev \"$seed_file\""
 }
 
+audio_seed=$(mktemp "${TMPDIR:-/tmp}/lyreo-lesson-audio.XXXXXX.sql")
+trap 'rm -f "$audio_seed"' EXIT
+python_bin=python3
+if [[ "${STORAGE_MODE:-local}" == "r2" && -x "$ROOT/tools/data-import/.venv/bin/python" ]]; then
+  python_bin="$ROOT/tools/data-import/.venv/bin/python"
+fi
+PYTHONPATH="$ROOT/tools/data-import" "$python_bin" \
+  "$ROOT/tools/data-import/scripts/prepare_lesson_seed_audio.py" "$LESSON_SEED_FILE" > "$audio_seed"
+
 run_seed "$ROOT/infra/postgres/seed/dev.sql"
+if [[ -s "$audio_seed" ]]; then
+  run_seed "$audio_seed"
+fi
 run_seed "$LESSON_SEED_FILE"
-exec "$ROOT/scripts/seed-demo.sh"
+"$ROOT/scripts/seed-demo.sh"

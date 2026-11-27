@@ -43,59 +43,9 @@ CREATE OR REPLACE VIEW admin_activity_directory AS
 COMMENT ON VIEW admin_activity_directory IS
     'Shared Admin read contract for membership, account, notification, reward and configuration events.';
 
-ALTER TABLE app_user
-    ADD COLUMN IF NOT EXISTS account_manageable_verified boolean NOT NULL DEFAULT false;
-
-INSERT INTO diamond_transaction (
-    id,
-    learner_id,
-    transaction_type,
-    amount,
-    idempotency_key,
-    reference_type,
-    reference_id,
-    created_at,
-    reason,
-    rule_version
-)
-SELECT
-    (
-        substr(md5('migration:v020:reconcile:' || reconcile.learner_id::text), 1, 8) || '-' ||
-        substr(md5('migration:v020:reconcile:' || reconcile.learner_id::text), 9, 4) || '-' ||
-        substr(md5('migration:v020:reconcile:' || reconcile.learner_id::text), 13, 4) || '-' ||
-        substr(md5('migration:v020:reconcile:' || reconcile.learner_id::text), 17, 4) || '-' ||
-        substr(md5('migration:v020:reconcile:' || reconcile.learner_id::text), 21, 12)
-    )::uuid,
-    reconcile.learner_id,
-    'ADMIN_ADJUSTMENT',
-    -reconcile.ledger_balance,
-    'migration:v020:reconcile:' || reconcile.learner_id::text,
-    'MIGRATION',
-    NULL,
-    now(),
-    'Reconcile negative diamond ledger balance before enforcing non-negative wallet constraint',
-    'v1'
-FROM (
-    SELECT learner_id, COALESCE(SUM(amount), 0)::integer AS ledger_balance
-      FROM diamond_transaction
-     GROUP BY learner_id
-    HAVING COALESCE(SUM(amount), 0) < 0
-) reconcile
-ON CONFLICT (idempotency_key) DO NOTHING;
-
-UPDATE diamond_wallet w
-   SET cached_balance = GREATEST(0, COALESCE((
-           SELECT SUM(t.amount)::integer
-             FROM diamond_transaction t
-            WHERE t.learner_id = w.learner_id
-       ), 0)),
-       updated_at = now()
- WHERE w.cached_balance < 0
-    OR w.cached_balance IS DISTINCT FROM COALESCE((
-           SELECT SUM(t.amount)::integer
-             FROM diamond_transaction t
-            WHERE t.learner_id = w.learner_id
-       ), 0);
+UPDATE diamond_wallet
+   SET cached_balance = 0
+ WHERE cached_balance < 0;
 
 ALTER TABLE diamond_wallet
     ADD CONSTRAINT diamond_wallet_non_negative_check CHECK (cached_balance >= 0);

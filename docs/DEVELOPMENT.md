@@ -42,6 +42,9 @@ categories with English names and Vietnamese translations, [development AI defau
 published demo lessons, and curated learning paths without overwriting existing edits or routes.
 No automatic reseeding runs at startup. Large banks stay under the frozen [import tools](../tools/data-import/README.md).
 
+Before importing a lesson snapshot, seed checks its canonical TEXT WAV objects in the configured
+storage. Missing, invalid, or silent audio keeps the affected lessons unavailable to learners.
+Run seed again after installing the correct audio to restore availability while preserving editorial visibility.
 Set `LESSON_SEED_FILE` to use a separately exported SQL snapshot. Keep private raw corpora and
 credentials out of Git.
 

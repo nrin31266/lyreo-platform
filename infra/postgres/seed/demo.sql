@@ -506,7 +506,7 @@ WITH seed_sections (id, path_id, title, position) AS (
     ('70000000-0000-0000-0000-000000000642'::uuid, '70000000-0000-0000-0000-000000000604'::uuid, 'Chương 2 · Thông báo Chuyên sâu Part 4 & Câu phức Học thuật', 2),
     ('70000000-0000-0000-0000-000000000643'::uuid, '70000000-0000-0000-0000-000000000604'::uuid, 'Chương 3 · Kinh doanh – Tài chính & Đọc điền đoạn Part 6', 3),
     ('70000000-0000-0000-0000-000000000644'::uuid, '70000000-0000-0000-0000-000000000604'::uuid, 'Chương 4 · Đọc hiểu Đa văn bản Part 7 & Thi thử Full Test', 4)
-),
+)
 INSERT INTO curriculum_section (id, path_id, title, position)
 SELECT ss.id, ss.path_id, ss.title, ss.position
 FROM seed_sections ss
@@ -734,11 +734,11 @@ verified_items AS (
     FROM raw_items v
     WHERE
         ((v.content_type = 'VOCABULARY_REVIEW' AND EXISTS (SELECT 1 FROM vocabulary_unit u WHERE u.id = v.ref_id))
-      OR (v.content_type = 'LESSON' AND EXISTS (SELECT 1 FROM lesson l WHERE l.id = v.ref_id))
+      OR (v.content_type = 'LESSON' AND EXISTS (SELECT 1 FROM lesson_availability l WHERE l.lesson_id = v.ref_id AND l.available))
       OR (v.content_type = 'GRAMMAR_PRACTICE' AND EXISTS (SELECT 1 FROM grammar_topic_catalog g WHERE g.id = v.ref_id))
       OR (v.content_type IN ('TOEIC_DRILL','TOEIC_TEST') AND EXISTS (SELECT 1 FROM toeic_test_catalog t WHERE t.id = v.ref_id)))
       AND EXISTS (SELECT 1 FROM curriculum_section cs WHERE cs.id = v.section_id)
-),
+)
 INSERT INTO curriculum_item (id, section_id, position, content_type, content_reference_id, required, unlock_rule, config_json)
 SELECT vi.id, vi.section_id, vi.position, vi.content_type, vi.ref_id, vi.required, vi.unlock_rule, vi.cfg
 FROM verified_items vi

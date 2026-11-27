@@ -29,13 +29,12 @@ public class JdbcLearnerAccountStore implements LearnerAccountStore, AccountAcce
     @Override
     public Optional<Account> find(UUID learnerId) {
         return jdbc.query("""
-            SELECT keycloak_subject, account_locked, account_sync_pending, account_manageable_verified
+            SELECT keycloak_subject, account_locked, account_sync_pending
             FROM app_user WHERE id = ?
             """, (rs, n) -> new Account(
                 rs.getString(1),
                 rs.getBoolean(2),
-                rs.getBoolean(3),
-                rs.getBoolean(4)
+                rs.getBoolean(3)
             ), learnerId).stream().findFirst();
     }
 
@@ -79,13 +78,6 @@ public class JdbcLearnerAccountStore implements LearnerAccountStore, AccountAcce
         jdbc.update("""
             INSERT INTO learner_account_audit(learner_id, actor, action) VALUES (?, ?, ?)
             """, learnerId, actor, action);
-    }
-
-    @Override
-    public void recordManageability(UUID learnerId, boolean manageable) {
-        write.executeWithoutResult(status -> jdbc.update("""
-            UPDATE app_user SET account_manageable_verified = ? WHERE id = ?
-            """, manageable, learnerId));
     }
 
     private static Timestamp timestamp(Instant value) {

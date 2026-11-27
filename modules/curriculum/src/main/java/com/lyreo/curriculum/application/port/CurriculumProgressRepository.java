@@ -54,6 +54,7 @@ public interface CurriculumProgressRepository {
     void ensureActiveEnrollment(UUID learnerId, UUID pathId);
 
     void markEnrollmentCompleted(UUID learnerId, UUID pathId);
+    void reopenCompletedEnrollment(UUID learnerId, UUID pathId);
 
     default CurriculumPath insertPath(UUID id, String code, String name, String level, String description, String status) {
         return insertPath(id, code, name, level, description, status, null, "PUBLIC", null);

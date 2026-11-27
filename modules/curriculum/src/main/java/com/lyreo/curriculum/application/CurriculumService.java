@@ -398,6 +398,14 @@ public class CurriculumService {
 
     @Transactional
     public void recomputePathProgress(UUID learnerId, UUID pathId) {
+        recomputePathProgress(learnerId, pathId, false);
+    }
+
+    void recomputeAfterPathEdit(UUID learnerId, UUID pathId) {
+        recomputePathProgress(learnerId, pathId, true);
+    }
+
+    private void recomputePathProgress(UUID learnerId, UUID pathId, boolean pathEdited) {
         List<CurriculumSection> sections = repository.findSectionsByPathId(pathId);
         List<CurriculumItem> items = repository.findItemsByPathId(pathId);
         if (items.isEmpty()) {
@@ -460,6 +468,8 @@ public class CurriculumService {
             : completedTotalCount == items.size();
         if (pathCompleted) {
             repository.markEnrollmentCompleted(learnerId, pathId);
+        } else if (pathEdited) {
+            repository.reopenCompletedEnrollment(learnerId, pathId);
         }
     }
 

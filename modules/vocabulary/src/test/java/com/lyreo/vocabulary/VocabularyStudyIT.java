@@ -373,6 +373,14 @@ class VocabularyStudyIT {
         // 6. GUESS_WORD: hints, per-question check, lock against overwrite, giveUp, SRS untouched
         int reviewEventsBeforeGuess = reviewEvents.size();
         SessionView guessSession = studyService.startSession(learnerA, unitVisible, PracticeMode.GUESS_WORD, 4, "guess-start");
+        assertThat(jdbc.queryForObject("""
+            SELECT request_fingerprint = encode(sha256(convert_to(?, 'UTF8')), 'hex')
+            FROM operation_idempotency_record
+            WHERE learner_id = ? AND operation = 'vocabulary.study.start' AND idempotency_key = 'guess-start'
+            """, Boolean.class, "UNIT|" + unitVisible + "|GUESS_WORD|4", learnerA)).isTrue();
+        assertThat(studyService.startSession(
+            learnerA, unitVisible, PracticeMode.GUESS_WORD, 4, "guess-start"
+        ).id()).isEqualTo(guessSession.id());
         QuestionView pepperQ = guessSession.questions().stream()
             .filter(q -> q.entryId().equals(entryPepper))
             .findFirst()

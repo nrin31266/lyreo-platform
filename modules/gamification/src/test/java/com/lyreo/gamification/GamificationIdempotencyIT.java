@@ -462,6 +462,14 @@ class GamificationIdempotencyIT {
             Integer.class, learnerId, shadowAchId
         )).isEqualTo(1);
 
+        missionListener.grammar(new GrammarQuestionAnsweredEvent(
+            learnerId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), 1, false, Instant.now()
+        ));
+        assertThat(jdbc.queryForObject(
+            "SELECT count(*) FROM learner_achievement WHERE learner_id = ? AND achievement_id = ?",
+            Integer.class, learnerId, grammarAchId
+        )).isZero();
+
         UUID grammarAttemptId = UUID.randomUUID();
         Instant grammarAt = Instant.now();
         missionListener.grammar(new GrammarQuestionAnsweredEvent(

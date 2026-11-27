@@ -58,6 +58,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
     String from =
         """
          FROM lesson l JOIN lesson_metadata m ON m.lesson_id=l.id LEFT JOIN lesson_authoring a ON a.lesson_id=l.id
+         JOIN lesson_availability availability ON availability.lesson_id=l.id
          LEFT JOIN lesson_youtube_source s ON s.video_id=a.video_id
          LEFT JOIN lesson_youtube_channel ch ON ch.channel_id=s.channel_id
          WHERE m.title ILIKE :query
@@ -82,7 +83,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
     var items =
         jdbc.query(
             "SELECT l.*,m.title AS"
-                + " display_title,m.description,m.image_url,m.visible,m.access_mode,m.required_feature_key,COALESCE(ch.visible,TRUE) AS channel_visible,GREATEST(m.updated_at,l.updated_at)"
+                + " display_title,m.description,m.image_url,m.visible,m.access_mode,m.required_feature_key,availability.channel_visible,availability.available AS effective_visible,GREATEST(m.updated_at,l.updated_at)"
                 + " AS metadata_updated_at,s.thumbnail_url,a.source_start_ms,a.source_end_ms,a.lesson_id,s.channel_id,COALESCE(ch.title,s.channel_title)"
                 + " AS channel_title,m.version AS metadata_version,m.deleted_at,a.revision AS authoring_revision,a.content_profile->>'cefr' AS cefr,a.generation_options->'activities' AS activities,                     a.active_job_id IN (:activeJobs) AS processing,                     a.active_job_id IN (:failedJobs) AS ai_failed"
                 + from
@@ -107,7 +108,7 @@ public class JdbcLessonCatalog implements LessonCatalogPort {
                         ? rs.getString("thumbnail_url")
                         : rs.getString("image_url"),
                     rs.getBoolean("visible"),rs.getBoolean("channel_visible"),
-                    "PUBLISHED".equals(rs.getString("status")) && rs.getBoolean("visible") && rs.getBoolean("channel_visible") && rs.getTimestamp("deleted_at")==null,
+                    rs.getBoolean("effective_visible"),
                     rs.getLong("metadata_version"),rs.getLong("authoring_revision"),rs.getTimestamp("deleted_at")!=null,
                     rs.getString("cefr")==null?"UNKNOWN":rs.getString("cefr"),rs.getString("activities")==null?List.of():mapper.readValue(rs.getString("activities"),mapper.getTypeFactory().constructCollectionType(List.class,String.class)),rs.getBoolean("processing"),rs.getBoolean("ai_failed"),
                     rs.getString("access_mode"),

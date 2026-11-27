@@ -282,7 +282,7 @@ it('renders branching interactive map with challenge crown and unlocks optional 
   expect(screen.queryByText('Locked')).not.toBeInTheDocument();
 });
 
-it('loads vocabulary unit entries in slice picker and applies curated entryIds', async () => {
+it('keeps the persisted item ID when the same slice entries are reordered', async () => {
   const unitId = 'c9786a44-99ee-5429-ba65-3b280279d776';
   const entryA = '19fc0403-0d97-593f-a9a3-379fa1ee502b';
   const entryB = 'be85838e-fae3-5d37-8356-6f3012f66183';
@@ -306,39 +306,36 @@ it('loads vocabulary unit entries in slice picker and applies curated entryIds',
     return [];
   });
 
-  const onSelect = vi.fn();
-  const onOpenChange = vi.fn();
+  const section = samplePath.sections[0];
+  const item = {
+    ...section.items[0],
+    contentType: 'VOCABULARY_REVIEW' as const,
+    contentReferenceId: unitId,
+    contentTitle: 'Vocabulary slice',
+    config: { entryIds: [entryA, entryB] },
+  };
+  const path = { ...samplePath, sections: [{ ...section, items: [item] }] };
+  vi.mocked(fetchAdminCurriculumPath).mockResolvedValue(path);
+  vi.mocked(updateAdminCurriculumPath).mockResolvedValue(path);
   const user = (await import('@testing-library/user-event')).default.setup();
+  show();
 
-  render(
-    <QueryClientProvider client={client}>
-      <I18nextProvider i18n={i18n}>
-        <CurriculumSlicePickerDialog
-          open
-          contentType="VOCABULARY_REVIEW"
-          currentId=""
-          currentConfig={{}}
-          onSelect={onSelect}
-          onOpenChange={onOpenChange}
-        />
-      </I18nextProvider>
-    </QueryClientProvider>,
-  );
-
-  const unitBtn = await screen.findByRole('button', { name: /Work · A1–A2 · 01/i });
-  await user.click(unitBtn);
-
-  expect(await screen.findByText('schedule')).toBeInTheDocument();
+  await user.click(await screen.findByRole('button', { name: /Vocabulary slice/i }));
+  const firstEntry = await screen.findByText('schedule');
   expect(screen.getByText('deadline')).toBeInTheDocument();
-
-  await user.click(screen.getByText('schedule'));
+  await user.click(firstEntry);
+  await user.click(firstEntry);
   await user.click(screen.getByRole('button', { name: 'Use selected slice' }));
+  await user.click(screen.getByRole('button', { name: 'Save path' }));
 
-  expect(onSelect).toHaveBeenCalledWith(
-    unitId,
-    { entryIds: [entryA] },
-    'Work · A1–A2 · 01',
-  );
+  await waitFor(() => expect(updateAdminCurriculumPath).toHaveBeenCalledWith(
+    path.id,
+    expect.objectContaining({
+      sections: [expect.objectContaining({
+        items: [expect.objectContaining({ id: item.id, config: { entryIds: [entryB, entryA] } })],
+      })],
+    }),
+  ));
 });
 
 it('loads grammar subtopics, disables 0Q subtopics, and clamps questionCount', async () => {

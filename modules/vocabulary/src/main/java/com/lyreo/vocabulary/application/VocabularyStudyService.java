@@ -452,7 +452,7 @@ public class VocabularyStudyService {
         List<UUID> normalizedEntryIds = normalizeRequestedEntryIds(entryIds);
 
         String fingerprint = "UNIT|" + unitId + "|" + selection.fingerprint() + "|" + limit
-            + "|" + entryIdsFingerprint(normalizedEntryIds);
+            + entryIdsFingerprintSuffix(normalizedEntryIds);
         return executeIdempotent(
             learnerId,
             "vocabulary.study.start",
@@ -537,7 +537,7 @@ public class VocabularyStudyService {
         List<UUID> normalizedEntryIds = normalizeRequestedEntryIds(entryIds);
 
         String fingerprint = "PACK|" + packId + "|" + selection.fingerprint() + "|" + limit
-            + "|" + entryIdsFingerprint(normalizedEntryIds);
+            + entryIdsFingerprintSuffix(normalizedEntryIds);
         return executeIdempotent(
             learnerId,
             "vocabulary.study.start",
@@ -630,11 +630,11 @@ public class VocabularyStudyService {
         return List.copyOf(unique);
     }
 
-    private static String entryIdsFingerprint(List<UUID> entryIds) {
-        if (entryIds == null || entryIds.isEmpty()) {
+    private static String entryIdsFingerprintSuffix(List<UUID> entryIds) {
+        if (entryIds.isEmpty()) {
             return "";
         }
-        return entryIds.stream().map(UUID::toString).sorted().collect(java.util.stream.Collectors.joining(","));
+        return entryIds.stream().map(UUID::toString).sorted().collect(java.util.stream.Collectors.joining(",", "|", ""));
     }
 
     private static List<StudyEntrySource> filterSourcesByEntryIds(

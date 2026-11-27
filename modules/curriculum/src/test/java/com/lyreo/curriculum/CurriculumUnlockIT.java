@@ -492,6 +492,15 @@ class CurriculumUnlockIT {
             .andExpect(jsonPath("$.sections[0].items[4].progressStatus").value("COMPLETED"))
             .andExpect(jsonPath("$.sections[0].items[5].progressStatus").value("UNLOCKED"));
 
+        listener.onToeicCompleted(new ToeicAttemptCompletedEvent(
+            learnerId, UUID.randomUUID(), toeicId, "DRILL", 6, 6, 6, 6, null, null, Instant.now(),
+            List.of(new ToeicAttemptCompletedEvent.PartResult(6, 6, 6),
+                new ToeicAttemptCompletedEvent.PartResult(7, 6, 6))
+        ));
+        mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.enrollmentStatus").value("COMPLETED"));
+
         // 3) Admin replaces content of item 1 while still sending old item1Id -> server assigns a new item ID,
         // clears stale completion for replaced content, and recomputes unlock status while preserving unchanged item 2.
         UUID replacedUnitId = UUID.randomUUID();
@@ -518,6 +527,7 @@ class CurriculumUnlockIT {
 
         String afterReplaceJson = mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.enrollmentStatus").value("ACTIVE"))
             .andExpect(jsonPath("$.sections[0].items[0].progressStatus").value("UNLOCKED"))
             .andExpect(jsonPath("$.sections[0].items[1].id").value(item2Id.toString()))
             .andExpect(jsonPath("$.sections[0].items[1].progressStatus").value("COMPLETED"))
@@ -525,6 +535,13 @@ class CurriculumUnlockIT {
         var afterReplaceTree = mapper.readTree(afterReplaceJson);
         assertThat(afterReplaceTree.get("sections").get(0).get("items").get(0).get("id").asString())
             .isNotEqualTo(item1Id.toString());
+
+        listener.onVocabularyUnitCompleted(new VocabularyUnitCompletedEvent(
+            UUID.randomUUID(), learnerId, UUID.randomUUID(), replacedUnitId, 1, 1, Instant.now(), List.of(entry1)
+        ));
+        mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.enrollmentStatus").value("COMPLETED"));
     }
 
     @Test

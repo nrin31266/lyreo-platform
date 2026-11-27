@@ -133,9 +133,7 @@ public class CurriculumAdminService {
 
         if (command.sections() != null) {
             reconcileSectionsAndItems(pathId, command.sections());
-            for (UUID enrolledLearnerId : repository.findEnrolledLearnerIds(pathId)) {
-                curriculumService.recomputePathProgress(enrolledLearnerId, pathId);
-            }
+            recomputeEnrolledProgress(pathId);
         }
 
         return curriculumService.buildPathDetail(null, updated);
@@ -174,7 +172,7 @@ public class CurriculumAdminService {
         CurriculumSection section = repository.findSectionById(sectionId)
             .filter(s -> s.pathId().equals(pathId))
             .orElseThrow(() -> new ResourceNotFoundException("Curriculum section not found"));
-        return repository.insertItem(
+        CurriculumItem added = repository.insertItem(
             UUID.randomUUID(),
             section.id(),
             itemSpec.position(),
@@ -184,6 +182,14 @@ public class CurriculumAdminService {
             normalizeUnlockRule(itemSpec.unlockRule(), itemSpec.required()),
             encodeConfig(itemSpec.config())
         );
+        recomputeEnrolledProgress(pathId);
+        return added;
+    }
+
+    private void recomputeEnrolledProgress(UUID pathId) {
+        for (UUID learnerId : repository.findEnrolledLearnerIds(pathId)) {
+            curriculumService.recomputeAfterPathEdit(learnerId, pathId);
+        }
     }
 
     private void reconcileSectionsAndItems(UUID pathId, List<SectionSpec> sections) {

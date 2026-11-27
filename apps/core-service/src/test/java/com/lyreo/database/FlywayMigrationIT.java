@@ -111,7 +111,7 @@ class FlywayMigrationIT {
     void verifiesConsolidatedBaselineMigrationsSucceeded() {
         MigrationInfo[] applied = flyway.info().applied();
 
-        assertThat(applied).hasSize(20).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
+        assertThat(applied).hasSize(21).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
@@ -137,7 +137,9 @@ class FlywayMigrationIT {
         assertThat(applied[17].getDescription()).isEqualTo("learner notification read and policy audit");
         assertThat(applied[18].getDescription()).isEqualTo("vocabulary flashcards and guess mode");
         assertThat(applied[19].getDescription()).isEqualTo("pr47 integrity hardening");
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("020");
+        assertThat(applied[19].getChecksum()).isEqualTo(-1291842960);
+        assertThat(applied[20].getDescription()).isEqualTo("reconcile wallets and seed lesson audio");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("021");
 
         String userIdNullable = jdbcTemplate.queryForObject("""
             SELECT is_nullable FROM information_schema.columns
@@ -153,9 +155,8 @@ class FlywayMigrationIT {
     }
 
     @Test
-    void v020ReconcilesNegativeDiamondBalanceWithLedgerBeforeApplyingConstraint() {
-        // Test migrating an isolated database from V001..V019 -> seed negative wallet/ledger (-4) -> apply V020
-        String dbName = "v020_reconcile_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+    void v021ReconcilesDiamondLedgerAfterTheOriginalV020() {
+        String dbName = "v021_reconcile_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
         jdbcTemplate.execute("CREATE DATABASE " + dbName);
         String isolatedUrl = postgres.getJdbcUrl().replaceFirst("/[^/?]+(\\?.*)?$", "/" + dbName + "$1");
         var isolatedDs = new org.springframework.jdbc.datasource.DriverManagerDataSource(
@@ -188,6 +189,15 @@ class FlywayMigrationIT {
                 """,
                 UUID.randomUUID(), learnerId, "neg-debit-" + learnerId
             );
+
+            Flyway.configure()
+                .dataSource(isolatedDs)
+                .target("020")
+                .load()
+                .migrate();
+            assertThat(isolatedJdbc.queryForObject("""
+                SELECT checksum FROM flyway_schema_history WHERE version = '020'
+                """, Integer.class)).isEqualTo(-1291842960);
 
             Flyway.configure()
                 .dataSource(isolatedDs)

@@ -431,20 +431,7 @@ export function CurriculumPage() {
             ? section
             : {
                 ...section,
-                items: section.items.map((item, j) => {
-                  if (j !== itemIndex) return item;
-                  const contentChanged =
-                    (patch.contentType !== undefined && patch.contentType !== item.contentType) ||
-                    (patch.contentReferenceId !== undefined &&
-                      patch.contentReferenceId.trim() !== item.contentReferenceId.trim()) ||
-                    (patch.config !== undefined &&
-                      JSON.stringify(patch.config ?? {}) !== JSON.stringify(item.config ?? {}));
-                  return {
-                    ...item,
-                    ...patch,
-                    ...(contentChanged ? { id: undefined } : {}),
-                  };
-                }),
+                items: section.items.map((item, j) => j === itemIndex ? { ...item, ...patch } : item),
               },
         ),
       };

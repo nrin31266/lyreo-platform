@@ -148,11 +148,9 @@ class LearnerProfilesIT {
         provider.failConnect = true;
         try {
             mvc.perform(put(lock).with(admin).contentType(MediaType.APPLICATION_JSON).content(lockRequest))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.locked").value(true))
-                .andExpect(jsonPath("$.syncPending").value(true));
+                .andExpect(status().isServiceUnavailable());
             mvc.perform(get("/api/v1/learner/profile").with(oldToken))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isOk());
         } finally {
             provider.failConnect = false;
         }
@@ -195,7 +193,7 @@ class LearnerProfilesIT {
     }
 
     @Test
-    void doesNotFallbackLockUnverifiedOrDemotedAccountsWhenKeycloakIsUnavailable() throws Exception {
+    void doesNotChangeLockWithoutCurrentEligibility() throws Exception {
         UUID unverified = UUID.randomUUID();
         UUID unverifiedSubject = UUID.randomUUID();
         jdbc.update("INSERT INTO app_user(id,keycloak_subject) VALUES (?,?)", unverified, unverifiedSubject.toString());
@@ -219,17 +217,13 @@ class LearnerProfilesIT {
             provider.failConnect = false;
         }
 
-        // Verify once via status(), then revoke manageability (simulating admin promotion) and ensure fallback fails closed again
+        // A successful read does not replace live eligibility verification for a later write.
         provider.subject = unverifiedSubject;
         mvc.perform(get("/api/v1/admin/learners/" + unverified + "/account").with(admin))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.management").value("AVAILABLE"));
 
         provider.subject = UUID.randomUUID();
-        mvc.perform(get("/api/v1/admin/learners/" + unverified + "/account").with(admin))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.management").value("UNMANAGED"));
-
         provider.failConnect = true;
         try {
             mvc.perform(put(lockUrl).with(admin).contentType(MediaType.APPLICATION_JSON).content("{\"locked\":true}"))

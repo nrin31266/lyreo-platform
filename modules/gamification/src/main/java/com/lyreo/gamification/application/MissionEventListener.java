@@ -107,7 +107,7 @@ public class MissionEventListener {
             1
         );
         recordStreak(factId, event.learnerId(), event.occurredAt());
-        if (achievements != null) {
+        if (achievements != null && event.correct()) {
             achievements.recordMetricProgress(
                 factId,
                 event.learnerId(),

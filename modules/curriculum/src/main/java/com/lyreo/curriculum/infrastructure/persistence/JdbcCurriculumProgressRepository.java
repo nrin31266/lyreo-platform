@@ -341,6 +341,15 @@ public final class JdbcCurriculumProgressRepository implements CurriculumProgres
     }
 
     @Override
+    public void reopenCompletedEnrollment(UUID learnerId, UUID pathId) {
+        jdbc.update("""
+            UPDATE curriculum_enrollment
+            SET status = 'ACTIVE', completed_at = NULL
+            WHERE learner_id = :learnerId AND path_id = :pathId AND status = 'COMPLETED'
+            """, Map.of("learnerId", learnerId, "pathId", pathId));
+    }
+
+    @Override
     public CurriculumPath insertPath(
         UUID id,
         String code,
