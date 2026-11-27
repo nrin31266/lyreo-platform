@@ -109,7 +109,9 @@ public class SecurityConfiguration {
             .toList();
         config.setAllowedOrigins(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Correlation-Id", "Idempotency-Key"));
+        config.setAllowedHeaders(List.of(
+            "Authorization", "Content-Type", "X-Correlation-Id", "Idempotency-Key", "Range", "If-None-Match"
+        ));
         config.setExposedHeaders(List.of(
             "X-Correlation-Id", "Location", "Retry-After", "ETag", "Content-Range", "Accept-Ranges"
         ));

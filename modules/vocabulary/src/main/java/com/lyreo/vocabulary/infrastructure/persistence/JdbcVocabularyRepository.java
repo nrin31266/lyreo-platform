@@ -214,10 +214,13 @@ public class JdbcVocabularyRepository implements VocabularyRepository {
     @Override
     public Optional<EntrySnapshotSeed> findEntrySnapshotSeed(UUID entryId) {
         return jdbc.query("""
-            SELECT id, term, content::text AS content_json, revision,
-                   image_id, uk_audio_id, us_audio_id, example_audio_id, second_example_audio_id
-            FROM vocabulary_unit_entry
-            WHERE id = :entryId
+            SELECT e.id, e.term, e.content::text AS content_json, e.revision,
+                   e.image_id, e.uk_audio_id, e.us_audio_id, e.example_audio_id, e.second_example_audio_id,
+                   p.access_mode, p.required_feature_key
+            FROM vocabulary_unit_entry e
+            JOIN vocabulary_unit u ON u.id = e.unit_id
+            JOIN vocabulary_pack p ON p.id = u.pack_id
+            WHERE e.id = :entryId
             """, Map.of("entryId", entryId), (rs, n) -> new EntrySnapshotSeed(
             rs.getObject("id", UUID.class),
             rs.getString("term"),
@@ -227,7 +230,9 @@ public class JdbcVocabularyRepository implements VocabularyRepository {
             rs.getObject("uk_audio_id", UUID.class),
             rs.getObject("us_audio_id", UUID.class),
             rs.getObject("example_audio_id", UUID.class),
-            rs.getObject("second_example_audio_id", UUID.class)
+            rs.getObject("second_example_audio_id", UUID.class),
+            rs.getString("access_mode"),
+            rs.getString("required_feature_key")
         )).stream().findFirst();
     }
 

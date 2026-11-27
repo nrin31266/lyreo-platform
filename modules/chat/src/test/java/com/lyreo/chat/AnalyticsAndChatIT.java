@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -410,6 +411,24 @@ class AnalyticsAndChatIT {
             .andExpect(status().isNoContent());
         mvc.perform(get("/api/v1/chat/conversations/{id}", conversationId).with(learnerA))
             .andExpect(status().isNotFound());
+
+        // LLM execution failure releases the reserved quota unit cleanly
+        String quotaFailSubject = "chat-fail-" + UUID.randomUUID();
+        var failLearner = auth(quotaFailSubject);
+        when(aiInvocationService.execute(eq(AiCapability.GENERAL_LLM), anyString(), argThat(m -> "Trigger AI failure".equals(m.get("question"))), anyMap()))
+            .thenThrow(new IllegalStateException("Upstream timeout"));
+        org.junit.jupiter.api.Assertions.assertThrows(Exception.class, () ->
+            mvc.perform(post("/api/v1/chat/ask")
+                    .with(failLearner)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"learnerLevel\":\"B1\",\"question\":\"Trigger AI failure\"}"))
+        );
+        mvc.perform(post("/api/v1/chat/ask")
+                .with(failLearner)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"learnerLevel\":\"B1\",\"question\":\"Follow-up after failure\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.remainingQuota").value(9));
     }
 
     private static RequestPostProcessor auth(String subject) {

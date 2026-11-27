@@ -12,7 +12,7 @@ import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.entitlement.api.EntitlementService;
 import com.lyreo.entitlement.api.FeatureKey;
-import com.lyreo.entitlement.api.QuotaDecision;
+import com.lyreo.entitlement.api.QuotaReservation;
 import com.lyreo.platform.config.application.OperationIdempotencyService;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -117,56 +117,71 @@ public class EnglishTutorService {
         }
 
         String operationId = "chat-exec:" + UUID.randomUUID();
-        QuotaDecision decision = entitlements != null
-            ? entitlements.consumeQuota(learnerId, FEATURE_CHAT_TUTOR, operationId)
-            : new QuotaDecision(FEATURE_CHAT_TUTOR.value(), operationId, true, 0, 0, null, "dev-v1");
+        QuotaReservation reservation = entitlements != null
+            ? entitlements.reserveQuota(learnerId, FEATURE_CHAT_TUTOR, operationId)
+            : null;
+        int remaining = reservation != null ? reservation.remaining() : 0;
+        Instant resetAt = reservation != null ? reservation.resetAt() : null;
 
-        Map<String, Object> input = new LinkedHashMap<>();
-        input.put("question", normalizedQuestion);
-        if (!history.isEmpty()) {
-            List<Map<String, String>> recent = history.stream()
-                .skip(Math.max(0, history.size() - 6))
-                .map(msg -> Map.of("role", msg.role(), "content", msg.content()))
-                .toList();
-            input.put("history", recent);
-        }
+        try {
+            Map<String, Object> input = new LinkedHashMap<>();
+            input.put("question", normalizedQuestion);
+            if (!history.isEmpty()) {
+                List<Map<String, String>> recent = history.stream()
+                    .skip(Math.max(0, history.size() - 6))
+                    .map(msg -> Map.of("role", msg.role(), "content", msg.content()))
+                    .toList();
+                input.put("history", recent);
+            }
 
-        AiExecutionResult result = ai.execute(
-            AiCapability.GENERAL_LLM,
-            prompts.systemPrompt(learnerLevel),
-            input,
-            Map.of("response_format", "text")
-        );
-        String answer = extractAnswer(result);
+            AiExecutionResult result = ai.execute(
+                AiCapability.GENERAL_LLM,
+                prompts.systemPrompt(learnerLevel),
+                input,
+                Map.of("response_format", "text")
+            );
+            String answer = extractAnswer(result);
 
-        if (chatRepository == null) {
-            return new AskResult(
+            if (chatRepository == null) {
+                if (reservation != null) {
+                    entitlements.settleQuota(reservation.reservationId());
+                }
+                return new AskResult(
+                    conversationId,
+                    null,
+                    answer,
+                    result.invocationId(),
+                    remaining,
+                    resetAt
+                );
+            }
+
+            String resolvedTitle = resolveTitle(title, normalizedQuestion);
+            ChatRepository.ChatTurnPersistenceResult saved = chatRepository.persistTurn(
                 conversationId,
-                null,
+                learnerId,
+                resolvedTitle,
+                normalizedQuestion,
+                answer,
+                result.invocationId()
+            );
+            if (reservation != null) {
+                entitlements.settleQuota(reservation.reservationId());
+            }
+            return new AskResult(
+                saved.conversationId(),
+                saved.assistantMessageId(),
                 answer,
                 result.invocationId(),
-                decision.remaining(),
-                decision.resetAt()
+                remaining,
+                resetAt
             );
+        } catch (RuntimeException failure) {
+            if (reservation != null) {
+                entitlements.releaseQuota(reservation.reservationId(), "LLM_EXECUTION_FAILED");
+            }
+            throw failure;
         }
-
-        String resolvedTitle = resolveTitle(title, normalizedQuestion);
-        ChatRepository.ChatTurnPersistenceResult saved = chatRepository.persistTurn(
-            conversationId,
-            learnerId,
-            resolvedTitle,
-            normalizedQuestion,
-            answer,
-            result.invocationId()
-        );
-        return new AskResult(
-            saved.conversationId(),
-            saved.assistantMessageId(),
-            answer,
-            result.invocationId(),
-            decision.remaining(),
-            decision.resetAt()
-        );
     }
 
     public List<ChatConversation> listConversations(UUID learnerId, int page, int size) {

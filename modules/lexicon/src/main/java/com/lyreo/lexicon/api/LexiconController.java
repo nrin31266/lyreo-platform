@@ -54,6 +54,12 @@ public class LexiconController {
             .orElseThrow(() -> new ResourceNotFoundException("Lexicon entry not found: " + id));
     }
 
+    @GetMapping("/by-headword/{headwordId}")
+    public LexiconEntryResponse getByHeadword(@PathVariable UUID headwordId) {
+        return search.findByHeadwordId(headwordId).map(detailMapper::from)
+            .orElseThrow(() -> new ResourceNotFoundException("Lexicon entry not found for headword: " + headwordId));
+    }
+
     public record LexiconEntryResponse(
         UUID id, UUID headwordId, String canonicalForm, String normalizedForm,
         String type, String language, String sourceMetadataJson, String licenseText,

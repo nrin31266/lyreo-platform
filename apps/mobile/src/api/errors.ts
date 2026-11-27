@@ -9,6 +9,7 @@ export type ApiErrorKind =
   | 'notFound'
   | 'validation'
   | 'conflict'
+  | 'payloadTooLarge'
   | 'rateLimited'
   | 'server'
   | 'unknown';
@@ -133,6 +134,7 @@ function kindForStatus(status: number): ApiErrorKind {
   if (status === 403) return 'forbidden';
   if (status === 404) return 'notFound';
   if (status === 409) return 'conflict';
+  if (status === 413) return 'payloadTooLarge';
   if (status === 429) return 'rateLimited';
   if (status >= 500) return 'server';
   return 'unknown';

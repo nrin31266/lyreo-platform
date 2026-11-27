@@ -47,6 +47,7 @@ export function NotificationsScreen() {
   const [nextPage, setNextPage] = useState(1);
   const [extraHasMore, setExtraHasMore] = useState<boolean | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState(false);
 
   const firstPage = resource.status === 'ready'
     ? (Array.isArray(resource.data)
@@ -58,6 +59,7 @@ export function NotificationsScreen() {
     setExtraItems([]);
     setNextPage(1);
     setExtraHasMore(null);
+    setLoadMoreError(false);
   }, [resource]);
 
   const items = useMemo(() => {
@@ -79,6 +81,7 @@ export function NotificationsScreen() {
     setExtraItems([]);
     setNextPage(1);
     setExtraHasMore(null);
+    setLoadMoreError(false);
     reload();
   }, [reload]);
 
@@ -87,6 +90,7 @@ export function NotificationsScreen() {
       return;
     }
     setLoadingMore(true);
+    setLoadMoreError(false);
     try {
       const response = await client.request<NotificationFeedResponse | Announcement[]>(
         `/api/v1/notifications?page=${nextPage}&size=${pageSize}`,
@@ -96,6 +100,8 @@ export function NotificationsScreen() {
       setExtraItems((prev) => [...prev, ...pageItems]);
       setNextPage((prev) => prev + 1);
       setExtraHasMore(moreAvailable);
+    } catch {
+      setLoadMoreError(true);
     } finally {
       setLoadingMore(false);
     }
@@ -118,7 +124,10 @@ export function NotificationsScreen() {
     ListEmptyComponent={resource.status === 'loading' ? <LoadingState />
       : resource.status === 'error' ? <ErrorState onRetry={handleRefresh} />
         : <EmptyState title={t('notifications.empty')} message={t('notifications.emptyHelp')} />}
-    ListFooterComponent={hasMore ? <View className="pt-2">
+    ListFooterComponent={hasMore ? <View className="gap-2 pt-2">
+      {loadMoreError ? (
+        <Text className="text-center text-xs text-destructive">{t('notifications.loadMoreFailed')}</Text>
+      ) : null}
       <Button
         variant="outline"
         disabled={loadingMore}

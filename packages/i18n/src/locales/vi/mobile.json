@@ -72,6 +72,7 @@
   "progress": {
     "back": "← Trang chủ",
     "title": "Tiến độ của bạn",
+    "general": "Tổng hợp",
     "listening": "Nghe",
     "speaking": "Nói",
     "vocabulary": "Từ vựng",
@@ -87,6 +88,7 @@
     "emptyHelp": "Thông tin từ Lyreo sẽ xuất hiện tại đây.",
     "loadMore": "Tải thông báo cũ hơn",
     "loadingMore": "Đang tải...",
+    "loadMoreFailed": "Không tải được thông báo cũ hơn. Chạm để thử lại.",
     "categories": {
       "SYSTEM": "Hệ thống",
       "STUDY_REMINDER": "Nhắc học",

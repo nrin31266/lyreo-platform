@@ -25,6 +25,7 @@ type Overview = {
 };
 
 const skillLabels = {
+  GENERAL: 'progress.general',
   LISTENING: 'progress.listening',
   SPEAKING: 'progress.speaking',
   VOCABULARY: 'progress.vocabulary',

@@ -182,7 +182,7 @@ public class LearnerLessonService {
                 sentence.audioEndMs(),
                 sentence.text(),
                 sentence.text(),
-                false,
+                attempted,
                 sentence.words(),
                 List.of(),
                 sentence.translation(),

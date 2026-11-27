@@ -16,7 +16,7 @@ const buttonVariants = cva('items-center justify-center rounded-full px-4 active
     size: {
       default: 'min-h-11 py-3',
       sm: 'px-3 py-2',
-      lg: 'min-h-13 px-6 py-4',
+      lg: 'min-h-[52px] px-6 py-4',
     },
   },
   defaultVariants: { variant: 'default', size: 'default' },
@@ -39,9 +39,15 @@ type ButtonProps = ComponentProps<typeof Pressable> & VariantProps<typeof button
   labelClassName?: string;
 };
 
-export function Button({ className, labelClassName, variant, size, children, ...props }: ButtonProps) {
+export function Button({ className, labelClassName, variant, size, style, children, ...props }: ButtonProps) {
+  const minHeight = Platform.OS === 'ios' ? 44 : 48;
   return (
-    <Pressable accessibilityRole="button" style={{ minHeight: Platform.OS === 'ios' ? 44 : 48 }} className={cn(buttonVariants({ variant, size }), className)} {...props}>
+    <Pressable
+      accessibilityRole="button"
+      className={cn(buttonVariants({ variant, size }), className)}
+      {...props}
+      style={(state) => [{ minHeight }, typeof style === 'function' ? style(state) : style]}
+    >
       {typeof children === 'string'
         ? <Text className={cn(labelVariants({ variant }), labelClassName)}>{children}</Text>
         : children}

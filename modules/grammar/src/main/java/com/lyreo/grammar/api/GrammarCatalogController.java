@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.*;
 public class GrammarCatalogController {
     private final PublishedGrammarCatalogs catalogs;private final AppUserProvisioningService users;
     public GrammarCatalogController(PublishedGrammarCatalogs catalogs,AppUserProvisioningService users) {this.catalogs=catalogs;this.users=users;}
-    public record Start(@Min(1) @Max(200) Integer limit,@Size(max = 200) List<@NotNull UUID> itemIds) {}
+    public record Start(@Min(1) @Max(50) Integer limit,@Size(max = 50) List<@NotNull UUID> itemIds) {}
     private UUID learner(Jwt jwt) {return users.provision(jwt.getSubject(),jwt.getClaimAsString("email")).id();}
 
     @GetMapping("/catalogs/{kind}")

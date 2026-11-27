@@ -236,7 +236,7 @@ def check_env_contracts(root: Path, errors: list[str]) -> None:
 
     for rel, adapter in (
         ("apps/admin-web/.env.example", "apps/admin-web/src/env.ts"),
-        ("apps/mobile/.env.example", "apps/mobile/src/env.ts"),
+        ("apps/mobile/.env.example", "apps/mobile/src/config/env.ts"),
     ):
         env_path, adapter_path = root / rel, root / adapter
         if env_path.exists() and adapter_path.exists():

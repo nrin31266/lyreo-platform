@@ -17,7 +17,14 @@ public final class ByteRangeResponses {
     private ByteRangeResponses() {}
 
     public static ResponseEntity<Resource> stream(AssetStore.Asset asset, byte[] bytes, String rangeHeader) {
-        MediaType mediaType = MediaType.parseMediaType(asset.mimeType());
+        return stream(asset.mimeType(), bytes, rangeHeader);
+    }
+
+    public static ResponseEntity<Resource> stream(String rawMimeType, byte[] bytes, String rangeHeader) {
+        String effectiveMime = (rawMimeType == null || rawMimeType.isBlank())
+            ? MediaType.APPLICATION_OCTET_STREAM_VALUE
+            : rawMimeType;
+        MediaType mediaType = MediaType.parseMediaType(effectiveMime);
         if (rangeHeader == null || rangeHeader.isBlank()) {
             return ResponseEntity.ok()
                 .contentType(mediaType)

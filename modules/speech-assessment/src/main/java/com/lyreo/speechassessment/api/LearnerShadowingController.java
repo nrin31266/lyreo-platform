@@ -2,11 +2,11 @@ package com.lyreo.speechassessment.api;
 
 import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.identity.application.AppUserProvisioningService;
+import com.lyreo.platform.content.ByteRangeResponses;
 import com.lyreo.speechassessment.application.LearnerPronunciationAttempts;
 import java.io.IOException;
 import java.net.URI;
 import java.util.UUID;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
@@ -94,16 +94,11 @@ public class LearnerShadowingController {
     @GetMapping(ATTEMPT_BASE + "/audio")
     public ResponseEntity<Resource> audio(
         @AuthenticationPrincipal Jwt jwt,
-        @PathVariable UUID id
+        @PathVariable UUID id,
+        @RequestHeader(value = "Range", required = false) String rangeHeader
     ) throws IOException {
         byte[] data = attempts.recording(provision(jwt), id);
-        return ResponseEntity.ok()
-            .cacheControl(CacheControl.noStore())
-            .header("X-Content-Type-Options", "nosniff")
-            .header("Accept-Ranges", "bytes")
-            .contentType(MediaType.parseMediaType("audio/wav"))
-            .contentLength(data.length)
-            .body(new ByteArrayResource(data));
+        return ByteRangeResponses.stream("audio/wav", data, rangeHeader);
     }
 
     @PostMapping(ATTEMPT_BASE + "/cancel")

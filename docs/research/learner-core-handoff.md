@@ -1,5 +1,7 @@
 # Master plan backend Learner và bàn giao Mobile
 
+> **Lưu ý cập nhật:** Đây là bản ghi quy hoạch backend ngày 25/11/2026. Đối với tài liệu bàn giao kỹ thuật hiện hành cho team Mobile (gồm kiểm toán `apps/mobile`, quyền sửa backend/DB, chiến lược Mobile-First vs Learner Web tương lai và bảng backlog phân rã task), xem [Mobile Handoff & Backlog](../mobile/HANDOFF_AND_BACKLOG.md).
+
 **Phạm vi ngày 25/11/2026.** Mobile cần đi hết vòng chọn nội dung → học → thoát → tiếp tục → xem kết quả bằng token Learner. Thứ tự bên dưới là ưu tiên theo phụ thuộc. Khi triển khai, đối chiếu từng luồng với [OpenAPI hiện hành](../API_DOCS.md), giữ route đang có và ghi riêng quyết định sản phẩm cần chủ dự án duyệt.
 
 ## Trình tự giao việc
@@ -140,11 +142,11 @@ Mọi route chi tiết và hợp đồng lỗi được tổng hợp tại [Core
 | Lesson Practice & Dictation | Tải catalog published, ẩn/hiện transcript theo hint, nộp dictation, hoàn tất WATCH | `GET /api/v1/lessons`, `GET /api/v1/lessons/{id}/activities/{activityId}`, `POST .../dictation/attempts`, `POST .../complete` | `lesson` | Dùng `Idempotency-Key` khi nộp attempt / complete `WATCH` |
 | Lesson Shadowing | Kiểm quota, gửi audio, poll kết quả | `GET .../shadowing/sentences/{sentenceId}/constraints`, `POST .../attempts`, `GET /api/v1/shadowing-attempts/{id}` | `speech-assessment` | Bắt buộc header `Idempotency-Key` (UUID) và `revision`; retry cùng UUID trả lại lượt đã xếp hàng; `403 QUOTA_EXCEEDED` hiện `resetAt` |
 | Grammar & TOEIC | Duyệt danh mục, chia Part TOEIC, mở/tìm lại phiên làm bài | `GET /api/v1/grammar/catalogs/{kind}/page`, `GET /api/v1/toeic/catalog/{id}`, `POST .../sessions`, `GET /api/v1/assessment-sessions` | `grammar`, `toeic`, `assessment` | Dùng `Idempotency-Key` khi start; `PUT /answers` + `POST /submit` mang `revision`; `409 SESSION_EXPIRED` mở phiên mới |
-| Curriculum | Duyệt lộ trình, đăng ký học, tiếp tục học | `GET/POST /api/v1/curriculum/paths/{id}/enroll`, `GET /api/v1/curriculum/continue` | `curriculum` | Replay completion event không cộng trùng tiến độ; chỉ lộ trình `ACTIVE` mới mở khóa |
+| Curriculum | Duyệt lộ trình, đăng ký học, tiếp tục học | `POST /api/v1/curriculum/paths/{id}/enroll`, `GET /api/v1/curriculum/continue` | `curriculum` | Replay completion event không cộng trùng tiến độ; chỉ lộ trình `ACTIVE` mới mở khóa |
 | Missions, Streak, Achievements & Diamond | Xem tóm tắt, nhiệm vụ theo kỳ UTC, huy hiệu, lịch sử | `GET /api/v1/gamification/summary`, `/missions`, `/achievements`, `/ledger` | `gamification` | Read-only; mốc `resetAt`/`endsAt` tính theo UTC |
 | Today Overview & Tutor Chat | Xem tổng quan học tập, hỏi gia sư AI | `GET /api/v1/analytics/overview`, `POST /api/v1/chat/ask`, `GET /api/v1/chat/conversations` | `analytics`, `chat` | Learner mới nhận `hasHistory: false`; Chat dùng `Idempotency-Key` tránh trừ quota hai lần |
 
-### Dữ liệu mẫu cố định (`make seed-demo` — [demo.sql](../../infra/postgres/seed/demo.sql))
+### Dữ liệu mẫu cố định (`make seed` — [demo.sql](../../infra/postgres/seed/demo.sql))
 
 | Tài khoản / Thực thể | Giá trị / UUID | Ghi chú trạng thái |
 |---|---|---|
@@ -155,7 +157,7 @@ Mọi route chi tiết và hợp đồng lỗi được tổng hợp tại [Core
 | Vocabulary Packs / Units | Public Pack `50000000-0000-0000-0000-000000000211` (Unit `...0221`, gồm từ `bank` đa nghĩa `...0237` và từ thiếu media `...0238`); Plus Pack `...0212`; Hidden Pack `...0213` | `VOCABULARY` release `demo-1.0.0` |
 | Lessons | Published `50000000-0000-0000-0000-000000000401` (`WATCH` `...0411`, `DICTATION` `...0412`, `SHADOWING` `...0413`, sentences `...0421`/`...0422`); Draft `...0402` | Bài published kèm audio WAV cố định |
 | Grammar & TOEIC | Topic `60000000-0000-0000-0000-000000000101` (Public); Bank `...0121` (`grammar.advanced`); TOEIC 200 câu `60000000-0000-0000-0000-000000000201`; Phiên `OPEN` `...0501` | Có đủ câu từ Part 1 đến Part 7 |
-| Curriculum Path | `50000000-0000-0000-0000-000000000601` (`code: FOUNDATION_PATH`) + mở rộng (`TRAVEL_SURVIVAL_A1`, `WORKPLACE_FLUENCY_B1`, `TOEIC_650_SPRINT`) | Đủ `DRAFT`/`PUBLISHED` với `LESSON`, `VOCABULARY_REVIEW`, `GRAMMAR_PRACTICE`, `TOEIC_TEST` |
+| Curriculum Path | `70000000-0000-0000-0000-000000000601`..`0605` (`REAL_WORLD_ENGLISH_A2_B1`, `WORKPLACE_FLUENCY_B1_B2`, `TOEIC_500_FOUNDATION`, `TOEIC_800_MASTERY`, `TOEIC_A1_STARTER`) | Đủ `DRAFT`/`PUBLISHED` với `LESSON`, `VOCABULARY_REVIEW`, `GRAMMAR_PRACTICE`, `TOEIC_TEST` |
 | Học viên mở rộng & Media mẫu | `30000000-...-0004` (`Trần Thảo Vy`) .. `0008` (`Vũ Mai Phương`); ảnh WebP & audio WAV tổng hợp (`0103..0112`) | Gồm 3 bài audio đã xuất bản (`0403..0405`), 2 gói từ vựng (`0214..0215`), mission/achievement và analytics 7 ngày |
 
 ### Bảng điều khiển Admin Web (`apps/admin-web`) & Gói dữ liệu Drive
@@ -168,13 +170,13 @@ Mọi route chi tiết và hợp đồng lỗi được tổng hợp tại [Core
 - **Learner mới chưa có lịch sử (`GET /api/v1/analytics/overview`)**:
 
 ```json
-{"hasHistory":false,"today":{"studySeconds":0,"activitiesCompleted":0,"reviewsCompleted":0},"week":{"activeDays":0,"studySeconds":0},"skills":[],"weaknesses":[]}
+{"hasHistory":false,"today":{"fromDate":"2026-11-26","toDate":"2026-11-26","activeDays":0,"studySeconds":0,"lessonCount":0,"vocabularyReviewCount":0,"grammarAnswerCount":0,"toeicQuestionCount":0},"week":{"fromDate":"2026-11-20","toDate":"2026-11-26","activeDays":0,"studySeconds":0,"lessonCount":0,"vocabularyReviewCount":0,"grammarAnswerCount":0,"toeicQuestionCount":0},"skills":[],"weaknesses":[]}
 ```
 
 - **Thiếu quyền gói Plus (`403 FEATURE_ENTITLEMENT_REQUIRED`)**:
 
 ```json
-{"type":"urn:lyreo:problem:feature-entitlement-required","title":"Forbidden","status":403,"detail":"Feature 'vocabulary.plus-packs' requires an active entitlement grant.","instance":"/api/v1/vocabulary/packs/50000000-0000-0000-0000-000000000212/units","code":"FEATURE_ENTITLEMENT_REQUIRED","featureKey":"vocabulary.plus-packs"}
+{"type":"urn:lyreo:problem:access-denied","title":"Access denied","status":403,"detail":"Access is denied to this resource.","instance":"/api/v1/vocabulary/packs/50000000-0000-0000-0000-000000000212/units","code":"FEATURE_ENTITLEMENT_REQUIRED","featureKey":"vocabulary.plus-packs"}
 ```
 
 - **Hết hạn mức theo ngày (`403 QUOTA_EXCEEDED`)**:
@@ -186,7 +188,7 @@ Mọi route chi tiết và hợp đồng lỗi được tổng hợp tại [Core
 - **Xung đột revision (`409 STALE_REVISION`) & Hết hạn phiên (`409 SESSION_EXPIRED`)**:
 
 ```json
-{"type":"urn:lyreo:problem:stale-revision","title":"Conflict","status":409,"detail":"Session revision mismatch.","code":"STALE_REVISION","currentRevision":3}
+{"type":"urn:lyreo:problem:stale-revision","title":"Stale revision","status":409,"detail":"Session revision mismatch.","code":"STALE_REVISION","currentRevision":3}
 ```
 
 ### Danh mục quyết định sản phẩm cần chủ dự án chốt trước Production

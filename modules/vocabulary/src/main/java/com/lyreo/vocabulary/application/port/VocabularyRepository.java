@@ -95,8 +95,25 @@ public interface VocabularyRepository {
         UUID ukAudioId,
         UUID usAudioId,
         UUID exampleAudioId,
-        UUID secondExampleAudioId
-    ) {}
+        UUID secondExampleAudioId,
+        String packAccessMode,
+        String requiredFeatureKey
+    ) {
+        public EntrySnapshotSeed(
+            UUID entryId,
+            String term,
+            VocabularyCatalog.LearningContent content,
+            long revision,
+            UUID imageId,
+            UUID ukAudioId,
+            UUID usAudioId,
+            UUID exampleAudioId,
+            UUID secondExampleAudioId
+        ) {
+            this(entryId, term, content, revision, imageId, ukAudioId, usAudioId,
+                exampleAudioId, secondExampleAudioId, "PUBLIC", null);
+        }
+    }
 
     record SavedCardMediaAccess(
         UUID cardId,

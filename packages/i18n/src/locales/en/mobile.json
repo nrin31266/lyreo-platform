@@ -72,6 +72,7 @@
   "progress": {
     "back": "← Home",
     "title": "Your progress",
+    "general": "General",
     "listening": "Listening",
     "speaking": "Speaking",
     "vocabulary": "Vocabulary",
@@ -87,6 +88,7 @@
     "emptyHelp": "Updates from Lyreo will appear here.",
     "loadMore": "Load older announcements",
     "loadingMore": "Loading...",
+    "loadMoreFailed": "Could not load older announcements. Tap to retry.",
     "categories": {
       "SYSTEM": "System",
       "STUDY_REMINDER": "Study reminder",

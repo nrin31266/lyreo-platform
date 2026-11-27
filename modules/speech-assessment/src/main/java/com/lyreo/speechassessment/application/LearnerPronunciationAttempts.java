@@ -29,6 +29,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
 
 /** Learner-facing Shadowing pronunciation attempt lifecycle and 24-hour audio retention. */
 @Service
@@ -179,9 +180,18 @@ public class LearnerPronunciationAttempts {
             job.errorCode(),
             attempt.outcome(),
             attempt.overallScore(),
-            attempt.result(),
+            sanitizeResult(attempt.result()),
             attempt.createdAt()
         );
+    }
+
+    private static JsonNode sanitizeResult(JsonNode result) {
+        if (result instanceof ObjectNode obj && obj.has("providerRaw")) {
+            ObjectNode copy = obj.deepCopy();
+            copy.remove("providerRaw");
+            return copy;
+        }
+        return result;
     }
 
     public byte[] recording(UUID learnerId, UUID attemptId) throws IOException {

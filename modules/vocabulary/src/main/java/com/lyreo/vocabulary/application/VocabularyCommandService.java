@@ -108,7 +108,7 @@ public class VocabularyCommandService {
             }
         }
 
-        EnrichedSaveInput input = enrich(command);
+        EnrichedSaveInput input = enrich(learnerId, command);
         String dedupKey = buildDedupKey(input);
         String fingerprint = buildSaveFingerprint(input, dedupKey, command.collectionIds());
 
@@ -307,7 +307,7 @@ public class VocabularyCommandService {
         return idempotency.execute(learnerId, operation, idempotencyKey, fingerprint, responseType, action);
     }
 
-    private EnrichedSaveInput enrich(SaveItemCommand cmd) {
+    private EnrichedSaveInput enrich(UUID learnerId, SaveItemCommand cmd) {
         String term = cleanNullable(cmd.term());
         String pos = cleanNullable(cmd.partOfSpeech());
         String meaningVi = cleanNullable(cmd.meaningVi());
@@ -323,6 +323,9 @@ public class VocabularyCommandService {
             var seedOpt = repository.findEntrySnapshotSeed(cmd.sourceEntryId());
             if (seedOpt.isPresent()) {
                 var seed = seedOpt.get();
+                if ("FEATURE".equals(seed.packAccessMode()) && seed.requiredFeatureKey() != null && entitlements != null) {
+                    entitlements.requireFeature(learnerId, FeatureKey.of(seed.requiredFeatureKey()));
+                }
                 if (term == null) {
                     term = cleanNullable(seed.term());
                 }

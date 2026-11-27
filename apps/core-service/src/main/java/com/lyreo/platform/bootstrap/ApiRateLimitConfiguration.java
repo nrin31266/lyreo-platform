@@ -81,8 +81,12 @@ public class ApiRateLimitConfiguration {
     }
 
     private static String coarseScope(String uri) {
+        if (uri.contains("/media/") || uri.endsWith("/audio") || uri.endsWith("/cover")
+            || uri.endsWith("/badge") || uri.endsWith("/avatar")) {
+            return "media";
+        }
         if (uri.contains("/chat")) return "chat";
-        if (uri.contains("/speech")) return "speech";
+        if (uri.contains("/speech") || uri.contains("/shadowing")) return "speech";
         if (uri.contains("/lessons")) return "lesson";
         return "general";
     }

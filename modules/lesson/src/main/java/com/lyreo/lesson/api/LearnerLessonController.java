@@ -4,15 +4,13 @@ import com.lyreo.identity.application.AppUserProvisioningService;
 import com.lyreo.lesson.application.port.LearnerLessonQuery;
 import com.lyreo.lesson.application.practice.LearnerLessonService;
 import com.lyreo.lesson.application.practice.LessonPracticeService;
+import com.lyreo.platform.content.ByteRangeResponses;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
-import org.springframework.http.CacheControl;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -86,17 +84,12 @@ public class LearnerLessonController {
     @GetMapping("/{lessonId}/audio")
     public ResponseEntity<Resource> audio(
         @AuthenticationPrincipal Jwt jwt,
-        @PathVariable UUID lessonId
+        @PathVariable UUID lessonId,
+        @RequestHeader(value = "Range", required = false) String rangeHeader
     ) {
         UUID learnerId = provision(jwt);
         var audio = lessons.readAudio(learnerId, lessonId);
-        return ResponseEntity.ok()
-            .contentType(MediaType.parseMediaType(audio.contentType()))
-            .cacheControl(CacheControl.noStore())
-            .contentLength(audio.bytes().length)
-            .header("X-Content-Type-Options", "nosniff")
-            .header("Accept-Ranges", "bytes")
-            .body(new ByteArrayResource(audio.bytes()));
+        return ByteRangeResponses.stream(audio.contentType(), audio.bytes(), rangeHeader);
     }
 
     @GetMapping("/{lessonId}/attempts")

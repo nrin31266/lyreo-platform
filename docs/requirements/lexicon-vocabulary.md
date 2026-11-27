@@ -12,7 +12,7 @@ forms/lemma, senses, pronunciation, source/license và Vietnamese translation st
 Lexicon sở hữu mục từ và nghĩa phục vụ tra cứu toàn hệ thống. Vocabulary sở hữu
 nội dung học theo chủ đề và trạng thái học cá nhân. Cùng một chữ có thể mang nghĩa
 khác nhau theo ngữ cảnh. Liên kết từ điển phải tùy chọn và có căn cứ ở mức nghĩa.
-Sổ SRS hiện tại còn yêu cầu `headwordId`; danh mục bộ học hoạt động độc lập.
+Endpoint legacy `POST /api/v1/vocabulary/cards` còn yêu cầu `headwordId`, trong khi `POST /api/v1/vocabulary/saved-items` cho phép tùy chọn `headwordId`, và flashcard bộ curated dùng `entryId`.
 
 ### FR-LEX-002 — Contextual lexical resolution
 
