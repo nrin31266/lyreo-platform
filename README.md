@@ -24,22 +24,19 @@ Use the versions in `.java-version`, `.nvmrc`, and `package.json#packageManager`
 
 ```bash
 make init-env
-# Configure release URLs and the team's R2 credentials in the ignored local env files.
-# Set STORAGE_MODE=r2 in both apps/core-service/.env and tools/data-import/.env.
+# Add the team's R2 endpoint and credentials to apps/core-service/.env and tools/data-import/.env.
 make setup
+make seed-lessons
+make setup-data
 ```
 
-Setup creates local environment files, syncs dependencies, starts PostgreSQL and Keycloak, and
-runs the development bootstrap and Flyway migrations. Content installation is optional:
+New environment files select the shared R2 bucket. `make setup` checks the storage settings,
+syncs dependencies, starts PostgreSQL and Keycloak, applies Flyway migrations, and creates demo
+accounts. `make seed-lessons` adds published sample lessons with audio on R2. `make setup-data`
+imports the dictionary, Grammar/TOEIC and Vocabulary catalogs. For isolated development without
+R2 credentials, set `STORAGE_MODE=local` in both files and run `make setup` for basic dev data.
 
-```bash
-make setup-data DATASET=lexicon        # Dictionary
-make setup-data DATASET=grammar-toeic  # Grammar and TOEIC L&R
-make setup-data                       # Both packages
-```
-
-The second and third commands verify or reuse the shared R2 media if both environments select R2.
-See the [Data Import guide](tools/data-import/README.md).
+See the [Data Import guide](tools/data-import/README.md) for individual catalog imports.
 Application source runs on the host. With `make dev-infra` running, start Core, AI and Admin in one
 terminal with prefixed logs, or start each process in its own terminal:
 
@@ -61,7 +58,8 @@ Local login details: [Development accounts](docs/ACCOUNT.md).
 business modules. It follows your editor's save behavior; it does not change autosave settings.
 See [Core development](apps/core-service/README.md#local-run-and-verification) for setup and reload details.
 
-`make mobile` starts Metro; install the Expo development build first using the [Mobile guide](apps/mobile/README.md). Mock AI and local storage are the normal development defaults.
+`make mobile` starts Metro. Install the Expo development build first using the [Mobile guide](apps/mobile/README.md).
+The sample lessons and their R2 audio are ready to use after setup. Run local AI models for tasks that need to generate new audio or transcripts locally.
 
 ## Common commands
 
@@ -72,8 +70,8 @@ See [Core development](apps/core-service/README.md#local-run-and-verification) f
 | `make db-shell`, `make db-reset` | Inspect DB or preview lesson-only reset; [scope and confirmation](docs/DEVELOPMENT.md) |
 | `make db-recreate`, `make down-v` | Guarded destructive DB/volume operations; see the same guide |
 | `make migrate`, `make seed-dev` | Apply schema and add reference categories without overwriting edits |
-| `make seed-lessons` | Add five real example lessons when the shared lesson audio is available |
-| `make setup-data`, `make data-storage-check` | Import both releases or check media storage alignment |
+| `make seed-lessons` | Add published sample lessons that use shared R2 audio |
+| `make setup-data`, `make data-storage-check` | Import frozen catalogs or check media storage alignment |
 | `make data-check`, `make data-fetch` | Verify or acquire the clean Grammar/TOEIC release |
 | `make setup-media` | Install the Core YouTube downloader; FFmpeg/ffprobe required on the host |
 | `make validate`, `make check` | Offline guards or full verification |

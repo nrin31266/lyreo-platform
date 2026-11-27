@@ -12,6 +12,7 @@ the content to install:
 ```bash
 make setup-data DATASET=lexicon
 make setup-data DATASET=grammar-toeic
+make setup-data DATASET=vocabulary
 make setup-data
 ```
 
@@ -57,9 +58,10 @@ make data-check
 ## Storage
 
 Full team integration uses each developer's PostgreSQL database and the configured shared R2
-bucket. Keep credentials in ignored env files. Select `STORAGE_MODE=r2` in Core and importer;
-`make data-storage-check` checks they agree. Isolated tests can use `STORAGE_MODE=local` with the
-same resolved `LOCAL_STORAGE_ROOT`. There is no fallback to a different storage target.
+bucket. Keep credentials in ignored env files. Core and importer default to `STORAGE_MODE=r2` in
+new env files. `make data-storage-check` checks they agree. Isolated tests can use
+`STORAGE_MODE=local` with the same resolved `LOCAL_STORAGE_ROOT`. There is no fallback to a
+different storage target.
 
 Grammar/TOEIC files use `media/sha256/{prefix}/{sha256}`. APPLY verifies size and SHA-256 metadata,
 or hashes object bytes if metadata is absent. Matching keys are reused; missing keys are uploaded;

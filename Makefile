@@ -129,6 +129,7 @@ seed_database = $(DB_SETUP) -Dspring-boot.run.arguments="--seed-dev \"$(1)\""
 
 setup:
 	$(MAKE) init-env
+	$(MAKE) data-storage-check
 	$(MAKE) doctor
 	$(MAKE) deps
 	$(MAKE) dev-infra
