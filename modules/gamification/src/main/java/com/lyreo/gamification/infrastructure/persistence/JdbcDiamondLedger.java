@@ -1,5 +1,6 @@
 package com.lyreo.gamification.infrastructure.persistence;
 
+import com.lyreo.contracts.errors.StateConflictException;
 import com.lyreo.gamification.application.port.DiamondLedger;
 import com.lyreo.gamification.domain.DiamondTransaction;
 import java.sql.ResultSet;
@@ -69,6 +70,71 @@ public class JdbcDiamondLedger implements DiamondLedger {
                 """,
                 Map.of("learnerId", transaction.learnerId(), "amount", transaction.amount())
             );
+        }
+        return transaction;
+    }
+
+    @Override
+    @Transactional
+    public DiamondTransaction appendCheckingNonNegative(DiamondTransaction transaction) {
+        jdbc.update(
+            """
+            INSERT INTO diamond_wallet(learner_id, cached_balance, updated_at)
+            VALUES(:learnerId, 0, now())
+            ON CONFLICT(learner_id) DO NOTHING
+            """,
+            Map.of("learnerId", transaction.learnerId())
+        );
+        Integer lockedBalance = jdbc.queryForObject(
+            "SELECT cached_balance FROM diamond_wallet WHERE learner_id = :learnerId FOR UPDATE",
+            Map.of("learnerId", transaction.learnerId()),
+            Integer.class
+        );
+        Optional<DiamondTransaction> existing = findByIdempotencyKey(transaction.idempotencyKey());
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        int currentBalance = lockedBalance == null ? 0 : lockedBalance;
+        if (currentBalance + transaction.amount() < 0) {
+            throw new StateConflictException("Insufficient diamond balance for negative adjustment");
+        }
+        int inserted = jdbc.update(
+            """
+            INSERT INTO diamond_transaction(
+                id, learner_id, transaction_type, amount, idempotency_key,
+                reference_type, reference_id, created_at, reason, rule_version
+            ) VALUES (
+                :id, :learnerId, :transactionType, :amount, :idempotencyKey,
+                :referenceType, :referenceId, :createdAt, :reason, :ruleVersion
+            )
+            ON CONFLICT(idempotency_key) DO NOTHING
+            """,
+            new MapSqlParameterSource()
+                .addValue("id", transaction.id())
+                .addValue("learnerId", transaction.learnerId())
+                .addValue("transactionType", transaction.type().name())
+                .addValue("amount", transaction.amount())
+                .addValue("idempotencyKey", transaction.idempotencyKey())
+                .addValue("referenceType", transaction.referenceType())
+                .addValue("referenceId", transaction.referenceId())
+                .addValue("createdAt", Timestamp.from(transaction.createdAt()))
+                .addValue("reason", transaction.reason())
+                .addValue("ruleVersion", transaction.ruleVersion())
+        );
+        if (inserted == 1) {
+            int updated = jdbc.update(
+                """
+                UPDATE diamond_wallet
+                   SET cached_balance = cached_balance + :amount,
+                       updated_at = now()
+                 WHERE learner_id = :learnerId
+                   AND cached_balance + :amount >= 0
+                """,
+                Map.of("learnerId", transaction.learnerId(), "amount", transaction.amount())
+            );
+            if (updated != 1) {
+                throw new StateConflictException("Insufficient diamond balance for negative adjustment");
+            }
         }
         return transaction;
     }

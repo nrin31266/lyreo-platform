@@ -101,20 +101,23 @@ public class EntitlementGrantAdminService {
             maxAmount,
             resolvedPolicyVersion
         ));
+        String normalizedActor = (actor == null || actor.isBlank()) ? "admin" : actor.trim();
         auditLogs.record(new EntitlementAuditEntry(
             UUID.randomUUID(),
-            UUID.nameUUIDFromBytes(("admin:" + (actor == null ? "admin" : actor)).getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+            null,
             saved.featureKey().value(),
             null,
             "QUOTA_UPDATED",
             saved.policyVersion(),
             Map.of(
+                "actor", normalizedActor,
                 "tier", saved.tier(),
                 "limitType", saved.limitType(),
                 "periodUnit", saved.periodUnit(),
                 "maxAmount", saved.maxAmount()
             ),
-            clock.instant()
+            clock.instant(),
+            normalizedActor
         ));
         return saved;
     }

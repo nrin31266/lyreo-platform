@@ -71,6 +71,7 @@ export type AdminCurriculumPath = AdminCurriculumPathSummary & {
 };
 
 export type SaveCurriculumItemInput = {
+  id?: string;
   position: number;
   contentType: CurriculumContentType;
   contentReferenceId: string;
@@ -80,6 +81,7 @@ export type SaveCurriculumItemInput = {
 };
 
 export type SaveCurriculumSectionInput = {
+  id?: string;
   title: string;
   position: number;
   items: SaveCurriculumItemInput[];
@@ -94,7 +96,7 @@ export type SaveCurriculumPathInput = {
   coverAssetId?: string | null;
   accessMode?: CurriculumAccessMode;
   requiredFeatureKey?: string | null;
-  sections: SaveCurriculumSectionInput[];
+  sections?: SaveCurriculumSectionInput[];
 };
 
 const base = '/api/v1/admin/curriculum/paths';

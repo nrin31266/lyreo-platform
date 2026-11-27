@@ -195,7 +195,27 @@ public class AssessmentSessions {
                 UUID answerId=UUID.nameUUIDFromBytes((id+":"+item.id()).getBytes(StandardCharsets.UTF_8));
                 events.publishEvent(new GrammarQuestionAnsweredEvent(learnerId,answerId,item.itemId(),item.topicId(),item.subtopicId(),item.content().difficultyLevel()==null?1:item.content().difficultyLevel(),score.correct(),now));
             }
-            events.publishEvent(new GrammarSessionCompletedEvent(row.id(),learnerId,row.catalogId(),row.mode(),result.correct(),result.total(),now));
+            UUID resolvedTopicId = snapshot.items().stream()
+                .map(Item::topicId)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+            List<UUID> resolvedSubtopicIds = snapshot.items().stream()
+                .map(Item::subtopicId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+            events.publishEvent(new GrammarSessionCompletedEvent(
+                row.id(),
+                learnerId,
+                row.catalogId(),
+                row.mode(),
+                result.correct(),
+                result.total(),
+                now,
+                resolvedTopicId,
+                resolvedSubtopicIds
+            ));
         }
         return get(learnerId,id);
     }

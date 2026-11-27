@@ -87,10 +87,12 @@ class LearnerProfilesIT {
     static class FakeAccountProvider implements LearnerAccountProvider, LearnerAccountProvider.Connection {
         UUID subject;
         boolean enabled = true;
+        boolean failConnect;
         boolean failLogout;
         boolean temporary;
         @Override public boolean configured() { return true; }
         @Override public Optional<Connection> connect(UUID id) {
+            if (failConnect) throw new ServiceUnavailableException("KEYCLOAK_ACCOUNT_UNAVAILABLE", "Unavailable", null);
             return id.equals(subject) ? Optional.of(this) : Optional.empty();
         }
         @Override public boolean enabled() { return enabled; }
@@ -143,6 +145,17 @@ class LearnerProfilesIT {
         String unlockRequest = """
             {"locked":false,"reason":"  Test account recovery  "}
             """;
+        provider.failConnect = true;
+        try {
+            mvc.perform(put(lock).with(admin).contentType(MediaType.APPLICATION_JSON).content(lockRequest))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.locked").value(true))
+                .andExpect(jsonPath("$.syncPending").value(true));
+            mvc.perform(get("/api/v1/learner/profile").with(oldToken))
+                .andExpect(status().isUnauthorized());
+        } finally {
+            provider.failConnect = false;
+        }
         provider.failLogout = true;
         try {
             mvc.perform(put(lock).with(admin).contentType(MediaType.APPLICATION_JSON).content(lockRequest))

@@ -381,6 +381,13 @@ class LearnerPlatformIntegrationIT {
             .andExpect(jsonPath("$.dailyMinutes").value(15));
 
         // 2. Entitlement matrix + Plus pack gate + Admin grant & revoke + concurrency quota race
+        mvc.perform(get("/api/v1/entitlements").with(PLUS_LEARNER))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.entitlements[?(@.featureKey=='vocabulary.plus-packs')].granted", contains(true)));
+
+        mvc.perform(get("/api/v1/entitlements").with(ADMIN))
+            .andExpect(status().isForbidden());
+
         mvc.perform(get("/api/v1/learner/entitlements").with(PLUS_LEARNER))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.entitlements[?(@.featureKey=='vocabulary.plus-packs')].granted", contains(true)));
@@ -785,12 +792,72 @@ class LearnerPlatformIntegrationIT {
         mvc.perform(get("/api/v1/admin/analytics/summary").with(ADMIN))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.activeLearners7d").isNumber());
+        // Lesson practice routes enforce FEATURE access on Plus lessons (B3)
+        UUID plusLessonId = UUID.fromString("50000000-0000-0000-0000-000000000405");
+        jdbc.update(
+            "UPDATE lesson_metadata SET access_mode = 'FEATURE', required_feature_key = 'lesson.plus-lessons' WHERE lesson_id = ?",
+            plusLessonId
+        );
+        UUID plusSentenceId = jdbc.queryForObject(
+            "SELECT id FROM lesson_sentence WHERE lesson_id = ? ORDER BY position LIMIT 1",
+            UUID.class,
+            plusLessonId
+        );
+        UUID plusWatchId = jdbc.queryForObject(
+            "SELECT id FROM lesson_activity WHERE lesson_id = ? AND activity_type = 'WATCH' LIMIT 1",
+            UUID.class,
+            plusLessonId
+        );
+        UUID plusDictId = jdbc.queryForObject(
+            "SELECT id FROM lesson_activity WHERE lesson_id = ? AND activity_type = 'DICTATION' LIMIT 1",
+            UUID.class,
+            plusLessonId
+        );
+        mvc.perform(get("/api/v1/lessons/" + plusLessonId + "/attempts").with(FREE_LEARNER))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("FEATURE_ENTITLEMENT_REQUIRED"));
+        mvc.perform(post("/api/v1/lessons/" + plusLessonId + "/activities/" + plusWatchId + "/complete").with(FREE_LEARNER))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("FEATURE_ENTITLEMENT_REQUIRED"));
+        mvc.perform(post("/api/v1/lessons/" + plusLessonId + "/activities/" + plusDictId + "/dictation/attempts")
+                .with(FREE_LEARNER)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"sentenceId\":\"" + plusSentenceId + "\",\"answer\":\"test\"}"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("FEATURE_ENTITLEMENT_REQUIRED"));
+        jdbc.update(
+            "UPDATE lesson_metadata SET access_mode = 'PUBLIC', required_feature_key = NULL WHERE lesson_id = ?",
+            plusLessonId
+        );
+
+        mvc.perform(put("/api/v1/admin/entitlements/quotas").with(ADMIN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"featureKey":"chat.tutor","tier":"FREE","limitType":"PERIOD_USAGE","periodUnit":"DAY","maxAmount":10,"policyVersion":"v2"}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.policyVersion").value("v2"));
+        mvc.perform(get("/api/v1/admin/notifications/activity").param("category", "OTHER").with(ADMIN))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[*].action").value(hasItems("QUOTA_UPDATED")));
+
+        jdbc.update("""
+            INSERT INTO ai_provider (id, code, display_name, enabled, encrypted_api_key)
+            VALUES (?, 'DEEPSEEK', 'DeepSeek', true, 'test-key')
+            ON CONFLICT (code) DO UPDATE SET enabled = true, encrypted_api_key = 'test-key'
+            """, UUID.randomUUID());
+        jdbc.update("""
+            INSERT INTO ai_invocation(id, capability, provider_code, model, status, request_hash, started_at)
+            VALUES (?, 'GENERAL_LLM', 'DEEPSEEK', 'deepseek-chat', 'FAILED', 'dash-health-test', now())
+            """, UUID.randomUUID());
+
         mvc.perform(get("/api/v1/admin/analytics/dashboard").param("days", "14").with(ADMIN))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.period.days").value(14))
             .andExpect(jsonPath("$.dailySeries.length()").value(14))
             .andExpect(jsonPath("$.kpis.totalLearners").isNumber())
             .andExpect(jsonPath("$.kpis.activePlusLearners").isNumber())
+            .andExpect(jsonPath("$.operations.aiProvidersUnhealthy").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)))
             .andExpect(jsonPath("$.contentInventory.curriculumPathsPublished").isNumber())
             .andExpect(jsonPath("$.topCurriculumPaths").isArray());
         mvc.perform(get("/api/v1/admin/analytics/dashboard").with(FREE_LEARNER))

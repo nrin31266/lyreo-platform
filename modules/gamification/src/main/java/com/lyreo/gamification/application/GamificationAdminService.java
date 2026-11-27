@@ -627,13 +627,8 @@ public class GamificationAdminService {
             );
         }
 
-        int currentBalance = ledger.balance(learnerId);
-        if (currentBalance + amount < 0) {
-            throw new StateConflictException("Insufficient diamond balance for negative adjustment");
-        }
-
         String ruleVersion = policyConfig.current().normalizedRuleVersion();
-        DiamondTransaction tx = ledger.append(new DiamondTransaction(
+        DiamondTransaction tx = ledger.appendCheckingNonNegative(new DiamondTransaction(
             UUID.randomUUID(),
             learnerId,
             DiamondTransaction.Type.ADMIN_ADJUSTMENT,

@@ -332,7 +332,7 @@ public class JdbcVocabularyStudyRepository implements VocabularyStudyRepository 
             .addValue("unitId", unitId)
             .addValue("packId", packId)
             .addValue("rating", rating.name())
-            .addValue("previousDue", previousDueAt, Types.TIMESTAMP_WITH_TIMEZONE)
+            .addValue("previousDue", previousDueAt, Types.TIMESTAMP)
             .addValue("nextDue", Timestamp.from(result.nextReviewAt()))
             .addValue("stability", result.stability())
             .addValue("difficulty", result.difficulty())

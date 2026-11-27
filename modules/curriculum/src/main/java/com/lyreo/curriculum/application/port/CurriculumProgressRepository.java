@@ -103,11 +103,40 @@ public interface CurriculumProgressRepository {
         String configJson
     );
 
+    default CurriculumSection updateSection(UUID id, String title, int position) {
+        throw new UnsupportedOperationException("updateSection is not implemented");
+    }
+
+    default CurriculumItem updateItem(
+        UUID id,
+        UUID sectionId,
+        int position,
+        ContentType contentType,
+        UUID contentReferenceId,
+        boolean required,
+        String unlockRule,
+        String configJson
+    ) {
+        throw new UnsupportedOperationException("updateItem is not implemented");
+    }
+
+    default void deleteItemsByIds(List<UUID> itemIds) {}
+
+    default void deleteSectionsByIds(List<UUID> sectionIds) {}
+
+    default void offsetSectionPositions(UUID pathId, int offset) {}
+
+    default void offsetItemPositions(UUID pathId, int offset) {}
+
     void deleteSectionsByPathId(UUID pathId);
 
     Optional<CurriculumSection> findSectionById(UUID sectionId);
 
     boolean existsByCode(String code, UUID excludePathId);
 
-    record ActiveItemTarget(UUID itemId, UUID pathId) {}
+    record ActiveItemTarget(UUID itemId, UUID pathId, Map<String, Object> config) {
+        public ActiveItemTarget(UUID itemId, UUID pathId) {
+            this(itemId, pathId, Map.of());
+        }
+    }
 }

@@ -116,9 +116,7 @@ public class EnglishTutorService {
             history = chatRepository.listMessages(conversationId);
         }
 
-        String operationId = (idempotencyKey != null && !idempotencyKey.isBlank())
-            ? idempotencyKey.trim()
-            : UUID.randomUUID().toString();
+        String operationId = "chat-exec:" + UUID.randomUUID();
         QuotaDecision decision = entitlements != null
             ? entitlements.consumeQuota(learnerId, FEATURE_CHAT_TUTOR, operationId)
             : new QuotaDecision(FEATURE_CHAT_TUTOR.value(), operationId, true, 0, 0, null, "dev-v1");

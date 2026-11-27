@@ -117,11 +117,35 @@ it('loads selected path detail, disables Save when clean, and publishes updates'
         code: 'FOUNDATION_PATH',
         name: 'Foundation Path',
         status: 'PUBLISHED',
+        sections: [
+          expect.objectContaining({
+            id: samplePath.sections[0].id,
+            title: 'Week 1 Updated',
+            items: [
+              expect.objectContaining({
+                id: samplePath.sections[0].items[0].id,
+              }),
+            ],
+          }),
+        ],
       }),
     ),
   );
   expect(await screen.findByText('Curriculum changes saved')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Save path' })).toBeDisabled();
+
+  // Renaming metadata without modifying sections omits sections from payload
+  vi.mocked(updateAdminCurriculumPath).mockResolvedValueOnce({ ...published, name: 'Foundation Path v2' });
+  fireEvent.click(screen.getByRole('button', { name: 'Path details' }));
+  fireEvent.change(screen.getByLabelText('Path name'), { target: { value: 'Foundation Path v2' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save path' }));
+  await waitFor(() => {
+    const calls = vi.mocked(updateAdminCurriculumPath).mock.calls;
+    const lastPayload = calls[calls.length - 1][1];
+    expect(lastPayload.name).toBe('Foundation Path v2');
+    expect(lastPayload.sections).toBeUndefined();
+  });
 });
 
 it('validates content UUIDs and creates a new path via Path Info dialog with auto-generated code', async () => {

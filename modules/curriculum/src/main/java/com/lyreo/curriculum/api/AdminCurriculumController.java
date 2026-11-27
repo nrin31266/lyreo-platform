@@ -133,10 +133,12 @@ public class AdminCurriculumController {
     ) {
         List<CurriculumAdminService.SectionSpec> sectionSpecs = sections == null ? null : sections.stream()
             .map(section -> new CurriculumAdminService.SectionSpec(
+                section.id(),
                 section.title(),
                 section.position(),
                 section.items() == null ? List.of() : section.items().stream()
                     .map(item -> new CurriculumAdminService.ItemSpec(
+                        item.id(),
                         item.position(),
                         item.contentType(),
                         item.contentReferenceId(),
@@ -218,12 +220,22 @@ public class AdminCurriculumController {
     ) {}
 
     public record SectionRequest(
+        UUID id,
         @NotBlank String title,
         int position,
         @Valid List<ItemRequest> items
-    ) {}
+    ) {
+        public SectionRequest(
+            String title,
+            int position,
+            List<ItemRequest> items
+        ) {
+            this(null, title, position, items);
+        }
+    }
 
     public record ItemRequest(
+        UUID id,
         int position,
         @NotNull CurriculumItem.ContentType contentType,
         @NotNull UUID contentReferenceId,
@@ -236,9 +248,20 @@ public class AdminCurriculumController {
             CurriculumItem.ContentType contentType,
             UUID contentReferenceId,
             Boolean required,
+            String unlockRule,
+            Map<String, Object> config
+        ) {
+            this(null, position, contentType, contentReferenceId, required, unlockRule, config);
+        }
+
+        public ItemRequest(
+            int position,
+            CurriculumItem.ContentType contentType,
+            UUID contentReferenceId,
+            Boolean required,
             String unlockRule
         ) {
-            this(position, contentType, contentReferenceId, required, unlockRule, Map.of());
+            this(null, position, contentType, contentReferenceId, required, unlockRule, Map.of());
         }
     }
 }

@@ -155,6 +155,7 @@ public class LearnerLessonService {
         int size
     ) {
         validatePage(page, size);
+        enforceLessonAccess(learnerId, lessonId);
         return query.listAttempts(
             learnerId,
             lessonId,

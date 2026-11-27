@@ -7,6 +7,7 @@ import com.lyreo.ai.application.admin.AiAdminService;
 import com.lyreo.contracts.errors.IdempotencyConflictException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.errors.StaleRevisionException;
+import com.lyreo.entitlement.api.FeatureEntitlementRequiredException;
 import com.lyreo.entitlement.api.QuotaExceededException;
 import com.lyreo.lesson.domain.authoring.AuthoringOptions;
 import com.lyreo.lesson.domain.authoring.AuthoringProfile;
@@ -317,6 +318,18 @@ class LearnerShadowingIT {
         assertThat(afterPurge.audioAvailable()).isFalse();
         assertThat(afterPurge.recordingPurgedAt()).isNotNull();
         assertThat(afterPurge.overallScore()).isEqualTo(92);
+
+        // 9. Marking lesson FEATURE (Plus-only) blocks Free learner on constraints, submit, and view
+        jdbc.update(
+            "UPDATE lesson_metadata SET access_mode = 'FEATURE', required_feature_key = 'lesson.plus-lessons' WHERE lesson_id = ?",
+            lessonId
+        );
+        assertThatThrownBy(() -> attempts.constraints(learner2, lessonId, shadowingActivityId, sentenceId, 5L))
+            .isInstanceOf(FeatureEntitlementRequiredException.class);
+        assertThatThrownBy(() -> attempts.submit(learner2, UUID.randomUUID(), lessonId, shadowingActivityId, sentenceId, 5L, audio))
+            .isInstanceOf(FeatureEntitlementRequiredException.class);
+        assertThatThrownBy(() -> attempts.view(learnerId, accepted1.attemptId()))
+            .isInstanceOf(FeatureEntitlementRequiredException.class);
     }
 
     private UUID insertUser() {

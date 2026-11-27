@@ -15,6 +15,10 @@ import com.lyreo.contracts.errors.StateConflictException;
 import com.lyreo.contracts.grammar.GrammarQuestionAnsweredEvent;
 import com.lyreo.contracts.lesson.LessonActivityCompletedEvent;
 import com.lyreo.contracts.lesson.LessonCompletedEvent;
+import com.lyreo.contracts.lesson.ShadowingAssessedEvent;
+import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent;
+import com.lyreo.contracts.vocabulary.VocabularyReviewCompletedEvent;
+import com.lyreo.gamification.application.GamificationAdminService;
 import com.lyreo.gamification.application.LessonRewardListener;
 import com.lyreo.gamification.application.MissionEventListener;
 import com.lyreo.gamification.application.StreakService;
@@ -22,7 +26,10 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -386,6 +393,82 @@ class GamificationIdempotencyIT {
             .andExpect(jsonPath("$.total").isNumber())
             .andExpect(jsonPath("$.hasMore").isBoolean())
             .andExpect(jsonPath("$.items").isArray());
+    }
+
+    @Test
+    void preventsConcurrentNegativeBalanceAndAdvancesShadowingVocabToeicMetrics() throws Exception {
+        UUID learnerId = UUID.randomUUID();
+        jdbc.update("INSERT INTO app_user(id, keycloak_subject) VALUES (?, ?)", learnerId, "concurrent-" + learnerId);
+        var adminService = context.getBean(GamificationAdminService.class);
+        adminService.adjustDiamonds(learnerId, 100, "Initial credit", "conc-init");
+
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            CountDownLatch ready = new CountDownLatch(2);
+            CountDownLatch start = new CountDownLatch(1);
+            var c1 = pool.submit(() -> {
+                ready.countDown();
+                start.await();
+                try {
+                    adminService.adjustDiamonds(learnerId, -70, "Debit 1", "conc-debit-1");
+                    return 200;
+                } catch (StateConflictException ex) {
+                    return 409;
+                }
+            });
+            var c2 = pool.submit(() -> {
+                ready.countDown();
+                start.await();
+                try {
+                    adminService.adjustDiamonds(learnerId, -70, "Debit 2", "conc-debit-2");
+                    return 200;
+                } catch (StateConflictException ex) {
+                    return 409;
+                }
+            });
+            ready.await();
+            start.countDown();
+            List<Integer> outcomes = List.of(c1.get(), c2.get());
+            assertThat(outcomes).containsExactlyInAnyOrder(200, 409);
+        }
+        assertThat(jdbc.queryForObject("SELECT cached_balance FROM diamond_wallet WHERE learner_id = ?", Integer.class, learnerId))
+            .isEqualTo(30);
+
+        UUID shadowMissionId = UUID.randomUUID();
+        UUID vocabAchId = UUID.randomUUID();
+        UUID toeicAchId = UUID.randomUUID();
+        jdbc.update("""
+            INSERT INTO mission_definition(id, code, title, recurrence, metric, target, diamond_reward, rule_version, enabled)
+            VALUES (?, 'DAILY_SHADOWING_TEST', 'Shadowing Test', 'DAILY', 'SHADOWING_SENTENCE', 2, 5, 'v1', true)
+            """, shadowMissionId);
+        jdbc.update("""
+            INSERT INTO achievement_definition(id, code, title, description, metric, target, xp_reward, diamond_reward, rule_version, enabled)
+            VALUES (?, 'VOCAB_TEST_ACH', 'Vocab Ach', 'Desc', 'VOCABULARY_REVIEW', 1, 10, 2, 'v1', true),
+                   (?, 'TOEIC_TEST_ACH', 'TOEIC Ach', 'Desc', 'TOEIC_DRILL_COMPLETED', 1, 10, 2, 'v1', true)
+            """, vocabAchId, toeicAchId);
+
+        UUID attemptId = UUID.randomUUID();
+        missionListener.shadowing(new ShadowingAssessedEvent(attemptId, learnerId, 0, 5, 90));
+        missionListener.shadowing(new ShadowingAssessedEvent(attemptId, learnerId, 0, 5, 90));
+        assertThat(jdbc.queryForObject(
+            "SELECT progress FROM mission_progress WHERE learner_id = ? AND mission_id = ?",
+            Integer.class, learnerId, shadowMissionId
+        )).isEqualTo(1);
+
+        missionListener.vocabulary(new VocabularyReviewCompletedEvent(
+            UUID.randomUUID(), learnerId, UUID.randomUUID(), null, "GOOD", true, Instant.now()
+        ));
+        missionListener.toeic(new ToeicAttemptCompletedEvent(
+            learnerId, UUID.randomUUID(), UUID.randomUUID(), "DRILL", 5, 5, 0, 0, null, null, Instant.now()
+        ));
+
+        assertThat(jdbc.queryForObject(
+            "SELECT progress FROM learner_achievement WHERE learner_id = ? AND achievement_id = ?",
+            Integer.class, learnerId, vocabAchId
+        )).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+            "SELECT progress FROM learner_achievement WHERE learner_id = ? AND achievement_id = ?",
+            Integer.class, learnerId, toeicAchId
+        )).isEqualTo(1);
     }
 
     private static RequestPostProcessor auth(String subject, String role) {

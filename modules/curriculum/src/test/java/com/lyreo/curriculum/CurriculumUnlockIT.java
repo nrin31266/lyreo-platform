@@ -13,6 +13,7 @@ import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.errors.StateConflictException;
 import com.lyreo.contracts.grammar.GrammarSessionCompletedEvent;
+import com.lyreo.contracts.lesson.LessonActivityCompletedEvent;
 import com.lyreo.contracts.lesson.LessonCompletedEvent;
 import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent;
 import com.lyreo.contracts.vocabulary.VocabularyUnitCompletedEvent;
@@ -319,6 +320,176 @@ class CurriculumUnlockIT {
         mvc.perform(get("/api/v1/curriculum/paths/{id}", path1Id).with(learner))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.sections[0].items[1].progressStatus").value("UNLOCKED"));
+    }
+
+    @Test
+    void adminSavePreservesProgressAndCompletionMatchesConfiguredSlices() throws Exception {
+        UUID unitId = UUID.randomUUID();
+        UUID entry1 = UUID.randomUUID();
+        UUID entry2 = UUID.randomUUID();
+        UUID lessonId = UUID.randomUUID();
+        UUID toeicId = UUID.randomUUID();
+
+        var admin = auth("cur-slice-admin-" + UUID.randomUUID(), "ADMIN");
+        var learner = auth("cur-slice-learner-" + UUID.randomUUID(), "LEARNER");
+
+        String createPayload = mapper.writeValueAsString(Map.of(
+            "name", "Slice Path",
+            "level", "B1",
+            "status", "PUBLISHED",
+            "sections", List.of(Map.of(
+                "title", "Ch 1",
+                "position", 1,
+                "items", List.of(
+                    Map.of("position", 1, "contentType", "VOCABULARY_REVIEW", "contentReferenceId", unitId,
+                        "required", true, "unlockRule", "NONE", "config", Map.of("entryIds", List.of(entry1))),
+                    Map.of("position", 2, "contentType", "VOCABULARY_REVIEW", "contentReferenceId", unitId,
+                        "required", true, "unlockRule", "PREVIOUS_REQUIRED", "config", Map.of("entryIds", List.of(entry2))),
+                    Map.of("position", 3, "contentType", "LESSON", "contentReferenceId", lessonId,
+                        "required", true, "unlockRule", "PREVIOUS_REQUIRED", "config", Map.of("activityType", "DICTATION")),
+                    Map.of("position", 4, "contentType", "LESSON", "contentReferenceId", lessonId,
+                        "required", true, "unlockRule", "PREVIOUS_REQUIRED", "config", Map.of("activityType", "SHADOWING")),
+                    Map.of("position", 5, "contentType", "TOEIC_DRILL", "contentReferenceId", toeicId,
+                        "required", true, "unlockRule", "PREVIOUS_REQUIRED", "config", Map.of("parts", List.of(1, 2), "questionCount", 10)),
+                    Map.of("position", 6, "contentType", "TOEIC_DRILL", "contentReferenceId", toeicId,
+                        "required", true, "unlockRule", "PREVIOUS_REQUIRED", "config", Map.of("parts", List.of(6, 7), "questionCount", 12))
+                )
+            ))
+        ));
+
+        String createdJson = mvc.perform(post("/api/v1/admin/curriculum/paths")
+                .with(admin)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(createPayload))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        var createdTree = mapper.readTree(createdJson);
+        UUID pathId = UUID.fromString(createdTree.get("id").asString());
+        UUID secId = UUID.fromString(createdTree.get("sections").get(0).get("id").asString());
+        UUID item1Id = UUID.fromString(createdTree.get("sections").get(0).get("items").get(0).get("id").asString());
+        UUID item2Id = UUID.fromString(createdTree.get("sections").get(0).get("items").get(1).get("id").asString());
+        UUID item3Id = UUID.fromString(createdTree.get("sections").get(0).get("items").get(2).get("id").asString());
+        UUID item4Id = UUID.fromString(createdTree.get("sections").get(0).get("items").get(3).get("id").asString());
+        UUID item5Id = UUID.fromString(createdTree.get("sections").get(0).get("items").get(4).get("id").asString());
+        UUID item6Id = UUID.fromString(createdTree.get("sections").get(0).get("items").get(5).get("id").asString());
+
+        mvc.perform(post("/api/v1/curriculum/paths/{id}/enroll", pathId).with(learner))
+            .andExpect(status().isOk());
+        UUID learnerId = jdbc.queryForObject(
+            "SELECT id FROM app_user WHERE keycloak_subject LIKE 'cur-slice-learner-%' ORDER BY created_at DESC LIMIT 1",
+            UUID.class
+        );
+
+        // Completing entry1 completes ONLY item 1 (slice 1), NOT item 2 (locked slice 2 of same unit)
+        listener.onVocabularyUnitCompleted(new VocabularyUnitCompletedEvent(
+            UUID.randomUUID(), learnerId, UUID.randomUUID(), unitId, 1, 1, Instant.now(), List.of(entry1)
+        ));
+        mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sections[0].items[0].progressStatus").value("COMPLETED"))
+            .andExpect(jsonPath("$.sections[0].items[1].progressStatus").value("UNLOCKED"))
+            .andExpect(jsonPath("$.sections[0].items[2].progressStatus").value("LOCKED"));
+
+        // Completing wrong slice does NOT complete item 2; completing entry2 DOES
+        listener.onVocabularyUnitCompleted(new VocabularyUnitCompletedEvent(
+            UUID.randomUUID(), learnerId, UUID.randomUUID(), unitId, 1, 1, Instant.now(), List.of(entry1)
+        ));
+        mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sections[0].items[1].progressStatus").value("UNLOCKED"));
+
+        listener.onVocabularyUnitCompleted(new VocabularyUnitCompletedEvent(
+            UUID.randomUUID(), learnerId, UUID.randomUUID(), unitId, 1, 1, Instant.now(), List.of(entry2)
+        ));
+        mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sections[0].items[1].progressStatus").value("COMPLETED"))
+            .andExpect(jsonPath("$.sections[0].items[2].progressStatus").value("UNLOCKED"))
+            .andExpect(jsonPath("$.sections[0].items[3].progressStatus").value("LOCKED"));
+
+        // Wrong activityType (SHADOWING) does not complete unlocked DICTATION item 3
+        listener.onLessonActivityCompleted(new LessonActivityCompletedEvent(
+            UUID.randomUUID(), learnerId, lessonId, UUID.randomUUID(), "SHADOWING", 90, Instant.now(), List.of()
+        ));
+        mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sections[0].items[2].progressStatus").value("UNLOCKED"));
+
+        listener.onLessonActivityCompleted(new LessonActivityCompletedEvent(
+            UUID.randomUUID(), learnerId, lessonId, UUID.randomUUID(), "DICTATION", 90, Instant.now(), List.of()
+        ));
+        mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sections[0].items[2].progressStatus").value("COMPLETED"))
+            .andExpect(jsonPath("$.sections[0].items[3].progressStatus").value("UNLOCKED"));
+
+        // Complete SHADOWING -> unlocks TOEIC_DRILL parts [1,2]
+        listener.onLessonActivityCompleted(new LessonActivityCompletedEvent(
+            UUID.randomUUID(), learnerId, lessonId, UUID.randomUUID(), "SHADOWING", 90, Instant.now(), List.of()
+        ));
+        mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sections[0].items[4].progressStatus").value("UNLOCKED"))
+            .andExpect(jsonPath("$.sections[0].items[5].progressStatus").value("LOCKED"));
+
+        // Completing parts [1,2] completes ONLY item 5, NOT item 6 (parts [6,7])
+        listener.onToeicCompleted(new ToeicAttemptCompletedEvent(
+            learnerId, UUID.randomUUID(), toeicId, "DRILL", 8, 10, 0, 0, null, null, Instant.now(),
+            List.of(new ToeicAttemptCompletedEvent.PartResult(1, 4, 5), new ToeicAttemptCompletedEvent.PartResult(2, 4, 5))
+        ));
+        mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sections[0].items[4].progressStatus").value("COMPLETED"))
+            .andExpect(jsonPath("$.sections[0].items[5].progressStatus").value("UNLOCKED"));
+
+        // 1) Admin metadata-only save (sections omitted) preserves all learner progress
+        mvc.perform(put("/api/v1/admin/curriculum/paths/{id}", pathId)
+                .with(admin)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(Map.of(
+                    "name", "Slice Path Renamed",
+                    "level", "B1",
+                    "status", "PUBLISHED"
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("Slice Path Renamed"));
+
+        // 2) Admin structural save with existing section/item IDs (preserving items) preserves completed progress!
+        mvc.perform(put("/api/v1/admin/curriculum/paths/{id}", pathId)
+                .with(admin)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(Map.of(
+                    "name", "Slice Path Renamed",
+                    "level", "B1",
+                    "status", "PUBLISHED",
+                    "sections", List.of(Map.of(
+                        "id", secId,
+                        "title", "Ch 1 Updated",
+                        "position", 1,
+                        "items", List.of(
+                            Map.of("id", item1Id, "position", 1, "contentType", "VOCABULARY_REVIEW", "contentReferenceId", unitId,
+                                "required", true, "unlockRule", "NONE", "config", Map.of("entryIds", List.of(entry1))),
+                            Map.of("id", item2Id, "position", 2, "contentType", "VOCABULARY_REVIEW", "contentReferenceId", unitId,
+                                "required", true, "unlockRule", "PREVIOUS_REQUIRED", "config", Map.of("entryIds", List.of(entry2))),
+                            Map.of("id", item3Id, "position", 3, "contentType", "LESSON", "contentReferenceId", lessonId,
+                                "required", true, "unlockRule", "PREVIOUS_REQUIRED", "config", Map.of("activityType", "DICTATION")),
+                            Map.of("id", item4Id, "position", 4, "contentType", "LESSON", "contentReferenceId", lessonId,
+                                "required", true, "unlockRule", "PREVIOUS_REQUIRED", "config", Map.of("activityType", "SHADOWING")),
+                            Map.of("id", item5Id, "position", 5, "contentType", "TOEIC_DRILL", "contentReferenceId", toeicId,
+                                "required", true, "unlockRule", "PREVIOUS_REQUIRED", "config", Map.of("parts", List.of(1, 2), "questionCount", 10)),
+                            Map.of("id", item6Id, "position", 6, "contentType", "TOEIC_DRILL", "contentReferenceId", toeicId,
+                                "required", true, "unlockRule", "PREVIOUS_REQUIRED", "config", Map.of("parts", List.of(6, 7), "questionCount", 12))
+                        )
+                    ))
+                ))))
+            .andExpect(status().isOk());
+
+        mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.completedRequiredItems").value(5))
+            .andExpect(jsonPath("$.sections[0].items[0].progressStatus").value("COMPLETED"))
+            .andExpect(jsonPath("$.sections[0].items[4].progressStatus").value("COMPLETED"))
+            .andExpect(jsonPath("$.sections[0].items[5].progressStatus").value("UNLOCKED"));
     }
 
     private static RequestPostProcessor auth(String subject, String role) {

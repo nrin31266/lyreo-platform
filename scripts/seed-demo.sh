@@ -85,6 +85,27 @@ if assets_dir.is_dir():
         target.parent.mkdir(parents=True, exist_ok=True)
         if not target.is_file() or hashlib.sha256(target.read_bytes()).hexdigest() != sha:
             target.write_bytes(payload)
+
+import re
+lessons_sql_path = Path("infra/postgres/seed/lessons.sql")
+if lessons_sql_path.is_file():
+    tts_samples = b"\x00\x00" * 32000
+    tts_wav_bytes = (
+        b"RIFF"
+        + struct.pack("<I", 36 + len(tts_samples))
+        + b"WAVE"
+        + b"fmt "
+        + struct.pack("<IHHIIHH", 16, 1, 1, 16000, 32000, 2, 16)
+        + b"data"
+        + struct.pack("<I", len(tts_samples))
+        + tts_samples
+    )
+    tts_keys = sorted(set(re.findall(r"lessons/[0-9a-f-]+/tts/[0-9a-f-]+\.wav", lessons_sql_path.read_text(encoding="utf-8"))))
+    for tts_key in tts_keys:
+        target = storage_root / tts_key
+        if not target.is_file() or target.stat().st_size == 0:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(tts_wav_bytes)
 print(f"Demo local media ready under {storage_root}")
 PY
 
@@ -94,6 +115,7 @@ from pathlib import Path
 import hashlib
 import mimetypes
 import os
+import re
 import sys
 
 import release_media
@@ -106,8 +128,8 @@ mime_overrides = {
     "a4c92f6340eb8e16caff9b6ba2e726d1b5cf080be70639aa696e6423f309903f": "image/png",
 }
 
-candidates: list[tuple[Path, str]] = [
-    (storage_root / "media" / "sha256" / sha[:2] / sha, mime)
+candidates: list[tuple[Path, str, str | None]] = [
+    (storage_root / "media" / "sha256" / sha[:2] / sha, mime, None)
     for sha, mime in mime_overrides.items()
 ]
 assets_dir = Path("infra/postgres/seed/assets")
@@ -116,15 +138,34 @@ if assets_dir.is_dir():
         if not asset_path.is_file() or asset_path.suffix.lower() not in {".webp", ".wav", ".png", ".jpg"}:
             continue
         mime = mimetypes.guess_type(asset_path.name)[0] or "application/octet-stream"
-        candidates.append((asset_path, mime))
+        candidates.append((asset_path, mime, None))
+
+lessons_sql_path = Path("infra/postgres/seed/lessons.sql")
+if lessons_sql_path.is_file():
+    for tts_key in sorted(set(re.findall(r"lessons/[0-9a-f-]+/tts/[0-9a-f-]+\.wav", lessons_sql_path.read_text(encoding="utf-8")))):
+        candidates.append((storage_root / tts_key, "audio/wav", tts_key))
+
+def remote_key_exists(key: str) -> bool:
+    try:
+        head = client.head_object(Bucket=bucket, Key=key)
+    except Exception as exc:
+        response = getattr(exc, "response", {})
+        code = str(response.get("Error", {}).get("Code", ""))
+        status = response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        if code in {"404", "NoSuchKey", "NotFound"} or status == 404:
+            return False
+        raise
+    return int(head.get("ContentLength") or 0) > 0
 
 uploaded = 0
-for src_path, mime in candidates:
+for src_path, mime, explicit_key in candidates:
     if not src_path.is_file():
+        continue
+    if explicit_key and remote_key_exists(explicit_key):
         continue
     data = src_path.read_bytes()
     sha = hashlib.sha256(data).hexdigest()
-    key = release_media.media_object_key(sha)
+    key = explicit_key or release_media.media_object_key(sha)
     if release_media.verify_or_upload_media(
         client,
         bucket,

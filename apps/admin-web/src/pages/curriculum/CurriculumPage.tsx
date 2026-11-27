@@ -66,6 +66,7 @@ import {
 } from './curriculum.api';
 
 type DraftItem = {
+  id?: string;
   key: string;
   contentType: CurriculumContentType;
   contentReferenceId: string;
@@ -75,6 +76,7 @@ type DraftItem = {
 };
 
 type DraftSection = {
+  id?: string;
   key: string;
   title: string;
   items: DraftItem[];
@@ -107,6 +109,23 @@ function previewAutoPathCode(name: string): string {
   return normalized.slice(0, 56).replace(/_+$/g, '');
 }
 
+function serializeSections(sections: DraftSection[]): string {
+  return JSON.stringify(
+    sections.map((section) => ({
+      id: section.id ?? null,
+      title: section.title.trim(),
+      items: section.items.map((item) => ({
+        id: item.id ?? null,
+        contentType: item.contentType,
+        contentReferenceId: item.contentReferenceId.trim(),
+        required: item.required,
+        unlockRule: item.unlockRule,
+        config: item.config ?? {},
+      })),
+    })),
+  );
+}
+
 function serializeDraft(d: DraftPath): string {
   return JSON.stringify({
     name: d.name.trim(),
@@ -117,16 +136,7 @@ function serializeDraft(d: DraftPath): string {
     accessMode: d.accessMode,
     requiredFeatureKey:
       d.accessMode === 'FEATURE' ? d.requiredFeatureKey || 'lesson.plus-lessons' : null,
-    sections: d.sections.map((section) => ({
-      title: section.title.trim(),
-      items: section.items.map((item) => ({
-        contentType: item.contentType,
-        contentReferenceId: item.contentReferenceId.trim(),
-        required: item.required,
-        unlockRule: item.unlockRule,
-        config: item.config ?? {},
-      })),
-    })),
+    sections: JSON.parse(serializeSections(d.sections)),
   });
 }
 
@@ -218,12 +228,14 @@ function toDraft(path: AdminCurriculumPath): DraftPath {
       .slice()
       .sort((a, b) => a.position - b.position)
       .map((section) => ({
+        id: section.id,
         key: section.id,
         title: section.title,
         items: section.items
           .slice()
           .sort((a, b) => a.position - b.position)
           .map((item) => ({
+            id: item.id,
             key: item.id,
             contentType: item.contentType,
             contentReferenceId: item.contentReferenceId,
@@ -250,6 +262,7 @@ export function CurriculumPage() {
   const [selectedId, setSelectedId] = useState<string | 'new' | null>(null);
   const [draft, setDraft] = useState<DraftPath | null>(null);
   const [baselineSnapshot, setBaselineSnapshot] = useState<string>('');
+  const [baselineSectionsSnapshot, setBaselineSectionsSnapshot] = useState<string>('');
   const [activeTab, setActiveTab] = useState('builder');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState(false);
@@ -326,6 +339,7 @@ export function CurriculumPage() {
       setSelectedId('new');
       setDraft(next);
       setBaselineSnapshot(serializeDraft(next));
+      setBaselineSectionsSnapshot(serializeSections(next.sections));
     }
   }, [paths.data, selectedId]);
 
@@ -334,6 +348,7 @@ export function CurriculumPage() {
       const next = toDraft(detail.data);
       setDraft(next);
       setBaselineSnapshot(serializeDraft(next));
+      setBaselineSectionsSnapshot(serializeSections(next.sections));
       setCollapsedSections({});
     }
   }, [detail.data, selectedId]);
@@ -349,6 +364,7 @@ export function CurriculumPage() {
       client.setQueryData([...curriculumKey, 'detail', saved.id], saved);
       setDraft(next);
       setBaselineSnapshot(serializeDraft(next));
+      setBaselineSectionsSnapshot(serializeSections(next.sections));
       setValidationError(null);
       setSavedNotice(true);
       void client.invalidateQueries({ queryKey: curriculumKey });
@@ -362,6 +378,7 @@ export function CurriculumPage() {
       setSelectedId(null);
       setDraft(null);
       setBaselineSnapshot('');
+      setBaselineSectionsSnapshot('');
       setSavedNotice(false);
       await client.invalidateQueries({ queryKey: curriculumKey });
     },
@@ -371,6 +388,7 @@ export function CurriculumPage() {
     setSelectedId(pathId);
     setDraft(null);
     setBaselineSnapshot('');
+    setBaselineSectionsSnapshot('');
     setValidationError(null);
     setSavedNotice(false);
     saveMutation.reset();
@@ -381,6 +399,7 @@ export function CurriculumPage() {
     setSelectedId('new');
     setDraft(next);
     setBaselineSnapshot(serializeDraft(next));
+    setBaselineSectionsSnapshot(serializeSections(next.sections));
     setCollapsedSections({});
     setActiveTab('builder');
     setValidationError(null);
@@ -468,6 +487,8 @@ export function CurriculumPage() {
     }
 
     setValidationError(null);
+    const sectionsChanged =
+      !draft.id || serializeSections(draft.sections) !== baselineSectionsSnapshot;
     const payload: SaveCurriculumPathInput = {
       ...(draft.id && draft.code.trim() ? { code: draft.code.trim() } : {}),
       name: draft.name.trim(),
@@ -478,18 +499,24 @@ export function CurriculumPage() {
       accessMode: draft.accessMode,
       requiredFeatureKey:
         draft.accessMode === 'FEATURE' ? draft.requiredFeatureKey || 'lesson.plus-lessons' : null,
-      sections: draft.sections.map((section, sectionIndex) => ({
-        title: section.title.trim(),
-        position: sectionIndex + 1,
-        items: section.items.map((item, itemIndex) => ({
-          position: itemIndex + 1,
-          contentType: item.contentType,
-          contentReferenceId: item.contentReferenceId.trim(),
-          required: item.required,
-          unlockRule: item.unlockRule,
-          config: item.config ?? {},
-        })),
-      })),
+      ...(sectionsChanged
+        ? {
+            sections: draft.sections.map((section, sectionIndex) => ({
+              ...(section.id ? { id: section.id } : {}),
+              title: section.title.trim(),
+              position: sectionIndex + 1,
+              items: section.items.map((item, itemIndex) => ({
+                ...(item.id ? { id: item.id } : {}),
+                position: itemIndex + 1,
+                contentType: item.contentType,
+                contentReferenceId: item.contentReferenceId.trim(),
+                required: item.required,
+                unlockRule: item.unlockRule,
+                config: item.config ?? {},
+              })),
+            })),
+          }
+        : {}),
     };
     saveMutation.mutate({ id: draft.id, payload });
   }

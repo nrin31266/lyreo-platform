@@ -339,6 +339,10 @@ public class VocabularyStudyService {
                     rating,
                     now
                 );
+                boolean eligibleForMissionCredit = locked.reviewCount() == 0
+                    || locked.nextReviewAt() == null
+                    || !locked.nextReviewAt().isAfter(now);
+
                 UUID reviewId = repository.applyEntryFlashcardReview(
                     learnerId,
                     entry.entryId(),
@@ -349,15 +353,17 @@ public class VocabularyStudyService {
                     now
                 );
 
-                events.publishEvent(new VocabularyReviewCompletedEvent(
-                    reviewId,
-                    learnerId,
-                    entry.entryId(),
-                    null,
-                    rating.name(),
-                    rating != SpacedRepetitionScheduler.Rating.AGAIN,
-                    now
-                ));
+                if (eligibleForMissionCredit) {
+                    events.publishEvent(new VocabularyReviewCompletedEvent(
+                        reviewId,
+                        learnerId,
+                        entry.entryId(),
+                        null,
+                        rating.name(),
+                        rating != SpacedRepetitionScheduler.Rating.AGAIN,
+                        now
+                    ));
+                }
 
                 int newReviewCount = locked.reviewCount() + 1;
                 int newLapseCount = locked.lapseCount() + (rating == SpacedRepetitionScheduler.Rating.AGAIN ? 1 : 0);
@@ -848,6 +854,12 @@ public class VocabularyStudyService {
                     throw new StaleRevisionException("Session revision mismatch", row.revision());
                 }
 
+                List<UUID> completedEntryIds = feedback.stream()
+                    .map(QuestionFeedback::entryId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
+
                 events.publishEvent(new VocabularyUnitCompletedEvent(
                     sessionId,
                     learnerId,
@@ -855,7 +867,8 @@ public class VocabularyStudyService {
                     row.unitId(),
                     correctCount,
                     totalCount,
-                    now
+                    now,
+                    completedEntryIds
                 ));
 
                 return repository.findSession(sessionId, learnerId, false)

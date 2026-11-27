@@ -359,6 +359,13 @@ class VocabularyStudyIT {
         assertThat(unitDeckAll.items()).hasSize(4);
         assertThat(unitDeckAll.items().getFirst().srsState()).isEqualTo("LEARNING");
 
+        // Immediate repeat review on a not-yet-due card updates SRS (free practice) WITHOUT emitting mission event
+        FlashcardReviewResponse flashRepeat = studyService.reviewFlashcard(
+            learnerA, entryAchieve, SpacedRepetitionScheduler.Rating.GOOD, 1, "flash-rev-repeat-non-due"
+        );
+        assertThat(flashRepeat.reviewCount()).isEqualTo(2);
+        assertThat(reviewEvents).hasSize(1);
+
         // Personal vocabulary_card table remains untouched!
         assertThat(jdbc.queryForObject("SELECT review_count FROM vocabulary_card WHERE id = ?", Integer.class, cardId))
             .isZero();

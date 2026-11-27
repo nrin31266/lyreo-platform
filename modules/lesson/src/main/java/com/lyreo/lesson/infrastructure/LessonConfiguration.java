@@ -118,9 +118,10 @@ public class LessonConfiguration {
         DictationScoringPolicy scoring,
         ApplicationEventPublisher events,
         ObjectMapper mapper,
-        OperationIdempotencyService idempotency
+        OperationIdempotencyService idempotency,
+        org.springframework.beans.factory.ObjectProvider<com.lyreo.entitlement.api.EntitlementService> entitlements
     ) {
-        return new LessonPracticeService(repository, scoring, events, mapper, idempotency);
+        return new LessonPracticeService(repository, scoring, events, mapper, idempotency, entitlements.getIfAvailable());
     }
 
     @Bean

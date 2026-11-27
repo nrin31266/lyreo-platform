@@ -136,7 +136,7 @@ setup:
 	elif ./scripts/check-data-storage.sh --require-r2 >/dev/null 2>&1; then \
 	  $(MAKE) setup-data; \
 	else \
-	  $(MAKE) seed; \
+	  $(MAKE) seed && \
 	  printf '%s\n' \
 	    'R2 credentials are not configured yet; skipped full dataset import (lexicon/grammar-toeic/vocabulary).' \
 	    'Set STORAGE_MODE=r2 and R2_* in apps/core-service/.env and tools/data-import/.env, then run: make setup-data'; \

@@ -699,16 +699,51 @@ public final class JdbcAnalyticsProjectionRepository implements AnalyticsProject
 
         AdminDashboardSummary.OperationsHealth operations = jdbc.queryForObject(
             """
+            WITH provider_health AS (
+                SELECT p.id,
+                       p.code,
+                       p.enabled,
+                       p.connection_status,
+                       p.encrypted_api_key,
+                       latest.status AS latest_invocation_status
+                  FROM ai_provider p
+                  LEFT JOIN LATERAL (
+                      SELECT inv.status
+                        FROM ai_invocation inv
+                       WHERE inv.provider_code = p.code
+                       ORDER BY inv.started_at DESC
+                       LIMIT 1
+                  ) latest ON true
+            )
             SELECT
                 0 AS jobs_running,
                 0 AS jobs_failed_24h,
                 0 AS jobs_succeeded_24h,
-                (SELECT COUNT(*)::int FROM ai_provider WHERE enabled = true) AS ai_enabled,
-                (SELECT COUNT(*)::int FROM ai_provider WHERE enabled = true AND connection_status = 'HEALTHY') AS ai_healthy,
-                (SELECT COUNT(*)::int FROM ai_provider WHERE enabled = true AND (connection_status IN ('FAILED', 'UNHEALTHY', 'ERROR') OR encrypted_api_key IS NULL)) AS ai_unhealthy,
-                (SELECT COUNT(*)::int FROM ai_invocation WHERE created_at >= :last24h) AS ai_invocations_24h,
-                (SELECT COUNT(*)::int FROM ai_invocation WHERE created_at >= :last24h AND status <> 'SUCCEEDED') AS ai_errors_24h,
-                (SELECT COALESCE(ROUND(AVG(latency_ms))::bigint, 0) FROM ai_invocation WHERE created_at >= :last24h AND latency_ms IS NOT NULL) AS ai_avg_latency_24h,
+                (SELECT COUNT(*)::int FROM provider_health WHERE enabled = true) AS ai_enabled,
+                (
+                    SELECT COUNT(*)::int
+                      FROM provider_health
+                     WHERE enabled = true
+                       AND NOT (
+                           (encrypted_api_key IS NULL AND code <> 'DEV_MOCK' AND code NOT LIKE 'LOCAL_%')
+                           OR connection_status IN ('FAILED', 'UNHEALTHY', 'ERROR')
+                           OR (latest_invocation_status IS NOT NULL AND latest_invocation_status <> 'SUCCEEDED')
+                       )
+                       AND (connection_status = 'HEALTHY' OR latest_invocation_status = 'SUCCEEDED')
+                ) AS ai_healthy,
+                (
+                    SELECT COUNT(*)::int
+                      FROM provider_health
+                     WHERE enabled = true
+                       AND (
+                           (encrypted_api_key IS NULL AND code <> 'DEV_MOCK' AND code NOT LIKE 'LOCAL_%')
+                           OR connection_status IN ('FAILED', 'UNHEALTHY', 'ERROR')
+                           OR (latest_invocation_status IS NOT NULL AND latest_invocation_status <> 'SUCCEEDED')
+                       )
+                ) AS ai_unhealthy,
+                (SELECT COUNT(*)::int FROM ai_invocation WHERE started_at >= :last24h) AS ai_invocations_24h,
+                (SELECT COUNT(*)::int FROM ai_invocation WHERE started_at >= :last24h AND status <> 'SUCCEEDED') AS ai_errors_24h,
+                (SELECT COALESCE(ROUND(AVG(latency_ms))::bigint, 0) FROM ai_invocation WHERE started_at >= :last24h AND latency_ms IS NOT NULL) AS ai_avg_latency_24h,
                 (SELECT COUNT(*)::int FROM app_user WHERE account_locked = true) AS locked_accounts,
                 (SELECT COUNT(*)::int FROM app_user WHERE account_sync_pending = true) AS pending_sync,
                 (SELECT COUNT(*)::int FROM learner_notification WHERE status = 'PUBLISHED' AND published_at > now()) AS scheduled_notifications

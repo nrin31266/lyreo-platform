@@ -1,6 +1,7 @@
 package com.lyreo.lesson.infrastructure.persistence;
 
 import com.lyreo.lesson.application.port.LessonPracticeRepository;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -13,6 +14,50 @@ public final class JdbcLessonPracticeRepository implements LessonPracticeReposit
 
     public JdbcLessonPracticeRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
+    }
+
+    @Override
+    public Optional<LessonAccess> findLessonAccess(UUID lessonId) {
+        return jdbc.query("""
+            SELECT m.access_mode, m.required_feature_key
+              FROM lesson_metadata m
+             WHERE m.lesson_id = :lessonId
+               AND m.deleted_at IS NULL
+            """, Map.of("lessonId", lessonId),
+            (rs, rowNum) -> new LessonAccess(rs.getString("access_mode"), rs.getString("required_feature_key"))
+        ).stream().findFirst();
+    }
+
+    @Override
+    public List<UUID> findCompletedSentenceIds(UUID learnerId, UUID activityId, int completionScore) {
+        return jdbc.query("""
+            SELECT a.sentence_id
+              FROM lesson_practice_attempt a
+             WHERE a.learner_id = :learnerId
+               AND a.activity_id = :activityId
+             GROUP BY a.sentence_id
+            HAVING MAX(a.server_score) >= :completionScore
+            """,
+            Map.of("learnerId", learnerId, "activityId", activityId, "completionScore", completionScore),
+            (rs, rowNum) -> rs.getObject("sentence_id", UUID.class)
+        );
+    }
+
+    @Override
+    public List<UUID> findActivitySentenceIds(UUID lessonId, UUID activityId) {
+        return jdbc.query("""
+            SELECT s.id
+              FROM lesson_sentence s
+             WHERE s.lesson_id = :lessonId
+               AND (NOT EXISTS(SELECT 1 FROM lesson_authoring x WHERE x.lesson_id = s.lesson_id)
+                    OR EXISTS(SELECT 1 FROM lesson_authoring x JOIN lesson_activity_sentence m
+                        ON m.activity_id = :activityId AND m.sentence_id = s.id
+                        WHERE x.lesson_id = s.lesson_id AND x.published_at IS NOT NULL))
+             ORDER BY s.position ASC
+            """,
+            Map.of("lessonId", lessonId, "activityId", activityId),
+            (rs, rowNum) -> rs.getObject("id", UUID.class)
+        );
     }
 
     @Override

@@ -1,10 +1,25 @@
 package com.lyreo.lesson.application.port;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 /** Persistence port for learner attempts/progress owned by the Lesson module. */
 public interface LessonPracticeRepository {
+
+    default Optional<LessonAccess> findLessonAccess(UUID lessonId) {
+        return Optional.empty();
+    }
+
+    default List<UUID> findCompletedSentenceIds(UUID learnerId, UUID activityId, int completionScore) {
+        return List.of();
+    }
+
+    default List<UUID> findActivitySentenceIds(UUID lessonId, UUID activityId) {
+        return List.of();
+    }
+
+    record LessonAccess(String accessMode, String requiredFeatureKey) {}
 
     Optional<DictationTarget> findDictationTarget(
         UUID lessonId,

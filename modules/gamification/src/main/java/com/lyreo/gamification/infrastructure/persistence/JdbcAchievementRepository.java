@@ -78,6 +78,27 @@ public final class JdbcAchievementRepository implements AchievementRepository {
     }
 
     @Override
+    public int incrementAndClampProgress(UUID learnerId, UUID achievementId, int delta, int target) {
+        Integer progress = jdbc.queryForObject(
+            """
+            INSERT INTO learner_achievement(learner_id, achievement_id, progress)
+            VALUES (:learnerId, :achievementId, LEAST(:target, :delta))
+            ON CONFLICT (learner_id, achievement_id) DO UPDATE SET
+                progress = LEAST(:target, learner_achievement.progress + :delta)
+            RETURNING progress
+            """,
+            Map.of(
+                "learnerId", learnerId,
+                "achievementId", achievementId,
+                "delta", Math.max(0, delta),
+                "target", Math.max(0, target)
+            ),
+            Integer.class
+        );
+        return progress == null ? 0 : progress;
+    }
+
+    @Override
     public boolean markUnlockedIfEligible(
         UUID learnerId,
         UUID achievementId,

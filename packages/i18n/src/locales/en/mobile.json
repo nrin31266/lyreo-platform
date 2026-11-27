@@ -85,6 +85,8 @@
     "title": "Notifications",
     "empty": "No announcements yet",
     "emptyHelp": "Updates from Lyreo will appear here.",
+    "loadMore": "Load older announcements",
+    "loadingMore": "Loading...",
     "categories": {
       "SYSTEM": "System",
       "STUDY_REMINDER": "Study reminder",

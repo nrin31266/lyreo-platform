@@ -4,10 +4,13 @@ import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.errors.StaleRevisionException;
 import com.lyreo.contracts.errors.StateConflictException;
+import com.lyreo.entitlement.api.EntitlementService;
+import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.lesson.application.port.AuthoringRepository;
 import com.lyreo.lesson.application.port.LessonPracticeRepository;
 import com.lyreo.lesson.domain.authoring.CaptionCueText;
 import java.util.UUID;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.modulith.NamedInterface;
 import org.springframework.stereotype.Component;
@@ -17,15 +20,46 @@ import org.springframework.stereotype.Component;
 public class ShadowingReference {
     private final AuthoringRepository lessons;
     private final LessonPracticeRepository practice;
+    private final EntitlementService entitlements;
 
     public ShadowingReference(AuthoringRepository lessons) {
-        this(lessons, null);
+        this(lessons, null, (EntitlementService) null);
+    }
+
+    public ShadowingReference(AuthoringRepository lessons, LessonPracticeRepository practice) {
+        this(lessons, practice, (EntitlementService) null);
+    }
+
+    public ShadowingReference(
+        AuthoringRepository lessons,
+        LessonPracticeRepository practice,
+        EntitlementService entitlements
+    ) {
+        this.lessons = lessons;
+        this.practice = practice;
+        this.entitlements = entitlements;
     }
 
     @Autowired
-    public ShadowingReference(AuthoringRepository lessons, LessonPracticeRepository practice) {
-        this.lessons = lessons;
-        this.practice = practice;
+    public ShadowingReference(
+        AuthoringRepository lessons,
+        LessonPracticeRepository practice,
+        ObjectProvider<EntitlementService> entitlementsProvider
+    ) {
+        this(lessons, practice, entitlementsProvider == null ? null : entitlementsProvider.getIfAvailable());
+    }
+
+    public void requireLearnerAccess(UUID learnerId, UUID lessonId) {
+        if (practice == null || entitlements == null || learnerId == null || lessonId == null) {
+            return;
+        }
+        practice.findLessonAccess(lessonId).ifPresent(access -> {
+            if ("FEATURE".equals(access.accessMode())
+                && access.requiredFeatureKey() != null
+                && !access.requiredFeatureKey().isBlank()) {
+                entitlements.requireFeature(learnerId, FeatureKey.of(access.requiredFeatureKey()));
+            }
+        });
     }
 
     public Sentence read(UUID lessonId, UUID sentenceId, long revision, boolean lock) {

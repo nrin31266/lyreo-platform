@@ -10,6 +10,10 @@ public interface DiamondLedger {
 
     DiamondTransaction append(DiamondTransaction transaction);
 
+    default DiamondTransaction appendCheckingNonNegative(DiamondTransaction transaction) {
+        return append(transaction);
+    }
+
     int balance(UUID learnerId);
 
     default Optional<DiamondTransaction> findByIdempotencyKey(String idempotencyKey) {

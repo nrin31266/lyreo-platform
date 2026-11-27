@@ -52,6 +52,7 @@ public class SecurityConfiguration {
                 .requestMatchers("/api/v1/lexicon/**").hasAnyRole("LEARNER", "ADMIN")
                 .requestMatchers(
                     "/api/v1/learner/**",
+                    "/api/v1/entitlements",
                     "/api/v1/curriculum/**",
                     "/api/v1/lessons/**",
                     "/api/v1/shadowing-attempts/**",

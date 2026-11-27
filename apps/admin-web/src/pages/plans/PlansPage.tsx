@@ -372,18 +372,6 @@ export function PlansPage() {
         coverAssetId: full.coverAssetId ?? null,
         accessMode: plus ? 'FEATURE' : 'PUBLIC',
         requiredFeatureKey: plus ? 'lesson.plus-lessons' : null,
-        sections: full.sections.map((s) => ({
-          title: s.title,
-          position: s.position,
-          items: s.items.map((item) => ({
-            position: item.position,
-            contentType: item.contentType,
-            contentReferenceId: item.contentReferenceId,
-            required: item.required,
-            unlockRule: item.unlockRule,
-            config: item.config ?? {},
-          })),
-        })),
       });
     },
     onMutate: ({ id }) => addPending(id),

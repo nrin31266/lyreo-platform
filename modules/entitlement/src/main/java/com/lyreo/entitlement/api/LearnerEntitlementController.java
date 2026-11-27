@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/learner/entitlements")
+@RequestMapping({"/api/v1/entitlements", "/api/v1/learner/entitlements"})
 public class LearnerEntitlementController {
     private final EntitlementService entitlements;
     private final AppUserProvisioningService users;

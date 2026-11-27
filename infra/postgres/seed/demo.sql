@@ -478,46 +478,47 @@ ON CONFLICT (id) DO UPDATE SET
     required_feature_key = EXCLUDED.required_feature_key,
     updated_at = now();
 
--- Replace sections & items cleanly on repeat runs so positions stay contiguous
-DELETE FROM curriculum_section
-WHERE path_id IN (
-    '70000000-0000-0000-0000-000000000601',
-    '70000000-0000-0000-0000-000000000602',
-    '70000000-0000-0000-0000-000000000603',
-    '70000000-0000-0000-0000-000000000604',
-    '70000000-0000-0000-0000-000000000605'
-);
-
--- Path 1-5 sections (4 cohesive chapters per path)
-INSERT INTO curriculum_section (id, path_id, title, position) VALUES
+-- Upsert seeded sections in place without deleting existing sections/items or learner progress
+WITH seed_sections (id, path_id, title, position) AS (
+    VALUES
     -- Path 5: TOEIC_A1_STARTER (20 items)
-    ('70000000-0000-0000-0000-000000000651', '70000000-0000-0000-0000-000000000605', 'Chương 1 · Nhịp nghe Chậm, Âm cơ bản & Từ vựng A1', 1),
-    ('70000000-0000-0000-0000-000000000652', '70000000-0000-0000-0000-000000000605', 'Chương 2 · Quán ăn, Di chuyển & Danh từ Nền tảng', 2),
-    ('70000000-0000-0000-0000-000000000653', '70000000-0000-0000-0000-000000000605', 'Chương 3 · Nghe hiểu A1 & Làm quen TOEIC Part 1', 3),
-    ('70000000-0000-0000-0000-000000000654', '70000000-0000-0000-0000-000000000605', 'Chương 4 · Phản xạ Câu ngắn & Đánh giá Đầu ra A1', 4),
+    ('70000000-0000-0000-0000-000000000651'::uuid, '70000000-0000-0000-0000-000000000605'::uuid, 'Chương 1 · Nhịp nghe Chậm, Âm cơ bản & Từ vựng A1', 1),
+    ('70000000-0000-0000-0000-000000000652'::uuid, '70000000-0000-0000-0000-000000000605'::uuid, 'Chương 2 · Quán ăn, Di chuyển & Danh từ Nền tảng', 2),
+    ('70000000-0000-0000-0000-000000000653'::uuid, '70000000-0000-0000-0000-000000000605'::uuid, 'Chương 3 · Nghe hiểu A1 & Làm quen TOEIC Part 1', 3),
+    ('70000000-0000-0000-0000-000000000654'::uuid, '70000000-0000-0000-0000-000000000605'::uuid, 'Chương 4 · Phản xạ Câu ngắn & Đánh giá Đầu ra A1', 4),
     -- Path 1: REAL_WORLD_ENGLISH_A2_B1 (22 items)
-    ('70000000-0000-0000-0000-000000000611', '70000000-0000-0000-0000-000000000601', 'Chương 1 · Sinh hoạt Buổi sáng & Quán cà phê', 1),
-    ('70000000-0000-0000-0000-000000000612', '70000000-0000-0000-0000-000000000601', 'Chương 2 · Kể chuyện, Thói quen & Giao tiếp hằng ngày', 2),
-    ('70000000-0000-0000-0000-000000000613', '70000000-0000-0000-0000-000000000601', 'Chương 3 · Du lịch, Khách sạn & Di chuyển Đô thị', 3),
-    ('70000000-0000-0000-0000-000000000614', '70000000-0000-0000-0000-000000000601', 'Chương 4 · Sức khỏe, Xã hội & Kiểm tra Nghe thực tế', 4),
+    ('70000000-0000-0000-0000-000000000611'::uuid, '70000000-0000-0000-0000-000000000601'::uuid, 'Chương 1 · Sinh hoạt Buổi sáng & Quán cà phê', 1),
+    ('70000000-0000-0000-0000-000000000612'::uuid, '70000000-0000-0000-0000-000000000601'::uuid, 'Chương 2 · Kể chuyện, Thói quen & Giao tiếp hằng ngày', 2),
+    ('70000000-0000-0000-0000-000000000613'::uuid, '70000000-0000-0000-0000-000000000601'::uuid, 'Chương 3 · Du lịch, Khách sạn & Di chuyển Đô thị', 3),
+    ('70000000-0000-0000-0000-000000000614'::uuid, '70000000-0000-0000-0000-000000000601'::uuid, 'Chương 4 · Sức khỏe, Xã hội & Kiểm tra Nghe thực tế', 4),
     -- Path 2: WORKPLACE_FLUENCY_B1_B2 (22 items)
-    ('70000000-0000-0000-0000-000000000621', '70000000-0000-0000-0000-000000000602', 'Chương 1 · Họp Standup & Từ vựng Công nghệ', 1),
-    ('70000000-0000-0000-0000-000000000622', '70000000-0000-0000-0000-000000000602', 'Chương 2 · Quản lý Dự án, Kinh tế & Truyền thông', 2),
-    ('70000000-0000-0000-0000-000000000623', '70000000-0000-0000-0000-000000000602', 'Chương 3 · Cấu trúc Học thuật & Nghe–Đọc B2', 3),
-    ('70000000-0000-0000-0000-000000000624', '70000000-0000-0000-0000-000000000602', 'Chương 4 · Đàm phán Khách hàng & Đánh giá Công sở', 4),
+    ('70000000-0000-0000-0000-000000000621'::uuid, '70000000-0000-0000-0000-000000000602'::uuid, 'Chương 1 · Họp Standup & Từ vựng Công nghệ', 1),
+    ('70000000-0000-0000-0000-000000000622'::uuid, '70000000-0000-0000-0000-000000000602'::uuid, 'Chương 2 · Quản lý Dự án, Kinh tế & Truyền thông', 2),
+    ('70000000-0000-0000-0000-000000000623'::uuid, '70000000-0000-0000-0000-000000000602'::uuid, 'Chương 3 · Cấu trúc Học thuật & Nghe–Đọc B2', 3),
+    ('70000000-0000-0000-0000-000000000624'::uuid, '70000000-0000-0000-0000-000000000602'::uuid, 'Chương 4 · Đàm phán Khách hàng & Đánh giá Công sở', 4),
     -- Path 3: TOEIC_500_FOUNDATION (24 items)
-    ('70000000-0000-0000-0000-000000000631', '70000000-0000-0000-0000-000000000603', 'Chương 1 · Từ vựng Công sở & Phản xạ Hỏi–Đáp Part 2', 1),
-    ('70000000-0000-0000-0000-000000000632', '70000000-0000-0000-0000-000000000603', 'Chương 2 · Ngữ pháp Từ loại & Giao tiếp Văn phòng', 2),
-    ('70000000-0000-0000-0000-000000000633', '70000000-0000-0000-0000-000000000603', 'Chương 3 · Hội thoại Ngắn Part 3 & Dịch vụ – Đi lại', 3),
-    ('70000000-0000-0000-0000-000000000634', '70000000-0000-0000-0000-000000000603', 'Chương 4 · Tăng tốc Part 5 & Tổng duyệt Nền tảng 500+', 4),
+    ('70000000-0000-0000-0000-000000000631'::uuid, '70000000-0000-0000-0000-000000000603'::uuid, 'Chương 1 · Từ vựng Công sở & Phản xạ Hỏi–Đáp Part 2', 1),
+    ('70000000-0000-0000-0000-000000000632'::uuid, '70000000-0000-0000-0000-000000000603'::uuid, 'Chương 2 · Ngữ pháp Từ loại & Giao tiếp Văn phòng', 2),
+    ('70000000-0000-0000-0000-000000000633'::uuid, '70000000-0000-0000-0000-000000000603'::uuid, 'Chương 3 · Hội thoại Ngắn Part 3 & Dịch vụ – Đi lại', 3),
+    ('70000000-0000-0000-0000-000000000634'::uuid, '70000000-0000-0000-0000-000000000603'::uuid, 'Chương 4 · Tăng tốc Part 5 & Tổng duyệt Nền tảng 500+', 4),
     -- Path 4: TOEIC_800_MASTERY (24 items)
-    ('70000000-0000-0000-0000-000000000641', '70000000-0000-0000-0000-000000000604', 'Chương 1 · Từ vựng Văn phòng B2 & Hội thoại Đa lượt Part 3', 1),
-    ('70000000-0000-0000-0000-000000000642', '70000000-0000-0000-0000-000000000604', 'Chương 2 · Thông báo Chuyên sâu Part 4 & Câu phức Học thuật', 2),
-    ('70000000-0000-0000-0000-000000000643', '70000000-0000-0000-0000-000000000604', 'Chương 3 · Kinh doanh – Tài chính & Đọc điền đoạn Part 6', 3),
-    ('70000000-0000-0000-0000-000000000644', '70000000-0000-0000-0000-000000000604', 'Chương 4 · Đọc hiểu Đa văn bản Part 7 & Thi thử Full Test', 4)
-ON CONFLICT (id) DO UPDATE SET
-    title = EXCLUDED.title,
-    position = EXCLUDED.position;
+    ('70000000-0000-0000-0000-000000000641'::uuid, '70000000-0000-0000-0000-000000000604'::uuid, 'Chương 1 · Từ vựng Văn phòng B2 & Hội thoại Đa lượt Part 3', 1),
+    ('70000000-0000-0000-0000-000000000642'::uuid, '70000000-0000-0000-0000-000000000604'::uuid, 'Chương 2 · Thông báo Chuyên sâu Part 4 & Câu phức Học thuật', 2),
+    ('70000000-0000-0000-0000-000000000643'::uuid, '70000000-0000-0000-0000-000000000604'::uuid, 'Chương 3 · Kinh doanh – Tài chính & Đọc điền đoạn Part 6', 3),
+    ('70000000-0000-0000-0000-000000000644'::uuid, '70000000-0000-0000-0000-000000000604'::uuid, 'Chương 4 · Đọc hiểu Đa văn bản Part 7 & Thi thử Full Test', 4)
+),
+updated_sections AS (
+    UPDATE curriculum_section cs
+    SET title = ss.title
+    FROM seed_sections ss
+    WHERE cs.id = ss.id
+    RETURNING cs.id
+)
+INSERT INTO curriculum_section (id, path_id, title, position)
+SELECT ss.id, ss.path_id, ss.title, ss.position
+FROM seed_sections ss
+WHERE NOT EXISTS (SELECT 1 FROM curriculum_section existing WHERE existing.id = ss.id)
+ON CONFLICT DO NOTHING;
 
 -- Tag B2 situational & Part 4 TOEIC lessons as Plus when present
 UPDATE lesson_metadata
@@ -739,21 +740,28 @@ verified_items AS (
         END AS cfg
     FROM raw_items v
     WHERE
-        (v.content_type = 'VOCABULARY_REVIEW' AND EXISTS (SELECT 1 FROM vocabulary_unit u WHERE u.id = v.ref_id))
-     OR (v.content_type = 'LESSON' AND EXISTS (SELECT 1 FROM lesson l WHERE l.id = v.ref_id))
-     OR (v.content_type = 'GRAMMAR_PRACTICE' AND EXISTS (SELECT 1 FROM grammar_topic_catalog g WHERE g.id = v.ref_id))
-     OR (v.content_type IN ('TOEIC_DRILL','TOEIC_TEST') AND EXISTS (SELECT 1 FROM toeic_test_catalog t WHERE t.id = v.ref_id))
+        ((v.content_type = 'VOCABULARY_REVIEW' AND EXISTS (SELECT 1 FROM vocabulary_unit u WHERE u.id = v.ref_id))
+      OR (v.content_type = 'LESSON' AND EXISTS (SELECT 1 FROM lesson l WHERE l.id = v.ref_id))
+      OR (v.content_type = 'GRAMMAR_PRACTICE' AND EXISTS (SELECT 1 FROM grammar_topic_catalog g WHERE g.id = v.ref_id))
+      OR (v.content_type IN ('TOEIC_DRILL','TOEIC_TEST') AND EXISTS (SELECT 1 FROM toeic_test_catalog t WHERE t.id = v.ref_id)))
+      AND EXISTS (SELECT 1 FROM curriculum_section cs WHERE cs.id = v.section_id)
+),
+updated_items AS (
+    UPDATE curriculum_item ci
+    SET content_type = vi.content_type,
+        content_reference_id = vi.ref_id,
+        required = vi.required,
+        unlock_rule = vi.unlock_rule,
+        config_json = vi.cfg
+    FROM verified_items vi
+    WHERE ci.id = vi.id
+    RETURNING ci.id
 )
 INSERT INTO curriculum_item (id, section_id, position, content_type, content_reference_id, required, unlock_rule, config_json)
-SELECT id, section_id, position, content_type, ref_id, required, unlock_rule, cfg
-FROM verified_items
-ON CONFLICT (id) DO UPDATE SET
-    section_id = EXCLUDED.section_id,
-    content_reference_id = EXCLUDED.content_reference_id,
-    required = EXCLUDED.required,
-    unlock_rule = EXCLUDED.unlock_rule,
-    config_json = EXCLUDED.config_json,
-    position = EXCLUDED.position;
+SELECT vi.id, vi.section_id, vi.position, vi.content_type, vi.ref_id, vi.required, vi.unlock_rule, vi.cfg
+FROM verified_items vi
+WHERE NOT EXISTS (SELECT 1 FROM curriculum_item existing WHERE existing.id = vi.id)
+ON CONFLICT DO NOTHING;
 
 -- Enrollments & initial progression for active learner cohort
 INSERT INTO curriculum_enrollment (learner_id, path_id, status, started_at)

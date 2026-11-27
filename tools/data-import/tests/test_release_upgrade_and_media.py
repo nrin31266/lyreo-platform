@@ -703,6 +703,21 @@ class DemoUpgradeAndMediaTest(unittest.TestCase):
                     catalog_only=True,
                 )
 
+            # Missing remote object or unconfigured storage MUST fail catalog_only=True!
+            empty_storage = LocalMediaClient(Path(tmp) / "empty_storage")
+            with self.assertRaisesRegex(ValueError, "Missing or invalid media object"):
+                gt_importer._upload_and_insert_assets(
+                    conn, package, uuid.uuid4(), 100, empty_storage, "local",
+                    {"active_rows_read": 0, "records_read": 1, "records_inserted": 0},
+                    catalog_only=True,
+                )
+            with self.assertRaisesRegex(ValueError, "requires configured media storage"):
+                gt_importer._upload_and_insert_assets(
+                    conn, package, uuid.uuid4(), 100, None, None,
+                    {"active_rows_read": 0, "records_read": 1, "records_inserted": 0},
+                    catalog_only=True,
+                )
+
     def test_allow_upgrade_cuts_over_active_release_while_single_install_still_blocks_without_flag(self):
         class CutoverDb:
             def __init__(self, initial_release):

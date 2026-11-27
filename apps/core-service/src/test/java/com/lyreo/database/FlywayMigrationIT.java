@@ -109,7 +109,7 @@ class FlywayMigrationIT {
     void verifiesConsolidatedBaselineMigrationsSucceeded() {
         MigrationInfo[] applied = flyway.info().applied();
 
-        assertThat(applied).hasSize(19).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
+        assertThat(applied).hasSize(20).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
@@ -134,7 +134,20 @@ class FlywayMigrationIT {
         assertThat(applied[16].getDescription()).isEqualTo("notification publication safety");
         assertThat(applied[17].getDescription()).isEqualTo("learner notification read and policy audit");
         assertThat(applied[18].getDescription()).isEqualTo("vocabulary flashcards and guess mode");
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("019");
+        assertThat(applied[19].getDescription()).isEqualTo("pr47 integrity hardening");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("020");
+
+        String userIdNullable = jdbcTemplate.queryForObject("""
+            SELECT is_nullable FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'entitlement_audit_log' AND column_name = 'user_id'
+            """, String.class);
+        assertThat(userIdNullable).isEqualTo("YES");
+
+        Integer walletConstraintCount = jdbcTemplate.queryForObject("""
+            SELECT count(*) FROM pg_constraint
+             WHERE conname = 'diamond_wallet_non_negative_check'
+            """, Integer.class);
+        assertThat(walletConstraintCount).isEqualTo(1);
     }
 
     @Test

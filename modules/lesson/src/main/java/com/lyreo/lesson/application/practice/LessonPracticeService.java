@@ -4,10 +4,13 @@ import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.lesson.LessonActivityCompletedEvent;
 import com.lyreo.contracts.lesson.LessonCompletedEvent;
+import com.lyreo.entitlement.api.EntitlementService;
+import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.lesson.application.port.LessonPracticeRepository;
 import com.lyreo.platform.config.application.OperationIdempotencyService;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
@@ -32,6 +35,7 @@ public class LessonPracticeService {
     private final ApplicationEventPublisher events;
     private final ObjectMapper mapper;
     private final OperationIdempotencyService idempotency;
+    private final EntitlementService entitlements;
 
     public LessonPracticeService(
         LessonPracticeRepository repository,
@@ -39,7 +43,7 @@ public class LessonPracticeService {
         ApplicationEventPublisher events,
         ObjectMapper mapper
     ) {
-        this(repository, dictationScoring, events, mapper, null);
+        this(repository, dictationScoring, events, mapper, null, null);
     }
 
     public LessonPracticeService(
@@ -49,11 +53,23 @@ public class LessonPracticeService {
         ObjectMapper mapper,
         OperationIdempotencyService idempotency
     ) {
+        this(repository, dictationScoring, events, mapper, idempotency, null);
+    }
+
+    public LessonPracticeService(
+        LessonPracticeRepository repository,
+        DictationScoringPolicy dictationScoring,
+        ApplicationEventPublisher events,
+        ObjectMapper mapper,
+        OperationIdempotencyService idempotency,
+        EntitlementService entitlements
+    ) {
         this.repository = repository;
         this.dictationScoring = dictationScoring;
         this.events = events;
         this.mapper = mapper;
         this.idempotency = idempotency;
+        this.entitlements = entitlements;
     }
 
     @Transactional
@@ -64,6 +80,7 @@ public class LessonPracticeService {
         UUID sentenceId,
         String answer
     ) {
+        enforceLessonAccess(learnerId, lessonId);
         return executeDictation(learnerId, lessonId, activityId, sentenceId, answer);
     }
 
@@ -77,6 +94,7 @@ public class LessonPracticeService {
         String idempotencyKey
     ) {
         validateIdempotencyKey(idempotencyKey);
+        enforceLessonAccess(learnerId, lessonId);
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotency == null) {
             return executeDictation(learnerId, lessonId, activityId, sentenceId, answer);
         }
@@ -99,6 +117,7 @@ public class LessonPracticeService {
         String idempotencyKey
     ) {
         validateIdempotencyKey(idempotencyKey);
+        enforceLessonAccess(learnerId, lessonId);
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotency == null) {
             return executeCompleteWatch(learnerId, lessonId, activityId);
         }
@@ -111,6 +130,19 @@ public class LessonPracticeService {
             WatchCompletionResult.class,
             () -> executeCompleteWatch(learnerId, lessonId, activityId)
         );
+    }
+
+    private void enforceLessonAccess(UUID learnerId, UUID lessonId) {
+        if (entitlements == null || learnerId == null || lessonId == null) {
+            return;
+        }
+        repository.findLessonAccess(lessonId).ifPresent(access -> {
+            if ("FEATURE".equals(access.accessMode())
+                && access.requiredFeatureKey() != null
+                && !access.requiredFeatureKey().isBlank()) {
+                entitlements.requireFeature(learnerId, FeatureKey.of(access.requiredFeatureKey()));
+            }
+        });
     }
 
     private DictationAttemptResult executeDictation(
@@ -154,6 +186,11 @@ public class LessonPracticeService {
         boolean activityCompleted = repository.tryMarkActivityCompleted(learnerId, activityId);
         Instant occurredAt = Instant.now();
         if (activityCompleted) {
+            List<UUID> completedSentenceIds = repository.findCompletedSentenceIds(
+                learnerId,
+                activityId,
+                DEFAULT_COMPLETION_SCORE
+            );
             events.publishEvent(new LessonActivityCompletedEvent(
                 activityFactId(learnerId, activityId),
                 learnerId,
@@ -161,7 +198,8 @@ public class LessonPracticeService {
                 activityId,
                 "DICTATION",
                 progress.bestScore() == null ? score.percent() : progress.bestScore(),
-                occurredAt
+                occurredAt,
+                completedSentenceIds
             ));
         }
 
@@ -205,6 +243,7 @@ public class LessonPracticeService {
         );
         Instant occurredAt = Instant.now();
         if (completion.newlyCompleted()) {
+            List<UUID> sentenceIds = repository.findActivitySentenceIds(lessonId, activityId);
             events.publishEvent(new LessonActivityCompletedEvent(
                 activityFactId(learnerId, activityId),
                 learnerId,
@@ -212,7 +251,8 @@ public class LessonPracticeService {
                 activityId,
                 "WATCH",
                 100,
-                occurredAt
+                occurredAt,
+                sentenceIds
             ));
         }
 

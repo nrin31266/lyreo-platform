@@ -3,6 +3,7 @@ package com.lyreo.gamification.application;
 import com.lyreo.contracts.grammar.GrammarQuestionAnsweredEvent;
 import com.lyreo.contracts.grammar.GrammarSessionCompletedEvent;
 import com.lyreo.contracts.lesson.LessonCompletedEvent;
+import com.lyreo.contracts.lesson.ShadowingAssessedEvent;
 import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent;
 import com.lyreo.contracts.vocabulary.VocabularyReviewCompletedEvent;
 import com.lyreo.contracts.vocabulary.VocabularyUnitCompletedEvent;
@@ -66,6 +67,25 @@ public class MissionEventListener {
             1
         );
         recordStreak(factId, event.learnerId(), event.occurredAt());
+        if (achievements != null) {
+            achievements.recordMetricProgress(factId, event.learnerId(), AchievementService.METRIC_VOCABULARY_REVIEW, 1);
+        }
+    }
+
+    @ApplicationModuleListener
+    public void shadowing(ShadowingAssessedEvent event) {
+        UUID factId = event.attemptId() != null
+            ? event.attemptId()
+            : deterministicFactId("shadowing:" + event.learnerId());
+        Instant occurredAt = Instant.now();
+        missions.increment(
+            factId,
+            event.learnerId(),
+            "SHADOWING_SENTENCE",
+            occurredAt,
+            1
+        );
+        recordStreak(factId, event.learnerId(), occurredAt);
     }
 
     @ApplicationModuleListener
@@ -94,6 +114,14 @@ public class MissionEventListener {
                 event.occurredAt(),
                 1
             );
+            if (achievements != null) {
+                achievements.recordMetricProgress(
+                    factId,
+                    event.learnerId(),
+                    AchievementService.METRIC_TOEIC_DRILL_COMPLETED,
+                    1
+                );
+            }
         }
         recordStreak(factId, event.learnerId(), event.occurredAt());
     }

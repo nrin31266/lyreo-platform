@@ -361,8 +361,22 @@ class AnalyticsAndChatIT {
                 ))))
             .andExpect(status().isNotFound());
 
-        // Exhaust remaining 9 FREE daily chat.tutor turns for learner A
-        for (int i = 0; i < 9; i++) {
+        // Expiring the cached idempotency response must charge a fresh quota unit on reuse (no free AI turns)
+        jdbc.update(
+            "UPDATE operation_idempotency_record SET expires_at = now() - interval '1 minute' WHERE idempotency_key = ?",
+            "chat-ask-1"
+        );
+        mvc.perform(post("/api/v1/chat/ask")
+                .with(learnerA)
+                .header("Idempotency-Key", "chat-ask-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"learnerLevel\":\"B1\",\"question\":\"When do I use since vs for?\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.remainingQuota").value(8));
+        verify(aiInvocationService, times(2)).execute(eq(AiCapability.GENERAL_LLM), anyString(), anyMap(), anyMap());
+
+        // Exhaust remaining 8 FREE daily chat.tutor turns for learner A
+        for (int i = 0; i < 8; i++) {
             mvc.perform(post("/api/v1/chat/ask")
                     .with(learnerA)
                     .contentType(MediaType.APPLICATION_JSON)
@@ -387,7 +401,7 @@ class AnalyticsAndChatIT {
             "SELECT count(*) FROM chat_message WHERE conversation_id = ?",
             Integer.class,
             conversationId
-        )).isEqualTo(20);
+        )).isEqualTo(18);
 
         // Non-owner cannot delete A's conversation; owner A deletes it (204) and GET returns 404
         mvc.perform(delete("/api/v1/chat/conversations/{id}", conversationId).with(learnerB))

@@ -15,6 +15,10 @@ public interface AchievementRepository {
 
     void upsertProgress(UUID learnerId, UUID achievementId, int progress);
 
+    default int incrementAndClampProgress(UUID learnerId, UUID achievementId, int delta, int target) {
+        return 0;
+    }
+
     boolean markUnlockedIfEligible(
         UUID learnerId,
         UUID achievementId,

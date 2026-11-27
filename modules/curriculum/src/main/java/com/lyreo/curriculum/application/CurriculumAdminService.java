@@ -132,8 +132,7 @@ public class CurriculumAdminService {
         }
 
         if (command.sections() != null) {
-            repository.deleteSectionsByPathId(pathId);
-            writeSectionsAndItems(pathId, command.sections());
+            reconcileSectionsAndItems(pathId, command.sections());
         }
 
         return curriculumService.buildPathDetail(null, updated);
@@ -182,6 +181,105 @@ public class CurriculumAdminService {
             normalizeUnlockRule(itemSpec.unlockRule(), itemSpec.required()),
             encodeConfig(itemSpec.config())
         );
+    }
+
+    private void reconcileSectionsAndItems(UUID pathId, List<SectionSpec> sections) {
+        List<CurriculumSection> existingSections = repository.findSectionsByPathId(pathId);
+        List<CurriculumItem> existingItems = repository.findItemsByPathId(pathId);
+        Set<UUID> existingSectionIds = existingSections.stream()
+            .map(CurriculumSection::id)
+            .collect(java.util.stream.Collectors.toSet());
+        Set<UUID> existingItemIds = existingItems.stream()
+            .map(CurriculumItem::id)
+            .collect(java.util.stream.Collectors.toSet());
+
+        Set<UUID> retainedSectionIds = new java.util.HashSet<>();
+        Set<UUID> retainedItemIds = new java.util.HashSet<>();
+        for (SectionSpec sectionSpec : sections) {
+            if (sectionSpec.id() != null && existingSectionIds.contains(sectionSpec.id())
+                && !retainedSectionIds.add(sectionSpec.id())) {
+                throw new RequestValidationException("Duplicate section id: " + sectionSpec.id());
+            }
+            if (sectionSpec.items() != null) {
+                for (ItemSpec itemSpec : sectionSpec.items()) {
+                    if (itemSpec.id() != null && existingItemIds.contains(itemSpec.id())
+                        && !retainedItemIds.add(itemSpec.id())) {
+                        throw new RequestValidationException("Duplicate item id: " + itemSpec.id());
+                    }
+                }
+            }
+        }
+
+        List<UUID> removedItemIds = existingItemIds.stream()
+            .filter(id -> !retainedItemIds.contains(id))
+            .toList();
+        List<UUID> removedSectionIds = existingSectionIds.stream()
+            .filter(id -> !retainedSectionIds.contains(id))
+            .toList();
+
+        // Remove only deleted items/sections before offsetting remaining positions so surviving progress rows stay intact.
+        repository.deleteItemsByIds(removedItemIds);
+        repository.deleteSectionsByIds(removedSectionIds);
+
+        if (!retainedItemIds.isEmpty()) {
+            repository.offsetItemPositions(pathId, 100_000);
+        }
+        if (!retainedSectionIds.isEmpty()) {
+            repository.offsetSectionPositions(pathId, 100_000);
+        }
+
+        int defaultSectionPos = 1;
+        for (SectionSpec sectionSpec : sections) {
+            int sectionPos = sectionSpec.position() > 0 ? sectionSpec.position() : defaultSectionPos;
+            defaultSectionPos++;
+            String title = requireNonBlank(sectionSpec.title(), "section title");
+            UUID sectionId;
+            if (sectionSpec.id() != null && existingSectionIds.contains(sectionSpec.id())) {
+                sectionId = sectionSpec.id();
+                repository.updateSection(sectionId, title, sectionPos);
+            } else {
+                sectionId = UUID.randomUUID();
+                repository.insertSection(sectionId, pathId, title, sectionPos);
+            }
+
+            if (sectionSpec.items() != null) {
+                int defaultItemPos = 1;
+                for (ItemSpec itemSpec : sectionSpec.items()) {
+                    int itemPos = itemSpec.position() > 0 ? itemSpec.position() : defaultItemPos;
+                    defaultItemPos++;
+                    ContentType contentType = Objects.requireNonNull(itemSpec.contentType(), "contentType is required");
+                    UUID contentReferenceId = Objects.requireNonNull(
+                        itemSpec.contentReferenceId(),
+                        "contentReferenceId is required"
+                    );
+                    String unlockRule = normalizeUnlockRule(itemSpec.unlockRule(), itemSpec.required());
+                    String configJson = encodeConfig(itemSpec.config());
+                    if (itemSpec.id() != null && existingItemIds.contains(itemSpec.id())) {
+                        repository.updateItem(
+                            itemSpec.id(),
+                            sectionId,
+                            itemPos,
+                            contentType,
+                            contentReferenceId,
+                            itemSpec.required(),
+                            unlockRule,
+                            configJson
+                        );
+                    } else {
+                        repository.insertItem(
+                            UUID.randomUUID(),
+                            sectionId,
+                            itemPos,
+                            contentType,
+                            contentReferenceId,
+                            itemSpec.required(),
+                            unlockRule,
+                            configJson
+                        );
+                    }
+                }
+            }
+        }
     }
 
     private void writeSectionsAndItems(UUID pathId, List<SectionSpec> sections) {
@@ -356,12 +454,22 @@ public class CurriculumAdminService {
     }
 
     public record SectionSpec(
+        UUID id,
         String title,
         int position,
         List<ItemSpec> items
-    ) {}
+    ) {
+        public SectionSpec(
+            String title,
+            int position,
+            List<ItemSpec> items
+        ) {
+            this(null, title, position, items);
+        }
+    }
 
     public record ItemSpec(
+        UUID id,
         int position,
         ContentType contentType,
         UUID contentReferenceId,
@@ -374,9 +482,20 @@ public class CurriculumAdminService {
             ContentType contentType,
             UUID contentReferenceId,
             boolean required,
+            String unlockRule,
+            Map<String, Object> config
+        ) {
+            this(null, position, contentType, contentReferenceId, required, unlockRule, config);
+        }
+
+        public ItemSpec(
+            int position,
+            ContentType contentType,
+            UUID contentReferenceId,
+            boolean required,
             String unlockRule
         ) {
-            this(position, contentType, contentReferenceId, required, unlockRule, Map.of());
+            this(null, position, contentType, contentReferenceId, required, unlockRule, Map.of());
         }
     }
 }

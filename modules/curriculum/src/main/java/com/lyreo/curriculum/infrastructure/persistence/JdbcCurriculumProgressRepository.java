@@ -62,7 +62,7 @@ public final class JdbcCurriculumProgressRepository implements CurriculumProgres
     ) {
         return jdbc.query(
             """
-            SELECT ci.id AS item_id, cp.id AS path_id
+            SELECT ci.id AS item_id, cp.id AS path_id, ci.config_json
             FROM curriculum_item ci
             JOIN curriculum_section cs ON cs.id = ci.section_id
             JOIN curriculum_path cp ON cp.id = cs.path_id
@@ -79,7 +79,8 @@ public final class JdbcCurriculumProgressRepository implements CurriculumProgres
             ),
             (rs, rowNumber) -> new ActiveItemTarget(
                 rs.getObject("item_id", UUID.class),
-                rs.getObject("path_id", UUID.class)
+                rs.getObject("path_id", UUID.class),
+                decodeConfig(rs.getString("config_json"))
             )
         );
     }
@@ -502,6 +503,120 @@ public final class JdbcCurriculumProgressRepository implements CurriculumProgres
                 rs.getString("unlock_rule"),
                 decodeConfig(rs.getString("config_json"))
             )
+        );
+    }
+
+    @Override
+    public CurriculumSection updateSection(UUID id, String title, int position) {
+        return jdbc.queryForObject(
+            """
+            UPDATE curriculum_section
+            SET title = :title,
+                "position" = :position
+            WHERE id = :id
+            RETURNING id, path_id, title, "position"
+            """,
+            Map.of("id", id, "title", title, "position", position),
+            (rs, rowNum) -> new CurriculumSection(
+                rs.getObject("id", UUID.class),
+                rs.getObject("path_id", UUID.class),
+                rs.getString("title"),
+                rs.getInt("position")
+            )
+        );
+    }
+
+    @Override
+    public CurriculumItem updateItem(
+        UUID id,
+        UUID sectionId,
+        int position,
+        ContentType contentType,
+        UUID contentReferenceId,
+        boolean required,
+        String unlockRule,
+        String configJson
+    ) {
+        return jdbc.queryForObject(
+            """
+            UPDATE curriculum_item
+            SET section_id = :sectionId,
+                "position" = :position,
+                content_type = :contentType,
+                content_reference_id = :contentReferenceId,
+                required = :required,
+                unlock_rule = :unlockRule,
+                config_json = CAST(:configJson AS jsonb)
+            WHERE id = :id
+            RETURNING id, section_id, "position", content_type, content_reference_id, required, unlock_rule, config_json
+            """,
+            new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("sectionId", sectionId)
+                .addValue("position", position)
+                .addValue("contentType", contentType.name())
+                .addValue("contentReferenceId", contentReferenceId)
+                .addValue("required", required)
+                .addValue("unlockRule", unlockRule)
+                .addValue("configJson", configJson == null || configJson.isBlank() ? "{}" : configJson),
+            (rs, rowNum) -> new CurriculumItem(
+                rs.getObject("id", UUID.class),
+                rs.getObject("section_id", UUID.class),
+                rs.getInt("position"),
+                ContentType.valueOf(rs.getString("content_type")),
+                rs.getObject("content_reference_id", UUID.class),
+                rs.getBoolean("required"),
+                rs.getString("unlock_rule"),
+                decodeConfig(rs.getString("config_json"))
+            )
+        );
+    }
+
+    @Override
+    public void deleteItemsByIds(List<UUID> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) {
+            return;
+        }
+        jdbc.update(
+            "DELETE FROM curriculum_item WHERE id IN (:ids)",
+            new MapSqlParameterSource("ids", itemIds)
+        );
+    }
+
+    @Override
+    public void deleteSectionsByIds(List<UUID> sectionIds) {
+        if (sectionIds == null || sectionIds.isEmpty()) {
+            return;
+        }
+        jdbc.update(
+            "DELETE FROM curriculum_section WHERE id IN (:ids)",
+            new MapSqlParameterSource("ids", sectionIds)
+        );
+    }
+
+    @Override
+    public void offsetSectionPositions(UUID pathId, int offset) {
+        jdbc.update(
+            """
+            UPDATE curriculum_section
+            SET "position" = "position" + :offset
+            WHERE path_id = :pathId
+            """,
+            Map.of("pathId", pathId, "offset", offset)
+        );
+    }
+
+    @Override
+    public void offsetItemPositions(UUID pathId, int offset) {
+        jdbc.update(
+            """
+            UPDATE curriculum_item ci
+            SET "position" = ci."position" + :offset
+            FROM curriculum_section cs
+            WHERE cs.id = ci.section_id
+              AND cs.path_id = :pathId
+            """,
+            Map.of("pathId", pathId, "offset", offset)
         );
     }
 

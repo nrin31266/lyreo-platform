@@ -16,7 +16,10 @@ import com.lyreo.entitlement.api.EntitlementService;
 import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.platform.config.application.ConsumerReceiptStore;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -178,6 +181,17 @@ public class CurriculumService {
         ContentType contentType,
         UUID contentReferenceId
     ) {
+        onContentCompleted(factId, learnerId, contentType, contentReferenceId, CompletionEvidence.empty());
+    }
+
+    @Transactional
+    public void onContentCompleted(
+        UUID factId,
+        UUID learnerId,
+        ContentType contentType,
+        UUID contentReferenceId,
+        CompletionEvidence evidence
+    ) {
         if (learnerId == null || contentType == null || contentReferenceId == null) {
             return;
         }
@@ -185,20 +199,187 @@ public class CurriculumService {
             return;
         }
 
-        List<CurriculumProgressRepository.ActiveItemTarget> targets =
-            repository.activeEnrolledItemTargetsReferencing(learnerId, contentType, contentReferenceId);
-        if (targets.isEmpty()) {
+        CompletionEvidence resolvedEvidence = evidence == null ? CompletionEvidence.empty() : evidence;
+        Set<UUID> referenceIds = new LinkedHashSet<>();
+        referenceIds.add(contentReferenceId);
+        referenceIds.addAll(resolvedEvidence.alternateReferenceIds());
+
+        Map<UUID, CurriculumProgressRepository.ActiveItemTarget> uniqueTargets = new LinkedHashMap<>();
+        for (UUID refId : referenceIds) {
+            for (CurriculumProgressRepository.ActiveItemTarget target :
+                repository.activeEnrolledItemTargetsReferencing(learnerId, contentType, refId)) {
+                uniqueTargets.putIfAbsent(target.itemId(), target);
+            }
+        }
+        if (uniqueTargets.isEmpty()) {
             return;
         }
 
+        Map<UUID, List<CurriculumProgressRepository.ActiveItemTarget>> byPath = new LinkedHashMap<>();
+        for (CurriculumProgressRepository.ActiveItemTarget target : uniqueTargets.values()) {
+            byPath.computeIfAbsent(target.pathId(), ignored -> new ArrayList<>()).add(target);
+        }
+
         Set<UUID> affectedPaths = new LinkedHashSet<>();
-        for (CurriculumProgressRepository.ActiveItemTarget target : targets) {
-            repository.complete(learnerId, target.itemId());
-            affectedPaths.add(target.pathId());
+        for (Map.Entry<UUID, List<CurriculumProgressRepository.ActiveItemTarget>> entry : byPath.entrySet()) {
+            UUID pathId = entry.getKey();
+            Map<UUID, String> statusByItem = new HashMap<>();
+            for (CurriculumItemProgress p : repository.findItemProgressByPath(learnerId, pathId)) {
+                statusByItem.put(p.itemId(), p.status());
+            }
+
+            for (CurriculumProgressRepository.ActiveItemTarget target : entry.getValue()) {
+                String currentStatus = statusByItem.get(target.itemId());
+                if (!isActionable(currentStatus)) {
+                    continue;
+                }
+                if (!matchesConfig(target.config(), contentType, resolvedEvidence)) {
+                    continue;
+                }
+                repository.complete(learnerId, target.itemId());
+                affectedPaths.add(pathId);
+            }
         }
 
         for (UUID pathId : affectedPaths) {
             recomputePathProgress(learnerId, pathId);
+        }
+    }
+
+    static boolean matchesConfig(
+        Map<String, Object> config,
+        ContentType contentType,
+        CompletionEvidence evidence
+    ) {
+        if (config == null || config.isEmpty()) {
+            return contentType != ContentType.LESSON || evidence.activityType() == null;
+        }
+
+        return switch (contentType) {
+            case LESSON -> {
+                String expectedActivity = asNonBlankString(config.get("activityType"));
+                Set<UUID> expectedSentences = asUuidSet(config.get("sentenceIds"));
+                if (expectedActivity == null && expectedSentences.isEmpty()) {
+                    yield evidence.activityType() == null;
+                }
+                if (expectedActivity != null
+                    && (evidence.activityType() == null
+                        || !expectedActivity.equalsIgnoreCase(evidence.activityType()))) {
+                    yield false;
+                }
+                if (!expectedSentences.isEmpty() && !evidence.sentenceIds().containsAll(expectedSentences)) {
+                    yield false;
+                }
+                yield true;
+            }
+            case VOCABULARY_REVIEW -> {
+                Set<UUID> expectedEntries = asUuidSet(config.get("entryIds"));
+                yield expectedEntries.isEmpty() || evidence.entryIds().containsAll(expectedEntries);
+            }
+            case GRAMMAR_PRACTICE -> {
+                Set<UUID> expectedSubtopics = asUuidSet(config.get("subtopicIds"));
+                if (!expectedSubtopics.isEmpty()) {
+                    boolean matchesSubtopic = !evidence.subtopicIds().isEmpty()
+                        && evidence.subtopicIds().stream().anyMatch(expectedSubtopics::contains);
+                    if (!matchesSubtopic) {
+                        yield false;
+                    }
+                }
+                Integer expectedCount = asInteger(config.get("questionCount"));
+                if (expectedCount != null && expectedCount > 0
+                    && (evidence.questionCount() == null || evidence.questionCount() < expectedCount)) {
+                    yield false;
+                }
+                yield true;
+            }
+            case TOEIC_DRILL, TOEIC_TEST -> {
+                Set<Integer> expectedParts = asIntSet(config.get("parts"));
+                if (!expectedParts.isEmpty() && !evidence.parts().containsAll(expectedParts)) {
+                    yield false;
+                }
+                Integer expectedCount = asInteger(config.get("questionCount"));
+                if (expectedCount != null && expectedCount > 0
+                    && (evidence.questionCount() == null || evidence.questionCount() < expectedCount)) {
+                    yield false;
+                }
+                yield true;
+            }
+        };
+    }
+
+    private static String asNonBlankString(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = value.toString().trim();
+        return text.isEmpty() ? null : text;
+    }
+
+    private static Integer asInteger(Object value) {
+        if (value instanceof Number n) {
+            return n.intValue();
+        }
+        if (value instanceof String s && !s.isBlank()) {
+            try {
+                return Integer.parseInt(s.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static Set<UUID> asUuidSet(Object raw) {
+        if (!(raw instanceof Collection<?> items) || items.isEmpty()) {
+            return Set.of();
+        }
+        Set<UUID> result = new HashSet<>();
+        for (Object item : items) {
+            if (item == null) {
+                continue;
+            }
+            try {
+                result.add(item instanceof UUID uuid ? uuid : UUID.fromString(item.toString().trim()));
+            } catch (IllegalArgumentException ignored) {
+                // ignore malformed entry
+            }
+        }
+        return result;
+    }
+
+    private static Set<Integer> asIntSet(Object raw) {
+        if (!(raw instanceof Collection<?> items) || items.isEmpty()) {
+            return Set.of();
+        }
+        Set<Integer> result = new HashSet<>();
+        for (Object item : items) {
+            Integer parsed = asInteger(item);
+            if (parsed != null) {
+                result.add(parsed);
+            }
+        }
+        return result;
+    }
+
+    public record CompletionEvidence(
+        String activityType,
+        Set<UUID> entryIds,
+        Set<UUID> sentenceIds,
+        Set<UUID> subtopicIds,
+        Set<Integer> parts,
+        Integer questionCount,
+        Set<UUID> alternateReferenceIds
+    ) {
+        public CompletionEvidence {
+            entryIds = entryIds == null ? Set.of() : Set.copyOf(entryIds);
+            sentenceIds = sentenceIds == null ? Set.of() : Set.copyOf(sentenceIds);
+            subtopicIds = subtopicIds == null ? Set.of() : Set.copyOf(subtopicIds);
+            parts = parts == null ? Set.of() : Set.copyOf(parts);
+            alternateReferenceIds = alternateReferenceIds == null ? Set.of() : Set.copyOf(alternateReferenceIds);
+        }
+
+        public static CompletionEvidence empty() {
+            return new CompletionEvidence(null, Set.of(), Set.of(), Set.of(), Set.of(), null, Set.of());
         }
     }
 

@@ -45,7 +45,27 @@ public class LearnerAccountService {
     public Status setLocked(UUID learnerId, String actor, boolean locked, String reason) {
         return store.serialized(learnerId, () -> {
             Account account = find(learnerId);
-            Connection remote = requireConnection(account, actor);
+            if (!provider.configured()) {
+                throw new ServiceUnavailableException(
+                    "ACCOUNT_MANAGEMENT_UNCONFIGURED",
+                    "Keycloak account management is not configured",
+                    null
+                );
+            }
+            UUID subject = parseManageableSubject(account, actor);
+
+            Connection remote;
+            try {
+                remote = provider.connect(subject)
+                    .orElseThrow(() -> new StateConflictException("This account cannot be managed as a learner"));
+            } catch (ServiceUnavailableException failure) {
+                if (locked) {
+                    store.change(learnerId, true, true, actor, "LOCK_REQUESTED", reason);
+                    return new Status("AVAILABLE", true, true);
+                }
+                throw failure;
+            }
+
             if (!account.pending() && account.locked() == locked && remote.enabled() != locked) {
                 return new Status("AVAILABLE", locked, false);
             }
@@ -70,6 +90,17 @@ public class LearnerAccountService {
 
     private Account find(UUID id) {
         return store.find(id).orElseThrow(() -> new ResourceNotFoundException("Learner account not found"));
+    }
+
+    private UUID parseManageableSubject(Account account, String actor) {
+        if (account.subject().equals(actor)) {
+            throw new StateConflictException("This account cannot be managed as a learner");
+        }
+        try {
+            return UUID.fromString(account.subject());
+        } catch (IllegalArgumentException ignored) {
+            throw new StateConflictException("This account cannot be managed as a learner");
+        }
     }
 
     private Optional<Connection> connect(Account account, String actor) {

@@ -85,6 +85,8 @@
     "title": "Thông báo",
     "empty": "Chưa có thông báo mới",
     "emptyHelp": "Thông tin từ Lyreo sẽ xuất hiện tại đây.",
+    "loadMore": "Tải thông báo cũ hơn",
+    "loadingMore": "Đang tải...",
     "categories": {
       "SYSTEM": "Hệ thống",
       "STUDY_REMINDER": "Nhắc học",

@@ -1,8 +1,12 @@
-import { render } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { useApiClient } from '@/api/api-provider';
 import { useCoreResource } from '@/api/use-core-resource';
 import { NotificationsScreen } from '@/features/notifications/notifications-screen';
 import { LearnerProgress } from '@/features/progress/learner-progress';
 
+jest.mock('@/api/api-provider', () => ({
+  useApiClient: jest.fn(),
+}));
 jest.mock('@/api/use-core-resource', () => ({
   useCoreResource: jest.fn(),
 }));
@@ -17,17 +21,27 @@ jest.mock('react-i18next', () => ({
 }));
 
 const coreResource = jest.mocked(useCoreResource);
+const apiClient = jest.mocked(useApiClient);
 
-it('shows the learner announcements returned by Core', async () => {
+it('shows the learner announcements returned by Core and loads subsequent pages when hasMore is true', async () => {
+  const request = jest.fn().mockResolvedValueOnce({
+    items: [{ id: 'msg-2', title: 'Older reminder', body: 'Keep your streak going.', category: 'STUDY_REMINDER', publishedAt: null, read: true, readAt: null }],
+    total: 2,
+    page: 1,
+    size: 1,
+    hasMore: false,
+    unreadCount: 1,
+  });
+  apiClient.mockReturnValue({ request });
   coreResource.mockReturnValue({
     resource: {
       status: 'ready',
       data: {
         items: [{ id: 'message', title: 'New practice path', body: 'Open the new listening unit.', category: 'SYSTEM', publishedAt: null, read: false, readAt: null }],
-        total: 1,
+        total: 2,
         page: 0,
-        size: 20,
-        hasMore: false,
+        size: 1,
+        hasMore: true,
         unreadCount: 1,
       },
     },
@@ -37,6 +51,12 @@ it('shows the learner announcements returned by Core', async () => {
   expect(coreResource).toHaveBeenCalledWith('/api/v1/notifications');
   expect(view.getByText('New practice path')).toBeTruthy();
   expect(view.getByText('Open the new listening unit.')).toBeTruthy();
+
+  fireEvent.press(view.getByRole('button', { name: 'notifications.loadMore' }));
+  await waitFor(() => {
+    expect(request).toHaveBeenCalledWith('/api/v1/notifications?page=1&size=1');
+    expect(view.getByText('Older reminder')).toBeTruthy();
+  });
 });
 
 it('uses the authenticated analytics result instead of showing a sample weakness', async () => {

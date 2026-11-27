@@ -30,20 +30,21 @@ public class JdbcEntitlementAuditRepository implements EntitlementAuditRepositor
             """
             INSERT INTO entitlement_audit_log (
                 id, user_id, feature_key, operation_id, decision,
-                policy_version, detail_json, occurred_at
+                policy_version, detail_json, actor, occurred_at
             ) VALUES (
                 :id, :userId, :featureKey, :operationId, :decision,
-                :policyVersion, CAST(:detailJson AS jsonb), :occurredAt
+                :policyVersion, CAST(:detailJson AS jsonb), :actor, :occurredAt
             )
             """,
             new MapSqlParameterSource()
                 .addValue("id", entry.id())
-                .addValue("userId", entry.userId())
+                .addValue("userId", entry.userId(), Types.OTHER)
                 .addValue("featureKey", entry.featureKey())
                 .addValue("operationId", entry.operationId(), Types.VARCHAR)
                 .addValue("decision", entry.decision())
                 .addValue("policyVersion", entry.policyVersion())
                 .addValue("detailJson", serialize(entry.detail()))
+                .addValue("actor", entry.actor(), Types.VARCHAR)
                 .addValue("occurredAt", Timestamp.from(entry.occurredAt()))
         );
     }
@@ -53,7 +54,7 @@ public class JdbcEntitlementAuditRepository implements EntitlementAuditRepositor
         int clampedLimit = Math.max(1, Math.min(limit, 200));
         return jdbc.query(
             """
-            SELECT id, user_id, feature_key, operation_id, decision, policy_version, detail_json::text AS detail_json, occurred_at
+            SELECT id, user_id, feature_key, operation_id, decision, policy_version, detail_json::text AS detail_json, actor, occurred_at
               FROM entitlement_audit_log
              WHERE (CAST(:userId AS uuid) IS NULL OR user_id = CAST(:userId AS uuid))
                AND (CAST(:featureKey AS varchar) IS NULL OR feature_key = CAST(:featureKey AS varchar))
@@ -72,7 +73,8 @@ public class JdbcEntitlementAuditRepository implements EntitlementAuditRepositor
                 rs.getString("decision"),
                 rs.getString("policy_version"),
                 deserialize(rs.getString("detail_json")),
-                rs.getTimestamp("occurred_at").toInstant()
+                rs.getTimestamp("occurred_at").toInstant(),
+                rs.getString("actor")
             )
         );
     }

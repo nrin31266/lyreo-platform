@@ -67,6 +67,7 @@ public class LearnerPronunciationAttempts {
     }
 
     public Constraints constraints(UUID learnerId, UUID lessonId, UUID activityId, UUID sentenceId, long revision) {
+        lessons.requireLearnerAccess(learnerId, lessonId);
         var reference = lessons.readForLearner(lessonId, activityId, sentenceId, revision, false);
         FeatureAccess quota = entitlements.evaluateFeature(learnerId, SHADOWING_FEATURE);
         return new Constraints(
@@ -100,6 +101,7 @@ public class LearnerPronunciationAttempts {
         if (upload == null || upload.length == 0 || upload.length > limits.maxUploadBytes()) {
             throw new RequestValidationException("Recording size exceeds the allowed upload limits");
         }
+        lessons.requireLearnerAccess(learnerId, lessonId);
         String fingerprint = fingerprint(lessonId, activityId, sentenceId, revision, upload);
 
         var existing = store.byKey(learnerId, key, false);
@@ -157,6 +159,7 @@ public class LearnerPronunciationAttempts {
 
     public View view(UUID learnerId, UUID attemptId) {
         var attempt = owned(learnerId, attemptId);
+        lessons.requireLearnerAccess(learnerId, attempt.lessonId());
         var job = job(attempt);
         boolean audioAvailable = attempt.recordingPurgedAt() == null
             && attempt.recordingObjectKey() != null
@@ -183,6 +186,7 @@ public class LearnerPronunciationAttempts {
 
     public byte[] recording(UUID learnerId, UUID attemptId) throws IOException {
         var attempt = owned(learnerId, attemptId);
+        lessons.requireLearnerAccess(learnerId, attempt.lessonId());
         if (attempt.recordingPurgedAt() != null
             || attempt.recordingObjectKey() == null
             || !attempt.expiresAt().isAfter(Instant.now())) {

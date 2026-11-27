@@ -531,8 +531,10 @@ def _upload_and_insert_assets(conn, package: ReleasePackage, run_id: uuid.UUID, 
                 or meta.get("bytes", meta.get("size_bytes")) != row["size_bytes"]
             ):
                 raise ValueError(f"Asset manifest hash mismatch for {row['path']}")
-            if client is not None and bucket:
-                remote_object_valid(client, bucket, key, row["id"], row["size_bytes"])
+            if client is None or not bucket:
+                raise ValueError("Catalog-only import requires configured media storage to verify referenced assets")
+            if not remote_object_valid(client, bucket, key, row["id"], row["size_bytes"]):
+                raise ValueError(f"Missing or invalid media object in storage for {row['path']} ({key})")
             return False
         path = (package.root / row["path"]).resolve(strict=True)
         if not path.is_relative_to(package.root.resolve()):
@@ -865,13 +867,7 @@ def main() -> None:
         validator_args=("--catalog-only",) if args.catalog_only else (),
     )
     if args.apply:
-        if args.catalog_only:
-            try:
-                client, bucket = _media_configuration()
-            except ValueError:
-                client, bucket = None, None
-        else:
-            client, bucket = _media_configuration()
+        client, bucket = _media_configuration()
         report = apply_import(
             package,
             database_url=db_url_from_args(args.database_url),
