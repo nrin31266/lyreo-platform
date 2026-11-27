@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 import java.util.UUID;
+import com.lyreo.ai.infrastructure.persistence.JdbcAiAdminRepository;
+import com.lyreo.analytics.infrastructure.persistence.JdbcAnalyticsProjectionRepository;
 import com.lyreo.lexicon.infrastructure.persistence.JdbcLexiconRepository;
 import com.lyreo.lexicon.api.LexiconController;
 import com.lyreo.lexicon.application.LexiconSearchService;
@@ -148,6 +150,100 @@ class FlywayMigrationIT {
              WHERE conname = 'diamond_wallet_non_negative_check'
             """, Integer.class);
         assertThat(walletConstraintCount).isEqualTo(1);
+    }
+
+    @Test
+    void v020ReconcilesNegativeDiamondBalanceWithLedgerBeforeApplyingConstraint() {
+        // Test migrating an isolated database from V001..V019 -> seed negative wallet/ledger (-4) -> apply V020
+        String dbName = "v020_reconcile_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+        jdbcTemplate.execute("CREATE DATABASE " + dbName);
+        String isolatedUrl = postgres.getJdbcUrl().replaceFirst("/[^/?]+(\\?.*)?$", "/" + dbName + "$1");
+        var isolatedDs = new org.springframework.jdbc.datasource.DriverManagerDataSource(
+            isolatedUrl,
+            postgres.getUsername(),
+            postgres.getPassword()
+        );
+        var isolatedJdbc = new JdbcTemplate(isolatedDs);
+        try {
+            Flyway.configure()
+                .dataSource(isolatedDs)
+                .target("019")
+                .validateMigrationNaming(true)
+                .load()
+                .migrate();
+
+            UUID learnerId = UUID.randomUUID();
+            isolatedJdbc.update(
+                "INSERT INTO app_user(id, keycloak_subject) VALUES (?, ?)",
+                learnerId, "v020-neg-" + learnerId
+            );
+            isolatedJdbc.update(
+                "INSERT INTO diamond_wallet(learner_id, cached_balance) VALUES (?, -4)",
+                learnerId
+            );
+            isolatedJdbc.update("""
+                INSERT INTO diamond_transaction(
+                    id, learner_id, transaction_type, amount, idempotency_key, reference_type, created_at
+                ) VALUES (?, ?, 'ADMIN_ADJUSTMENT', -4, ?, 'ADMIN_ADJUSTMENT', now())
+                """,
+                UUID.randomUUID(), learnerId, "neg-debit-" + learnerId
+            );
+
+            Flyway.configure()
+                .dataSource(isolatedDs)
+                .validateMigrationNaming(true)
+                .load()
+                .migrate();
+
+            Integer walletBalance = isolatedJdbc.queryForObject(
+                "SELECT cached_balance FROM diamond_wallet WHERE learner_id = ?",
+                Integer.class, learnerId
+            );
+            Integer ledgerSum = isolatedJdbc.queryForObject(
+                "SELECT COALESCE(SUM(amount), 0)::int FROM diamond_transaction WHERE learner_id = ?",
+                Integer.class, learnerId
+            );
+            assertThat(walletBalance).isEqualTo(0);
+            assertThat(ledgerSum).isEqualTo(0);
+        } finally {
+            jdbcTemplate.execute("DROP DATABASE IF EXISTS " + dbName + " WITH (FORCE)");
+        }
+    }
+
+    @Test
+    void inFlightRunningAiInvocationDoesNotMarkProviderUnhealthyOrCountAsError() {
+        var named = new NamedParameterJdbcTemplate(jdbcTemplate.getDataSource());
+        var analytics = new JdbcAnalyticsProjectionRepository(named);
+        var aiAdmin = new JdbcAiAdminRepository(named);
+
+        UUID providerId = UUID.randomUUID();
+        String code = "LOCAL_TEST_HEALTH_" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+        jdbcTemplate.update("""
+            INSERT INTO ai_provider(id, code, display_name, base_url, enabled, connection_status)
+            VALUES (?, ?, 'Local Health Test', 'http://localhost:8001', true, 'UNKNOWN')
+            """, providerId, code);
+        // Prior SUCCEEDED invocation followed by a newer RUNNING invocation
+        jdbcTemplate.update("""
+            INSERT INTO ai_invocation(id, capability, provider_code, model, status, started_at, finished_at, latency_ms)
+            VALUES (?, 'CHAT', ?, 'test-model', 'SUCCEEDED', now() - interval '2 minutes', now() - interval '1 minute', 120),
+                   (?, 'CHAT', ?, 'test-model', 'RUNNING', now(), NULL, NULL)
+            """, UUID.randomUUID(), code, UUID.randomUUID(), code);
+
+        try {
+            var provider = aiAdmin.providers().stream()
+                .filter(p -> code.equals(p.code()))
+                .findFirst()
+                .orElseThrow();
+            assertThat(provider.connectionStatus()).isEqualTo("HEALTHY");
+
+            var summary = analytics.loadAdminDashboard(java.time.LocalDate.now(ZoneOffset.UTC), 7);
+            assertThat(summary.operations().aiErrors24h()).isZero();
+            assertThat(summary.operations().aiProvidersUnhealthy()).isZero();
+            assertThat(summary.operations().aiProvidersHealthy()).isGreaterThanOrEqualTo(1);
+        } finally {
+            jdbcTemplate.update("DELETE FROM ai_invocation WHERE provider_code = ?", code);
+            jdbcTemplate.update("DELETE FROM ai_provider WHERE id = ?", providerId);
+        }
     }
 
     @Test

@@ -45,6 +45,10 @@ public interface CurriculumProgressRepository {
 
     List<CurriculumEnrollment> findActivePublishedEnrollments(UUID learnerId);
 
+    default List<UUID> findEnrolledLearnerIds(UUID pathId) {
+        return List.of();
+    }
+
     List<CurriculumItemProgress> findItemProgressByPath(UUID learnerId, UUID pathId);
 
     void ensureActiveEnrollment(UUID learnerId, UUID pathId);

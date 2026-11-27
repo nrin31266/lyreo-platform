@@ -711,6 +711,7 @@ public final class JdbcAnalyticsProjectionRepository implements AnalyticsProject
                       SELECT inv.status
                         FROM ai_invocation inv
                        WHERE inv.provider_code = p.code
+                         AND inv.status IN ('SUCCEEDED', 'FAILED')
                        ORDER BY inv.started_at DESC
                        LIMIT 1
                   ) latest ON true
@@ -727,7 +728,7 @@ public final class JdbcAnalyticsProjectionRepository implements AnalyticsProject
                        AND NOT (
                            (encrypted_api_key IS NULL AND code <> 'DEV_MOCK' AND code NOT LIKE 'LOCAL_%')
                            OR connection_status IN ('FAILED', 'UNHEALTHY', 'ERROR')
-                           OR (latest_invocation_status IS NOT NULL AND latest_invocation_status <> 'SUCCEEDED')
+                           OR latest_invocation_status = 'FAILED'
                        )
                        AND (connection_status = 'HEALTHY' OR latest_invocation_status = 'SUCCEEDED')
                 ) AS ai_healthy,
@@ -738,11 +739,11 @@ public final class JdbcAnalyticsProjectionRepository implements AnalyticsProject
                        AND (
                            (encrypted_api_key IS NULL AND code <> 'DEV_MOCK' AND code NOT LIKE 'LOCAL_%')
                            OR connection_status IN ('FAILED', 'UNHEALTHY', 'ERROR')
-                           OR (latest_invocation_status IS NOT NULL AND latest_invocation_status <> 'SUCCEEDED')
+                           OR latest_invocation_status = 'FAILED'
                        )
                 ) AS ai_unhealthy,
                 (SELECT COUNT(*)::int FROM ai_invocation WHERE started_at >= :last24h) AS ai_invocations_24h,
-                (SELECT COUNT(*)::int FROM ai_invocation WHERE started_at >= :last24h AND status <> 'SUCCEEDED') AS ai_errors_24h,
+                (SELECT COUNT(*)::int FROM ai_invocation WHERE started_at >= :last24h AND status = 'FAILED') AS ai_errors_24h,
                 (SELECT COALESCE(ROUND(AVG(latency_ms))::bigint, 0) FROM ai_invocation WHERE started_at >= :last24h AND latency_ms IS NOT NULL) AS ai_avg_latency_24h,
                 (SELECT COUNT(*)::int FROM app_user WHERE account_locked = true) AS locked_accounts,
                 (SELECT COUNT(*)::int FROM app_user WHERE account_sync_pending = true) AS pending_sync,

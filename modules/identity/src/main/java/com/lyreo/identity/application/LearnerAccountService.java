@@ -24,7 +24,7 @@ public class LearnerAccountService {
     public Status status(UUID learnerId, String actor) {
         Account account = find(learnerId);
         if (!provider.configured()) return new Status("UNCONFIGURED", account.locked(), account.pending());
-        var connection = connect(account, actor);
+        var connection = connect(learnerId, account, actor);
         return connection.map(remote -> new Status("AVAILABLE", account.locked() || !remote.enabled(), account.pending()))
             .orElseGet(() -> new Status("UNMANAGED", account.locked(), account.pending()));
     }
@@ -32,7 +32,7 @@ public class LearnerAccountService {
     public void resetPassword(UUID learnerId, String actor, String password, boolean changeOnNextLogin) {
         store.serialized(learnerId, () -> {
             Account account = find(learnerId);
-            Connection remote = requireConnection(account, actor);
+            Connection remote = requireConnection(learnerId, account, actor);
             if (account.locked() || !remote.enabled()) {
                 throw new StateConflictException("Unlock the learner account before resetting its password");
             }
@@ -56,10 +56,13 @@ public class LearnerAccountService {
 
             Connection remote;
             try {
-                remote = provider.connect(subject)
-                    .orElseThrow(() -> new StateConflictException("This account cannot be managed as a learner"));
+                Optional<Connection> connected = provider.connect(subject);
+                store.recordManageability(learnerId, connected.isPresent());
+                remote = connected.orElseThrow(
+                    () -> new StateConflictException("This account cannot be managed as a learner")
+                );
             } catch (ServiceUnavailableException failure) {
-                if (locked) {
+                if (locked && account.manageableVerified()) {
                     store.change(learnerId, true, true, actor, "LOCK_REQUESTED", reason);
                     return new Status("AVAILABLE", true, true);
                 }
@@ -103,7 +106,7 @@ public class LearnerAccountService {
         }
     }
 
-    private Optional<Connection> connect(Account account, String actor) {
+    private Optional<Connection> connect(UUID learnerId, Account account, String actor) {
         if (account.subject().equals(actor)) return Optional.empty();
         UUID subject;
         try {
@@ -111,13 +114,15 @@ public class LearnerAccountService {
         } catch (IllegalArgumentException ignored) {
             return Optional.empty();
         }
-        return provider.connect(subject);
+        Optional<Connection> connected = provider.connect(subject);
+        store.recordManageability(learnerId, connected.isPresent());
+        return connected;
     }
 
-    private Connection requireConnection(Account account, String actor) {
+    private Connection requireConnection(UUID learnerId, Account account, String actor) {
         if (!provider.configured()) throw new ServiceUnavailableException(
             "ACCOUNT_MANAGEMENT_UNCONFIGURED", "Keycloak account management is not configured", null);
-        return connect(account, actor)
+        return connect(learnerId, account, actor)
             .orElseThrow(() -> new StateConflictException("This account cannot be managed as a learner"));
     }
 

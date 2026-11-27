@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Image, View, type ImageSourcePropType } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useApiClient } from '@/api/api-provider';
@@ -48,6 +48,21 @@ export function NotificationsScreen() {
   const [extraHasMore, setExtraHasMore] = useState<boolean | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState(false);
+  const generationRef = useRef(0);
+  const loadMoreControllerRef = useRef<AbortController | null>(null);
+
+  const cancelInFlightLoadMore = useCallback(() => {
+    generationRef.current += 1;
+    if (loadMoreControllerRef.current) {
+      loadMoreControllerRef.current.abort();
+      loadMoreControllerRef.current = null;
+    }
+    setLoadingMore(false);
+  }, []);
+
+  useEffect(() => () => {
+    cancelInFlightLoadMore();
+  }, [cancelInFlightLoadMore]);
 
   const firstPage = useMemo(() => (
     resource.status === 'ready'
@@ -58,11 +73,12 @@ export function NotificationsScreen() {
   ), [resource]);
 
   useEffect(() => {
+    cancelInFlightLoadMore();
     setExtraItems([]);
     setNextPage(1);
     setExtraHasMore(null);
     setLoadMoreError(false);
-  }, [resource]);
+  }, [cancelInFlightLoadMore, resource]);
 
   const items = useMemo(() => {
     const merged: Announcement[] = [];
@@ -80,32 +96,48 @@ export function NotificationsScreen() {
   const pageSize = firstPage.size > 0 ? firstPage.size : 20;
 
   const handleRefresh = useCallback(() => {
+    cancelInFlightLoadMore();
     setExtraItems([]);
     setNextPage(1);
     setExtraHasMore(null);
     setLoadMoreError(false);
     reload();
-  }, [reload]);
+  }, [cancelInFlightLoadMore, reload]);
 
   const loadMore = useCallback(async () => {
     if (resource.status !== 'ready' || !hasMore || loadingMore) {
       return;
     }
+    const generation = generationRef.current;
+    const controller = new AbortController();
+    loadMoreControllerRef.current = controller;
     setLoadingMore(true);
     setLoadMoreError(false);
     try {
       const response = await client.request<NotificationFeedResponse | Announcement[]>(
         `/api/v1/notifications?page=${nextPage}&size=${pageSize}`,
+        { signal: controller.signal },
       );
+      if (generationRef.current !== generation || controller.signal.aborted) {
+        return;
+      }
       const pageItems = Array.isArray(response) ? response : (response.items ?? []);
       const moreAvailable = Array.isArray(response) ? false : Boolean(response.hasMore);
       setExtraItems((prev) => [...prev, ...pageItems]);
       setNextPage((prev) => prev + 1);
       setExtraHasMore(moreAvailable);
     } catch {
+      if (generationRef.current !== generation || controller.signal.aborted) {
+        return;
+      }
       setLoadMoreError(true);
     } finally {
-      setLoadingMore(false);
+      if (loadMoreControllerRef.current === controller) {
+        loadMoreControllerRef.current = null;
+      }
+      if (generationRef.current === generation && !controller.signal.aborted) {
+        setLoadingMore(false);
+      }
     }
   }, [client, hasMore, loadingMore, nextPage, pageSize, resource.status]);
 

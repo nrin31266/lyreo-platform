@@ -267,10 +267,10 @@ public class CurriculumService {
                         || !expectedActivity.equalsIgnoreCase(evidence.activityType()))) {
                     yield false;
                 }
-                if (!expectedSentences.isEmpty() && !evidence.sentenceIds().containsAll(expectedSentences)) {
-                    yield false;
+                if (!expectedSentences.isEmpty()) {
+                    yield evidence.sentenceIds().containsAll(expectedSentences);
                 }
-                yield true;
+                yield evidence.activityCompleted();
             }
             case VOCABULARY_REVIEW -> {
                 Set<UUID> expectedEntries = asUuidSet(config.get("entryIds"));
@@ -368,8 +368,21 @@ public class CurriculumService {
         Set<UUID> subtopicIds,
         Set<Integer> parts,
         Integer questionCount,
-        Set<UUID> alternateReferenceIds
+        Set<UUID> alternateReferenceIds,
+        boolean activityCompleted
     ) {
+        public CompletionEvidence(
+            String activityType,
+            Set<UUID> entryIds,
+            Set<UUID> sentenceIds,
+            Set<UUID> subtopicIds,
+            Set<Integer> parts,
+            Integer questionCount,
+            Set<UUID> alternateReferenceIds
+        ) {
+            this(activityType, entryIds, sentenceIds, subtopicIds, parts, questionCount, alternateReferenceIds, true);
+        }
+
         public CompletionEvidence {
             entryIds = entryIds == null ? Set.of() : Set.copyOf(entryIds);
             sentenceIds = sentenceIds == null ? Set.of() : Set.copyOf(sentenceIds);
@@ -379,7 +392,7 @@ public class CurriculumService {
         }
 
         public static CompletionEvidence empty() {
-            return new CompletionEvidence(null, Set.of(), Set.of(), Set.of(), Set.of(), null, Set.of());
+            return new CompletionEvidence(null, Set.of(), Set.of(), Set.of(), Set.of(), null, Set.of(), true);
         }
     }
 

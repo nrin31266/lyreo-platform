@@ -260,17 +260,22 @@ public class VocabularyCommandService {
                     );
                 }
                 Instant at = Instant.now();
+                boolean eligibleForMissionCredit = card.reviewCount() == 0
+                    || card.nextReviewAt() == null
+                    || !card.nextReviewAt().isAfter(at);
                 var result = scheduler.schedule(card, rating, at);
                 UUID reviewId = repository.applyReviewWithId(card.id(), rating, result, at);
-                events.publishEvent(new VocabularyReviewCompletedEvent(
-                    reviewId,
-                    learnerId,
-                    card.id(),
-                    card.headwordId(),
-                    rating.name(),
-                    rating != SpacedRepetitionScheduler.Rating.AGAIN,
-                    at
-                ));
+                if (eligibleForMissionCredit) {
+                    events.publishEvent(new VocabularyReviewCompletedEvent(
+                        reviewId,
+                        learnerId,
+                        card.id(),
+                        card.headwordId(),
+                        rating.name(),
+                        rating != SpacedRepetitionScheduler.Rating.AGAIN,
+                        at
+                    ));
+                }
                 return result;
             }
         );

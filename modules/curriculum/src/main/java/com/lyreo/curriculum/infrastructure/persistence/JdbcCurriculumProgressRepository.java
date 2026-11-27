@@ -626,6 +626,15 @@ public final class JdbcCurriculumProgressRepository implements CurriculumProgres
     }
 
     @Override
+    public List<UUID> findEnrolledLearnerIds(UUID pathId) {
+        return jdbc.query(
+            "SELECT learner_id FROM curriculum_enrollment WHERE path_id = :pathId",
+            Map.of("pathId", pathId),
+            (rs, rowNum) -> rs.getObject("learner_id", UUID.class)
+        );
+    }
+
+    @Override
     public Optional<CurriculumSection> findSectionById(UUID sectionId) {
         return jdbc.query(
             """

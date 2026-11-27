@@ -299,6 +299,13 @@ class SavedVocabularyCollectionIT {
         assertThatThrownBy(() -> commandService.review(learnerA, sense0.id(), SpacedRepetitionScheduler.Rating.GOOD, 0, "rev-key-2"))
             .isInstanceOf(StaleRevisionException.class);
 
+        // Repeat review before nextReviewAt is due still updates SRS, but does NOT emit another mission credit event
+        var rev2NonDue = commandService.review(learnerA, sense0.id(), SpacedRepetitionScheduler.Rating.GOOD, 1, "rev-key-non-due");
+        assertThat(rev2NonDue.nextReviewAt()).isNotNull();
+        assertThat(jdbc.queryForObject("SELECT review_count FROM vocabulary_card WHERE id = ?", Integer.class, sense0.id()))
+            .isEqualTo(2);
+        assertThat(reviewEvents).hasSize(1);
+
         // 7. Pagination & search (> 20 items) + FREE capacity limit 100
         for (int i = 0; i < 23; i++) {
             commandService.saveItem(learnerA, new SaveItemCommand(

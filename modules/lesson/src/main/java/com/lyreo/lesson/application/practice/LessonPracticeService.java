@@ -4,6 +4,7 @@ import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.lesson.LessonActivityCompletedEvent;
 import com.lyreo.contracts.lesson.LessonCompletedEvent;
+import com.lyreo.contracts.lesson.LessonSentenceProgressEvent;
 import com.lyreo.entitlement.api.EntitlementService;
 import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.lesson.application.port.LessonPracticeRepository;
@@ -185,12 +186,24 @@ public class LessonPracticeService {
 
         boolean activityCompleted = repository.tryMarkActivityCompleted(learnerId, activityId);
         Instant occurredAt = Instant.now();
-        if (activityCompleted) {
-            List<UUID> completedSentenceIds = repository.findCompletedSentenceIds(
+        boolean sentencePassed = score.percent() >= DEFAULT_COMPLETION_SCORE;
+        List<UUID> completedSentenceIds = (activityCompleted || sentencePassed)
+            ? repository.findCompletedSentenceIds(learnerId, activityId, DEFAULT_COMPLETION_SCORE)
+            : List.of();
+        if (sentencePassed) {
+            events.publishEvent(new LessonSentenceProgressEvent(
+                attemptId,
                 learnerId,
+                lessonId,
                 activityId,
-                DEFAULT_COMPLETION_SCORE
-            );
+                "DICTATION",
+                sentenceId,
+                score.percent(),
+                completedSentenceIds,
+                occurredAt
+            ));
+        }
+        if (activityCompleted) {
             events.publishEvent(new LessonActivityCompletedEvent(
                 activityFactId(learnerId, activityId),
                 learnerId,

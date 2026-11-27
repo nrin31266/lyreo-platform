@@ -53,18 +53,32 @@ public final class VocabularyExerciseGenerator {
         int limit,
         long seed
     ) {
-        if (entries == null || entries.isEmpty() || limit <= 0 || mode == null) {
+        return generateQuestions(entries, entries, mode, limit, seed);
+    }
+
+    /** Generates up to {@code limit} eligible questions targeting {@code targetEntries} with {@code distractorPool}. */
+    public List<SnapshotQuestion> generateQuestions(
+        List<StudyEntrySource> targetEntries,
+        List<StudyEntrySource> distractorPool,
+        PracticeMode mode,
+        int limit,
+        long seed
+    ) {
+        if (targetEntries == null || targetEntries.isEmpty() || limit <= 0 || mode == null) {
             return List.of();
         }
+        List<StudyEntrySource> pool = (distractorPool == null || distractorPool.isEmpty())
+            ? targetEntries
+            : distractorPool;
         if (mode == PracticeMode.MIXED) {
-            return generateMixedQuestions(entries, PracticeMode.STANDARD_PRACTICE_MODES, limit, seed);
+            return generateMixedQuestions(targetEntries, pool, PracticeMode.STANDARD_PRACTICE_MODES, limit, seed);
         }
         List<SnapshotQuestion> generated = new ArrayList<>();
-        for (StudyEntrySource entry : entries) {
+        for (StudyEntrySource entry : targetEntries) {
             if (generated.size() >= limit) {
                 break;
             }
-            buildQuestion(entry, entries, mode, seed).ifPresent(generated::add);
+            buildQuestion(entry, pool, mode, seed).ifPresent(generated::add);
         }
         return List.copyOf(generated);
     }
@@ -79,9 +93,26 @@ public final class VocabularyExerciseGenerator {
         int limit,
         long seed
     ) {
-        if (entries == null || entries.isEmpty() || requestedModes == null || requestedModes.isEmpty() || limit <= 0) {
+        return generateMixedQuestions(entries, entries, requestedModes, limit, seed);
+    }
+
+    /**
+     * Generates up to {@code limit} questions targeting {@code targetEntries} distributed across
+     * {@code requestedModes} while drawing distractors from {@code distractorPool}.
+     */
+    public List<SnapshotQuestion> generateMixedQuestions(
+        List<StudyEntrySource> targetEntries,
+        List<StudyEntrySource> distractorPool,
+        List<PracticeMode> requestedModes,
+        int limit,
+        long seed
+    ) {
+        if (targetEntries == null || targetEntries.isEmpty() || requestedModes == null || requestedModes.isEmpty() || limit <= 0) {
             return List.of();
         }
+        List<StudyEntrySource> pool = (distractorPool == null || distractorPool.isEmpty())
+            ? targetEntries
+            : distractorPool;
         List<PracticeMode> concreteModes = requestedModes.stream()
             .filter(Objects::nonNull)
             .filter(m -> m != PracticeMode.MIXED)
@@ -91,7 +122,7 @@ public final class VocabularyExerciseGenerator {
             return List.of();
         }
 
-        List<StudyEntrySource> shuffled = new ArrayList<>(entries);
+        List<StudyEntrySource> shuffled = new ArrayList<>(targetEntries);
         Collections.shuffle(shuffled, new Random(seed));
 
         List<SnapshotQuestion> generated = new ArrayList<>();
@@ -102,7 +133,7 @@ public final class VocabularyExerciseGenerator {
             }
             for (int offset = 0; offset < concreteModes.size(); offset++) {
                 PracticeMode candidate = concreteModes.get((modeCursor + offset) % concreteModes.size());
-                Optional<SnapshotQuestion> q = buildQuestion(entry, entries, candidate, seed);
+                Optional<SnapshotQuestion> q = buildQuestion(entry, pool, candidate, seed);
                 if (q.isPresent()) {
                     generated.add(q.get());
                     modeCursor = (modeCursor + offset + 1) % concreteModes.size();

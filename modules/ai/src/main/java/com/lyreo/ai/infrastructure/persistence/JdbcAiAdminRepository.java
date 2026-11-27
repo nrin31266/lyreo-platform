@@ -25,7 +25,7 @@ public final class JdbcAiAdminRepository implements AiAdminRepository {
                    CASE
                        WHEN p.connection_status IS DISTINCT FROM 'UNKNOWN' THEN p.connection_status
                        WHEN latest.status = 'SUCCEEDED' THEN 'HEALTHY'
-                       WHEN latest.status IS NOT NULL THEN 'FAILED'
+                       WHEN latest.status = 'FAILED' THEN 'FAILED'
                        ELSE 'UNKNOWN'
                    END AS connection_status,
                    p.key_last4, (p.encrypted_api_key IS NOT NULL) AS configured
@@ -34,6 +34,7 @@ public final class JdbcAiAdminRepository implements AiAdminRepository {
                   SELECT inv.status
                     FROM ai_invocation inv
                    WHERE inv.provider_code = p.code
+                     AND inv.status IN ('SUCCEEDED', 'FAILED')
                    ORDER BY inv.started_at DESC
                    LIMIT 1
               ) latest ON true

@@ -15,6 +15,7 @@ import com.lyreo.contracts.errors.StateConflictException;
 import com.lyreo.contracts.grammar.GrammarSessionCompletedEvent;
 import com.lyreo.contracts.lesson.LessonActivityCompletedEvent;
 import com.lyreo.contracts.lesson.LessonCompletedEvent;
+import com.lyreo.contracts.lesson.LessonSentenceProgressEvent;
 import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent;
 import com.lyreo.contracts.vocabulary.VocabularyUnitCompletedEvent;
 import com.lyreo.curriculum.application.CurriculumCompletionListener;
@@ -490,6 +491,119 @@ class CurriculumUnlockIT {
             .andExpect(jsonPath("$.sections[0].items[0].progressStatus").value("COMPLETED"))
             .andExpect(jsonPath("$.sections[0].items[4].progressStatus").value("COMPLETED"))
             .andExpect(jsonPath("$.sections[0].items[5].progressStatus").value("UNLOCKED"));
+
+        // 3) Admin replaces content of item 1 while still sending old item1Id -> server assigns a new item ID,
+        // clears stale completion for replaced content, and recomputes unlock status while preserving unchanged item 2.
+        UUID replacedUnitId = UUID.randomUUID();
+        mvc.perform(put("/api/v1/admin/curriculum/paths/{id}", pathId)
+                .with(admin)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(Map.of(
+                    "name", "Slice Path Renamed",
+                    "level", "B1",
+                    "status", "PUBLISHED",
+                    "sections", List.of(Map.of(
+                        "id", secId,
+                        "title", "Ch 1 Updated",
+                        "position", 1,
+                        "items", List.of(
+                            Map.of("id", item1Id, "position", 1, "contentType", "VOCABULARY_REVIEW", "contentReferenceId", replacedUnitId,
+                                "required", true, "unlockRule", "NONE", "config", Map.of("entryIds", List.of(entry1))),
+                            Map.of("id", item2Id, "position", 2, "contentType", "VOCABULARY_REVIEW", "contentReferenceId", unitId,
+                                "required", true, "unlockRule", "PREVIOUS_REQUIRED", "config", Map.of("entryIds", List.of(entry2)))
+                        )
+                    ))
+                ))))
+            .andExpect(status().isOk());
+
+        String afterReplaceJson = mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sections[0].items[0].progressStatus").value("UNLOCKED"))
+            .andExpect(jsonPath("$.sections[0].items[1].id").value(item2Id.toString()))
+            .andExpect(jsonPath("$.sections[0].items[1].progressStatus").value("COMPLETED"))
+            .andReturn().getResponse().getContentAsString();
+        var afterReplaceTree = mapper.readTree(afterReplaceJson);
+        assertThat(afterReplaceTree.get("sections").get(0).get("items").get(0).get("id").asString())
+            .isNotEqualTo(item1Id.toString());
+    }
+
+    @Test
+    void lessonSentenceProgressCompletesConfiguredSliceWithoutPrematurelyCompletingFullActivityItem() throws Exception {
+        var admin = auth("cur-lesson-slice-admin-" + UUID.randomUUID(), "ADMIN");
+        var learner = auth("cur-lesson-slice-learner-" + UUID.randomUUID(), "LEARNER");
+        UUID lessonId = UUID.randomUUID();
+        UUID activityId = UUID.randomUUID();
+        UUID s1 = UUID.randomUUID();
+        UUID s2 = UUID.randomUUID();
+        UUID s3 = UUID.randomUUID();
+
+        String createPayload = mapper.writeValueAsString(Map.of(
+            "code", "LESSON_SLICE_" + UUID.randomUUID().toString().substring(0, 8),
+            "name", "Lesson Slice Path",
+            "level", "A2",
+            "status", "PUBLISHED",
+            "sections", List.of(Map.of(
+                "title", "Ch 1",
+                "position", 1,
+                "items", List.of(
+                    Map.of("position", 1, "contentType", "LESSON", "contentReferenceId", lessonId,
+                        "required", true, "unlockRule", "NONE",
+                        "config", Map.of("activityType", "DICTATION", "sentenceIds", List.of(s1, s2))),
+                    Map.of("position", 2, "contentType", "LESSON", "contentReferenceId", lessonId,
+                        "required", true, "unlockRule", "PREVIOUS_REQUIRED",
+                        "config", Map.of("activityType", "DICTATION"))
+                )
+            ))
+        ));
+
+        String createdJson = mvc.perform(post("/api/v1/admin/curriculum/paths")
+                .with(admin)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(createPayload))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        UUID pathId = UUID.fromString(mapper.readTree(createdJson).get("id").asString());
+
+        mvc.perform(post("/api/v1/curriculum/paths/{id}/enroll", pathId).with(learner))
+            .andExpect(status().isOk());
+        UUID learnerId = jdbc.queryForObject(
+            "SELECT id FROM app_user WHERE keycloak_subject LIKE 'cur-lesson-slice-learner-%' ORDER BY created_at DESC LIMIT 1",
+            UUID.class
+        );
+
+        // Passing only s1 does NOT complete [s1, s2] slice
+        listener.onLessonSentenceProgress(new LessonSentenceProgressEvent(
+            UUID.randomUUID(), learnerId, lessonId, activityId, "DICTATION", s1, 100, List.of(s1), Instant.now()
+        ));
+        mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sections[0].items[0].progressStatus").value("UNLOCKED"))
+            .andExpect(jsonPath("$.sections[0].items[1].progressStatus").value("LOCKED"));
+
+        // Passing s2 completes ONLY item 1 (the [s1, s2] slice) without requiring full activity (s3 not passed)
+        listener.onLessonSentenceProgress(new LessonSentenceProgressEvent(
+            UUID.randomUUID(), learnerId, lessonId, activityId, "DICTATION", s2, 95, List.of(s1, s2), Instant.now()
+        ));
+        mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sections[0].items[0].progressStatus").value("COMPLETED"))
+            .andExpect(jsonPath("$.sections[0].items[1].progressStatus").value("UNLOCKED"));
+
+        // Partial sentence progress MUST NOT prematurely complete item 2 (which requires full DICTATION activity)
+        listener.onLessonSentenceProgress(new LessonSentenceProgressEvent(
+            UUID.randomUUID(), learnerId, lessonId, activityId, "DICTATION", s2, 95, List.of(s1, s2), Instant.now()
+        ));
+        mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sections[0].items[1].progressStatus").value("UNLOCKED"));
+
+        // Full activity completion completes item 2
+        listener.onLessonActivityCompleted(new LessonActivityCompletedEvent(
+            UUID.randomUUID(), learnerId, lessonId, activityId, "DICTATION", 95, Instant.now(), List.of(s1, s2, s3)
+        ));
+        mvc.perform(get("/api/v1/curriculum/paths/{id}", pathId).with(learner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sections[0].items[1].progressStatus").value("COMPLETED"));
     }
 
     private static RequestPostProcessor auth(String subject, String role) {

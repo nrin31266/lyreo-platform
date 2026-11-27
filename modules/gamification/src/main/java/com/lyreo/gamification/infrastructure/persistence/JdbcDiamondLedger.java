@@ -1,5 +1,6 @@
 package com.lyreo.gamification.infrastructure.persistence;
 
+import com.lyreo.contracts.errors.IdempotencyConflictException;
 import com.lyreo.contracts.errors.StateConflictException;
 import com.lyreo.gamification.application.port.DiamondLedger;
 import com.lyreo.gamification.domain.DiamondTransaction;
@@ -8,6 +9,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -92,7 +94,17 @@ public class JdbcDiamondLedger implements DiamondLedger {
         );
         Optional<DiamondTransaction> existing = findByIdempotencyKey(transaction.idempotencyKey());
         if (existing.isPresent()) {
-            return existing.get();
+            DiamondTransaction replay = existing.get();
+            if (!replay.learnerId().equals(transaction.learnerId())
+                || replay.type() != transaction.type()
+                || replay.amount() != transaction.amount()
+                || !Objects.equals(replay.reason(), transaction.reason())) {
+                throw new IdempotencyConflictException(
+                    "Idempotency key was already used with a different diamond transaction payload",
+                    transaction.idempotencyKey()
+                );
+            }
+            return replay;
         }
         int currentBalance = lockedBalance == null ? 0 : lockedBalance;
         if (currentBalance + transaction.amount() < 0) {

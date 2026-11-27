@@ -450,6 +450,33 @@ class VocabularyStudyIT {
         assertThat(packSubmitted.status()).isEqualTo("SUBMITTED");
         assertThat(unitEvents).hasSize(unitEventsBeforePack + 1);
         assertThat(unitEvents.getLast().unitId()).isNull();
+
+        // 8. Slice-scoped unit session selects ONLY requested entryIds while still building 4-option distractors from unit
+        SessionView sliceSession = studyService.startSession(
+            learnerA,
+            unitVisible,
+            PracticeMode.CHOOSE_MEANING,
+            null,
+            null,
+            List.of(entryApple, entryPepper),
+            "slice-unit-1"
+        );
+        assertThat(sliceSession.questions()).hasSize(2);
+        assertThat(sliceSession.questions())
+            .extracting(QuestionView::entryId)
+            .containsExactlyInAnyOrder(entryApple, entryPepper);
+        assertThat(sliceSession.questions().getFirst().options()).hasSize(4);
+
+        // Out-of-scope entryId is rejected with RequestValidationException
+        assertThatThrownBy(() -> studyService.startSession(
+            learnerA,
+            unitVisible,
+            PracticeMode.CHOOSE_MEANING,
+            null,
+            null,
+            List.of(entryApple, UUID.randomUUID()),
+            "slice-unit-invalid"
+        )).isInstanceOf(RequestValidationException.class);
     }
 
     private UUID insertAsset(String filename, String mimeType, byte[] bytes) throws Exception {

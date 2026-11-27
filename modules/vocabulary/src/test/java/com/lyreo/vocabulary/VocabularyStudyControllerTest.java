@@ -157,7 +157,7 @@ class VocabularyStudyControllerTest {
         );
         when(studyService.startPackSession(
                 eq(learnerId), eq(packId), eq(PracticeMode.MIXED),
-                eq(List.of(PracticeMode.CHOOSE_MEANING, PracticeMode.GUESS_WORD)), eq(15), eq("pack-1")))
+                eq(List.of(PracticeMode.CHOOSE_MEANING, PracticeMode.GUESS_WORD)), eq(15), eq(null), eq("pack-1")))
             .thenReturn(packSession);
 
         mvc.perform(post("/api/v1/vocabulary/packs/{packId}/sessions", packId)
@@ -167,6 +167,18 @@ class VocabularyStudyControllerTest {
             .andExpect(status().isCreated())
             .andExpect(header().string("Location", "/api/v1/vocabulary/sessions/" + sessionId))
             .andExpect(jsonPath("$.mode").value("MIXED"));
+
+        when(studyService.startSession(
+                eq(learnerId), eq(unitId), eq(PracticeMode.CHOOSE_MEANING),
+                eq(null), eq(null), eq(List.of(entryId)), eq("unit-slice-1")))
+            .thenReturn(packSession);
+
+        mvc.perform(post("/api/v1/vocabulary/units/{unitId}/sessions", unitId)
+                .header("Idempotency-Key", "unit-slice-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mode\":\"CHOOSE_MEANING\",\"entryIds\":[\"" + entryId + "\"]}"))
+            .andExpect(status().isCreated())
+            .andExpect(header().string("Location", "/api/v1/vocabulary/sessions/" + sessionId));
 
         HintResponse hint = new HintResponse(questionId, "j****", List.of(0), 1, 4);
         when(studyService.requestHint(learnerId, sessionId, questionId)).thenReturn(hint);

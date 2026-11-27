@@ -133,6 +133,9 @@ public class CurriculumAdminService {
 
         if (command.sections() != null) {
             reconcileSectionsAndItems(pathId, command.sections());
+            for (UUID enrolledLearnerId : repository.findEnrolledLearnerIds(pathId)) {
+                curriculumService.recomputePathProgress(enrolledLearnerId, pathId);
+            }
         }
 
         return curriculumService.buildPathDetail(null, updated);
@@ -189,11 +192,14 @@ public class CurriculumAdminService {
         Set<UUID> existingSectionIds = existingSections.stream()
             .map(CurriculumSection::id)
             .collect(java.util.stream.Collectors.toSet());
-        Set<UUID> existingItemIds = existingItems.stream()
-            .map(CurriculumItem::id)
-            .collect(java.util.stream.Collectors.toSet());
+        Map<UUID, CurriculumItem> existingItemsById = existingItems.stream()
+            .collect(java.util.stream.Collectors.toMap(
+                CurriculumItem::id,
+                java.util.function.Function.identity()
+            ));
 
         Set<UUID> retainedSectionIds = new java.util.HashSet<>();
+        Set<UUID> seenExistingItemIds = new java.util.HashSet<>();
         Set<UUID> retainedItemIds = new java.util.HashSet<>();
         for (SectionSpec sectionSpec : sections) {
             if (sectionSpec.id() != null && existingSectionIds.contains(sectionSpec.id())
@@ -202,22 +208,28 @@ public class CurriculumAdminService {
             }
             if (sectionSpec.items() != null) {
                 for (ItemSpec itemSpec : sectionSpec.items()) {
-                    if (itemSpec.id() != null && existingItemIds.contains(itemSpec.id())
-                        && !retainedItemIds.add(itemSpec.id())) {
-                        throw new RequestValidationException("Duplicate item id: " + itemSpec.id());
+                    if (itemSpec.id() != null && existingItemsById.containsKey(itemSpec.id())) {
+                        if (!seenExistingItemIds.add(itemSpec.id())) {
+                            throw new RequestValidationException("Duplicate item id: " + itemSpec.id());
+                        }
+                        CurriculumItem existingItem = existingItemsById.get(itemSpec.id());
+                        if (hasEquivalentContent(existingItem, itemSpec)) {
+                            retainedItemIds.add(itemSpec.id());
+                        }
                     }
                 }
             }
         }
 
-        List<UUID> removedItemIds = existingItemIds.stream()
+        List<UUID> removedItemIds = existingItemsById.keySet().stream()
             .filter(id -> !retainedItemIds.contains(id))
             .toList();
         List<UUID> removedSectionIds = existingSectionIds.stream()
             .filter(id -> !retainedSectionIds.contains(id))
             .toList();
 
-        // Remove only deleted items/sections before offsetting remaining positions so surviving progress rows stay intact.
+        // Remove deleted or content-replaced items before offsetting positions so unchanged items keep progress
+        // while replaced content receives a fresh item ID and never inherits stale completion state.
         repository.deleteItemsByIds(removedItemIds);
         repository.deleteSectionsByIds(removedSectionIds);
 
@@ -254,7 +266,7 @@ public class CurriculumAdminService {
                     );
                     String unlockRule = normalizeUnlockRule(itemSpec.unlockRule(), itemSpec.required());
                     String configJson = encodeConfig(itemSpec.config());
-                    if (itemSpec.id() != null && existingItemIds.contains(itemSpec.id())) {
+                    if (itemSpec.id() != null && retainedItemIds.contains(itemSpec.id())) {
                         repository.updateItem(
                             itemSpec.id(),
                             sectionId,
@@ -280,6 +292,52 @@ public class CurriculumAdminService {
                 }
             }
         }
+    }
+
+    private boolean hasEquivalentContent(CurriculumItem existing, ItemSpec incoming) {
+        if (existing.contentType() != incoming.contentType()) {
+            return false;
+        }
+        if (!Objects.equals(existing.contentReferenceId(), incoming.contentReferenceId())) {
+            return false;
+        }
+        return Objects.equals(canonicalConfig(existing.config()), canonicalConfig(incoming.config()));
+    }
+
+    private Map<String, Object> canonicalConfig(Map<String, Object> config) {
+        if (config == null || config.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Object> normalized = new java.util.TreeMap<>();
+        for (Map.Entry<String, Object> entry : config.entrySet()) {
+            Object value = entry.getValue();
+            if (value == null) {
+                continue;
+            }
+            if (value instanceof java.util.Collection<?> collection) {
+                if (collection.isEmpty()) {
+                    continue;
+                }
+                List<String> elements = collection.stream()
+                    .filter(Objects::nonNull)
+                    .map(item -> item.toString().trim())
+                    .filter(s -> !s.isEmpty())
+                    .distinct()
+                    .sorted()
+                    .toList();
+                if (!elements.isEmpty()) {
+                    normalized.put(entry.getKey(), elements);
+                }
+            } else if (value instanceof Number number) {
+                normalized.put(entry.getKey(), number.longValue());
+            } else {
+                String text = value.toString().trim();
+                if (!text.isEmpty()) {
+                    normalized.put(entry.getKey(), text);
+                }
+            }
+        }
+        return normalized;
     }
 
     private void writeSectionsAndItems(UUID pathId, List<SectionSpec> sections) {

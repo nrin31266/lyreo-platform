@@ -436,6 +436,8 @@ class GamificationIdempotencyIT {
         UUID shadowMissionId = UUID.randomUUID();
         UUID vocabAchId = UUID.randomUUID();
         UUID toeicAchId = UUID.randomUUID();
+        UUID shadowAchId = UUID.randomUUID();
+        UUID grammarAchId = UUID.randomUUID();
         jdbc.update("""
             INSERT INTO mission_definition(id, code, title, recurrence, metric, target, diamond_reward, rule_version, enabled)
             VALUES (?, 'DAILY_SHADOWING_TEST', 'Shadowing Test', 'DAILY', 'SHADOWING_SENTENCE', 2, 5, 'v1', true)
@@ -443,8 +445,10 @@ class GamificationIdempotencyIT {
         jdbc.update("""
             INSERT INTO achievement_definition(id, code, title, description, metric, target, xp_reward, diamond_reward, rule_version, enabled)
             VALUES (?, 'VOCAB_TEST_ACH', 'Vocab Ach', 'Desc', 'VOCABULARY_REVIEW', 1, 10, 2, 'v1', true),
-                   (?, 'TOEIC_TEST_ACH', 'TOEIC Ach', 'Desc', 'TOEIC_DRILL_COMPLETED', 1, 10, 2, 'v1', true)
-            """, vocabAchId, toeicAchId);
+                   (?, 'TOEIC_TEST_ACH', 'TOEIC Ach', 'Desc', 'TOEIC_DRILL_COMPLETED', 1, 10, 2, 'v1', true),
+                   (?, 'SHADOW_TEST_ACH', 'Shadow Ach', 'Desc', 'SHADOWING_SENTENCE', 1, 10, 2, 'v1', true),
+                   (?, 'GRAMMAR_TEST_ACH', 'Grammar Ach', 'Desc', 'GRAMMAR_ANSWER', 1, 10, 2, 'v1', true)
+            """, vocabAchId, toeicAchId, shadowAchId, grammarAchId);
 
         UUID attemptId = UUID.randomUUID();
         missionListener.shadowing(new ShadowingAssessedEvent(attemptId, learnerId, 0, 5, 90));
@@ -452,6 +456,23 @@ class GamificationIdempotencyIT {
         assertThat(jdbc.queryForObject(
             "SELECT progress FROM mission_progress WHERE learner_id = ? AND mission_id = ?",
             Integer.class, learnerId, shadowMissionId
+        )).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+            "SELECT progress FROM learner_achievement WHERE learner_id = ? AND achievement_id = ?",
+            Integer.class, learnerId, shadowAchId
+        )).isEqualTo(1);
+
+        UUID grammarAttemptId = UUID.randomUUID();
+        Instant grammarAt = Instant.now();
+        missionListener.grammar(new GrammarQuestionAnsweredEvent(
+            learnerId, grammarAttemptId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), 1, true, grammarAt
+        ));
+        missionListener.grammar(new GrammarQuestionAnsweredEvent(
+            learnerId, grammarAttemptId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), 1, true, grammarAt
+        ));
+        assertThat(jdbc.queryForObject(
+            "SELECT progress FROM learner_achievement WHERE learner_id = ? AND achievement_id = ?",
+            Integer.class, learnerId, grammarAchId
         )).isEqualTo(1);
 
         missionListener.vocabulary(new VocabularyReviewCompletedEvent(
@@ -469,6 +490,35 @@ class GamificationIdempotencyIT {
             "SELECT progress FROM learner_achievement WHERE learner_id = ? AND achievement_id = ?",
             Integer.class, learnerId, toeicAchId
         )).isEqualTo(1);
+
+        // Concurrent admin adjustments sharing one idempotencyKey with conflicting payloads MUST return 200 + 409
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            CountDownLatch ready = new CountDownLatch(2);
+            CountDownLatch start = new CountDownLatch(1);
+            var a1 = pool.submit(() -> {
+                ready.countDown();
+                start.await();
+                try {
+                    adminService.adjustDiamonds(learnerId, 10, "Bonus A", "shared-conflict-key");
+                    return 200;
+                } catch (IdempotencyConflictException ex) {
+                    return 409;
+                }
+            });
+            var a2 = pool.submit(() -> {
+                ready.countDown();
+                start.await();
+                try {
+                    adminService.adjustDiamonds(learnerId, 25, "Bonus B", "shared-conflict-key");
+                    return 200;
+                } catch (IdempotencyConflictException ex) {
+                    return 409;
+                }
+            });
+            ready.await();
+            start.countDown();
+            assertThat(List.of(a1.get(), a2.get())).containsExactlyInAnyOrder(200, 409);
+        }
     }
 
     private static RequestPostProcessor auth(String subject, String role) {

@@ -86,6 +86,14 @@ public class MissionEventListener {
             1
         );
         recordStreak(factId, event.learnerId(), occurredAt);
+        if (achievements != null) {
+            achievements.recordMetricProgress(
+                factId,
+                event.learnerId(),
+                AchievementService.METRIC_SHADOWING_SENTENCE,
+                1
+            );
+        }
     }
 
     @ApplicationModuleListener
@@ -99,6 +107,14 @@ public class MissionEventListener {
             1
         );
         recordStreak(factId, event.learnerId(), event.occurredAt());
+        if (achievements != null) {
+            achievements.recordMetricProgress(
+                factId,
+                event.learnerId(),
+                AchievementService.METRIC_GRAMMAR_ANSWER,
+                1
+            );
+        }
     }
 
     @ApplicationModuleListener

@@ -155,6 +155,7 @@ public class VocabularyStudyController {
             request.mode(),
             request.modes(),
             request.limit(),
+            request.entryIds(),
             idempotencyKey
         );
         return ResponseEntity.created(URI.create("/api/v1/vocabulary/sessions/" + session.id()))
@@ -174,6 +175,7 @@ public class VocabularyStudyController {
             request.mode(),
             request.modes(),
             request.limit(),
+            request.entryIds(),
             idempotencyKey
         );
         return ResponseEntity.created(URI.create("/api/v1/vocabulary/sessions/" + session.id()))
@@ -265,10 +267,16 @@ public class VocabularyStudyController {
         @Size(max = 10)
         List<PracticeMode> modes,
         @Min(1) @Max(100)
-        Integer limit
+        Integer limit,
+        @Size(max = 100)
+        List<@NotNull UUID> entryIds
     ) {
         public StartSessionRequest(PracticeMode mode, Integer limit) {
-            this(mode, null, limit);
+            this(mode, null, limit, null);
+        }
+
+        public StartSessionRequest(PracticeMode mode, List<PracticeMode> modes, Integer limit) {
+            this(mode, modes, limit, null);
         }
     }
 

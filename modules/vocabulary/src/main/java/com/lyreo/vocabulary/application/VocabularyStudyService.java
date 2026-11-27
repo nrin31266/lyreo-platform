@@ -420,7 +420,7 @@ public class VocabularyStudyService {
         Integer limit,
         String idempotencyKey
     ) {
-        return startSession(learnerId, unitId, mode, null, limit, idempotencyKey);
+        return startSession(learnerId, unitId, mode, null, limit, null, idempotencyKey);
     }
 
     @Transactional
@@ -432,12 +432,27 @@ public class VocabularyStudyService {
         Integer limit,
         String idempotencyKey
     ) {
+        return startSession(learnerId, unitId, mode, modes, limit, null, idempotencyKey);
+    }
+
+    @Transactional
+    public SessionView startSession(
+        UUID learnerId,
+        UUID unitId,
+        PracticeMode mode,
+        List<PracticeMode> modes,
+        Integer limit,
+        List<UUID> entryIds,
+        String idempotencyKey
+    ) {
         ModeSelection selection = resolveModeSelection(mode, modes);
         if (limit != null && (limit < 1 || limit > 100)) {
             throw new RequestValidationException("limit must be between 1 and 100");
         }
+        List<UUID> normalizedEntryIds = normalizeRequestedEntryIds(entryIds);
 
-        String fingerprint = "UNIT|" + unitId + "|" + selection.fingerprint() + "|" + limit;
+        String fingerprint = "UNIT|" + unitId + "|" + selection.fingerprint() + "|" + limit
+            + "|" + entryIdsFingerprint(normalizedEntryIds);
         return executeIdempotent(
             learnerId,
             "vocabulary.study.start",
@@ -450,14 +465,15 @@ public class VocabularyStudyService {
                 requirePackEntitlement(learnerId, unit.packAccessMode(), unit.packRequiredFeatureKey());
 
                 List<EntryWithProgressRow> entryRows = repository.findVisibleEntries(unitId, learnerId);
-                List<StudyEntrySource> sources = entryRows.stream().map(VocabularyStudyService::toSource).toList();
+                List<StudyEntrySource> allSources = entryRows.stream().map(VocabularyStudyService::toSource).toList();
+                List<StudyEntrySource> targetSources = filterSourcesByEntryIds(allSources, normalizedEntryIds);
 
                 UUID sessionId = UUID.randomUUID();
                 long seed = sessionId.getMostSignificantBits() ^ sessionId.getLeastSignificantBits();
-                int requestedLimit = limit != null ? limit : Math.max(1, sources.size());
+                int requestedLimit = limit != null ? limit : Math.max(1, targetSources.size());
                 List<SnapshotQuestion> questions = selection.multiMode()
-                    ? generator.generateMixedQuestions(sources, selection.concreteModes(), requestedLimit, seed)
-                    : generator.generateQuestions(sources, selection.sessionMode(), requestedLimit, seed);
+                    ? generator.generateMixedQuestions(targetSources, allSources, selection.concreteModes(), requestedLimit, seed)
+                    : generator.generateQuestions(targetSources, allSources, selection.sessionMode(), requestedLimit, seed);
                 if (questions.isEmpty()) {
                     throw new RequestValidationException(
                         "No eligible questions available for mode " + selection.sessionMode()
@@ -501,12 +517,27 @@ public class VocabularyStudyService {
         Integer limit,
         String idempotencyKey
     ) {
+        return startPackSession(learnerId, packId, mode, modes, limit, null, idempotencyKey);
+    }
+
+    @Transactional
+    public SessionView startPackSession(
+        UUID learnerId,
+        UUID packId,
+        PracticeMode mode,
+        List<PracticeMode> modes,
+        Integer limit,
+        List<UUID> entryIds,
+        String idempotencyKey
+    ) {
         ModeSelection selection = resolveModeSelection(mode, modes);
         if (limit != null && (limit < 1 || limit > 100)) {
             throw new RequestValidationException("limit must be between 1 and 100");
         }
+        List<UUID> normalizedEntryIds = normalizeRequestedEntryIds(entryIds);
 
-        String fingerprint = "PACK|" + packId + "|" + selection.fingerprint() + "|" + limit;
+        String fingerprint = "PACK|" + packId + "|" + selection.fingerprint() + "|" + limit
+            + "|" + entryIdsFingerprint(normalizedEntryIds);
         return executeIdempotent(
             learnerId,
             "vocabulary.study.start",
@@ -519,20 +550,33 @@ public class VocabularyStudyService {
                 requirePackEntitlement(learnerId, pack.accessMode(), pack.requiredFeatureKey());
 
                 List<EntryWithProgressRow> entryRows = repository.findVisibleEntriesByPack(packId, learnerId);
-                List<StudyEntrySource> sources = new ArrayList<>(
-                    entryRows.stream().map(VocabularyStudyService::toSource).toList()
+                List<StudyEntrySource> allSources = entryRows.stream().map(VocabularyStudyService::toSource).toList();
+                List<StudyEntrySource> targetSources = new ArrayList<>(
+                    filterSourcesByEntryIds(allSources, normalizedEntryIds)
                 );
 
                 UUID sessionId = UUID.randomUUID();
                 long seed = sessionId.getMostSignificantBits() ^ sessionId.getLeastSignificantBits();
-                int requestedLimit = limit != null ? limit : Math.min(30, Math.max(1, sources.size()));
+                int requestedLimit = limit != null ? limit : Math.min(30, Math.max(1, targetSources.size()));
 
                 List<SnapshotQuestion> questions;
                 if (selection.multiMode()) {
-                    questions = generator.generateMixedQuestions(sources, selection.concreteModes(), requestedLimit, seed);
+                    questions = generator.generateMixedQuestions(
+                        targetSources,
+                        allSources,
+                        selection.concreteModes(),
+                        requestedLimit,
+                        seed
+                    );
                 } else {
-                    Collections.shuffle(sources, new Random(seed));
-                    questions = generator.generateQuestions(sources, selection.sessionMode(), requestedLimit, seed);
+                    Collections.shuffle(targetSources, new Random(seed));
+                    questions = generator.generateQuestions(
+                        targetSources,
+                        allSources,
+                        selection.sessionMode(),
+                        requestedLimit,
+                        seed
+                    );
                 }
                 if (questions.isEmpty()) {
                     throw new RequestValidationException(
@@ -567,6 +611,52 @@ public class VocabularyStudyService {
                     .orElseThrow();
             }
         );
+    }
+
+    private static List<UUID> normalizeRequestedEntryIds(List<UUID> entryIds) {
+        if (entryIds == null || entryIds.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<UUID> unique = new LinkedHashSet<>();
+        for (UUID entryId : entryIds) {
+            if (entryId == null) {
+                throw new RequestValidationException("entryIds cannot contain null");
+            }
+            unique.add(entryId);
+        }
+        if (unique.size() > 100) {
+            throw new RequestValidationException("entryIds cannot exceed 100 entries");
+        }
+        return List.copyOf(unique);
+    }
+
+    private static String entryIdsFingerprint(List<UUID> entryIds) {
+        if (entryIds == null || entryIds.isEmpty()) {
+            return "";
+        }
+        return entryIds.stream().map(UUID::toString).sorted().collect(java.util.stream.Collectors.joining(","));
+    }
+
+    private static List<StudyEntrySource> filterSourcesByEntryIds(
+        List<StudyEntrySource> allSources,
+        List<UUID> requestedEntryIds
+    ) {
+        if (requestedEntryIds == null || requestedEntryIds.isEmpty()) {
+            return allSources;
+        }
+        Map<UUID, StudyEntrySource> byId = new LinkedHashMap<>();
+        for (StudyEntrySource source : allSources) {
+            byId.put(source.id(), source);
+        }
+        List<StudyEntrySource> selected = new ArrayList<>(requestedEntryIds.size());
+        for (UUID id : requestedEntryIds) {
+            StudyEntrySource match = byId.get(id);
+            if (match == null) {
+                throw new RequestValidationException("Requested vocabulary entryId is outside this scope: " + id);
+            }
+            selected.add(match);
+        }
+        return selected;
     }
 
     public List<SessionSummary> listSessions(UUID learnerId, UUID unitId, String status) {

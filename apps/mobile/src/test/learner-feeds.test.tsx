@@ -54,7 +54,76 @@ it('shows the learner announcements returned by Core and loads subsequent pages 
 
   await fireEvent.press(view.getByRole('button', { name: 'notifications.loadMore' }));
   expect(await view.findByText('Older reminder')).toBeTruthy();
-  expect(request).toHaveBeenCalledWith('/api/v1/notifications?page=1&size=1');
+  expect(request).toHaveBeenCalledWith(
+    '/api/v1/notifications?page=1&size=1',
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+  await view.unmount();
+});
+
+it('ignores a stale loadMore response that resolves after pull-to-refresh resets the notification feed', async () => {
+  let resolveStalePage!: (value: unknown) => void;
+  const stalePagePromise = new Promise((resolve) => {
+    resolveStalePage = resolve;
+  });
+  const request = jest.fn().mockReturnValueOnce(stalePagePromise);
+  apiClient.mockReturnValue({ request });
+
+  let currentResource: {
+    status: 'ready';
+    data: {
+      items: Array<{ id: string; title: string; body: string; category: 'SYSTEM'; publishedAt: null }>;
+      total: number;
+      page: number;
+      size: number;
+      hasMore: boolean;
+      unreadCount: number;
+    };
+  } = {
+    status: 'ready',
+    data: {
+      items: [{ id: 'old-1', title: 'Old page 1', body: 'Initial item.', category: 'SYSTEM', publishedAt: null }],
+      total: 2,
+      page: 0,
+      size: 1,
+      hasMore: true,
+      unreadCount: 1,
+    },
+  };
+  const reload = jest.fn();
+  coreResource.mockImplementation(() => ({ resource: currentResource, reload }));
+
+  const view = await render(<NotificationsScreen />);
+  await fireEvent.press(view.getByRole('button', { name: 'notifications.loadMore' }));
+  expect(request).toHaveBeenCalledTimes(1);
+
+  currentResource = {
+    status: 'ready',
+    data: {
+      items: [{ id: 'fresh-1', title: 'Fresh page 1', body: 'After refresh.', category: 'SYSTEM', publishedAt: null }],
+      total: 3,
+      page: 0,
+      size: 1,
+      hasMore: true,
+      unreadCount: 2,
+    },
+  };
+  await view.rerender(<NotificationsScreen />);
+  expect(view.getByText('Fresh page 1')).toBeTruthy();
+
+  resolveStalePage({
+    items: [{ id: 'stale-2', title: 'Stale page 2', body: 'Should be ignored.', category: 'SYSTEM', publishedAt: null }],
+    total: 2,
+    page: 1,
+    size: 1,
+    hasMore: false,
+    unreadCount: 0,
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(view.queryByText('Stale page 2')).toBeNull();
+  expect(view.getByRole('button', { name: 'notifications.loadMore' })).toBeTruthy();
   await view.unmount();
 });
 

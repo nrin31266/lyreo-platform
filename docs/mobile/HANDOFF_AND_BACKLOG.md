@@ -60,6 +60,17 @@ Phần UI trong `apps/mobile/` trước đây chỉ dựng nhanh để test buil
 - **`client.ts` & `useCoreResource` cần nâng cấp:** `client.ts` hiện ép mọi response 2xx phải là JSON (chưa tải được binary/audio hay đọc header `Location`/`ETag`), còn `useCoreResource` đang nuốt mất object `ApiError` và xóa danh sách đang xem mỗi khi focus lại màn hình.
 - **Native dependencies chưa cài:** `apps/mobile/package.json` chưa có thư viện phát audio, ghi âm, YouTube iframe, icon, hay xử lý ảnh avatar. Nhớ chạy `make mobile-android-install` (rebuild Dev Client) sau khi thêm native libs vì Lyreo **không hỗ trợ Expo Go**.
 
+### 2.4 Nguyên tắc Công nghệ & Thư viện MỞ (Chủ động research, không tự trói tay)
+
+> **Quan trọng:** Danh sách thư viện gợi ý trong tài liệu này **không phải giới hạn cứng**. `apps/mobile/` hiện mới là bộ khung cơ bản trên **Expo + React Native + Expo Router**.
+
+- **Được tự do research & cài thư viện tốt nhất cho trải nghiệm Mobile:** Team có thể chủ động tìm và cài thêm bất kỳ thư viện/SDK phổ biến, còn được bảo trì tốt cho Expo/React Native nếu giúp app đẹp hơn, mượt hơn, nhanh hơn (ví dụ: thư viện UI/component, animation kiểu `react-native-reanimated`, gesture/bottom-sheet như `@gorhom/bottom-sheet`, `FlashList`, audio/video player, waveform, haptic, toast, skeleton, TanStack Query/cache offline, biểu đồ, v.v.).
+- **Không dùng lý do "tài liệu không ghi thư viện đó" để làm giao diện sơ sài hoặc trải nghiệm kém.** Chất lượng app thực tế trên tay người dùng là ưu tiên số 1.
+- **Chỉ cần đảm bảo 3 nguyên tắc khi cài thư viện mới:**
+  1. Tương thích với **Expo Dev Client** (nếu có native code thì rebuild dev client bằng `make mobile-android-install` / `expo prebuild` tương ứng).
+  2. Giữ nguyên hợp đồng **Auth (Keycloak OIDC PKCE + `expo-secure-store`), API Core, server-side authority và không lộ secret**.
+  3. Chạy qua được `pnpm --filter @lyreo/mobile typecheck`, `pnpm --filter @lyreo/mobile test` và `make validate` (không hardcode màu ngoài theme, đủ i18n `en`/`vi`).
+
 ---
 
 ## 3. Luật Chơi Team & Quyền Sửa Backend / Logic / DB / Docs
@@ -216,7 +227,7 @@ Hãy triển khai task [MÃ_TASK — VD: MOB-202] trong repo lyreo-platform theo
 
 Yêu cầu:
 1. Đọc mục 1–4 và dòng [MÃ_TASK] trong docs/mobile/HANDOFF_AND_BACKLOG.md, sau đó mở các file Owner Docs & Code Pointers được ghi ở dòng đó để xem code hiện tại trước khi sửa.
-2. Lưu ý UI cũ trong apps/mobile chỉ là scaffold placeholder: tuân thủ design token/UI kit mới ở Wave 0 (hoặc hoàn thiện sạch đẹp trong src/theme/), KHÔNG hardcode màu hex/rgb bên ngoài src/theme/primitives.ts và semantic.ts, thêm đủ text en + vi vào packages/i18n/src/locales/{en,vi}/mobile.json.
+2. Lưu ý UI cũ trong apps/mobile chỉ là scaffold placeholder: tuân thủ design token/UI kit mới ở Wave 0 (hoặc hoàn thiện sạch đẹp trong src/theme/), KHÔNG hardcode màu hex/rgb bên ngoài src/theme/primitives.ts và semantic.ts, thêm đủ text en + vi vào packages/i18n/src/locales/{en,vi}/mobile.json. Bạn ĐƯỢC TỰ DO research và cài thêm thư viện Expo/React Native tốt, phổ biến (UI, animation, bottom sheet, audio/video, icon, haptic, cache...) để app đẹp và mượt, miễn tương thích Expo Dev Client và không làm hỏng rule kiểm tra repo.
 3. Task này thuộc phạm vi [Full on Mobile / Mobile-Lite] — hãy tối ưu UX di động (nhất là audio/chạm/lặp câu) vừa đúng phạm vi, không over-engineer phần để dành Web.
 4. Bạn ĐƯỢC PHÉP sửa Java backend (modules/*), business logic, thêm Flyway migration mới (V021+) và cập nhật docs/ nếu phát hiện thiếu field, sai format hay bất hợp lý — nhưng phải giữ đúng Spring Modulith boundaries và server-side authority.
 5. Sau khi xong, chạy kiểm tra thực tế và báo kết quả:

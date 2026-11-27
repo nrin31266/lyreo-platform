@@ -507,13 +507,6 @@ WITH seed_sections (id, path_id, title, position) AS (
     ('70000000-0000-0000-0000-000000000643'::uuid, '70000000-0000-0000-0000-000000000604'::uuid, 'Chương 3 · Kinh doanh – Tài chính & Đọc điền đoạn Part 6', 3),
     ('70000000-0000-0000-0000-000000000644'::uuid, '70000000-0000-0000-0000-000000000604'::uuid, 'Chương 4 · Đọc hiểu Đa văn bản Part 7 & Thi thử Full Test', 4)
 ),
-updated_sections AS (
-    UPDATE curriculum_section cs
-    SET title = ss.title
-    FROM seed_sections ss
-    WHERE cs.id = ss.id
-    RETURNING cs.id
-)
 INSERT INTO curriculum_section (id, path_id, title, position)
 SELECT ss.id, ss.path_id, ss.title, ss.position
 FROM seed_sections ss
@@ -746,17 +739,6 @@ verified_items AS (
       OR (v.content_type IN ('TOEIC_DRILL','TOEIC_TEST') AND EXISTS (SELECT 1 FROM toeic_test_catalog t WHERE t.id = v.ref_id)))
       AND EXISTS (SELECT 1 FROM curriculum_section cs WHERE cs.id = v.section_id)
 ),
-updated_items AS (
-    UPDATE curriculum_item ci
-    SET content_type = vi.content_type,
-        content_reference_id = vi.ref_id,
-        required = vi.required,
-        unlock_rule = vi.unlock_rule,
-        config_json = vi.cfg
-    FROM verified_items vi
-    WHERE ci.id = vi.id
-    RETURNING ci.id
-)
 INSERT INTO curriculum_item (id, section_id, position, content_type, content_reference_id, required, unlock_rule, config_json)
 SELECT vi.id, vi.section_id, vi.position, vi.content_type, vi.ref_id, vi.required, vi.unlock_rule, vi.cfg
 FROM verified_items vi

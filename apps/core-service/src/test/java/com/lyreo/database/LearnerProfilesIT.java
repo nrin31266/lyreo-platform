@@ -195,6 +195,53 @@ class LearnerProfilesIT {
     }
 
     @Test
+    void doesNotFallbackLockUnverifiedOrDemotedAccountsWhenKeycloakIsUnavailable() throws Exception {
+        UUID unverified = UUID.randomUUID();
+        UUID unverifiedSubject = UUID.randomUUID();
+        jdbc.update("INSERT INTO app_user(id,keycloak_subject) VALUES (?,?)", unverified, unverifiedSubject.toString());
+        var admin = auth("account-guard-admin", "ADMIN");
+        var unverifiedToken = jwt().jwt(token -> token.subject(unverifiedSubject.toString())
+                .issuedAt(Instant.now().minusSeconds(10)))
+            .authorities(new SimpleGrantedAuthority("ROLE_LEARNER"));
+        String lockUrl = "/api/v1/admin/learners/" + unverified + "/account/lock";
+
+        provider.failConnect = true;
+        try {
+            mvc.perform(put(lockUrl).with(admin).contentType(MediaType.APPLICATION_JSON).content("{\"locked\":true}"))
+                .andExpect(status().isServiceUnavailable());
+            assertThat(jdbc.queryForObject("SELECT account_locked FROM app_user WHERE id = ?", Boolean.class, unverified))
+                .isFalse();
+            assertThat(jdbc.queryForObject("SELECT account_sync_pending FROM app_user WHERE id = ?", Boolean.class, unverified))
+                .isFalse();
+            mvc.perform(get("/api/v1/learner/profile").with(unverifiedToken))
+                .andExpect(status().isOk());
+        } finally {
+            provider.failConnect = false;
+        }
+
+        // Verify once via status(), then revoke manageability (simulating admin promotion) and ensure fallback fails closed again
+        provider.subject = unverifiedSubject;
+        mvc.perform(get("/api/v1/admin/learners/" + unverified + "/account").with(admin))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.management").value("AVAILABLE"));
+
+        provider.subject = UUID.randomUUID();
+        mvc.perform(get("/api/v1/admin/learners/" + unverified + "/account").with(admin))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.management").value("UNMANAGED"));
+
+        provider.failConnect = true;
+        try {
+            mvc.perform(put(lockUrl).with(admin).contentType(MediaType.APPLICATION_JSON).content("{\"locked\":true}"))
+                .andExpect(status().isServiceUnavailable());
+            assertThat(jdbc.queryForObject("SELECT account_locked FROM app_user WHERE id = ?", Boolean.class, unverified))
+                .isFalse();
+        } finally {
+            provider.failConnect = false;
+        }
+    }
+
+    @Test
     void adminCanReadButCannotChangeAToeicTarget() throws Exception {
         var learner = auth("toeic-target-learner", "LEARNER");
         var admin = auth("toeic-target-admin", "ADMIN");

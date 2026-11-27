@@ -3,6 +3,7 @@ package com.lyreo.curriculum.application;
 import com.lyreo.contracts.grammar.GrammarSessionCompletedEvent;
 import com.lyreo.contracts.lesson.LessonActivityCompletedEvent;
 import com.lyreo.contracts.lesson.LessonCompletedEvent;
+import com.lyreo.contracts.lesson.LessonSentenceProgressEvent;
 import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent;
 import com.lyreo.contracts.vocabulary.VocabularyUnitCompletedEvent;
 import com.lyreo.curriculum.application.CurriculumService.CompletionEvidence;
@@ -60,7 +61,34 @@ public class CurriculumCompletionListener {
                 Set.of(),
                 Set.of(),
                 null,
-                Set.of()
+                Set.of(),
+                true
+            )
+        );
+    }
+
+    @ApplicationModuleListener
+    public void onLessonSentenceProgress(LessonSentenceProgressEvent event) {
+        UUID factId = event.factId() != null
+            ? event.factId()
+            : deterministicFactId(
+                "lesson-sentence:" + event.learnerId() + ":" + event.activityId() + ":" + event.sentenceId()
+                    + ":" + event.occurredAt()
+            );
+        curriculumService.onContentCompleted(
+            factId,
+            event.learnerId(),
+            ContentType.LESSON,
+            event.lessonId(),
+            new CompletionEvidence(
+                event.activityType(),
+                Set.of(),
+                Set.copyOf(event.completedSentenceIds()),
+                Set.of(),
+                Set.of(),
+                null,
+                Set.of(),
+                false
             )
         );
     }

@@ -2,6 +2,7 @@ package com.lyreo.lesson.application.practice;
 
 import com.lyreo.contracts.lesson.LessonActivityCompletedEvent;
 import com.lyreo.contracts.lesson.LessonCompletedEvent;
+import com.lyreo.contracts.lesson.LessonSentenceProgressEvent;
 import com.lyreo.lesson.api.LearnerShadowingCompletionPort;
 import com.lyreo.lesson.application.port.LessonPracticeRepository;
 import java.time.Instant;
@@ -56,12 +57,24 @@ public class LearnerShadowingCompletionService implements LearnerShadowingComple
 
         boolean activityCompleted = repository.tryMarkActivityCompleted(learnerId, activityId);
         Instant occurredAt = Instant.now();
-        if (activityCompleted) {
-            List<UUID> completedSentenceIds = repository.findCompletedSentenceIds(
+        boolean sentencePassed = clampedScore >= LessonPracticeService.DEFAULT_COMPLETION_SCORE;
+        List<UUID> completedSentenceIds = (activityCompleted || sentencePassed)
+            ? repository.findCompletedSentenceIds(learnerId, activityId, LessonPracticeService.DEFAULT_COMPLETION_SCORE)
+            : List.of();
+        if (sentencePassed) {
+            events.publishEvent(new LessonSentenceProgressEvent(
+                attemptId,
                 learnerId,
+                lessonId,
                 activityId,
-                LessonPracticeService.DEFAULT_COMPLETION_SCORE
-            );
+                "SHADOWING",
+                sentenceId,
+                clampedScore,
+                completedSentenceIds,
+                occurredAt
+            ));
+        }
+        if (activityCompleted) {
             events.publishEvent(new LessonActivityCompletedEvent(
                 LessonPracticeService.activityFactId(learnerId, activityId),
                 learnerId,

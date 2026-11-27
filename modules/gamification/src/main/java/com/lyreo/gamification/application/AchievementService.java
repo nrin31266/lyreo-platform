@@ -24,6 +24,8 @@ public class AchievementService {
     public static final String METRIC_STREAK_DAYS = "STREAK_DAYS";
     public static final String METRIC_VOCABULARY_REVIEW = "VOCABULARY_REVIEW";
     public static final String METRIC_TOEIC_DRILL_COMPLETED = "TOEIC_DRILL_COMPLETED";
+    public static final String METRIC_SHADOWING_SENTENCE = "SHADOWING_SENTENCE";
+    public static final String METRIC_GRAMMAR_ANSWER = "GRAMMAR_ANSWER";
 
     private final AchievementRepository achievements;
     private final XpLedger xpLedger;
