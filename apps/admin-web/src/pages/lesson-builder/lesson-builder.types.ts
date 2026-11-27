@@ -124,4 +124,5 @@ export type AuthoringOptions = {
   pronunciationStrategy: 'DISABLED' | 'ON_DEMAND' | 'PREGENERATE';
   accent: 'US' | 'UK';
   pronunciationProvider: 'LOCAL' | 'AI';
+  ttsSpeed?: number;
 };

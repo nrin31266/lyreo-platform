@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360" fill="none">
+  <defs>
+    <linearGradient id="bgWork" x1="0" y1="0" x2="640" y2="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0B2228"/>
+      <stop offset="55%" stop-color="#12353E"/>
+      <stop offset="100%" stop-color="#1B4B57"/>
+    </linearGradient>
+    <radialGradient id="tealGlow" cx="320" cy="180" r="220" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#14B8A6" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#0B2228" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="boardSurface" x1="190" y1="74" x2="450" y2="286" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F8FAFC"/>
+      <stop offset="100%" stop-color="#E2E8F0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="640" height="360" fill="url(#bgWork)"/>
+  <rect width="640" height="360" fill="url(#tealGlow)"/>
+
+  <!-- Architectural glass mullions -->
+  <g stroke="#99F6E4" stroke-opacity="0.09" stroke-width="1.5">
+    <line x1="160" y1="0" x2="160" y2="360"/>
+    <line x1="320" y1="0" x2="320" y2="360"/>
+    <line x1="480" y1="0" x2="480" y2="360"/>
+    <circle cx="320" cy="180" r="146"/>
+  </g>
+
+  <!-- Central executive collaboration board -->
+  <rect x="190" y="72" width="260" height="216" rx="20" fill="url(#boardSurface)" stroke="#94A3B8" stroke-width="1.5"/>
+
+  <!-- Top window bar -->
+  <rect x="190" y="72" width="260" height="36" rx="20" fill="#0F172A"/>
+  <rect x="190" y="92" width="260" height="16" fill="#0F172A"/>
+  <circle cx="214" cy="90" r="4.5" fill="#38BDF8"/>
+  <circle cx="228" cy="90" r="4.5" fill="#2DD4BF"/>
+  <circle cx="242" cy="90" r="4.5" fill="#FBBF24"/>
+  <rect x="358" y="85" width="70" height="10" rx="5" fill="#1E293B"/>
+
+  <!-- 2-column executive kanban / negotiation layout -->
+  <!-- Left column: sprint & standup cards -->
+  <rect x="210" y="124" width="106" height="66" rx="12" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <rect x="222" y="136" width="42" height="7" rx="3.5" fill="#0F766E"/>
+  <rect x="222" y="150" width="80" height="7" rx="3.5" fill="#334155"/>
+  <rect x="222" y="164" width="60" height="7" rx="3.5" fill="#94A3B8"/>
+
+  <rect x="210" y="200" width="106" height="68" rx="12" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <rect x="222" y="212" width="48" height="7" rx="3.5" fill="#2563EB"/>
+  <rect x="222" y="226" width="76" height="7" rx="3.5" fill="#334155"/>
+  <circle cx="230" cy="249" r="8" fill="#0EA5E9"/>
+  <circle cx="244" cy="249" r="8" fill="#14B8A6"/>
+  <rect x="262" y="245" width="40" height="8" rx="4" fill="#CBD5E1"/>
+
+  <!-- Right column: global presentation & metrics card -->
+  <rect x="328" y="124" width="102" height="144" rx="12" fill="#0F172A"/>
+  <!-- Mini trend & negotiation node link -->
+  <path d="M344 188L366 168L386 176L412 146" stroke="#2DD4BF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="344" cy="188" r="4" fill="#2DD4BF"/>
+  <circle cx="366" cy="168" r="4" fill="#2DD4BF"/>
+  <circle cx="386" cy="176" r="4" fill="#2DD4BF"/>
+  <circle cx="412" cy="146" r="5" fill="#FBBF24"/>
+
+  <rect x="344" y="210" width="70" height="8" rx="4" fill="#E2E8F0"/>
+  <rect x="344" y="226" width="52" height="7" rx="3.5" fill="#64748B"/>
+  <rect x="344" y="244" width="70" height="10" rx="5" fill="#0D9488"/>
+
+  <!-- Floating speech/briefing badge -->
+  <g transform="translate(148, 166)">
+    <rect x="0" y="0" width="56" height="56" rx="16" fill="#0D9488" stroke="#99F6E4" stroke-opacity="0.6" stroke-width="1.5"/>
+    <path d="M17 22H39M17 29H33M17 36H27" stroke="#F0FDFA" stroke-width="3" stroke-linecap="round"/>
+  </g>
+</svg>

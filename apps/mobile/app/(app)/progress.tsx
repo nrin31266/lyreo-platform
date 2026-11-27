@@ -1,40 +1,18 @@
-import { ScrollView, View } from 'react-native';
+import { ScrollView } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { BackButton } from '@/components/navigation/back-button';
 import { Text } from '@/components/ui/text';
-
-const skills = [
-  ['listening', 72],
-  ['speaking', 64],
-  ['vocabulary', 81],
-  ['grammar', 69],
-] as const;
+import { LearnerProgress } from '@/features/progress/learner-progress';
 
 export default function ProgressScreen() {
   const { t } = useTranslation('mobile');
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerStyle={{ padding: 24, paddingTop: 24, gap: 16, paddingBottom: 24 }}>
+    <ScrollView className="flex-1 bg-background" contentContainerStyle={{ padding: 24, gap: 16 }}>
       <BackButton label={t('progress.back')} />
-      <Text className="mt-[18px] text-[40px] font-semibold tracking-tight text-foreground">{t('progress.title')}</Text>
-      <Text className="leading-[22px] text-muted-foreground">{t('progress.lead')}</Text>
-
-      {skills.map(([name, value]) => (
-        <View className="rounded-lg border border-border bg-surface p-[18px]" key={name}>
-          <View className="flex-row justify-between">
-            <Text className="font-semibold text-foreground">{t(`progress.${name}`)}</Text>
-            <Text className="font-semibold text-primary">{value}</Text>
-          </View>
-          <View className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-            <View className="h-1.5 rounded-full bg-primary" style={{ width: `${value}%` }} />
-          </View>
-        </View>
-      ))}
-
-      <View className="mt-2 rounded-lg bg-secondary p-5">
-        <Text className="font-semibold text-secondary-foreground">{t('progress.week')}</Text>
-        <Text className="my-1.5 text-2xl font-semibold text-secondary-foreground">{t('progress.weekValue')}</Text>
-        <Text className="leading-[22px] text-secondary-foreground opacity-75">{t('progress.weekMeta')}</Text>
-      </View>
+      <Text accessibilityRole="header" className="text-3xl font-semibold tracking-tight text-foreground">
+        {t('progress.title')}
+      </Text>
+      <LearnerProgress />
     </ScrollView>
   );
 }

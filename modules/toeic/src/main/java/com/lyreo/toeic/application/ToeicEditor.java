@@ -67,6 +67,32 @@ public class ToeicEditor {
         var clean=new ToeicDraft(data.title(),data.code(),data.type(),data.year(),data.testNumber(),data.listeningDurationSeconds(),data.readingDurationSeconds(),data.accessMode(),data.requiredFeatureKey(),groups,placements);
         documents.save("toeic",id,revision,clean,actor,ToeicDraft.class);return get(id);
     }
+    @Transactional
+    public void updateAccess(UUID id, String accessMode, String requiredFeatureKey, String actor) {
+        String mode = accessMode == null ? "" : accessMode.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("PUBLIC", "FEATURE").contains(mode)) {
+            throw new RequestValidationException("accessMode must be PUBLIC or FEATURE");
+        }
+        String featureKey = "FEATURE".equals(mode) ? "toeic.full-access" : null;
+        if ("FEATURE".equals(mode) && requiredFeatureKey != null && !requiredFeatureKey.isBlank()
+            && !"toeic.full-access".equals(requiredFeatureKey.trim())) {
+            throw new RequestValidationException("requiredFeatureKey must be toeic.full-access");
+        }
+        var current = get(id);
+        source.updateAccess(id, mode, featureKey);
+        if (documents.find("toeic", id, ToeicDraft.class).isPresent()) {
+            var d = current.draft();
+            var updated = new ToeicDraft(
+                d.title(), d.code(), d.type(), d.year(), d.testNumber(),
+                d.listeningDurationSeconds(), d.readingDurationSeconds(),
+                mode, featureKey, d.groups(), d.placements()
+            );
+            var saved = documents.save("toeic", id, current.revision(), updated, actor, ToeicDraft.class);
+            if ("PUBLISHED".equals(current.status()) && readiness(updated).stream().noneMatch(i -> "ERROR".equals(i.severity()))) {
+                documents.publish("toeic", id, saved.revision(), "Updated access tier", actor, ToeicDraft.class);
+            }
+        }
+    }
     @Transactional public Document<ToeicDraft> publish(UUID id,long revision,String reason,String actor) {
         var data=get(id).draft();
         if(readiness(data).stream().anyMatch(i->i.severity().equals("ERROR"))) throw new StateConflictException("Resolve publication blockers first");

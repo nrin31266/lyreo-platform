@@ -22,6 +22,11 @@ public final class JpaAppUserRepositoryAdapter implements AppUserRepository {
     }
 
     @Override
+    public boolean existsById(UUID id) {
+        return repository.existsById(id);
+    }
+
+    @Override
     public Optional<AppUser> findBySubject(String subject) {
         return repository.findByKeycloakSubject(subject).map(JpaAppUserRepositoryAdapter::toDomain);
     }

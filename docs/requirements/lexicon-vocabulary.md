@@ -12,7 +12,7 @@ forms/lemma, senses, pronunciation, source/license và Vietnamese translation st
 Lexicon sở hữu mục từ và nghĩa phục vụ tra cứu toàn hệ thống. Vocabulary sở hữu
 nội dung học theo chủ đề và trạng thái học cá nhân. Cùng một chữ có thể mang nghĩa
 khác nhau theo ngữ cảnh. Liên kết từ điển phải tùy chọn và có căn cứ ở mức nghĩa.
-Sổ SRS hiện tại còn yêu cầu `headwordId`; danh mục bộ học hoạt động độc lập.
+Endpoint legacy `POST /api/v1/vocabulary/cards` còn yêu cầu `headwordId`, trong khi `POST /api/v1/vocabulary/saved-items` cho phép tùy chọn `headwordId`, và flashcard bộ curated dùng `entryId`.
 
 ### FR-LEX-002 — Contextual lexical resolution
 
@@ -62,6 +62,7 @@ CLI cài gói từ điển đã xác minh. Admin biên tập mục đã có và 
 
 Kho ngôn ngữ có bảng 44 âm theo [IELTS Fighter](https://ielts-fighter.com/tin-tuc/bang-phien-am-tieng-anh-ipa_mt1567386908.html),
 đối chiếu với [bảng IPA tương tác chính thức](https://www.internationalphoneticassociation.org/IPAcharts/IPA_charts_TI/IPA_charts_TI.html).
+Bảng mở với tất cả ký hiệu ở trạng thái chưa chọn, trừ khi liên kết chỉ định một âm hợp lệ.
 Âm mẫu phát trực tiếp từ 43 MP3 của IELTS Fighter. Từ ví dụ dùng bản ghi gốc từ Commons,
 có ghi giấy phép và tác giả. Admin có thể phát riêng âm, riêng từ, hoặc âm rồi đến từ.
 Mục /ʊə/ dùng [âm mẫu PolyU](https://elc.polyu.edu.hk/sounds/lesson4-2.htm)
@@ -100,18 +101,20 @@ với câu cũ. Khi biên tập có thể cập nhật bản dịch đi cùng c�
 ### Thứ tự triển khai Vocabulary
 
 1. Nạp danh mục đã làm sạch một lần, quản lý và kiểm tra nội dung trong Admin.
-2. Cấp API Learner duyệt bộ/unit và học thẻ. Dùng từ, nghĩa Việt, audio và ví dụ
-   để tạo bài chọn nghĩa, chọn từ, sắp xếp chữ, nghe–viết và điền theo ngữ cảnh.
-   Chỉ tạo điền từ từ ví dụ khớp được đáp án; lựa chọn nhiễu sinh từ nhóm học đủ
-   từ phù hợp. Tiến độ đi theo mục học và unit. Lượt chơi giải trí không đổi lịch ôn.
+2. Cấp API Learner duyệt bộ/unit và học thẻ (flashcard SRS theo phạm vi mới + cần ôn,
+   toàn bộ unit hoặc cả bộ). Dùng từ, nghĩa Việt, audio và ví dụ để tạo bài chọn nghĩa,
+   chọn từ, sắp xếp chữ, điền khuyết, nghe–viết, điền theo ngữ cảnh, đoán từ theo nghĩa
+   (có gợi ý/kiểm tra từng câu phía server) và phiên luyện tập kết hợp nhiều dạng theo
+   unit hoặc cả bộ. Chỉ tạo điền từ từ ví dụ khớp được đáp án; lựa chọn nhiễu sinh từ
+   nhóm học đủ từ phù hợp. Tiến độ đi theo mục học và unit. Lượt luyện tập và đoán từ
+   không đổi lịch ôn SRS; chỉ lượt đánh giá trong luồng Học thẻ cập nhật lịch SRS.
 3. Cho phép lưu từ từ bộ học, Lesson và Lexicon. Lưu nghĩa/ngữ cảnh đã chọn cùng
    nguồn tham chiếu. ID Lexicon là thông tin bổ sung khi xác minh được. Chuyển đổi
    sổ SRS cũ có giữ lịch sử, sau đó chốt hợp đồng Learner trước bàn giao frontend.
 
 ### FR-VOC-001 — Save and review card
 
-Learner lưu lexical unit cùng optional context, review và nhận next scheduling
-state/history/mastery.
+Learner tạo, đổi tên và quản lý bộ từ cá nhân. Khi lưu từ Lesson, Lexicon hoặc bộ học, learner chọn bộ đích và giữ nghĩa, ngữ cảnh, tham chiếu nguồn. Màn hình bộ cá nhân phục vụ xem, tìm và sắp xếp từ đã lưu. Thao tác lưu hoặc gỡ từ chỉ thay đổi thư viện cá nhân. Phiên học và lịch SRS thuộc luồng Học.
 
 ### BR-VOC-001 — Scheduler abstraction
 
@@ -175,8 +178,7 @@ Là learner, tôi muốn lưu lexical unit và review để nhận lịch tiếp
 
 #### AC-VOC-001 — Save/review
 
-Given Lexicon entry và authenticated learner, when save/review , then
-card/history/scheduling state thuộc learner được cập nhật và review fact  được publish một lần theo contract.
+Lưu nghĩa vào bộ rồi mở lại phải thấy đúng nghĩa và nguồn của learner đó. Số lượt ôn và XP giữ nguyên. Khi learner thực hiện review trong luồng Học, cập nhật lịch và phát review fact đúng một lần.
 
 #### AC-VOC-002 — Scheduler replaceability
 

@@ -247,8 +247,10 @@ def prior_release_exists(conn, package: ReleasePackage) -> bool:
     )
 
 
-def ensure_single_install(conn, package: ReleasePackage) -> None:
-    """Allow one immutable content release per domain; reruns of that release stay safe."""
+def ensure_single_install(conn, package: ReleasePackage, *, allow_upgrade: bool = False) -> None:
+    """Allow one immutable content release per domain unless controlled upgrade is enabled."""
+    if allow_upgrade:
+        return
     prior = conn.execute(
         """SELECT dr.id, dr.package_version, dr.checksum_sha256
            FROM dataset_release dr
@@ -299,15 +301,32 @@ def package_record_count(package: ReleasePackage) -> int:
     return sum(package.counts.values())
 
 
-def finalize_install(conn, package: ReleasePackage, *, installed_by: str = "setup-data") -> None:
-    """Pin the single accepted release without mutable activation/rollback history."""
+def finalize_install(
+    conn,
+    package: ReleasePackage,
+    *,
+    installed_by: str = "setup-data",
+    allow_upgrade: bool = False,
+) -> None:
+    """Pin the active release, cutting over atomically after SUCCEEDED APPLY when allow_upgrade is set."""
     with conn.transaction():
-        conn.execute(
-            """INSERT INTO dataset_active_release(domain,release_id,activated_by)
-               VALUES(%s,%s,%s)
-               ON CONFLICT(domain) DO NOTHING""",
-            (package.domain, package.release_id, installed_by),
-        )
+        if allow_upgrade:
+            conn.execute(
+                """INSERT INTO dataset_active_release(domain,release_id,activated_by)
+                   VALUES(%s,%s,%s)
+                   ON CONFLICT(domain) DO UPDATE
+                   SET release_id=EXCLUDED.release_id,
+                       activated_at=now(),
+                       activated_by=EXCLUDED.activated_by""",
+                (package.domain, package.release_id, installed_by),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO dataset_active_release(domain,release_id,activated_by)
+                   VALUES(%s,%s,%s)
+                   ON CONFLICT(domain) DO NOTHING""",
+                (package.domain, package.release_id, installed_by),
+            )
         current = conn.execute(
             "SELECT release_id FROM dataset_active_release WHERE domain=%s",
             (package.domain,),

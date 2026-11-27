@@ -16,6 +16,29 @@ export function normalizeLocale(input: string | null | undefined): SupportedLoca
     : fallbackLocale;
 }
 
+export function weaknessMessageKey(type: string, key: string) {
+  switch (type) {
+    case 'GRAMMAR_TOPIC':
+      return 'weakness.grammar';
+    case 'VOCABULARY':
+      return 'weakness.vocabulary';
+    case 'VOCABULARY_UNIT':
+      return 'weakness.vocabularyUnit';
+    case 'TOEIC_PART':
+      return 'weakness.toeicPart';
+    case 'TOEIC_SECTION':
+      return key === 'LISTENING' ? 'weakness.toeicListening' : 'weakness.toeicReading';
+    case 'SHADOWING_ASSESSMENT':
+      return key === 'FLUENCY' ? 'weakness.shadowingFluency' : 'weakness.shadowingWords';
+    case 'LESSON_ACTIVITY':
+      if (key === 'SHADOWING') return 'weakness.shadowing';
+      if (key === 'DICTATION') return 'weakness.dictation';
+      return 'weakness.lesson';
+    default:
+      return 'weakness.study';
+  }
+}
+
 export const adminI18nResources = {
   en: { common: enCommon, admin: enAdmin },
   vi: { common: viCommon, admin: viAdmin },

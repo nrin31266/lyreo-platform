@@ -38,13 +38,14 @@ make setup
 
 `init-dev-env.sh` đồng bộ:
 
-- confidential `lyreo-core-service` client secret giữa Docker/Keycloak bootstrap env;
+- confidential `lyreo-core-service` client secret giữa Docker, Keycloak bootstrap và Core;
 - Core dev bootstrap token.
 
-Core runtime **chưa đọc** secret của `lyreo-core-service`: client/service account này được giữ sẵn
-cho lúc thật sự cần Keycloak Admin API như spec mô tả. Khi capability đó được implement, thêm một
-Core runtime variable cùng code consumer trong cùng change; không copy secret vào Core `.env` trước
-chỉ để “phòng xa”.
+Core dùng `KEYCLOAK_ADMIN_CLIENT_SECRET` và `KEYCLOAK_ADMIN_REALM_URL` để quản lý
+tài khoản học viên. Khi còn trống secret, hồ sơ hiển thị trạng thái chưa cấu hình.
+Bootstrap local cấp `manage-users` cho service account trong realm `lyreo`. Với production,
+cấu hình quyền trong realm triển khai và giữ secret ở Core. Giới hạn quyền theo người dùng
+khi chính sách Keycloak của môi trường hỗ trợ. Core kiểm tra vai trò đích trước từng thao tác.
 
 Bước Keycloak trong `make setup`:
 

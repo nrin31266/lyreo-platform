@@ -14,6 +14,7 @@ public interface BackgroundJobRepository {
     BackgroundJobService.Page list(java.util.Set<com.lyreo.platform.jobs.domain.BackgroundJobStatus> statuses, String type, int page, int size);
     Optional<BackgroundJob> latest(String type, String ownerModule, UUID ownerReferenceId);
     default List<UUID> matchingIds(String type,String ownerModule,java.util.Set<com.lyreo.platform.jobs.domain.BackgroundJobStatus> statuses) {return List.of();}
+    default JobHealthCounts healthCounts(Instant since) { return JobHealthCounts.EMPTY; }
     CancellationResult requestCancellation(UUID id);
     boolean isCancellationRequested(UUID id);
 

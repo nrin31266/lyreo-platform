@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/raleway";
+@import "@xyflow/react/dist/style.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -61,7 +62,7 @@
     --avatar-sky-ink: #264779;
     --avatar-lilac-surface: #e8dff8;
     --avatar-lilac-ink: #513579;
-    --success: #2E7D5B;
+    --success: #287255;
     --warning: #8A5918;
     --background: oklch(1 0 0);
     --foreground: oklch(0.147 0.004 49.25);
@@ -81,11 +82,68 @@
     --border: oklch(0.923 0.003 48.717);
     --input: oklch(0.923 0.003 48.717);
     --ring: oklch(0.709 0.01 56.259);
-    --chart-1: oklch(0.809 0.105 251.813);
-    --chart-2: oklch(0.623 0.214 259.815);
-    --chart-3: oklch(0.546 0.245 262.881);
-    --chart-4: oklch(0.488 0.243 264.376);
-    --chart-5: oklch(0.424 0.199 265.638);
+    --chart-1: #2B6CE6;
+    --chart-2: #0F9D8A;
+    --chart-3: #D97706;
+    --chart-4: #7C3AED;
+    --chart-5: #4B83F2;
+    --tier-bronze: #B45309;
+    --tier-silver: #64748B;
+    --tier-gold: #CA8A04;
+    --tier-platinum: #0891B2;
+    --tier-legendary: #7C3AED;
+    --node-lesson: #2563EB;
+    --node-vocab: #059669;
+    --node-grammar: #D97706;
+    --node-toeic: #7C3AED;
+    --node-toeic-test: #E11D48;
+    --node-speaking: #0891B2;
+    --plan-free-surface: #F8FAFC;
+    --plan-plus-surface: #FFFBEB;
+    --plan-plus-ring: #D97706;
+    --map-canvas: #F8FAFC;
+    --map-stone-done: #10B981;
+    --map-stone-done-edge: #047857;
+    --map-stone-active: #F59E0B;
+    --map-stone-active-edge: #B45309;
+    --map-stone-locked: #E2E8F0;
+    --map-stone-locked-edge: #94A3B8;
+    --reward-diamond: #0284C7;
+    --reward-xp: #D97706;
+    --offer-plus-banner: #1D75F2;
+    --offer-plus-banner-ink: #FFFFFF;
+    --offer-plus-surface: #F5F9FF;
+    --offer-plus-border: #93C5FD;
+    --offer-plus-cta: #1479FF;
+    --offer-plus-cta-hover: #0B65E0;
+    --cefr-a1-bg: #ECFDF5;
+    --cefr-a1-ink: #047857;
+    --cefr-a2-bg: #F0FDF4;
+    --cefr-a2-ink: #15803D;
+    --cefr-b1-bg: #EFF6FF;
+    --cefr-b1-ink: #1D4ED8;
+    --cefr-b2-bg: #EEF2FF;
+    --cefr-b2-ink: #4338CA;
+    --cefr-c1-bg: #F5F3FF;
+    --cefr-c1-ink: #6D28D9;
+    --cefr-c2-bg: #FDF4FF;
+    --cefr-c2-ink: #A21CAF;
+    --pos-noun-bg: #EFF6FF;
+    --pos-noun-ink: #1D4ED8;
+    --pos-verb-bg: #ECFDF5;
+    --pos-verb-ink: #047857;
+    --pos-adj-bg: #FFFBEB;
+    --pos-adj-ink: #B45309;
+    --pos-adv-bg: #F5F3FF;
+    --pos-adv-ink: #6D28D9;
+    --pos-other-bg: #F1F5F9;
+    --pos-other-ink: #475569;
+    --map-road: #CBD5E1;
+    --map-road-done: #10B981;
+    --map-branch: #94A3B8;
+    --map-boss-bg: #5B21B6;
+    --map-boss-ring: #F59E0B;
+    --map-boss-ink: #FFFFFF;
     --radius: 0.875rem;
     --sidebar: oklch(0.985 0.001 106.423);
     --sidebar-foreground: oklch(0.147 0.004 49.25);
@@ -118,11 +176,68 @@
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
     --ring: oklch(0.553 0.013 58.071);
-    --chart-1: oklch(0.809 0.105 251.813);
-    --chart-2: oklch(0.623 0.214 259.815);
-    --chart-3: oklch(0.546 0.245 262.881);
-    --chart-4: oklch(0.488 0.243 264.376);
-    --chart-5: oklch(0.424 0.199 265.638);
+    --chart-1: #2B6CE6;
+    --chart-2: #0F9D8A;
+    --chart-3: #D97706;
+    --chart-4: #7C3AED;
+    --chart-5: #4B83F2;
+    --tier-bronze: #B45309;
+    --tier-silver: #64748B;
+    --tier-gold: #CA8A04;
+    --tier-platinum: #0891B2;
+    --tier-legendary: #7C3AED;
+    --node-lesson: #60A5FA;
+    --node-vocab: #34D399;
+    --node-grammar: #FBBF24;
+    --node-toeic: #A78BFA;
+    --node-toeic-test: #FB7185;
+    --node-speaking: #0891B2;
+    --plan-free-surface: #1E293B;
+    --plan-plus-surface: #2B2111;
+    --plan-plus-ring: #F59E0B;
+    --map-canvas: #0F172A;
+    --map-stone-done: #059669;
+    --map-stone-done-edge: #064E3B;
+    --map-stone-active: #D97706;
+    --map-stone-active-edge: #92400E;
+    --map-stone-locked: #334155;
+    --map-stone-locked-edge: #1E293B;
+    --reward-diamond: #38BDF8;
+    --reward-xp: #FBBF24;
+    --offer-plus-banner: #2563EB;
+    --offer-plus-banner-ink: #FFFFFF;
+    --offer-plus-surface: #0F1D36;
+    --offer-plus-border: #1D4ED8;
+    --offer-plus-cta: #2563EB;
+    --offer-plus-cta-hover: #3B82F6;
+    --cefr-a1-bg: #064E3B;
+    --cefr-a1-ink: #6EE7B7;
+    --cefr-a2-bg: #14532D;
+    --cefr-a2-ink: #86EFAC;
+    --cefr-b1-bg: #1E3A8A;
+    --cefr-b1-ink: #93C5FD;
+    --cefr-b2-bg: #312E81;
+    --cefr-b2-ink: #A5B4FC;
+    --cefr-c1-bg: #4C1D95;
+    --cefr-c1-ink: #C4B5FD;
+    --cefr-c2-bg: #701A75;
+    --cefr-c2-ink: #F0ABFC;
+    --pos-noun-bg: #1E3A8A;
+    --pos-noun-ink: #93C5FD;
+    --pos-verb-bg: #064E3B;
+    --pos-verb-ink: #6EE7B7;
+    --pos-adj-bg: #78350F;
+    --pos-adj-ink: #FCD34D;
+    --pos-adv-bg: #4C1D95;
+    --pos-adv-ink: #C4B5FD;
+    --pos-other-bg: #1E293B;
+    --pos-other-ink: #CBD5E1;
+    --map-road: #334155;
+    --map-road-done: #059669;
+    --map-branch: #475569;
+    --map-boss-bg: #7C3AED;
+    --map-boss-ring: #FBBF24;
+    --map-boss-ink: #F5F3FF;
     --sidebar: oklch(0.216 0.006 56.043);
     --sidebar-foreground: oklch(0.985 0.001 106.423);
     --sidebar-primary: oklch(0.623 0.214 259.815);
@@ -131,6 +246,18 @@
     --sidebar-accent-foreground: oklch(0.985 0.001 106.423);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.553 0.013 58.071);
+}
+
+.achievement-tier-badge {
+    &[data-tier="BRONZE"] { --badge-tier: var(--tier-bronze); }
+    &[data-tier="SILVER"] { --badge-tier: var(--tier-silver); }
+    &[data-tier="GOLD"] { --badge-tier: var(--tier-gold); }
+    &[data-tier="PLATINUM"] { --badge-tier: var(--tier-platinum); }
+    &[data-tier="LEGENDARY"] { --badge-tier: var(--tier-legendary); }
+
+    background-color: color-mix(in srgb, var(--badge-tier, transparent) 15%, var(--background));
+    border-color: color-mix(in srgb, var(--badge-tier, var(--border)) 35%, var(--background));
+    color: color-mix(in srgb, var(--badge-tier, var(--foreground)) 58%, var(--foreground));
 }
 
 @layer base {

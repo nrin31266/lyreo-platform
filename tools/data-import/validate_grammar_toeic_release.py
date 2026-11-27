@@ -56,7 +56,7 @@ def validate_membership_hierarchy(membership: dict, subtopics: dict[str, dict]) 
         )
 
 
-def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
+def validate(root: Path, raw: Path | None, archive: Path | None, *, catalog_only: bool = False) -> dict:
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     require(manifest["format"] == "lyreo.dataset-release" and manifest["manifest_schema_version"] == 1, "Unsupported manifest envelope")
     require(manifest["package"]["domain"] == "grammar-toeic", "Wrong domain")
@@ -64,10 +64,17 @@ def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
     expected_paths = {entry["path"] for entry in inventory}
     require(len(expected_paths) == len(inventory), "Duplicate manifest path")
     actual_paths = {path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()} - {"manifest.json"}
-    require(actual_paths == expected_paths, "Manifest inventory mismatch")
+    if catalog_only:
+        required_paths = {path for path in expected_paths if not path.startswith("media/")}
+        require(required_paths <= actual_paths and actual_paths <= expected_paths, "Manifest inventory mismatch")
+    else:
+        require(actual_paths == expected_paths, "Manifest inventory mismatch")
+    inventory_by_path = {entry["path"]: entry for entry in inventory}
     for entry in inventory:
         relative = Path(entry["path"])
         require(not relative.is_absolute() and ".." not in relative.parts, f"Unsafe manifest path: {relative}")
+        if catalog_only and entry["path"].startswith("media/"):
+            continue
         path = root / entry["path"]
         require(path.is_file() and path.stat().st_size == entry["size_bytes"] and sha256(path) == entry["sha256"], f"File checksum mismatch: {path}")
         if entry["records"] is not None:
@@ -132,8 +139,17 @@ def validate(root: Path, raw: Path | None, archive: Path | None) -> dict:
     for name, expected in manifest["counts"].items():
         require(len(rows(root, name + ".jsonl")) == expected, f"Manifest count mismatch: {name}")
     for asset in asset_list:
-        path = root / asset["path"]
-        require(path.is_file() and sha256(path) == asset["id"] and path.stat().st_size == asset["size_bytes"] and asset["source_paths"], f"Asset corrupted: {asset['id']}")
+        meta = inventory_by_path.get(asset["path"])
+        require(
+            meta is not None
+            and meta["sha256"] == asset["id"]
+            and meta["size_bytes"] == asset["size_bytes"]
+            and asset["source_paths"],
+            f"Asset manifest mismatch: {asset['id']}",
+        )
+        if not catalog_only:
+            path = root / asset["path"]
+            require(path.is_file() and sha256(path) == asset["id"] and path.stat().st_size == asset["size_bytes"] and asset["source_paths"], f"Asset corrupted: {asset['id']}")
     source_media = sorted((path, asset["id"]) for asset in asset_list for path in asset["source_paths"])
     require(len(source_media) == manifest["source"]["media_files"], "Source media count mismatch")
     source_manifest_hash = hashlib.sha256("\n".join(f"{path} {digest}" for path, digest in source_media).encode()).hexdigest()
@@ -338,8 +354,14 @@ def main() -> None:
     parser.add_argument("--raw", type=Path)
     parser.add_argument("--archive", type=Path)
     parser.add_argument("--report", type=Path)
+    parser.add_argument("--catalog-only", action="store_true", help="Skip checking extracted media files on disk")
     args = parser.parse_args()
-    result = validate(args.release.resolve(), args.raw.resolve() if args.raw else None, args.archive.resolve() if args.archive else None)
+    result = validate(
+        args.release.resolve(),
+        args.raw.resolve() if args.raw else None,
+        args.archive.resolve() if args.archive else None,
+        catalog_only=args.catalog_only,
+    )
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")

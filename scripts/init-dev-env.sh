@@ -54,15 +54,14 @@ PY
   fi
 }
 
-# Keep the future `lyreo-core-service` confidential client secret identical across the
-# Docker/Keycloak bootstrap owners. Core runtime does not consume it until an Admin API client
-# is implemented.
+# Keep the local confidential client secret in sync with Keycloak and Core.
 CORE_SECRET=$(get_env "$DOCKER_ENV" LYREO_CORE_CLIENT_SECRET)
 if [[ -z "$CORE_SECRET" || "$CORE_SECRET" == "lyreo-local-core-secret-change-me" ]]; then
   CORE_SECRET=$(openssl rand -hex 32)
   set_env "$DOCKER_ENV" LYREO_CORE_CLIENT_SECRET "$CORE_SECRET"
 fi
 set_env "$KC_ENV" LYREO_CORE_CLIENT_SECRET "$CORE_SECRET"
+set_env "$CORE_ENV" KEYCLOAK_ADMIN_CLIENT_SECRET "$CORE_SECRET"
 
 # Keep Keycloak admin credentials aligned between the container and bootstrap scripts.
 KC_ADMIN=$(get_env "$DOCKER_ENV" KEYCLOAK_ADMIN)
@@ -104,6 +103,7 @@ for key in \
   LEXICON_RELEASE_DIR \
   LEXICON_RELEASE_URL \
   LEXICON_RELEASE_SHA256 \
+  VOCABULARY_RELEASE_URL \
   R2_REGION LOCAL_STORAGE_ROOT DATA_DRIVE_REMOTE; do
   if ! grep -q "^${key}=" "$DATA_ENV"; then
     set_env "$DATA_ENV" "$key" "$(get_env "$DATA_ENV.example" "$key")"

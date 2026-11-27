@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { RiPencilLine } from '@remixicon/react';
+import { RiCameraLine, RiPencilLine } from '@remixicon/react';
 import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
 import type { Area } from 'react-easy-crop';
 import { useTranslation } from 'react-i18next';
@@ -160,7 +160,7 @@ export function LearnerAvatarDialog({ entry }: { entry: LearnerEntry }) {
           aria-label={t('learnerProfiles.changeAvatar')}>
           <LearnerAvatar entry={entry} size="lg" />
           <span className="absolute -right-1 -bottom-1 grid size-5 place-items-center rounded-full bg-background">
-            <RiPencilLine className="size-3!" aria-hidden="true" />
+            <RiCameraLine className="size-3!" aria-hidden="true" />
           </span>
         </Button>
       </DialogTrigger>

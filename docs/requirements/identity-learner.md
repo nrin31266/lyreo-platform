@@ -63,6 +63,20 @@ Admin bấm bút cạnh tên để sửa tại chỗ hoặc bấm ảnh để m�
 chọn ảnh từ các nhóm Thú, Hoa, Nhân vật và Truyện tranh trong cùng một danh sách cuộn,
 hoặc tải JPEG/PNG. Core giữ ảnh riêng tư, chỉ phục vụ cho
 chủ hồ sơ và Admin.
+Trong hồ sơ Admin, mỗi học viên có một gói Free hoặc Plus và lịch sử theo từng lần
+chuyển gói. Admin chỉ có quyền xem mục tiêu điểm TOEIC L&R trong hồ sơ.
+
+Admin có thể đặt lại mật khẩu cho tài khoản học viên với tùy chọn yêu cầu đổi
+mật khẩu ở lần đăng nhập tiếp theo. Core chuyển dữ liệu mật khẩu sang Keycloak
+trong yêu cầu đang xử lý. Nhật ký chỉ ghi người thực hiện, tài khoản, thao tác và thời điểm.
+
+Admin có thể nhập lý do khi khóa hoặc mở khóa. Lý do được lưu trong nhật ký nếu có.
+Core xác nhận tài khoản thuộc phạm vi quản lý với Keycloak trong mỗi yêu cầu khóa hoặc mở khóa.
+Nếu không thể xác nhận, Core giữ nguyên trạng thái. Sau khi xác nhận, Core chặn các phiên đang dùng
+trước khi đồng bộ khóa và đăng xuất với Keycloak. Nếu đồng bộ thất bại, tài khoản vẫn bị chặn
+và Admin có thể thử lại. Sau khi mở khóa, học viên đăng nhập lại để lấy phiên mới.
+Tài khoản có quyền Admin, service account và hồ sơ mẫu không có người dùng Keycloak
+nằm ngoài phạm vi thao tác.
 [Hợp đồng HTTP](../architecture/http-api-contract.md#learner-profile-onboarding-and-admin-directory).
 
 ## User Stories & Acceptance Criteria

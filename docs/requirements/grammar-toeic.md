@@ -72,7 +72,9 @@ Admin rà soát và biên tập đề đã import. Công cụ CLI cài gói dữ
 Part 2 có đúng lựa chọn A/B/C, các Part còn lại có A/B/C/D; nhóm Part 3/4 có 3 câu, Part 6 có 4. Part 7 có 29 câu đọc đơn (2–4 câu/nhóm) và
 25 câu đọc nhiều tài liệu (5 câu với 2–3 tài liệu/nhóm).
 Câu CLOZE Part 6 được phép thiếu stem riêng nhưng phải có passage và số gap duy nhất trong nhóm;
-số gap giữ nguyên trong lịch sử phiên. Câu cần passage/audio nhóm
+số gap giữ nguyên trong lịch sử phiên. Ngân hàng chung hiển thị ngữ cảnh đã import
+và dẫn thẳng đến câu trong đề. Câu ảnh Part 1 có thể dùng ảnh/audio thay cho câu dẫn.
+Câu cần passage/audio nhóm
 không được chọn vào bộ Grammar độc lập.
 Admin chỉ quản lý đề đầy đủ, không tạo/lưu drill, trích Part, đổi số câu hay di chuyển câu sang Part khác.
 Server từ chối nội dung loại DRILL và bản lưu không đủ 200 câu/đúng phân bố Part.

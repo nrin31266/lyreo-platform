@@ -77,11 +77,15 @@ public class OpenApiConfiguration {
                 new Tag().name("Jobs").description("Background job tracking and cancellation"),
                 new Tag().name("AI Administration").description("AI provider and route routing management"),
                 new Tag().name("Lexicon").description("Global learner dictionary lookup"),
-                new Tag().name("Vocabulary").description("Learner vocabulary SRS and review"),
+                new Tag().name("Vocabulary").description("Curated vocabulary catalog, flashcard SRS study, guess-the-word and multi-mode practice, saved cards and collections"),
                 new Tag().name("Grammar").description("Grammar bank questions and practice"),
                 new Tag().name("TOEIC").description("TOEIC test attempts and submission"),
-                new Tag().name("Chat").description("English tutor conversation"),
-                new Tag().name("Realtime").description("Admin realtime SSE feeds")
+                new Tag().name("Entitlement").description("Learner feature entitlements, quota snapshots and manual admin grants"),
+                new Tag().name("Curriculum").description("Learning paths, section progression and admin authoring"),
+                new Tag().name("Gamification").description("Missions, achievements, streaks, XP and Diamond ledger"),
+                new Tag().name("Analytics").description("Learner study overview, metrics and weakness projections"),
+                new Tag().name("Chat").description("English tutor conversations and privacy-preserving admin chat telemetry"),
+                new Tag().name("Realtime").description("Admin realtime SSE feeds and learner notifications")
             ));
     }
 
@@ -105,6 +109,7 @@ public class OpenApiConfiguration {
             );
             describeLearnerSchemas(openApi);
             describeLearnerOperations(openApi, problemContent);
+            describePlatformOperations(openApi, problemContent);
 
             // Operation-level contract for POST /api/v1/admin/lessons/build
             var lessonBuildPath = openApi.getPaths().get("/api/v1/admin/lessons/build");
@@ -322,7 +327,79 @@ public class OpenApiConfiguration {
                     .description("Correlation identifier for tracing"))
                 .addProperty("errors", new ArraySchema()
                     .items(new Schema<>().$ref(VIOLATION_SCHEMA_REF))
-                    .description("Field-level validation errors")));
+                    .description("Field-level validation errors"))
+                .addProperty("featureKey", new StringSchema()
+                    .description("Entitlement or quota feature key when 403/429 applies"))
+                .addProperty("limitType", new StringSchema()
+                    .description("Limit type (CAPACITY or PERIOD_QUOTA) when quota exceeded"))
+                .addProperty("limit", new IntegerSchema()
+                    .description("Configured cap or period quota limit when exceeded"))
+                .addProperty("remaining", new IntegerSchema()
+                    .description("Remaining quota count at denial time"))
+                .addProperty("resetAt", new StringSchema()
+                    .description("ISO-8601 UTC timestamp when a period quota resets"))
+                .addProperty("currentRevision", new IntegerSchema()
+                    .description("Latest server revision when 409 STALE_REVISION occurs"))
+                .addProperty("expiredAt", new StringSchema()
+                    .description("ISO-8601 UTC timestamp when 409 SESSION_EXPIRED occurs")));
+        }
+    }
+
+    private static void describePlatformOperations(OpenAPI openApi, Content problems) {
+        openApi.getPaths().forEach((path, item) -> {
+            if (path.startsWith("/api/v1/learner/entitlements") || path.startsWith("/api/v1/admin/entitlements")) {
+                tagWithProblems(item, "Entitlement", problems, path.contains("/admin/"), false);
+            } else if (path.startsWith("/api/v1/curriculum") || path.startsWith("/api/v1/admin/curriculum")) {
+                tagWithProblems(item, "Curriculum", problems, true, true);
+            } else if (path.startsWith("/api/v1/gamification") || path.startsWith("/api/v1/admin/gamification")) {
+                tagWithProblems(item, "Gamification", problems, true, path.contains("/diamonds"));
+            } else if (path.startsWith("/api/v1/analytics") || path.startsWith("/api/v1/admin/analytics")) {
+                tagWithProblems(item, "Analytics", problems, path.contains("/admin/"), false);
+            } else if (path.startsWith("/api/v1/chat") || path.startsWith("/api/v1/admin/chat")) {
+                tagWithProblems(item, "Chat", problems, false, false);
+            } else if (path.startsWith("/api/v1/vocabulary")
+                || path.startsWith("/api/v1/lessons")
+                || path.startsWith("/api/v1/shadowing-attempts")
+                || path.startsWith("/api/v1/grammar")
+                || path.startsWith("/api/v1/toeic")
+                || path.startsWith("/api/v1/assessment-sessions")) {
+                item.readOperations().forEach(operation -> {
+                    var responses = operation.getResponses();
+                    if (responses != null && !path.startsWith("/api/v1/admin/")) {
+                        addIfMissing(responses, "403", "Feature entitlement or role required", problems);
+                        addIfMissing(responses, "404", "Resource not found", problems);
+                        addIfMissing(responses, "409", "State, revision, expiry, or idempotency conflict", problems);
+                    }
+                });
+            }
+        });
+    }
+
+    private static void tagWithProblems(
+        io.swagger.v3.oas.models.PathItem item,
+        String tag,
+        Content problems,
+        boolean include404,
+        boolean include409
+    ) {
+        item.readOperations().forEach(operation -> {
+            operation.setTags(List.of(tag));
+            var responses = operation.getResponses();
+            if (responses != null) {
+                addIfMissing(responses, "403", "Access or entitlement required", problems);
+                if (include404) {
+                    addIfMissing(responses, "404", "Resource not found", problems);
+                }
+                if (include409) {
+                    addIfMissing(responses, "409", "State or idempotency conflict", problems);
+                }
+            }
+        });
+    }
+
+    private static void addIfMissing(ApiResponses responses, String code, String description, Content problems) {
+        if (!responses.containsKey(code)) {
+            responses.addApiResponse(code, new ApiResponse().description(description).content(problems));
         }
     }
 }

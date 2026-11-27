@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from validate_lexicon_release import SUPPORTED_SCHEMAS
+from release_media import backup_media, media_configuration, restore_media
 
 from clean_import_common import (
     ReleasePackage,
@@ -301,7 +302,13 @@ def reconcile_v2_content(conn, package: ReleasePackage, batch_size: int) -> dict
     return checked
 
 
-def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int) -> dict[str, Any]:
+def apply_import(
+    package: ReleasePackage,
+    *,
+    database_url: str,
+    batch_size: int,
+    allow_upgrade: bool = False,
+) -> dict[str, Any]:
     if batch_size < 1:
         raise ValueError("--batch-size must be positive")
 
@@ -312,7 +319,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int)
     records_inserted = 0
     try:
         lock_import_domain(conn, package.domain)
-        ensure_single_install(conn, package)
+        ensure_single_install(conn, package, allow_upgrade=allow_upgrade)
         register_release(conn, package)
         baseline = not prior_release_exists(conn, package)
         already_imported = conn.execute(
@@ -362,7 +369,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int)
                 },
             })
             run_succeeded = True
-            finalize_install(conn, package)
+            finalize_install(conn, package, allow_upgrade=allow_upgrade)
             return {
                 "mode": "APPLY",
                 "run_id": str(run_id),
@@ -463,7 +470,7 @@ def apply_import(package: ReleasePackage, *, database_url: str, batch_size: int)
             }
             finish_run(conn, run_id, records_read, records_inserted, details)
         run_succeeded = True
-        finalize_install(conn, package)
+        finalize_install(conn, package, allow_upgrade=allow_upgrade)
         return {
             "mode": "APPLY",
             "run_id": str(run_id),
@@ -494,11 +501,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"))
     parser.add_argument("--batch-size", type=int, default=1000)
     parser.add_argument("--apply", action="store_true", help="Write to PostgreSQL; default is a full dry run")
+    parser.add_argument("--allow-upgrade", action="store_true", help="Cut over dataset_active_release after a SUCCEEDED APPLY")
+    parser.add_argument("--backup-media", type=Path, help="Export manifest-referenced media objects to a backup directory")
+    parser.add_argument("--restore-media", type=Path, help="Restore backed-up media objects to target storage")
+    parser.add_argument("--prefix", default="", help="Optional target storage prefix for --backup-media/--restore-media")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if args.backup_media and args.restore_media:
+        raise SystemExit("Specify at most one of --backup-media or --restore-media")
+    if args.restore_media:
+        client, bucket = media_configuration()
+        report = restore_media(args.restore_media, client, bucket, release_root=args.release, prefix=args.prefix)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return
     if not args.release:
         raise SystemExit("--release or LEXICON_RELEASE_DIR is required")
     package = validate_clean_release(
@@ -506,11 +524,18 @@ def main() -> None:
         domain="lexicon",
         validator_name="validate_lexicon_release.py",
     )
-    if args.apply:
+    if args.backup_media:
+        try:
+            client, bucket = media_configuration()
+        except ValueError:
+            client, bucket = None, None
+        report = backup_media(package.root, args.backup_media, client, bucket, prefix=args.prefix)
+    elif args.apply:
         report = apply_import(
             package,
             database_url=db_url_from_args(args.database_url),
             batch_size=args.batch_size,
+            allow_upgrade=args.allow_upgrade,
         )
     else:
         report = dry_run_report(package, args.batch_size)

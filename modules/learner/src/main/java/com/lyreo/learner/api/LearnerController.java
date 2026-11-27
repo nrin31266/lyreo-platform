@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -71,8 +72,13 @@ public class LearnerController {
         @Valid @RequestBody OnboardingRequest request
     ) {
         var user = users.provision(jwt.getSubject(), jwt.getClaimAsString("email"));
-        var profile = onboarding.onboard(user.id(), LearnerProfile.Goal.valueOf(request.goal()),
-            LearnerProfile.Level.valueOf(request.currentLevel()), request.dailyMinutes());
+        var profile = onboarding.onboard(
+            user.id(),
+            LearnerProfile.Goal.valueOf(request.goal()),
+            LearnerProfile.Level.valueOf(request.currentLevel()),
+            request.dailyMinutes(),
+            request.toeicTargetScore()
+        );
         return LearnerProfileDto.from(profile);
     }
 
@@ -92,8 +98,19 @@ public class LearnerController {
     }
 
     @GetMapping(value = "/profile/avatar", produces = MediaType.IMAGE_PNG_VALUE)
-    public ResponseEntity<byte[]> avatar(@AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<byte[]> avatar(
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch
+    ) {
         var user = users.provision(jwt.getSubject(), jwt.getClaimAsString("email"));
+        UUID uploadId = profiles.findByLearnerId(user.id()).map(LearnerProfile::avatarUploadId).orElse(null);
+        if (uploadId != null) {
+            String etag = "\"" + uploadId + "\"";
+            if (etag.equals(ifNoneMatch != null ? ifNoneMatch.strip() : null)) {
+                return LearnerAvatarImage.notModified(etag);
+            }
+            return LearnerAvatarImage.cachedResponse(profiles.avatar(user.id()), etag);
+        }
         return LearnerAvatarImage.response(profiles.avatar(user.id()));
     }
 
@@ -126,10 +143,12 @@ public class LearnerController {
         String goal,
         Integer dailyMinutes,
         String focusArea,
+        Integer toeicTargetScore,
         LearnerPreferencesResponse preferences,
         LearnerProfile.StarterSuggestion starterSuggestion,
         String avatarPreset,
-        UUID avatarUploadId
+        UUID avatarUploadId,
+        String avatarUrl
     ) {
         public static LearnerProfileDto from(LearnerProfile p) {
             if (p == null) return null;
@@ -140,10 +159,12 @@ public class LearnerController {
                 p.goal(),
                 p.dailyMinutes(),
                 p.focusArea(),
+                p.toeicTargetScore(),
                 LearnerPreferencesResponse.from(p.preferences()),
                 p.starterSuggestion(),
                 p.avatarPreset(),
-                p.avatarUploadId()
+                p.avatarUploadId(),
+                p.avatarUploadId() != null ? "/api/v1/learner/profile/avatar?v=" + p.avatarUploadId() : null
             );
         }
     }
@@ -182,8 +203,15 @@ public class LearnerController {
         @JsonDeserialize(using = DailyMinutesDeserializer.class)
         @Min(value = 5, message = "dailyMinutes must be at least 5")
         @Max(value = 240, message = "dailyMinutes must be at most 240")
-        Integer dailyMinutes
-    ) {}
+        Integer dailyMinutes,
+        @Min(value = 10, message = "toeicTargetScore must be at least 10")
+        @Max(value = 990, message = "toeicTargetScore must be at most 990")
+        Integer toeicTargetScore
+    ) {
+        public OnboardingRequest(String goal, String currentLevel, Integer dailyMinutes) {
+            this(goal, currentLevel, dailyMinutes, null);
+        }
+    }
 
     public static final class LearnerProfilePatchRequest extends LearnerAppearancePatchRequest {
         @JsonSetter(nulls = Nulls.FAIL)
@@ -201,10 +229,21 @@ public class LearnerController {
         private String focusArea;
         private boolean changeFocusArea;
 
+        @Min(value = 10, message = "toeicTargetScore must be at least 10")
+        @Max(value = 990, message = "toeicTargetScore must be at most 990")
+        private Integer toeicTargetScore;
+        private boolean changeToeicTargetScore;
+
         @JsonSetter("focusArea")
         public void setFocusArea(String focus) {
             changeFocusArea = true;
             focusArea = focus;
+        }
+
+        @JsonSetter("toeicTargetScore")
+        public void setToeicTargetScore(Integer score) {
+            changeToeicTargetScore = true;
+            toeicTargetScore = score;
         }
 
         LearnerProfile.Patch toDomain() {
@@ -213,7 +252,9 @@ public class LearnerController {
                 goal == null ? null : LearnerProfile.Goal.valueOf(goal),
                 currentLevel == null ? null : LearnerProfile.Level.valueOf(currentLevel),
                 dailyMinutes, changeFocusArea,
-                focusArea == null ? null : LearnerProfile.FocusArea.valueOf(focusArea)
+                focusArea == null ? null : LearnerProfile.FocusArea.valueOf(focusArea),
+                changeToeicTargetScore,
+                toeicTargetScore
             );
         }
     }

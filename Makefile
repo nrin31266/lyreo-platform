@@ -1,4 +1,4 @@
-.PHONY: help init-env doctor setup setup-media deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset db-recreate seed-dev seed-lessons down dev core ai admin mobile \
+.PHONY: help init-env doctor setup setup-media deps deps-java data-fetch data-check lexicon-fetch lexicon-check dev-infra dev-config db-shell db-reset db-recreate seed down dev core ai admin mobile \
         mobile-ios-device-register mobile-ios-build \
         android-check android-emulator-create android-emulator mobile-android-install \
         ai-local clean \
@@ -10,7 +10,7 @@ help:
 	  'Lyreo common commands:' \
 	  '' \
 	  'Setup' \
-	  '  make setup                       First-clone setup: env + deps + infrastructure + local accounts + reference data' \
+	  '  make setup                       First-clone setup: env + deps + infra + Keycloak + frozen datasets (R2 mode) + seed (SKIP_DATA=1 skips dataset import)' \
 	  '  make init-env                    Copy/synchronize local .env files' \
 	  '  make doctor                      Inspect local toolchain/env/data readiness' \
 	  '  make setup-media                 Install the Core YouTube metadata/audio downloader' \
@@ -26,12 +26,12 @@ help:
 	  '  make mobile                      Run Expo Metro bundler (requires Dev Build installed on device/emulator)' \
 	  '' \
 	  'Data' \
-	  '  make setup-data [DATASET=...]     Install vocabulary, lexicon, grammar-toeic or all packages' \
+	  '  make setup-data [DATASET=...]     Install frozen lexicon, grammar-toeic, vocabulary or all releases and seed demo content' \
 	  '  make data-storage-check          Check Core and importer use the same media storage' \
 	  '  make data-ai-pilot ARGS=--execute Run the bounded maintenance pilot (default: dry-run)' \
-	  '  make data-fetch                  Download/verify the versioned Grammar+TOEIC clean release' \
+	  '  make data-fetch                  Download/verify the frozen Grammar+TOEIC clean release' \
 	  '  make data-check                  Verify the installed Grammar+TOEIC clean release' \
-	  '  make lexicon-fetch               Download/verify the versioned Lexicon clean release' \
+	  '  make lexicon-fetch               Download/verify the frozen Lexicon clean release' \
 	  '  make lexicon-check               Verify the installed Lexicon clean release' \
 	  '  make import-clean-vocabulary     Prepare/validate the Vocabulary release (ARGS="--apply" to install once)' \
 	  '  make import-clean-lexicon        Validate/dry-run the pinned Lexicon release (ARGS="--apply" to install once)' \
@@ -42,7 +42,7 @@ help:
 	  '  make db-shell                    Open psql inside PostgreSQL container against Lyreo dev DB' \
 	  '  make db-reset                    Preview lesson-only reset; keeps imported banks and configuration' \
 	  '  make db-recreate                 Preview destructive whole application database recreation' \
-	  '  make seed-dev                    Migrate and seed reference categories in the configured database' \
+	  '  make seed                        Migrate and seed reference data, demo learners, lessons, curriculum paths & media' \
 	  '  make migrate                     Apply Flyway without starting HTTP or workers' \
 	  '  make down-v CONFIRM=lyreo-volumes Delete ALL volumes, including imports and Keycloak' \
 	  '' \
@@ -74,7 +74,7 @@ help:
 	  '  make dev-config                  Validate compose.dev.yml syntax/resolution' \
 	  '  make prod-config                 Validate compose.prod.yml syntax/resolution' \
 	  '' \
-	  'make setup prepares the application; run make setup-data when you need content.' \
+	  'make setup prepares everything and imports frozen content when R2 is configured (or run make setup-data later).' \
 	  '' \
 	  'Android first-time: make android-check -> make android-emulator-create -> make android-emulator -> make mobile-android-install -> make mobile' \
 	  'iOS first-time:     make mobile-ios-device-register -> make mobile-ios-build -> install IPA from EAS URL -> make mobile'
@@ -124,8 +124,6 @@ deps: deps-java
 	pnpm install --frozen-lockfile
 
 DB_SETUP = set -a; . ./apps/core-service/.env && set +a && ./mvnw -B -pl apps/core-service spring-boot:run -Dspring-boot.run.main-class=com.lyreo.platform.bootstrap.DatabaseSetup
-DEV_SEED_FILE := $(CURDIR)/infra/postgres/seed/dev.sql
-seed_database = $(DB_SETUP) -Dspring-boot.run.arguments="--seed-dev \"$(1)\""
 
 setup:
 	$(MAKE) init-env
@@ -134,8 +132,15 @@ setup:
 	$(MAKE) deps
 	$(MAKE) dev-infra
 	@set -a; . ./infra/keycloak/.env && set +a && ./infra/keycloak/scripts/bootstrap-keycloak.sh && ./infra/keycloak/scripts/seed-dev-users.sh
-	@bash scripts/seed-learners.sh
-	@$(call seed_database,$(DEV_SEED_FILE))
+	@if [ "$(SKIP_DATA)" = "1" ]; then \
+	  $(MAKE) seed; \
+	elif ./scripts/check-data-storage.sh --require-r2 >/dev/null 2>&1; then \
+	  $(MAKE) setup-data; \
+	else \
+	  $(MAKE) seed && \
+	  printf '%s\n' \
+	    'Local storage selected; installed demo data. For full datasets, configure R2 in both .env files and run make setup-data.'; \
+	fi
 	@printf '%s\n' \
 	  'Lyreo local dependencies are ready.' \
 	  'Open separate terminals for: make core, make ai, make admin, make mobile.'
@@ -155,12 +160,8 @@ db-reset:
 db-recreate:
 	./scripts/db-reset.sh --database
 
-seed-dev: deps-java
-	@$(call seed_database,$(DEV_SEED_FILE))
-
-LESSON_SEED_FILE ?= $(CURDIR)/infra/postgres/seed/lessons.sql
-seed-lessons: seed-dev
-	@$(call seed_database,$(abspath $(LESSON_SEED_FILE)))
+seed: deps-java
+	./scripts/seed.sh
 
 migrate: deps-java
 	@$(DB_SETUP)

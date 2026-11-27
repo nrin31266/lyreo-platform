@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import io
 import math
 
@@ -24,7 +25,9 @@ class WhisperXRuntime:
 
     async def _stt(self, request: ExecuteRequest) -> ExecuteResponse:
         waveform = await self._audio(request)
-        segments = await asyncio.to_thread(self._transcribe, waveform)
+        fast_turn = request.options.get('timestamps') is False and len(waveform) <= 25 * 16_000
+        transcriber = self._transcribe_fast if fast_turn else self._transcribe
+        segments = await asyncio.to_thread(transcriber, waveform)
         text = ' '.join(segment['text'] for segment in segments)
         if not text:
             raise ValueError('WhisperX found no speech')
@@ -34,7 +37,7 @@ class WhisperXRuntime:
             metadata={'runtime': 'whisperx', 'model': self.cfg.whisperx_asr_model},
         )
 
-    def _transcribe(self, waveform):
+    def _ensure_asr(self):
         import whisperx
 
         device = self.cfg.whisperx_device
@@ -43,11 +46,36 @@ class WhisperXRuntime:
                 self.cfg.whisperx_asr_model, device, language='en', vad_method='silero',
                 compute_type='int8_float16' if device == 'cuda' else 'int8',
             )
-        model = self._asr.model.model
+        return self._asr
+
+    def _transcribe_fast(self, waveform):
+        asr = self._ensure_asr()
+        model = asr.model.model
+        if not model.model_is_loaded:
+            model.load_model()
+        direct, _ = asr.model.transcribe(
+            waveform, language='en', beam_size=1, best_of=1,
+            vad_filter=False, condition_on_previous_text=False, without_timestamps=True,
+        )
+        duration_ms = round(len(waveform) / 16)
+        segments = []
+        for segment in direct:
+            text = segment.text.strip()
+            if not text:
+                continue
+            start_ms = max(0, round((segment.start or 0.0) * 1000))
+            end_ms = min(duration_ms, max(start_ms, round((segment.end or 0.0) * 1000)))
+            segments.append({'text': text, 'start_ms': start_ms, 'end_ms': end_ms})
+        return segments
+
+    def _transcribe(self, waveform):
+        device = self.cfg.whisperx_device
+        asr = self._ensure_asr()
+        model = asr.model.model
         try:
             if not model.model_is_loaded:
                 model.load_model()
-            result = self._asr.transcribe(waveform, batch_size=1, language='en')
+            result = asr.transcribe(waveform, batch_size=1, language='en')
             segments = result['segments']
             word_count = sum(len(segment['text'].split()) for segment in segments)
             duration = len(waveform) / 16_000
@@ -114,6 +142,10 @@ class WhisperXRuntime:
         import whisperx
 
         device = self.cfg.whisperx_device
+        if device == 'cuda' and self._asr is not None:
+            asr_model = self._asr.model.model
+            if asr_model.model_is_loaded:
+                asr_model.unload_model(to_cpu=True)
         if self._aligner is None:
             try:
                 nltk.data.find('tokenizers/punkt_tab/english')
@@ -145,9 +177,18 @@ class WhisperXRuntime:
 
     @staticmethod
     async def _audio(request):
+        raw_b64 = request.input.get('audio_base64')
+        if isinstance(raw_b64, str) and raw_b64.strip():
+            try:
+                decoded = base64.b64decode(raw_b64.strip(), validate=True)
+            except Exception as exc:
+                raise ValueError('WhisperX received invalid audio_base64') from exc
+            if not decoded:
+                raise ValueError('WhisperX audio_base64 decoded to empty bytes')
+            return await asyncio.to_thread(_decode_audio, decoded)
         source = normalize_audio_source(request.input.get('audio') or request.input.get('audio_url'))
         if not source:
-            raise ValueError('WhisperX requires input.audio or input.audio_url')
+            raise ValueError('WhisperX requires input.audio, input.audio_url, or input.audio_base64')
         return await resolve_audio(source, _decode_audio)
 
 

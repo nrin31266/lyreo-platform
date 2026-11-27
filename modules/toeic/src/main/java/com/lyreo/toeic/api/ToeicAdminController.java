@@ -15,6 +15,12 @@ public class ToeicAdminController {
     public ToeicAdminController(ToeicEditor editor,ToeicEditorSource source,DocumentStore documents) {this.editor=editor;this.source=source;this.documents=documents;}
     public record Save(long revision,ToeicDraft content) {}
     public record Action(long revision,String reason,String status,UUID publicationId) {}
+    public record AccessRequest(String accessMode,String requiredFeatureKey) {}
+    @PutMapping("/{id}/access")
+    public DocumentStore.Document<ToeicDraft> updateAccess(@PathVariable UUID id,@RequestBody AccessRequest input,@AuthenticationPrincipal Jwt jwt) {
+        editor.updateAccess(id,input.accessMode(),input.requiredFeatureKey(),jwt.getSubject());
+        return editor.get(id);
+    }
     @GetMapping("/source-review") public List<ToeicEditorSource.ReviewTarget> reviewTargets() {return source.reviewTargets();}
     @GetMapping("/page") public com.lyreo.platform.content.CatalogPage<ToeicEditorSource.Summary> page(@RequestParam(defaultValue="") String q,@RequestParam(required=false) Integer year,@RequestParam(defaultValue="") String status,@RequestParam(defaultValue="") String type,@RequestParam(defaultValue="") String access,@RequestParam(defaultValue="") String quality,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="30") int size) {
         var items=list(q,year,status,type,access,quality,page,size);

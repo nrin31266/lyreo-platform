@@ -44,6 +44,9 @@ public class LearnerProfileService {
 
     @Transactional
     public LearnerProfile patchProfile(UUID learnerId, LearnerProfile.Patch patch) {
+        if (patch.changeToeicTargetScore()) {
+            OnboardingService.validateToeicTargetScore(patch.toeicTargetScore());
+        }
         repository.recordFirstSeen(learnerId);
         return repository.patchProfile(learnerId, patch)
             .orElseThrow(() -> new StateConflictException("Complete onboarding before editing the profile"));

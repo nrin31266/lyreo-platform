@@ -4,6 +4,10 @@ import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.lexicon.application.LexiconSearchService;
 import com.lyreo.lexicon.domain.LexiconEntry;
 import com.lyreo.lexicon.domain.LexiconSearchResult;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -27,8 +31,8 @@ public class LexiconController {
     }
 
     @GetMapping("/search")
-    public LexiconSearchResponse search(@RequestParam("q") String query,
-                                        @RequestParam(defaultValue = "20") int limit) {
+    public LexiconSearchResponse search(@RequestParam("q") @NotBlank @Size(max = 120) String query,
+                                        @RequestParam(defaultValue = "20") @Min(1) @Max(50) int limit) {
         LexiconSearchResult result = search.search(query, limit);
         return new LexiconSearchResponse(result.results().stream()
             .map(hit -> new LexiconSearchHitResponse(hit.entryId(), hit.headword(),
@@ -48,6 +52,12 @@ public class LexiconController {
     public LexiconEntryResponse get(@PathVariable UUID id) {
         return search.findById(id).map(detailMapper::from)
             .orElseThrow(() -> new ResourceNotFoundException("Lexicon entry not found: " + id));
+    }
+
+    @GetMapping("/by-headword/{headwordId}")
+    public LexiconEntryResponse getByHeadword(@PathVariable UUID headwordId) {
+        return search.findByHeadwordId(headwordId).map(detailMapper::from)
+            .orElseThrow(() -> new ResourceNotFoundException("Lexicon entry not found for headword: " + headwordId));
     }
 
     public record LexiconEntryResponse(
@@ -81,7 +91,15 @@ public class LexiconController {
 
     public record PronunciationResponse(UUID id, UUID itemId, String accent, String ipa,
                                         String audioFile, String audioUrl, String sourceUrl,
-                                        List<String> tags, UUID assetId,Map<String,Object> pronunciationContext, List<String> regions) {}
+                                        List<String> tags, UUID assetId, String audioEndpoint,
+                                        Map<String,Object> pronunciationContext, List<String> regions) {
+        public PronunciationResponse(UUID id, UUID itemId, String accent, String ipa,
+                                     String audioFile, String audioUrl, String sourceUrl,
+                                     List<String> tags, UUID assetId,
+                                     Map<String,Object> pronunciationContext, List<String> regions) {
+            this(id, itemId, accent, ipa, audioFile, audioUrl, sourceUrl, tags, assetId, null, pronunciationContext, regions);
+        }
+    }
 
     public record PronunciationVariantResponse(UUID id,String form,String notation,String notationSystem,String usage,String scopeStatus,String partOfSpeech,List<String> regions,List<PronunciationResponse> recordings) {}
     public record TranslationResponse(UUID id, UUID itemId, UUID senseId, String wordVi,

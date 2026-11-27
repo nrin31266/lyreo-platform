@@ -4,10 +4,19 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
-import { RiRefreshLine, RiSearchLine, RiLoader4Line, RiExternalLinkLine, RiFileCopyLine, RiDownloadLine, RiCheckLine } from '@remixicon/react';
+import {
+  RiRefreshLine,
+  RiSearchLine,
+  RiLoader4Line,
+  RiExternalLinkLine,
+  RiFileCopyLine,
+  RiDownloadLine,
+  RiCheckLine,
+} from '@remixicon/react';
 import { AdminPagination } from '@/components/AdminPagination';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { statusBadgeVariant } from '@/components/ContentBadges';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -26,22 +35,32 @@ import type { Job } from './jobs.types';
 const active = new Set(['QUEUED', 'RUNNING', 'RETRY_WAIT', 'CANCEL_REQUESTED']);
 const cancellable = new Set(['QUEUED', 'RUNNING', 'RETRY_WAIT']);
 const statuses = ['ACTIVE', 'QUEUED', 'RUNNING', 'RETRY_WAIT', 'CANCEL_REQUESTED', 'FAILED', 'SUCCEEDED', 'CANCELLED'];
+const quickStatuses = [
+  { value: '', key: 'jobs.quickFilters.ALL' },
+  { value: 'ACTIVE', key: 'jobs.quickFilters.ACTIVE' },
+  { value: 'FAILED', key: 'jobs.quickFilters.FAILED' },
+  { value: 'SUCCEEDED', key: 'jobs.quickFilters.SUCCEEDED' },
+] as const;
 const jobTypes = ['LESSON_AUTHORING', 'LESSON_BUILD', 'LESSON_SOURCE_PREVIEW', 'VOICE_SAMPLE_PREPARE', 'YOUTUBE_CHANNEL_SYNC', 'DATA_IMPORT', 'LEXICON_EDITORIAL_AI', 'QUESTION_EDITORIAL_AI'];
 const authoring = (job: Job) => job.ownerModule === 'lesson' && job.jobType === 'LESSON_AUTHORING' && !!job.ownerReferenceId;
+
 function JobStatus({ job }: { job: Job }) {
   const { t } = useTranslation('admin');
-  return <Badge variant={job.status === 'FAILED' ? 'destructive' : job.status === 'SUCCEEDED' ? 'success' : active.has(job.status) ? 'secondary' : 'outline'}>
+  return <Badge variant={statusBadgeVariant(job.status)}>
     {active.has(job.status) && <RiLoader4Line className="size-3 motion-safe:animate-spin" aria-hidden="true" />}
     {t(`lessonAuthoring.labels.${job.status}`, { defaultValue: job.status })}
   </Badge>;
 }
+
 function Duration({ job }: { job: Job }) {
   return <JobDuration job={{ ...job, jobId: job.id, operation: job.jobType, usage: [] }} />;
 }
+
 function JobSkeleton() {
   const { t } = useTranslation('admin');
   return <div role="status" aria-label={t('loading')} className="jobs-skeleton">{[0, 1, 2, 3, 4].map(i => <div key={i}><Skeleton className="h-10 w-2/5" /><Skeleton className="h-5 w-24" /><Skeleton className="h-5 w-1/4" /></div>)}</div>;
 }
+
 export function JobsPage() {
   const { t, i18n } = useTranslation('admin');
   const [params, setParams] = useSearchParams();
@@ -54,11 +73,13 @@ export function JobsPage() {
   const list = useQuery({ queryKey: ['jobs', status, type, page], queryFn: ({ signal }) => fetchJobs(new URLSearchParams({ status, type, page: String(page), size: '20' }), signal), placeholderData: keepPreviousData, refetchInterval: connection === 'connected' ? 30000 : 5000 });
   const query = useQuery({ queryKey: ['job', queryId], queryFn: ({ signal }) => fetchJob(queryId, signal), enabled: validId,
     refetchInterval: q => q.state.data && active.has(q.state.data.status) ? connection === 'connected' ? 30000 : 2500 : false });
+
   function update(key: string, value: string) {
     const next = new URLSearchParams(params); if (value) next.set(key, value); else next.delete(key);
     if (key !== 'page' && key !== 'job') next.delete('page');
     setParams(next);
   }
+
   function lookup(event: FormEvent) {
     event.preventDefault();
     const value = id.trim();
@@ -66,15 +87,61 @@ export function JobsPage() {
     setValidationError('');
     if (value === queryId) void query.refetch(); else update('job', value);
   }
+
   function refresh() { void list.refetch(); if (validId) void query.refetch(); }
+
   const date = (value?: string | null) => value ? new Date(value).toLocaleString(i18n.language, { dateStyle: 'short', timeStyle: 'short' }) : '—';
+
   return <section className="jobs-page">
-    <header className="page-heading"><div><h1>{t('jobs.title')}</h1><p className="lead">{t('jobs.lead')}</p></div><Button variant="outline" disabled={list.isFetching || query.isFetching} onClick={refresh}><RiRefreshLine className={list.isFetching || query.isFetching ? 'motion-safe:animate-spin' : ''} />{t('jobs.refresh')}</Button></header>
+    <header className="page-heading">
+      <div>
+        <h1>{t('jobs.title')}</h1>
+        <p className="lead">{t('jobs.lead')}</p>
+      </div>
+      <div className="jobs-header-actions">
+        <Button variant="outline" disabled={list.isFetching || query.isFetching} onClick={refresh}>
+          <RiRefreshLine className={list.isFetching || query.isFetching ? 'motion-safe:animate-spin' : ''} />
+          {t('jobs.refresh')}
+        </Button>
+      </div>
+    </header>
+
     <div className="jobs-toolbar">
-      <div className="jobs-filters"><Select value={status || 'ALL'} onValueChange={value => update('status', value === 'ALL' ? '' : value)}><SelectTrigger aria-label={t('jobs.status')}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">{t('jobs.allStatuses')}</SelectItem>{statuses.map(value => <SelectItem key={value} value={value}>{value === 'ACTIVE' ? t('jobs.active') : t(`lessonAuthoring.labels.${value}`)}</SelectItem>)}</SelectContent></Select>
-      <Select value={type || 'ALL'} onValueChange={value => update('type', value === 'ALL' ? '' : value)}><SelectTrigger aria-label={t('jobs.type')}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">{t('jobs.allTypes')}</SelectItem>{jobTypes.map(value => <SelectItem key={value} value={value}>{t(`jobs.types.${value}`)}</SelectItem>)}</SelectContent></Select></div>
-      <form className="jobs-lookup" onSubmit={lookup}><Input value={id} aria-label={t('jobs.jobUuid')} placeholder={t('jobs.lookupPlaceholder')} onChange={e => { setId(e.target.value); setValidationError(''); }} aria-invalid={!!validationError} /><Button type="submit" variant="outline" disabled={query.isFetching || !id.trim()}><RiSearchLine />{t('jobs.inspect')}</Button></form>
+      <div className="jobs-filters">
+        <div className="jobs-quick-pills" role="group" aria-label={t('jobs.status')}>
+          {quickStatuses.map(item => (
+            <Button
+              key={item.key}
+              type="button"
+              size="xs"
+              variant={status === item.value ? 'secondary' : 'ghost'}
+              onClick={() => update('status', item.value)}
+            >
+              {t(item.key)}
+            </Button>
+          ))}
+        </div>
+        <Select value={status || 'ALL'} onValueChange={value => update('status', value === 'ALL' ? '' : value)}>
+          <SelectTrigger aria-label={t('jobs.status')}><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">{t('jobs.allStatuses')}</SelectItem>
+            {statuses.map(value => <SelectItem key={value} value={value}>{value === 'ACTIVE' ? t('jobs.active') : t(`lessonAuthoring.labels.${value}`)}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={type || 'ALL'} onValueChange={value => update('type', value === 'ALL' ? '' : value)}>
+          <SelectTrigger aria-label={t('jobs.type')}><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">{t('jobs.allTypes')}</SelectItem>
+            {jobTypes.map(value => <SelectItem key={value} value={value}>{t(`jobs.types.${value}`)}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+      <form className="jobs-lookup" onSubmit={lookup}>
+        <Input value={id} aria-label={t('jobs.jobUuid')} placeholder={t('jobs.lookupPlaceholder')} onChange={e => { setId(e.target.value); setValidationError(''); }} aria-invalid={!!validationError} />
+        <Button type="submit" variant="outline" disabled={query.isFetching || !id.trim()}><RiSearchLine />{t('jobs.inspect')}</Button>
+      </form>
     </div>
+
     {validationError && <p role="alert" className="text-sm text-destructive">{validationError}</p>}
     <div className="jobs-sync" role="status"><span className="jobs-connection" data-connected={connection === 'connected'} />{t(`jobs.connection.${connection}`)}<span>{t('jobs.lastUpdated', { time: list.dataUpdatedAt ? new Date(list.dataUpdatedAt).toLocaleTimeString(i18n.language) : '—' })}</span>{list.isFetching && <RiLoader4Line className="size-3 motion-safe:animate-spin" aria-hidden="true" />}</div>
     <CatalogError error={list.error} retry={() => void list.refetch()} retrying={list.isFetching} />
@@ -82,7 +149,19 @@ export function JobsPage() {
       <TableCell><button className="jobs-task" onClick={() => update('job', job.id)}><strong>{t(`jobs.types.${job.jobType}`, { defaultValue: job.jobType })}</strong><span>{t('jobs.shortId', { id: job.id.slice(0, 8) })} · {t('jobs.attempt', { current: job.attemptCount, max: job.maxAttempts })}</span></button></TableCell>
       <TableCell><JobStatus job={job} /></TableCell>
       <TableCell><div className="jobs-progress"><span>{job.currentStep ? t(`lessonAuthoring.labels.${job.currentStep}`, { defaultValue: job.currentStep }) : t('jobs.waiting')}</span>{active.has(job.status) && <Progress value={job.progressPercent} aria-label={t('jobs.progress')} />}{job.errorCode && <span className="text-destructive">{job.errorCode}</span>}</div></TableCell>
-      <TableCell className="jobs-date">{date(job.createdAt)}</TableCell><TableCell><Duration job={job} /></TableCell><TableCell><Button variant="outline" size="sm" onClick={() => update('job', job.id)}>{t('jobs.details')}</Button></TableCell>
+      <TableCell className="jobs-date">{date(job.createdAt)}</TableCell><TableCell><Duration job={job} /></TableCell>
+      <TableCell>
+        <div className="jobs-row-actions">
+          <Button variant="outline" size="sm" onClick={() => update('job', job.id)}>{t('jobs.details')}</Button>
+          {authoring(job) && (
+            <Button asChild variant="ghost" size="sm">
+              <Link to={`/lessons/${job.ownerReferenceId}`} aria-label={`${t('jobs.openLesson')} ${job.id.slice(0, 8)}`}>
+                <RiExternalLinkLine aria-hidden="true" />
+              </Link>
+            </Button>
+          )}
+        </div>
+      </TableCell>
     </TableRow>)}</TableBody></Table></div> : !list.isError && <Empty><EmptyTitle>{t('jobs.emptyTitle')}</EmptyTitle><EmptyDescription>{t(status || type ? 'jobs.emptyFiltered' : 'jobs.emptyDescription')}</EmptyDescription>{(status || type) && <Button variant="outline" onClick={() => { const next = new URLSearchParams(params); ['status', 'type', 'page'].forEach(key => next.delete(key)); setParams(next); }}>{t('jobs.clearFilters')}</Button>}</Empty>}
     {list.data && <footer className="jobs-pagination"><span>{t('jobs.total', { count: list.data.total })}</span><AdminPagination page={list.data.page} pageCount={Math.ceil(list.data.total / list.data.size)} disabled={list.isFetching || list.isError} onPageChange={page => update('page', page ? String(page) : '')} /></footer>}
     <Sheet open={!!queryId} onOpenChange={open => { if (!open) update('job', ''); }}><SheetContent className="jobs-sheet"><SheetHeader><SheetTitle>{t('jobs.details')}</SheetTitle><SheetDescription>{t('jobs.detailsHelp')}</SheetDescription></SheetHeader>
@@ -90,6 +169,7 @@ export function JobsPage() {
     </SheetContent></Sheet>
   </section>;
 }
+
 function JobDetails({ job, date }: { job: Job; date: (value?: string | null) => string }) {
   const { t } = useTranslation('admin'), client = useQueryClient();
   const [confirm, setConfirm] = useState(false), [technical, setTechnical] = useState(false), [copied, setCopied] = useState(false), [copyError, setCopyError] = useState(false);
@@ -106,7 +186,11 @@ function JobDetails({ job, date }: { job: Job; date: (value?: string | null) => 
     {job.status === 'CANCEL_REQUESTED' && <p className="jobs-help">{t('jobs.cancellationPending')}</p>}
     <dl className="jobs-dates">{[['created', job.createdAt], ['started', job.startedAt], ['finished', job.finishedAt], ['nextRetry', job.nextRetryAt]].map(([label, value]) => <div key={label}><dt>{t(`jobs.${label}`)}</dt><dd>{date(value)}</dd></div>)}</dl>
     <p className="jobs-help">{t('jobs.durationHelp')}</p>
-    <div className="jobs-detail-actions">{authoring(job) && <Button asChild><Link to={`/lessons/${job.ownerReferenceId}`}><RiExternalLinkLine />{t('jobs.openLesson')}</Link></Button>}{cancellable.has(job.status) && <Button variant="outline" onClick={() => { mutation.reset(); setConfirm(true); }}>{t('jobs.requestCancellation')}</Button>}</div>
+    <div className="jobs-detail-actions">
+      {authoring(job) && <Button asChild><Link to={`/lessons/${job.ownerReferenceId}`}><RiExternalLinkLine />{t('jobs.openLesson')}</Link></Button>}
+      {authoring(job) && active.has(job.status) && <Button asChild variant="outline"><Link to={`/lessons/new?draft=${job.ownerReferenceId}`}><RiExternalLinkLine />{t('jobs.openDraft')}</Link></Button>}
+      {cancellable.has(job.status) && <Button variant="outline" onClick={() => { mutation.reset(); setConfirm(true); }}>{t('jobs.requestCancellation')}</Button>}
+    </div>
     {authoring(job) && <section className="jobs-technical"><Button variant="outline" onClick={() => setTechnical(value => !value)} aria-expanded={technical}>{t('finish.technical')}</Button>{technical && <><CatalogError error={diagnostics.error} retry={() => void diagnostics.refetch()} retrying={diagnostics.isFetching} />{diagnostics.isPending ? <Skeleton className="h-40 w-full" /> : diagnostics.data && <><p className="jobs-help">{t(diagnostics.data.length ? 'jobs.diagnosticHelp' : 'finish.noDiagnostic')}</p><div className="jobs-detail-actions"><Button variant="outline" size="sm" disabled={diagnostics.isFetching || diagnostics.isError} onClick={() => void copy()}>{copied ? <RiCheckLine /> : <RiFileCopyLine />}{t(copied ? 'jobs.copied' : 'finish.copyDiagnostic')}</Button><Button variant="outline" size="sm" disabled={diagnostics.isFetching || diagnostics.isError} onClick={() => { const url = URL.createObjectURL(new Blob([json], { type: 'application/json' })), link = document.createElement('a'); link.href = url; link.download = `job-${job.id}.json`; link.click(); URL.revokeObjectURL(url); }}><RiDownloadLine />{t('finish.downloadDiagnostic')}</Button></div>{copyError && <p role="alert">{t('jobs.copyFailed')}</p>}<pre tabIndex={0}>{json}</pre></>}</>}</section>}
     <Dialog open={confirm} onOpenChange={open => { if (!mutation.isPending) setConfirm(open); }}><DialogContent><DialogHeader><DialogTitle>{t('jobs.cancelDialog.title')}</DialogTitle><DialogDescription>{t('jobs.cancelDialog.description')}</DialogDescription></DialogHeader><CatalogError error={mutation.error} />{!cancellable.has(job.status) && <p>{t('jobs.noLongerCancellable')}</p>}<div className="jobs-detail-actions"><Button variant="outline" disabled={mutation.isPending} onClick={() => setConfirm(false)}>{t('common:actions.cancel')}</Button><Button variant="destructive" disabled={mutation.isPending || !cancellable.has(job.status)} onClick={() => void cancel()}>{mutation.isPending && <RiLoader4Line className="motion-safe:animate-spin" />}{t('jobs.cancelDialog.confirm')}</Button></div></DialogContent></Dialog>
   </div>;

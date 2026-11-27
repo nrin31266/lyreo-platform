@@ -21,10 +21,24 @@ public final class JdbcAiAdminRepository implements AiAdminRepository {
     public List<ProviderSummary> providers() {
         return jdbc.query(
             """
-            SELECT id, code, display_name, base_url, enabled, connection_status,
-                   key_last4, (encrypted_api_key IS NOT NULL) AS configured
-              FROM ai_provider
-             ORDER BY code
+            SELECT p.id, p.code, p.display_name, p.base_url, p.enabled,
+                   CASE
+                       WHEN p.connection_status IS DISTINCT FROM 'UNKNOWN' THEN p.connection_status
+                       WHEN latest.status = 'SUCCEEDED' THEN 'HEALTHY'
+                       WHEN latest.status = 'FAILED' THEN 'FAILED'
+                       ELSE 'UNKNOWN'
+                   END AS connection_status,
+                   p.key_last4, (p.encrypted_api_key IS NOT NULL) AS configured
+              FROM ai_provider p
+              LEFT JOIN LATERAL (
+                  SELECT inv.status
+                    FROM ai_invocation inv
+                   WHERE inv.provider_code = p.code
+                     AND inv.status IN ('SUCCEEDED', 'FAILED')
+                   ORDER BY inv.started_at DESC
+                   LIMIT 1
+              ) latest ON true
+             ORDER BY p.code
             """,
             Map.of(),
             (rs, rowNum) -> new ProviderSummary(

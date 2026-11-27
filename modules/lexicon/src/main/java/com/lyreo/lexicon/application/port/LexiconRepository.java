@@ -8,6 +8,10 @@ import java.util.UUID;
 
 public interface LexiconRepository {
     Optional<LexiconEntry> findById(UUID id);
+
+    default Optional<LexiconEntry> findByHeadwordId(UUID headwordId) {
+        return Optional.empty();
+    }
     LexiconSearchResult search(String displayQuery, String lookupQuery, int limit);
     Optional<LexiconEntry> findByNormalizedForm(String normalizedForm);
 

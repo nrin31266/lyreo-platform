@@ -17,6 +17,7 @@ export type LearnerEntry = {
   focusArea: string | null;
   avatarPreset: AvatarPreset | null;
   avatarUploadId: string | null;
+  toeicTargetScore: number | null;
 };
 
 type LearnerPage = {
@@ -55,4 +56,108 @@ export function uploadLearnerAvatar(id: string, file: File) {
 export async function fetchLearnerAvatar(id: string, signal?: AbortSignal) {
   const response = await http.get<Blob>(`${base}/${encodeURIComponent(id)}/avatar`, { signal, responseType: 'blob' });
   return response.data;
+}
+
+export type LearnerPlanTier = 'FREE' | 'PLUS';
+
+export type LearnerPlan = {
+  tier: LearnerPlanTier;
+  validUntil: string | null;
+  history: { tier: LearnerPlanTier; changedAt: string }[];
+};
+
+export type DiamondTransactionEntry = {
+  id: string;
+  amount: number;
+  balanceAfter?: number;
+  reason: string;
+  sourceType?: string | null;
+  sourceReference?: string | null;
+  createdAt: string;
+};
+
+export type LearnerGamificationSummary = {
+  learnerId: string;
+  xp: number;
+  level: number;
+  xpIntoLevel: number;
+  xpForNextLevel: number;
+  diamondBalance: number;
+  currentStreak: number;
+  longestStreak: number;
+  lastActiveDate: string | null;
+  transactions: DiamondTransactionEntry[];
+};
+
+export type AdjustLearnerDiamondsInput = {
+  amount: number;
+  reason: string;
+  idempotencyKey: string;
+};
+
+export type AdjustDiamondsResponse = {
+  transactionId: string;
+  learnerId: string;
+  amount: number;
+  balance: number;
+  reason: string;
+  idempotencyKey: string;
+  ruleVersion: string;
+  createdAt: string;
+};
+
+const gamificationBase = '/api/v1/admin/gamification/learners';
+
+function planUrl(learnerId: string) {
+  return `/api/v1/admin/entitlements/learners/${encodeURIComponent(learnerId)}/plan`;
+}
+
+export function fetchLearnerPlan(learnerId: string, signal?: AbortSignal) {
+  return api<LearnerPlan>(planUrl(learnerId), { signal });
+}
+
+export function updateLearnerPlan(learnerId: string, tier: LearnerPlanTier, durationDays?: number) {
+  return api<LearnerPlan>(planUrl(learnerId), {
+    method: 'PUT',
+    body: JSON.stringify({ tier, durationDays }),
+  });
+}
+
+export function fetchLearnerGamification(learnerId: string, signal?: AbortSignal) {
+  return api<LearnerGamificationSummary>(`${gamificationBase}/${encodeURIComponent(learnerId)}`, { signal });
+}
+
+export function adjustLearnerDiamonds(learnerId: string, input: AdjustLearnerDiamondsInput) {
+  return api<AdjustDiamondsResponse>(`${gamificationBase}/${encodeURIComponent(learnerId)}/diamonds`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export type LearnerAccountStatus = {
+  management: 'AVAILABLE' | 'UNCONFIGURED' | 'UNMANAGED';
+  locked: boolean;
+  syncPending: boolean;
+};
+
+function accountUrl(learnerId: string) {
+  return `${base}/${encodeURIComponent(learnerId)}/account`;
+}
+
+export function fetchLearnerAccount(learnerId: string, signal?: AbortSignal) {
+  return api<LearnerAccountStatus>(accountUrl(learnerId), { signal });
+}
+
+export function resetLearnerPassword(learnerId: string, password: string, changeOnNextLogin: boolean) {
+  return api<void>(`${accountUrl(learnerId)}/password`, {
+    method: 'PUT',
+    body: JSON.stringify({ password, changeOnNextLogin }),
+  });
+}
+
+export function setLearnerAccountLock(learnerId: string, locked: boolean, reason?: string) {
+  return api<LearnerAccountStatus>(`${accountUrl(learnerId)}/lock`, {
+    method: 'PUT',
+    body: JSON.stringify({ locked, reason }),
+  });
 }

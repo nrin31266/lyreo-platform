@@ -4,7 +4,7 @@ Lyreo runs application source locally for debugging and hot reload. Docker devel
 
 ## First development loop
 
-Run `make init-env`, `make doctor`, and the needed dependency/setup targets from the root README. Start `make dev-infra` before Core. Run `make dev` for Core, AI and Admin in one terminal (`APPS="..."` selects services; Ctrl+C stops them, not Docker), or run `make core`, `make ai`, `make admin`, or `make mobile` in separate terminals as needed. Mobile needs an installed Expo development build; see [Mobile](../apps/mobile/README.md). For integrated YouTube authoring, run `make setup-media`, enable acquisition in the Core local env and restart Core (see [Core](../apps/core-service/README.md#youtube-authoring-tools)). Fresh-clone setup seeds reference data. Run `make setup-data` separately for the content you need. Dataset operations live in [Data Import](../tools/data-import/README.md).
+Follow the [first-clone setup](../README.md#first-clone) to configure R2, seed demo data and import the frozen datasets. Start `make dev-infra` before Core. Run `make dev` for Core, AI and Admin in one terminal (`APPS="..."` selects services; Ctrl+C stops them, not Docker), or run `make core`, `make ai`, `make admin`, or `make mobile` in separate terminals as needed. Mobile needs an installed Expo development build; see [Mobile](../apps/mobile/README.md). For integrated YouTube authoring, run `make setup-media`, enable acquisition in the Core local env and restart Core (see [Core](../apps/core-service/README.md#youtube-authoring-tools)). Dataset operations live in [Data Import](../tools/data-import/README.md).
 
 New development env files select the shared R2 bucket for sample lessons and full dataset imports.
 See [Data Import](../tools/data-import/README.md) for credentials and package installation.
@@ -32,18 +32,18 @@ The foundation closeout starts with `V001` for schema and `V002` for reference d
 append from `V003`. Databases from the pre-closeout 31-migration history need a fresh application
 database and a new import. Keep a backup of application data you need before resetting. [D-035](DECISIONS.md#d-035--consolidate-the-foundation-schema-before-team-onboarding-2026-11-22) records the cutover.
 
-Development defaults live in [`infra/postgres/seed/dev.sql`](../infra/postgres/seed/dev.sql).
-Run `make seed-dev` to migrate and bootstrap the datasource configured in Core's `.env`; it does
-not select the Compose database independently. It adds 24 stable categories with English
-names and Vietnamese translations, plus [development AI defaults](CONFIGURATION.md#development-ai-defaults).
-Rerunning preserves existing categories, providers, credentials and routes.
-No automatic reseeding runs at startup. Large banks stay under the [import tools](DATA_PIPELINES.md).
+Development defaults live in [`infra/postgres/seed/dev.sql`](../infra/postgres/seed/dev.sql),
+published text lessons live in [`infra/postgres/seed/lessons.sql`](../infra/postgres/seed/lessons.sql), and
+curated curriculum paths, badges, learners, and cover media live in [`infra/postgres/seed/demo.sql`](../infra/postgres/seed/demo.sql).
+Run `make seed` to migrate and idempotently apply all three layers (`dev.sql` -> `lessons.sql` ->
+`seed-demo.sh` + `demo.sql`) against the datasource configured in Core's `.env`. It adds 24 stable
+categories with English names and Vietnamese translations, [development AI defaults](CONFIGURATION.md#development-ai-defaults),
+published demo lessons, and curated learning paths without overwriting existing edits or routes.
+No automatic reseeding runs at startup. Large banks stay under the frozen [import tools](../tools/data-import/README.md).
 
-`make seed-lessons` adds the ten published lessons in the tracked fixture after bootstrap.
-Each snapshot includes transcript timing, practice content and source metadata. Core needs
-access to the canonical audio objects in the shared development bucket. Rerunning preserves
-existing lessons and metadata.
-
+Before importing a lesson snapshot, seed checks its canonical TEXT WAV objects in the configured
+storage. Missing, invalid, or silent audio keeps the affected lessons unavailable to learners.
+Run seed again after installing the correct audio to restore availability while preserving editorial visibility.
 Set `LESSON_SEED_FILE` to use a separately exported SQL snapshot. Keep private raw corpora and
 credentials out of Git.
 
@@ -86,6 +86,10 @@ newer than the installed app dependencies; manifests and project contracts still
 overwriting its worktree or posting safeguards. Do not replace it through a generic registry install.
 
 ## CodeGraph pilot
+
+MCP clients that read `.mcp.json` (Claude Code, Antigravity, Cursor): `cp .mcp.example.json .mcp.json`.
+The example lists only project tools (CodeGraph, shadcn); put personal servers and tokens in your own
+user-level config, never in this file.
 
 CodeGraph 1.6.2 is an optional, project-scoped navigation tool, not a runtime dependency or a
 verification gate. [Project Codex config](../.codex/config.toml) runs its MCP server through pnpm,

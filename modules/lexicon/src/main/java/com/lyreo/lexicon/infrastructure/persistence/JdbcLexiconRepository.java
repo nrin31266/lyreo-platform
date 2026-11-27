@@ -71,6 +71,52 @@ public final class JdbcLexiconRepository implements LexiconRepository {
         }
         return hydrate(headers).stream().findFirst();
     }
+
+    @Override
+    public Optional<LexiconEntry> findByHeadwordId(UUID headwordId) {
+        List<UUID> entryIds = jdbc.query(
+            """
+            SELECT e.id
+              FROM dataset_active_release ar
+              JOIN lexicon_entry e ON e.release_id = ar.release_id
+             WHERE ar.domain = 'lexicon'
+               AND e.headword_id = :headwordId
+             ORDER BY e.id
+             LIMIT 1
+            """,
+            Map.of("headwordId", headwordId),
+            (rs, n) -> rs.getObject("id", UUID.class)
+        );
+        if (!entryIds.isEmpty()) {
+            return findById(entryIds.getFirst());
+        }
+        if (documents != null) {
+            List<EditorialOverride> overrides = jdbc.query(
+                """
+                SELECT d.id, d.status, p.content
+                  FROM content_document d
+                  LEFT JOIN content_publication p ON p.id = d.publication_id
+                 WHERE d.namespace = 'lexicon'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM content_source_binding b
+                        WHERE b.namespace = d.namespace AND b.document_id = d.id AND NOT b.enabled
+                   )
+                   AND d.status = 'PUBLISHED'
+                   AND d.publication_id IS NOT NULL
+                   AND p.content->>'headwordId' = :headword
+                 ORDER BY d.id
+                 LIMIT 1
+                """,
+                Map.of("headword", headwordId.toString()),
+                (rs, n) -> new EditorialOverride(rs.getObject(1, UUID.class), rs.getString(2), rs.getString(3))
+            );
+            if (!overrides.isEmpty() && overrides.getFirst().content() != null) {
+                var override = overrides.getFirst();
+                return Optional.of(drafts.entry(override.id(), documents.read(override.content(), LexiconDraft.class)));
+            }
+        }
+        return Optional.empty();
+    }
     private <V> Map<String,V> jsonMap(String value) {
         return json.readValue(value,new tools.jackson.core.type.TypeReference<Map<String,V>>(){});
     }

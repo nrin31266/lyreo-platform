@@ -18,12 +18,12 @@ import tools.jackson.databind.ObjectMapper;
 public final class JdbcLearnerProfileRepository implements LearnerProfileRepository {
     private static final String PROFILE_COLUMNS = """
         learner_id, display_name, current_level, goal, daily_minutes, focus_area,
-        preferences_json, onboarding_completed_at, avatar_preset, avatar_upload_id
+        preferences_json, onboarding_completed_at, avatar_preset, avatar_upload_id, toeic_target_score
         """;
     private static final String DIRECTORY_COLUMNS = """
         SELECT p.learner_id, p.display_name, u.email_snapshot, p.first_seen_at,
                p.onboarding_completed_at, p.goal, p.current_level, p.daily_minutes, p.focus_area,
-               p.avatar_preset, p.avatar_upload_id
+               p.avatar_preset, p.avatar_upload_id, p.toeic_target_score
         """;
     private static final String DIRECTORY_FROM = """
         FROM learner_profile p JOIN identity_user_directory u ON u.id = p.learner_id
@@ -75,13 +75,26 @@ public final class JdbcLearnerProfileRepository implements LearnerProfileReposit
     public LearnerProfile completeOnboarding(
         UUID learnerId, LearnerProfile.Goal goal, LearnerProfile.Level level, int minutes
     ) {
+        return completeOnboarding(learnerId, goal, level, minutes, null);
+    }
+
+    @Override
+    public LearnerProfile completeOnboarding(
+        UUID learnerId, LearnerProfile.Goal goal, LearnerProfile.Level level, int minutes, Integer toeicTargetScore
+    ) {
+        var params = new MapSqlParameterSource("id", learnerId)
+            .addValue("goal", goal.name())
+            .addValue("level", level.name())
+            .addValue("minutes", minutes)
+            .addValue("toeicTargetScore", toeicTargetScore, java.sql.Types.SMALLINT);
         var completed = jdbc.query("""
             UPDATE learner_profile
             SET goal = :goal, current_level = :level, daily_minutes = :minutes,
+                toeic_target_score = COALESCE(:toeicTargetScore, toeic_target_score),
                 onboarding_completed_at = now(), updated_at = now()
             WHERE learner_id = :id AND onboarding_completed_at IS NULL
             RETURNING
-            """ + PROFILE_COLUMNS, Map.of("id", learnerId, "goal", goal.name(), "level", level.name(), "minutes", minutes),
+            """ + PROFILE_COLUMNS, params,
             this::readProfile);
         return completed.stream().findFirst().orElseGet(() -> findByLearnerId(learnerId).orElseThrow());
     }
@@ -93,13 +106,16 @@ public final class JdbcLearnerProfileRepository implements LearnerProfileReposit
             .addValue("goal", patch.goal() == null ? null : patch.goal().name())
             .addValue("minutes", patch.dailyMinutes())
             .addValue("changeFocus", patch.changeFocusArea())
-            .addValue("focus", patch.focusArea() == null ? null : patch.focusArea().name());
+            .addValue("focus", patch.focusArea() == null ? null : patch.focusArea().name())
+            .addValue("changeToeicTarget", patch.changeToeicTargetScore())
+            .addValue("toeicTargetScore", patch.toeicTargetScore(), java.sql.Types.SMALLINT);
         return jdbc.query("""
             UPDATE learner_profile SET
                 current_level = coalesce(:level, current_level),
                 goal = coalesce(:goal, goal),
                 daily_minutes = coalesce(:minutes, daily_minutes),
                 focus_area = CASE WHEN :changeFocus THEN :focus ELSE focus_area END,
+                toeic_target_score = CASE WHEN :changeToeicTarget THEN :toeicTargetScore ELSE toeic_target_score END,
             """ + APPEARANCE_UPDATE + """
             WHERE learner_id = :id AND onboarding_completed_at IS NOT NULL
             RETURNING
@@ -178,7 +194,8 @@ public final class JdbcLearnerProfileRepository implements LearnerProfileReposit
             readPreferences(rs.getString("preferences_json")),
             instant(rs, "onboarding_completed_at"),
             rs.getString("avatar_preset"),
-            rs.getObject("avatar_upload_id", UUID.class)
+            rs.getObject("avatar_upload_id", UUID.class),
+            rs.getObject("toeic_target_score", Integer.class)
         );
     }
 
@@ -196,7 +213,8 @@ public final class JdbcLearnerProfileRepository implements LearnerProfileReposit
             rs.getObject("daily_minutes", Integer.class),
             rs.getString("focus_area"),
             rs.getString("avatar_preset"),
-            rs.getObject("avatar_upload_id", UUID.class)
+            rs.getObject("avatar_upload_id", UUID.class),
+            rs.getObject("toeic_target_score", Integer.class)
         );
     }
 

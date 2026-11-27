@@ -1,6 +1,7 @@
 package com.lyreo.database;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -11,9 +12,15 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.lyreo.contracts.errors.ServiceUnavailableException;
+import com.lyreo.identity.api.AdminLearnerAccountController;
+import com.lyreo.identity.application.LearnerAccountService;
+import com.lyreo.identity.application.port.LearnerAccountProvider;
 import com.lyreo.identity.infrastructure.IdentityConfiguration;
+import com.lyreo.identity.infrastructure.persistence.JdbcLearnerAccountStore;
 import com.lyreo.identity.infrastructure.persistence.JpaAppUserEntity;
 import com.lyreo.identity.infrastructure.persistence.SpringDataAppUserJpaRepository;
 import com.lyreo.learner.api.AdminLearnerController;
@@ -26,6 +33,8 @@ import com.lyreo.platform.web.ApiExceptionHandler;
 import com.lyreo.platform.web.ApiProblemWriter;
 import com.lyreo.platform.web.ProblemAccessDeniedHandler;
 import com.lyreo.platform.web.ProblemAuthenticationEntryPoint;
+import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
@@ -38,6 +47,7 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.persistence.autoconfigure.EntityScan;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
@@ -67,18 +77,178 @@ class LearnerProfilesIT {
         IdentityConfiguration.class, LearnerConfiguration.class, LearnerController.class, AdminLearnerController.class,
         SecurityConfiguration.class, ApiRateLimitConfiguration.class, OpenApiConfiguration.class,
         ApiExceptionHandler.class, ApiProblemWriter.class, ProblemAccessDeniedHandler.class,
-        ProblemAuthenticationEntryPoint.class
+        ProblemAuthenticationEntryPoint.class, AdminLearnerAccountController.class,
+        LearnerAccountService.class, JdbcLearnerAccountStore.class
     })
-    static class Config {}
+    static class Config {
+        @Bean FakeAccountProvider testAccountProvider() { return new FakeAccountProvider(); }
+    }
+
+    static class FakeAccountProvider implements LearnerAccountProvider, LearnerAccountProvider.Connection {
+        UUID subject;
+        boolean enabled = true;
+        boolean failConnect;
+        boolean failLogout;
+        boolean temporary;
+        @Override public boolean configured() { return true; }
+        @Override public Optional<Connection> connect(UUID id) {
+            if (failConnect) throw new ServiceUnavailableException("KEYCLOAK_ACCOUNT_UNAVAILABLE", "Unavailable", null);
+            return id.equals(subject) ? Optional.of(this) : Optional.empty();
+        }
+        @Override public boolean enabled() { return enabled; }
+        @Override public void enable(boolean next) { enabled = next; }
+        @Override public void endSessions() {
+            if (failLogout) throw new ServiceUnavailableException("KEYCLOAK_ACCOUNT_UNAVAILABLE", "Unavailable", null);
+        }
+        @Override public void resetPassword(String password, boolean changeOnNextLogin) {
+            temporary = changeOnNextLogin;
+        }
+    }
 
     @Autowired WebApplicationContext context;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper json;
+    @Autowired FakeAccountProvider provider;
     MockMvc mvc;
 
     @BeforeEach
     void configureMvc() {
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
+    }
+
+    @Test
+    void resetsPasswordsWithEitherOptionAndKeepsSessionsBlockedAcrossLockAndUnlock() throws Exception {
+        UUID learner = UUID.randomUUID();
+        UUID subject = UUID.randomUUID();
+        jdbc.update("INSERT INTO app_user(id,keycloak_subject) VALUES (?,?)", learner, subject.toString());
+        provider.subject = subject;
+        var admin = auth("account-management-admin", "ADMIN");
+        var issued = Instant.now().minusSeconds(30);
+        var oldToken = jwt().jwt(token -> token.subject(subject.toString()).issuedAt(issued))
+            .authorities(new SimpleGrantedAuthority("ROLE_LEARNER"));
+        String account = "/api/v1/admin/learners/" + learner + "/account";
+        String reset = account + "/password";
+        String lock = account + "/lock";
+        for (boolean temporary : new boolean[] { true, false }) {
+            String passwordPayload = json.writeValueAsString(java.util.Map.of(
+                "password", "Fixture-Password!87", "changeOnNextLogin", temporary));
+            mvc.perform(put(reset).with(oldToken).contentType(MediaType.APPLICATION_JSON).content(passwordPayload))
+                .andExpect(status().isForbidden());
+            mvc.perform(put(reset).with(admin).contentType(MediaType.APPLICATION_JSON).content(passwordPayload))
+                .andExpect(status().isNoContent());
+            assertThat(provider.temporary).isEqualTo(temporary);
+        }
+
+        String lockRequest = """
+            {"locked":true}
+            """;
+        String unlockRequest = """
+            {"locked":false,"reason":"  Test account recovery  "}
+            """;
+        provider.failConnect = true;
+        try {
+            mvc.perform(put(lock).with(admin).contentType(MediaType.APPLICATION_JSON).content(lockRequest))
+                .andExpect(status().isServiceUnavailable());
+            mvc.perform(get("/api/v1/learner/profile").with(oldToken))
+                .andExpect(status().isOk());
+        } finally {
+            provider.failConnect = false;
+        }
+        provider.failLogout = true;
+        try {
+            mvc.perform(put(lock).with(admin).contentType(MediaType.APPLICATION_JSON).content(lockRequest))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.locked").value(true))
+                .andExpect(jsonPath("$.syncPending").value(true));
+            assertThat(jdbc.queryForList("SELECT action FROM admin_activity_directory WHERE learner_id = ?", String.class, learner))
+                .contains("LOCK_REQUESTED");
+            mvc.perform(get("/api/v1/learner/profile").with(oldToken))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string("WWW-Authenticate", containsString("invalid_token")));
+            mvc.perform(put(lock).with(admin).contentType(MediaType.APPLICATION_JSON).content(unlockRequest))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.syncPending").value(true));
+            assertThat(jdbc.queryForList("SELECT action FROM admin_activity_directory WHERE learner_id = ?", String.class, learner))
+                .contains("UNLOCK_REQUESTED").doesNotContain("LOCK_REQUESTED");
+            assertThat(provider.enabled).isFalse();
+        } finally {
+            provider.failLogout = false;
+        }
+
+        mvc.perform(put(lock).with(admin).contentType(MediaType.APPLICATION_JSON).content(lockRequest))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.syncPending").value(false));
+        mvc.perform(put(lock).with(admin).contentType(MediaType.APPLICATION_JSON).content(unlockRequest))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.locked").value(false));
+        assertThat(provider.enabled).isTrue();
+        assertThat(jdbc.queryForList("SELECT action FROM admin_activity_directory WHERE learner_id = ?", String.class, learner))
+            .contains("LOCKED", "UNLOCKED").doesNotContain("LOCK_REQUESTED", "UNLOCK_REQUESTED");
+        mvc.perform(get("/api/v1/learner/profile").with(oldToken)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/learner/profile").with(jwt().jwt(token -> token.subject(subject.toString())
+                .issuedAt(Instant.now().plusSeconds(2))).authorities(new SimpleGrantedAuthority("ROLE_LEARNER"))))
+            .andExpect(status().isOk());
+        assertThat(jdbc.queryForList("SELECT action FROM learner_account_audit WHERE learner_id = ? ORDER BY id", String.class, learner))
+            .contains("TEMPORARY_PASSWORD_SET", "PASSWORD_SET", "LOCKED", "UNLOCKED");
+        assertThat(jdbc.queryForObject("SELECT reason FROM learner_account_audit WHERE learner_id = ? AND action = 'LOCKED'",
+            String.class, learner)).isNull();
+        assertThat(jdbc.queryForObject("SELECT reason FROM learner_account_audit WHERE learner_id = ? AND action = 'UNLOCKED'",
+            String.class, learner)).isEqualTo("Test account recovery");
+    }
+
+    @Test
+    void doesNotChangeLockWithoutCurrentEligibility() throws Exception {
+        UUID unverified = UUID.randomUUID();
+        UUID unverifiedSubject = UUID.randomUUID();
+        jdbc.update("INSERT INTO app_user(id,keycloak_subject) VALUES (?,?)", unverified, unverifiedSubject.toString());
+        var admin = auth("account-guard-admin", "ADMIN");
+        var unverifiedToken = jwt().jwt(token -> token.subject(unverifiedSubject.toString())
+                .issuedAt(Instant.now().minusSeconds(10)))
+            .authorities(new SimpleGrantedAuthority("ROLE_LEARNER"));
+        String lockUrl = "/api/v1/admin/learners/" + unverified + "/account/lock";
+
+        provider.failConnect = true;
+        try {
+            mvc.perform(put(lockUrl).with(admin).contentType(MediaType.APPLICATION_JSON).content("{\"locked\":true}"))
+                .andExpect(status().isServiceUnavailable());
+            assertThat(jdbc.queryForObject("SELECT account_locked FROM app_user WHERE id = ?", Boolean.class, unverified))
+                .isFalse();
+            assertThat(jdbc.queryForObject("SELECT account_sync_pending FROM app_user WHERE id = ?", Boolean.class, unverified))
+                .isFalse();
+            mvc.perform(get("/api/v1/learner/profile").with(unverifiedToken))
+                .andExpect(status().isOk());
+        } finally {
+            provider.failConnect = false;
+        }
+
+        // A successful read does not replace live eligibility verification for a later write.
+        provider.subject = unverifiedSubject;
+        mvc.perform(get("/api/v1/admin/learners/" + unverified + "/account").with(admin))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.management").value("AVAILABLE"));
+
+        provider.subject = UUID.randomUUID();
+        provider.failConnect = true;
+        try {
+            mvc.perform(put(lockUrl).with(admin).contentType(MediaType.APPLICATION_JSON).content("{\"locked\":true}"))
+                .andExpect(status().isServiceUnavailable());
+            assertThat(jdbc.queryForObject("SELECT account_locked FROM app_user WHERE id = ?", Boolean.class, unverified))
+                .isFalse();
+        } finally {
+            provider.failConnect = false;
+        }
+    }
+
+    @Test
+    void adminCanReadButCannotChangeAToeicTarget() throws Exception {
+        var learner = auth("toeic-target-learner", "LEARNER");
+        var admin = auth("toeic-target-admin", "ADMIN");
+        var profile = mvc.perform(get("/api/v1/learner/profile").with(learner))
+            .andExpect(status().isOk()).andReturn();
+        String id = json.readTree(profile.getResponse().getContentAsString()).get("userId").asString();
+        jdbc.update("UPDATE learner_profile SET toeic_target_score = 750 WHERE learner_id = ?", UUID.fromString(id));
+        String directoryUrl = "/api/v1/admin/learners/" + id;
+        mvc.perform(put(directoryUrl + "/toeic-target").with(admin)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"score\":800}"))
+            .andExpect(status().isNotFound());
+        mvc.perform(get(directoryUrl).with(admin))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.toeicTargetScore").value(750));
     }
 
     @Test

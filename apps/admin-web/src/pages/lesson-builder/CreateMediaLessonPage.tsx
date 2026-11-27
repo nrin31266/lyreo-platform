@@ -17,7 +17,7 @@ import { RiLoader4Line } from '@remixicon/react';
 import { SourceInspectionSkeleton } from './AuthoringSkeleton';
 import { ProcessingStatus } from './ProcessingStatus';
 import { ContentOptionsPanel,defaultContentOptions } from './ContentEditor';
-import { VoiceSelect } from './VoiceSelect';
+import { TtsSpeedSelect, VoiceSelect } from './VoiceSelect';
 import { validSelection } from './timeline-view';
 import { timecode } from './timecode';
 import * as authoring from './lesson-builder.api';
@@ -76,6 +76,19 @@ export function CreateMediaLessonPage({ type, onDirtyChange, onBusyChange }: { t
       {type === 'text' ? <>
         <Field><FieldLabel htmlFor="source-text">{t('media.text')}</FieldLabel><Textarea className="min-h-64" id="source-text" value={text} maxLength={10000} required rows={10} onChange={event => setText(event.target.value)} /><FieldDescription>{t('media.textHelp')}</FieldDescription></Field>
         <VoiceSelect value={voice} onChange={setVoice} disabled={create.isPending} />
+        <TtsSpeedSelect
+          value={options.ttsSpeed ?? 1}
+          disabled={create.isPending}
+          onChange={(speed) =>
+            setOptions((prev) => {
+              if (speed === 1) {
+                const { ttsSpeed: _removed, ...rest } = prev;
+                return rest;
+              }
+              return { ...prev, ttsSpeed: speed };
+            })
+          }
+        />
       </> : <Field><FieldLabel htmlFor="audio-file">{t('media.upload')}</FieldLabel><Input id="audio-file" type="file" accept=".mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/mp4" disabled={upload.isPending || create.isPending} onChange={event => {
         const file = event.currentTarget.files?.[0];
         if (!file) return;

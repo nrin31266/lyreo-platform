@@ -21,6 +21,12 @@ Admin uses React/Vite, React Router, local shadcn Radix components and the full 
 `src/styles/globals.css` owns the default preset palette and light/dark success/warning colors;
 feature styles live with their owners. Admin has no dependency on Mobile theme tokens. Shared EN/VI strings live in `packages/i18n`.
 
+Use `ContentBadges.tsx` for recurring badge meanings. Success, publication and enabled states are
+green. Drafts and items needing attention are amber. Failures, blocked items and deletion are red.
+Processing, disabled states and ordinary metadata use neutral colors. Difficulty follows green
+(easy or 1–2), amber (medium or 3) and red (hard or 4–5). Free/Plus, CEFR, parts of speech and
+achievement tiers use their shared badges with visible labels.
+
 Axios owns authenticated transport, timeout, cancellation and Problem Details. TanStack Query owns
 server data, invalidation and polling while jobs are active; mutations do not retry automatically.
 One authenticated SSE stream per Admin layout invalidates job/draft queries, resynchronizes on
@@ -51,10 +57,10 @@ category/channel routes redirect to the corresponding tab. Filters remain in the
 Category creation/editing opens in a dialog, keeping the list position on close. Category pickers in
 source creation, draft settings and lesson metadata share a searchable, bounded scrolling list;
 filtering preserves selections. Metadata dialogs keep Save/Cancel visible while their fields scroll.
-Catalog tables align row actions at the right: text buttons open/continue lessons, icons edit,
-synchronize, inspect jobs or delete with confirmation. Lifecycle badges distinguish drafts (warning),
-published/synchronized (success), processing (neutral) and failures/deletion (destructive); visibility
-is a separate labeled switch. Lesson rows show CEFR, duration and activities when available.
+Catalog tables align row actions at the right. Lesson actions include the labeled visibility switch.
+On wide tables, source, CEFR, duration, activities and access have their own columns.
+The desktop vocabulary workspace keeps the filters, table headings and pagination visible while
+the catalog navigation and word results scroll independently.
 
 Metadata (display title, description, image URL and categories) can change independently of published
 learning content. Inactive history-free drafts delete permanently; published lessons soft-delete

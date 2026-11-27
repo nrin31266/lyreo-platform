@@ -26,11 +26,23 @@ public interface VocabularyCatalog {
 
     enum Review { ALL, NEEDS_REVIEW, MISSING_VI, MISSING_SYNONYMS, MISSING_ANTONYMS, HIDDEN }
 
-    record Pack(UUID id, String titleEn, String titleVi, boolean hidden, long revision, long unitCount, long entryCount, UUID coverImage) {}
+    record Pack(UUID id, String titleEn, String titleVi, boolean hidden, long revision, long unitCount, long entryCount, UUID coverImage,
+                String accessMode, String requiredFeatureKey) {
+        public Pack(UUID id, String titleEn, String titleVi, boolean hidden, long revision, long unitCount, long entryCount, UUID coverImage) {
+            this(id, titleEn, titleVi, hidden, revision, unitCount, entryCount, coverImage, "PUBLIC", null);
+        }
+    }
     record Unit(UUID id, String title, String level, boolean hidden, long revision, long entryCount) {}
     record EntrySummary(UUID id, UUID packId, UUID unitId, String unitTitle, String level, String term,
                         String pos, String ipa, int senseCount, String definitionEn, String meaningVi,
-                        UUID audioId, boolean hidden, boolean needsReview, boolean missingVietnamese) {}
+                        UUID audioId, boolean hidden, boolean needsReview, boolean missingVietnamese, boolean hasConflict) {
+        public EntrySummary(UUID id, UUID packId, UUID unitId, String unitTitle, String level, String term,
+                            String pos, String ipa, int senseCount, String definitionEn, String meaningVi,
+                            UUID audioId, boolean hidden, boolean needsReview, boolean missingVietnamese) {
+            this(id, packId, unitId, unitTitle, level, term, pos, ipa, senseCount, definitionEn, meaningVi,
+                audioId, hidden, needsReview, missingVietnamese, false);
+        }
+    }
     record EntryPage(List<EntrySummary> items, long total) {}
     record Entry(UUID id, String term, boolean hidden, long revision, LearningContent content, Media media) {}
     record Media(UUID image, UUID ukAudio, UUID usAudio, UUID exampleAudio, UUID secondExampleAudio) {}
@@ -52,7 +64,12 @@ public interface VocabularyCatalog {
         List<ContextNote> contextNotes
     ) {}
     record PackEdit(@NotNull @PositiveOrZero Long revision, @NotBlank @Size(max = 120) String titleEn,
-                    @NotBlank @Size(max = 120) String titleVi, @NotNull Boolean hidden) {}
+                    @NotBlank @Size(max = 120) String titleVi, @NotNull Boolean hidden,
+                    @Pattern(regexp = "PUBLIC|FEATURE") String accessMode, @Size(max = 64) String requiredFeatureKey) {
+        public PackEdit(Long revision, String titleEn, String titleVi, Boolean hidden) {
+            this(revision, titleEn, titleVi, hidden, null, null);
+        }
+    }
     record UnitEdit(@NotNull @PositiveOrZero Long revision, @NotBlank @Size(max = 120) String title,
                     @NotNull Boolean hidden, @Pattern(regexp = "[ABC][12]") String level) {}
     record EntryEdit(@NotNull @PositiveOrZero Long revision, @NotNull @Valid LearningContent content,

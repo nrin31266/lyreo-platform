@@ -126,7 +126,35 @@ class DatabaseSetupIT {
             assertThat(jdbc.queryForObject("SELECT encrypted_api_key FROM ai_provider WHERE code='AZURE_SPEECH' AND enabled", String.class))
                 .isEqualTo("azure-test-ciphertext");
             assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class))
-                .containsExactly("001", "002", "003", "004", "005", "006", "007", "008", "009");
+                .containsExactly("001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016", "017", "018", "019", "020", "021");
+        }
+    }
+
+    @Test
+    void seedsPublishedSnapshotsAndHidesMissingAudioWithoutChangingPublication() {
+        try (var postgres = new PostgreSQLContainer("postgres:18.6-alpine")) {
+            postgres.start();
+            var datasource = new DriverManagerDataSource(
+                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+            var jdbc = new JdbcTemplate(datasource);
+            Path seeds = Path.of("../../infra/postgres/seed");
+            DatabaseSetup.apply(datasource, seeds.resolve("dev.sql"));
+            var snapshot = seeds.resolve("lessons.sql");
+            String audioKey = "lessons/de2cc719-0f15-4f25-b845-5504fcdf1860/tts/3ca1f746-f412-409c-8e71-eae5453a9a70.wav";
+            jdbc.update("INSERT INTO seed_lesson_audio_unavailable (object_key) VALUES (?)", audioKey);
+            DatabaseSetup.apply(datasource, snapshot);
+            DatabaseSetup.apply(datasource, seeds.resolve("demo.sql"));
+            DatabaseSetup.apply(datasource, seeds.resolve("demo.sql"));
+
+            String availability = """
+                SELECT v.available FROM lesson_availability v
+                JOIN lesson l ON l.id = v.lesson_id
+                WHERE l.canonical_audio_object_key = ? AND l.status = 'PUBLISHED'
+                """;
+            assertThat(jdbc.queryForObject(availability, Boolean.class, audioKey)).isFalse();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM curriculum_section", Integer.class)).isPositive();
+            jdbc.update("DELETE FROM seed_lesson_audio_unavailable WHERE object_key = ?", audioKey);
+            assertThat(jdbc.queryForObject(availability, Boolean.class, audioKey)).isTrue();
         }
     }
 }

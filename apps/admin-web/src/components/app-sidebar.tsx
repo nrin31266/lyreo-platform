@@ -1,4 +1,4 @@
-import { RiVoiceprintLine as AudioLines, RiCloseLine as X } from "@remixicon/react";
+import { RiCloseLine as X } from "@remixicon/react";
 import { Button } from '@/components/ui/button';
 import { SheetClose } from '@/components/ui/sheet';
 import { Link } from 'react-router-dom';
@@ -25,15 +25,17 @@ export function AppSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" className="group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0" asChild>
+            <SidebarMenuButton size="lg" className="overflow-visible group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0" asChild>
               <Link
                 to="/"
                 onClick={() => setOpenMobile(false)}
                 aria-label={`Lyreo · ${t('admin:workspace')}`}
               >
-                <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-sidebar-primary text-sidebar-primary-foreground [&>img]:size-full [&>img]:object-contain">
-                  <AudioLines aria-hidden="true" />
-                </span>
+                <img
+                  src={`${import.meta.env.BASE_URL}brand/lyreo-head.png`}
+                  alt=""
+                  className="pointer-events-none size-8 shrink-0 scale-150 object-contain group-data-[collapsible=icon]:scale-125"
+                />
                 <span className="flex flex-col group-data-[collapsible=icon]:hidden">
                   <strong>Lyreo</strong>
                   <small className="text-muted-foreground">

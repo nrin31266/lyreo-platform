@@ -17,6 +17,7 @@
     <dependency><groupId>com.lyreo</groupId><artifactId>lyreo-module-ai</artifactId><version>${project.version}</version></dependency>
  <dependency><groupId>com.lyreo</groupId><artifactId>lyreo-platform-storage</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>com.lyreo</groupId><artifactId>lyreo-platform-content</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>com.lyreo</groupId><artifactId>lyreo-platform-config</artifactId><version>${project.version}</version></dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>

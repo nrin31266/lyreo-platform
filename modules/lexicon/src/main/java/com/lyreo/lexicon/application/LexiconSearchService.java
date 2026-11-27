@@ -23,4 +23,8 @@ public class LexiconSearchService {
     public Optional<LexiconEntry> findById(UUID id) {
         return repository.findById(id);
     }
+
+    public Optional<LexiconEntry> findByHeadwordId(UUID headwordId) {
+        return repository.findByHeadwordId(headwordId);
+    }
 }

@@ -16,12 +16,35 @@ models; producer module vẫn sở hữu attempts/progress. Không query reposit
 
 Initial projection dùng facts như Grammar wrong topic, Vocabulary Again, TOEIC
 wrong part và Shadowing mismatch/timing. AI recommendation chờ đủ learner history.
+TOEIC dùng số câu đúng và tổng số câu theo Part từ kết quả đã nộp. Sự kiện cũ chỉ có
+tổng Nghe/Đọc vẫn đọc được. Shadowing lấy tỷ lệ lỗi từ và điểm fluency từ lần chấm
+có điểm, không đưa bản ghi hoặc transcript sang Analytics. Mỗi lần nộp/chấm chỉ
+được tính một lần. Điểm yếu hiển thị cùng số mẫu trên Home/Progress và hồ sơ Admin.
+Hồ sơ Admin ghi rõ số Part và dạng bài khi có dữ liệu theo Part, gắn nhãn tổng hợp
+cho dữ liệu cũ theo Nghe/Đọc, và hiển thị đủ nhóm kỹ năng được theo dõi kể cả khi chưa có mẫu.
+Tab Học tập & kỹ năng dùng điểm của từng hoạt động được chấm (ví dụ Chép chính tả
+và Shadowing) và kết quả các bài ngữ pháp/TOEIC đã nộp. Hồ sơ hiển thị chuỗi ngày học
+hiện tại, kỷ lục và ngày học gần nhất theo UTC.
 
 ### FR-NTF-001 — Realtime and notification boundary
 
 Notification truyền job progress/completed/failed, mission completed, level-up và
 system notifications. SSE phù hợp server→client MVP; transport có thể đổi mà không đổi domain event.
 
+Thông báo do Admin soạn xuất hiện trong mục Thông báo trên Trang chủ ứng dụng khi
+đã xuất bản, đến thời điểm đăng, chưa hết hạn và đúng đối tượng nhận. Admin có thể
+gửi cho tất cả học viên, nhóm Free hoặc Plus theo gói hiện tại, hoặc chọn từ 1 đến 100
+học viên. Nhắc học phải có nhóm hoặc học viên cụ thể. Tiến độ và điều kiện nhận
+huy hiệu vẫn do hệ thống học tập tính riêng cho từng học viên. Thông báo mới mặc định
+là bản nháp. Admin xác nhận đối tượng ở nút công bố. Sau khi công bố,
+Admin tạo thông báo mới nếu cần đổi đối tượng nhận. Học viên tải lại danh sách khi
+mở mục này và thấy biểu tượng ứng với từng loại thông báo trong ứng dụng.
+
+Nhật ký hoạt động chỉ dành cho Admin và có bộ lọc theo gói thành viên, tài khoản,
+thông báo, điều chỉnh kim cương và các thay đổi cấu hình khác. Lịch sử thành viên
+hiển thị chuyển sang Plus hoặc trở về Free theo từng giai đoạn có hiệu lực.
+Thông báo đã lên lịch có thời điểm dự kiến hiển thị. Nhật ký tài khoản cho thấy
+yêu cầu khóa hoặc mở khóa gần nhất trong thời gian chờ đồng bộ với Keycloak.
 
 ### FR-CHT-001 — English tutor boundary
 

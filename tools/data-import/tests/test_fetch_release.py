@@ -167,3 +167,49 @@ def test_missing_canonical_archive_uses_remote_source(tmp_path: Path, canonical_
         fetcher.run(config)
     download.assert_called_once_with(url, mock.ANY)
     assert (release / "manifest.json").read_bytes() == b"{}"
+
+
+def test_catalog_only_flag_propagates_to_verify_release(tmp_path: Path) -> None:
+    archive = tmp_path / "source-catalog.tar.gz"
+    make_archive(archive, [("grammar-toeic-1.0.1/manifest.json", b"{}", "file")])
+    installed = tmp_path / "releases/grammar-toeic/1.0.1"
+    config = Config("1.0.1", "1.0.1", archive.as_uri(), sha256_file(archive), installed, tmp_path / "dataset-fetch")
+    with mock.patch("fetch_release.verify_release") as verify:
+        run(config, catalog_only=True)
+        run(config, check=True, catalog_only=True)
+    assert verify.call_count == 2
+    for call in verify.call_args_list:
+        assert call.kwargs.get("catalog_only") is True
+
+
+def test_frozen_drive_lock_enforces_pinned_ids_and_checksums(tmp_path: Path) -> None:
+    from release_lock import assert_drive_url_locked, default_release_pin
+
+    for domain in ("lexicon", "grammar-toeic", "vocabulary"):
+        url, sha = default_release_pin(domain)
+        assert_drive_url_locked(domain, url, sha)
+
+    # Grammar/TOEIC catalog-only artifact is also pinned in release-lock.json
+    assert_drive_url_locked(
+        "grammar-toeic",
+        "https://drive.google.com/file/d/1rNd1Xv8v70CBGC81evSu8HwXq6M6NIJx/view",
+        "48ad50623e8565758084a0a3a8dfd3e046a255cde1936af404e4a4624d9c43a9",
+    )
+
+    with pytest.raises(ValueError, match="release-lock.json"):
+        assert_drive_url_locked(
+            "grammar-toeic",
+            "https://drive.google.com/file/d/unpinned_drive_file/view",
+            "10b090b40e1b69fff690f99e79f5e09711c3eb0c7bd422031676c98c1b7226ba",
+        )
+
+    with pytest.raises(ValueError, match="release-lock.json"):
+        assert_drive_url_locked(
+            "vocabulary",
+            "https://drive.google.com/file/d/1PzxSDGzxihgs1gNW6FwvOuKI59bl2r0P/view",
+            "0" * 64,
+        )
+
+    # Local archive / file:// overrides remain allowed for offline tests
+    local_archive = tmp_path / "local.tar.gz"
+    assert_drive_url_locked("lexicon", local_archive.as_uri(), "0" * 64)

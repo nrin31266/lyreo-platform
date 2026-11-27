@@ -106,7 +106,7 @@ public final class LessonAuthoringJobHandler implements JobHandler {
         var result=ai.executeForProvider(AiCapability.TTS,"LOCAL_KOKORO","",
             Map.of("text",lesson.sentences.stream().map(sentence->sentence.text).collect(java.util.stream.Collectors.joining(" ")),
                 "sentences",lesson.sentences.stream().map(sentence->sentence.text).toList()),
-            Map.of("voice",lesson.ttsVoice));
+            Map.of("voice",lesson.ttsVoice,"speed",lesson.options==null?1.0:lesson.options.effectiveTtsSpeed()));
 
         context.throwIfCancellationRequested();
         Object raw=result.output().get("audio_base64");

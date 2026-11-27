@@ -118,7 +118,7 @@ def check_required_files(root: Path, errors: list[str]) -> None:
 
 
 def check_data_env(root: Path, errors: list[str]) -> None:
-    """Verify clean-release env template keys and exclusion of local data."""
+    """Verify frozen Drive release lock, env template pins, and read-only Drive usage."""
     data_env = root / "tools/data-import/.env.example"
     if data_env.exists():
         data_env_text = data_env.read_text(encoding="utf-8")
@@ -134,6 +134,60 @@ def check_data_env(root: Path, errors: list[str]) -> None:
         checksum_match = re.search(r"^GRAMMAR_TOEIC_RELEASE_SHA256=([0-9a-f]{64})$", data_env_text, re.MULTILINE)
         if not checksum_match:
             errors.append("data importer env example must pin the clean release SHA-256")
+
+        lock_path = root / "tools/data-import/release-lock.json"
+        if not lock_path.is_file():
+            errors.append("missing frozen release lockfile: tools/data-import/release-lock.json")
+        else:
+            try:
+                lock_data = json.loads(lock_path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                errors.append(f"bad JSON tools/data-import/release-lock.json: {exc}")
+            else:
+                if lock_data.get("frozen") is not True or lock_data.get("policy") != "read-only":
+                    errors.append("tools/data-import/release-lock.json must stay frozen with policy='read-only'")
+                releases = lock_data.get("releases") or {}
+                env_values: dict[str, str] = {}
+                for line in data_env_text.splitlines():
+                    stripped = line.strip()
+                    if not stripped or stripped.startswith("#") or "=" not in stripped:
+                        continue
+                    k, v = stripped.split("=", 1)
+                    env_values[k.strip()] = v.strip()
+
+                expected_pins = {
+                    "GRAMMAR_TOEIC_RELEASE_VERSION": (releases.get("grammar-toeic") or {}).get("version"),
+                    "GRAMMAR_TOEIC_RELEASE_SCHEMA_VERSION": (releases.get("grammar-toeic") or {}).get("schema_version"),
+                    "GRAMMAR_TOEIC_RELEASE_URL": (releases.get("grammar-toeic") or {}).get("default_url"),
+                    "GRAMMAR_TOEIC_RELEASE_SHA256": (releases.get("grammar-toeic") or {}).get("default_sha256"),
+                    "LEXICON_RELEASE_VERSION": (releases.get("lexicon") or {}).get("version"),
+                    "LEXICON_RELEASE_SCHEMA_VERSION": (releases.get("lexicon") or {}).get("schema_version"),
+                    "LEXICON_RELEASE_URL": (releases.get("lexicon") or {}).get("default_url"),
+                    "LEXICON_RELEASE_SHA256": (releases.get("lexicon") or {}).get("default_sha256"),
+                    "VOCABULARY_RELEASE_URL": (releases.get("vocabulary") or {}).get("default_url"),
+                }
+                for key, expected in expected_pins.items():
+                    if not expected or env_values.get(key) != str(expected):
+                        errors.append(
+                            f"tools/data-import/.env.example {key} drifted from frozen tools/data-import/release-lock.json"
+                        )
+
+        rclone_write_re = re.compile(
+            r"(?:\brclone\b(?:\s+--?[A-Za-z0-9-]+(?:=\S+)?)*\s+"
+            r"|\brclone['\"]\s*,\s*['\"])"
+            r"(?:copy|copyto|sync|move|moveto|delete|deletefile|purge|mkdir|rcat|touch|rmdir)\b"
+        )
+        for scan_root_rel in ("scripts", "tools/data-import"):
+            scan_root = root / scan_root_rel
+            if not scan_root.exists():
+                continue
+            for path in (*repo_files(scan_root, "*.py", root), *repo_files(scan_root, "*.sh", root)):
+                rel = path.relative_to(root).as_posix()
+                if "/tests/" in f"/{rel}":
+                    continue
+                text = path.read_text(encoding="utf-8", errors="ignore")
+                if rclone_write_re.search(text):
+                    errors.append(f"Drive access must be read-only (no mutating rclone command allowed): {rel}")
 
     gitignore = root / ".gitignore"
     if gitignore.exists() and ".data/" not in gitignore.read_text(encoding="utf-8"):
@@ -182,7 +236,7 @@ def check_env_contracts(root: Path, errors: list[str]) -> None:
 
     for rel, adapter in (
         ("apps/admin-web/.env.example", "apps/admin-web/src/env.ts"),
-        ("apps/mobile/.env.example", "apps/mobile/src/env.ts"),
+        ("apps/mobile/.env.example", "apps/mobile/src/config/env.ts"),
     ):
         env_path, adapter_path = root / rel, root / adapter
         if env_path.exists() and adapter_path.exists():

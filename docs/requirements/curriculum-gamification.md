@@ -12,6 +12,9 @@ type, content reference, position, required và unlock rule; không copy content
 Curriculum sở hữu enrollment, item progress, current position và unlock. Nó
 consume completion facts của Lesson/Grammar/TOEIC/Vocabulary; không truy cập internals.
 
+Khi Admin thay nội dung lộ trình, các mục tương đương giữ tiến độ. Nếu học viên còn mục
+cần hoàn thành theo quy tắc của cấu trúc mới, ghi danh đã hoàn tất trở lại `ACTIVE`.
+
 ### BR-CUR-001 — Extensible content references
 
 Item có thể tham chiếu Lesson, Grammar Practice, TOEIC Drill/Test, Vocabulary

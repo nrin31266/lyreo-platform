@@ -33,7 +33,8 @@ it('shows dictionary meaning/translation data and jumps to the final partial pag
   show('/lexicon','/api/v1/admin/lexicon','/lexicon?q=book');
   expect(await screen.findByText('A bound volume.')).toBeInTheDocument();
   expect(screen.getByText('Visible')).toBeInTheDocument();
-  expect(screen.getByText(/Word · noun/)).toBeInTheDocument();
+  expect(screen.getByText('Word')).toBeInTheDocument();
+  expect(screen.getByText('noun')).toBeInTheDocument();
   expect(screen.queryByText('Standard Listening & Reading test')).not.toBeInTheDocument();
   expect(screen.getByText('…')).toBeInTheDocument();
   await userEvent.click(await screen.findByRole('button',{name:'Page 34'}));

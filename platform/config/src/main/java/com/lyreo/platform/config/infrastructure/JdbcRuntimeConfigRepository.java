@@ -3,6 +3,8 @@ package com.lyreo.platform.config.infrastructure;
 import tools.jackson.databind.ObjectMapper;
 import com.lyreo.platform.config.application.RuntimeConfigRepository;
 import com.lyreo.platform.config.domain.RuntimeConfigDocument;
+import java.sql.Timestamp;
+import java.sql.Types;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -55,8 +57,8 @@ public final class JdbcRuntimeConfigRepository implements RuntimeConfigRepositor
                 .addValue("key", document.configKey())
                 .addValue("version", document.schemaVersion())
                 .addValue("config", mapper.writeValueAsString(document.config()))
-                .addValue("updatedBy", document.updatedBy())
-                .addValue("updatedAt", document.updatedAt()));
+                .addValue("updatedBy", document.updatedBy(), Types.OTHER)
+                .addValue("updatedAt", Timestamp.from(document.updatedAt())));
             return document;
         } catch (Exception e) {
             throw new IllegalStateException("Unable to persist module runtime config", e);

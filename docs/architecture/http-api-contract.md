@@ -34,6 +34,30 @@ is 1–100, default 20. Detail/list add nullable `nextRetryAt`, `errorCode`, saf
 and nullable `finishedAt` timestamps from persisted state. Elapsed time semantics and the
 Admin-only SSE event/snapshot boundary are owned by the [jobs protocol](background-jobs.md).
 
+## Learner announcements
+
+`GET /api/v1/notifications` requires `LEARNER` and accepts zero-based pagination and filter
+parameters (`page`, `size`, `unreadOnly`), returning `{items, total, page, size, hasMore, unreadCount}`.
+Items are filtered to active published announcements matching the learner's current Free/Plus tier,
+global `ALL` announcements, or `SELECTED` announcements addressed to their ID. Each item contains
+`id`, `title`, `body`, `category`, nullable `publishedAt`, `read`, and nullable `readAt`.
+`POST /api/v1/notifications/{id}/read` and `POST /api/v1/notifications/read-all` return `204 No Content`
+and record multi-device read state in `learner_notification_read`.
+
+Admin authoring uses `/api/v1/admin/notifications`. `targetAudience` accepts `ALL`, `FREE`,
+`PLUS` or `SELECTED`. `SELECTED` requires `recipientIds` with 1–100 directory learners.
+Creating without `status` saves a draft. Editing without `status` preserves it.
+Creating or transitioning to `PUBLISHED` requires an explicit `targetAudience`.
+Admin responses also include `recipientLabels` in the same order as `recipientIds`.
+Publishing `STUDY_REMINDER` with `ALL` is rejected. Once the publication time has arrived,
+the audience, selected recipients and original publication time are fixed.
+
+`GET /api/v1/admin/notifications/activity` returns `{items,page,hasNext}` with 30 entries
+per zero-based page. An optional `category` filters `MEMBERSHIP`, `ACCOUNT`,
+`NOTIFICATION`, `REWARD` or `OTHER`. The feed presents membership transitions,
+account changes, announcement edits, manual Diamond adjustments, global reward policy updates (`REWARD_POLICY_UPDATED`), and quota configuration changes.
+`NOTIFICATION_SCHEDULED` entries include the planned timestamp in `scheduledFor`.
+For accounts awaiting Keycloak sync, the feed includes the most recent lock or unlock request.
 ## Admin classification and source media
 
 All endpoints below require ADMIN. `/api/v1/admin/lesson-channels/sync-configuration` returns
@@ -251,6 +275,17 @@ Learner sessions keep the publication/question/media evidence captured at start.
 <a id="learner-profile-onboarding-and-admin-directory"></a>
 ## Learner profile, onboarding and Admin directory
 
+Admin can read the directory field `toeicTargetScore`. The Admin profile has no write route for this field.
+
+Account routes under `/api/v1/admin/learners/{learnerId}/account` require a Lyreo Admin.
+`GET` returns `management`, `locked` and `syncPending`.
+`PUT /password` accepts `password` and `changeOnNextLogin` and returns 204.
+`PUT /lock` requires `locked` and accepts an optional `reason` of up to 500 characters.
+If the current Keycloak account eligibility cannot be verified, Core returns `503` without changing the lock.
+A response with `syncPending: true`
+means Core has blocked access and the Keycloak operation requires a retry.
+Locked accounts and tokens issued before the account was reopened receive `401`.
+
 Self-service routes require `LEARNER` and derive ownership from the authenticated
 JWT subject. Admin directory routes require `ADMIN`.
 
@@ -341,3 +376,60 @@ To edit, send `{"displayName":"Mai","focusArea":"LISTENING","dailyMinutes":15}`.
 The response has the same DTO shape with the new fields and
 `"starterSuggestion":{"topic":"CONVERSATION","difficulty":"BEGINNER","dailyMinutes":15}`.
 A following GET returns the updated DTO in its wrapper.
+
+## Learning, Entitlement, Curriculum, Gamification, Analytics & Chat Extensions
+
+All protected endpoints use `BearerAuth` (`Authorization: Bearer <JWT>`) and return RFC 9457 Problem Details (`LyreoProblemDetail`) with explicit machine-readable error codes and structured extension fields:
+
+| HTTP Status | `code` | Extra Problem Details fields | Client action |
+|---|---|---|---|
+| `401` | `AUTHENTICATION_REQUIRED` | — | Refresh OIDC token once or re-authenticate |
+| `403` | `ACCESS_DENIED` | — | Wrong role (e.g., `LEARNER` calling `/api/v1/admin/**`) |
+| `403` | `FEATURE_ENTITLEMENT_REQUIRED` | `featureKey` | Show feature upgrade / locked state |
+| `403` | `QUOTA_EXCEEDED` | `featureKey`, `limitType`, `limit`, `remaining`, `resetAt` | Display quota limit & UTC ISO-8601 `resetAt` |
+| `409` | `STALE_REVISION` | `currentRevision` | Reload latest server state before retrying edit/save |
+| `409` | `SESSION_EXPIRED` | `expiredAt` | Offer starting a new study/assessment session |
+| `409` | `IDEMPOTENCY_CONFLICT` | — | Reject mutation replay with changed payload under same `Idempotency-Key` |
+| `413` | `PAYLOAD_TOO_LARGE` | — | Reject oversized uploads above server multipart limits |
+| `429` | `RATE_LIMITED` | `Retry-After` header | Respect per-client API rate limit backoff |
+| `503` | `SERVICE_UNAVAILABLE` | — | Upstream execution / transient dependency unavailable |
+
+All paginated collection endpoints standardize on `{items, total, page, size, hasMore}` (with `balance` also included on `/api/v1/gamification/ledger`, and `unreadCount` on `/api/v1/notifications`).
+
+### Endpoint Summary by Module Owner
+
+- **Identity & Learner (`modules/identity`, `modules/learner`)**:
+  - `GET /api/v1/me`: returns `id`, `subject`, `email`, and `roles` (`List<String>`).
+  - `GET/PATCH /api/v1/learner/profile`: includes `toeicTargetScore` (10–990 in increments of 5, nullable), `avatarUrl`, plus `PUT /api/v1/learner/onboarding`.
+  - `GET/PUT /api/v1/learner/profile/avatar`: `GET` supports `If-None-Match` -> `304 Not Modified` before reading bytes.
+- **Entitlement (`modules/entitlement`)**:
+  - Learner: `GET /api/v1/entitlements` (and alias `GET /api/v1/learner/entitlements`) include top-level `tier` (`FREE` | `PLUS`), nullable `validUntil`, and per-feature access, remaining period/capacity quotas, and `resetAt`.
+  - Admin: `GET/PUT /api/v1/admin/entitlements/learners/{learnerId}/plan` returns the current `tier`, `validUntil` and up to 30 recent Free/Plus changes. PUT accepts `tier` (`FREE` or `PLUS`) and an optional Plus `durationDays` (30, 90 or 365). Omit the duration for open-ended Plus. Expiration returns the learner to Free automatically. Repeating the active tier leaves its expiry and history intact. A manual plan choice supersedes any scheduled legacy changes.
+  - Admin policy and audit: `GET /api/v1/admin/entitlements/features`, `GET/PUT /api/v1/admin/entitlements/quotas`, and `GET /api/v1/admin/entitlements/audit`. `GET /api/v1/admin/entitlements/grants` reads archived per-feature records. Effective grant intervals from before plan membership are combined into Plus periods.
+- **Vocabulary (`modules/vocabulary`)**:
+  - Study Catalog & Media: `GET /api/v1/vocabulary/packs`, `GET /api/v1/vocabulary/packs/{packId}/cover` (`If-None-Match` `304`), `GET /api/v1/vocabulary/packs/{packId}/units`, `GET /api/v1/vocabulary/units/{unitId}`, `GET /api/v1/vocabulary/entries/{entryId}/media/{assetId}` (supports HTTP `Range` / `206 Partial Content`).
+  - Flashcard SRS Study (`Học`): `GET /api/v1/vocabulary/flashcards` (`unitId`/`packId`, `scope`: `DUE_AND_NEW` | `ALL`, `limit` 1..200 with counts and 4-rating `intervalPreviews`), `POST /api/v1/vocabulary/entries/{entryId}/flashcard-review` (idempotent + `expectedReviewCount` optimistic guard, updates curated-entry SRS without touching personal `vocabulary_card`).
+  - Practice & Guess Sessions (`CHOOSE_MEANING`, `CHOOSE_WORD`, `LETTER_SCRAMBLE`, `MISSING_LETTERS`, `LISTEN_WRITE`, `CONTEXT_CLOZE`, `GUESS_WORD`, `MIXED`): `POST /api/v1/vocabulary/units/{unitId}/sessions` and `POST /api/v1/vocabulary/packs/{packId}/sessions` (supports `mode` or `modes[]`, `limit` 1..100, and optional `entryIds[]` validated against the unit/pack scope to practice a curriculum slice), `GET /api/v1/vocabulary/sessions` (optional `packId`, `unitId`, `status`, paginated `{items, total, page, size, hasMore}` with `unitTitle`), `GET /api/v1/vocabulary/sessions/{id}`, `POST /api/v1/vocabulary/sessions/{id}/questions/{questionId}/hint`, `POST /api/v1/vocabulary/sessions/{id}/questions/{questionId}/check`, `PUT /api/v1/vocabulary/sessions/{id}/answers`, `POST /api/v1/vocabulary/sessions/{id}/submit`.
+  - Saved Vocabulary & Personal Collections: `POST /api/v1/vocabulary/cards`, `DELETE /api/v1/vocabulary/cards/{cardId}` (`204`), `POST /api/v1/vocabulary/saved-items`, `GET /api/v1/vocabulary/due` (paginated `{items, total, page, size, hasMore}` with `term`, `meaningVi`, `partOfSpeech`, `audioUrl`, `imageUrl`), `POST /api/v1/vocabulary/cards/{cardId}/review`, `GET/POST /api/v1/vocabulary/collections`, `PATCH/DELETE /api/v1/vocabulary/collections/{id}`, `GET/POST /api/v1/vocabulary/collections/{id}/items`, `DELETE /api/v1/vocabulary/collections/{id}/items/{cardId}`, `POST /api/v1/vocabulary/collections/{id}/move`, `GET /api/v1/vocabulary/saved-items/{cardId}/media/{assetId}`.
+  - Admin Vocabulary Pack & Conflict metadata: `GET /api/v1/admin/vocabulary/packs`, `PUT /api/v1/admin/vocabulary/packs/{id}` (`accessMode`: `PUBLIC` | `FEATURE`, `requiredFeatureKey`), `GET /api/v1/admin/vocabulary/entries` (`hasConflict`).
+- **Lesson, Speech Assessment & Lexicon (`modules/lesson`, `modules/speech-assessment`, `modules/lexicon`)**:
+  - Learner Lessons: `GET /api/v1/lessons` (paginated with `hasMore`), `GET /api/v1/lessons/categories`, `GET /api/v1/lessons/{lessonId}`, `GET /api/v1/lessons/{lessonId}/activities/{activityId}`, `GET /api/v1/lessons/{lessonId}/audio` (supports HTTP `Range` / `206`), `GET /api/v1/lessons/{lessonId}/attempts`, `POST /api/v1/lessons/{lessonId}/activities/{activityId}/dictation/attempts`, `POST /api/v1/lessons/{lessonId}/activities/{activityId}/complete`.
+  - Learner Shadowing: `GET /api/v1/lessons/{lessonId}/activities/{activityId}/shadowing/sentences/{sentenceId}/constraints`, `POST .../attempts` (multipart `audio`, requires `Idempotency-Key` UUID + `revision`, `202` + `Location`), `GET /api/v1/shadowing-attempts/{id}`, `GET /api/v1/shadowing-attempts/{id}/audio` (supports HTTP `Range` / `206`), `POST /api/v1/shadowing-attempts/{id}/cancel`.
+  - Lexicon (`ROLE_LEARNER` or `ROLE_ADMIN`): `GET /api/v1/lexicon/search`, `GET /api/v1/lexicon/{id}`, `GET /api/v1/lexicon/by-headword/{headwordId}`, `GET /api/v1/lexicon/{id}/pronunciations/{pronunciationId}/audio` (supports HTTP `Range` / `206`).
+- **Grammar, TOEIC & Assessment (`modules/grammar`, `modules/toeic`, `modules/assessment`)**:
+  - Grammar: `GET /api/v1/grammar/catalogs/{kind}` (+ `parentId`), `GET /api/v1/grammar/catalogs/{kind}/page`, `GET /api/v1/grammar/catalogs/{kind}/{id}`, `POST /api/v1/grammar/catalogs/{kind}/{id}/sessions`.
+  - TOEIC: `GET /api/v1/toeic/catalog`, `GET /api/v1/toeic/catalog/page`, `GET /api/v1/toeic/catalog/{id}` (includes `parts` breakdown), `POST /api/v1/toeic/catalog/{id}/sessions` (supports `parts: [1..7]` for `DRILL`). `FULL_TEST` submissions compute ETS-approximated `listeningScaledScore`, `readingScaledScore` (5–495), and `totalScaledScore` (10–990); `DRILL` keeps scaled fields `null` and provides `accuracyPercent`.
+  - Admin question context: `GET /api/v1/admin/assessment-items/{id}/context` returns imported TOEIC placement metadata and available passage/transcript.
+  - Sessions: `GET /api/v1/assessment-sessions?domain=...&status=...&catalogId=...&page=0&size=20` (paginated `{items, total, page, size, hasMore}` using lightweight `ScoreSummary`), `GET /api/v1/assessment-sessions/{id}`, `PUT /api/v1/assessment-sessions/{id}/answers`, `POST /api/v1/assessment-sessions/{id}/submit`, `GET /api/v1/assessment-sessions/{id}/media/{assetId}` (supports HTTP `Range` / `206`).
+- **Curriculum (`modules/curriculum`)**:
+  - Learner: `GET /api/v1/curriculum/paths` (includes `coverUrl`), `GET /api/v1/curriculum/paths/{id}/cover` (`If-None-Match` `304`), `GET /api/v1/curriculum/paths/{id}`, `POST /api/v1/curriculum/paths/{id}/enroll`, `GET /api/v1/curriculum/continue` (includes `contentTitle`, `config`, `coverUrl`).
+  - Admin: `GET/POST /api/v1/admin/curriculum/paths`, `GET/PUT/DELETE /api/v1/admin/curriculum/paths/{id}`, `PUT /api/v1/admin/curriculum/paths/{id}/status`, `POST /api/v1/admin/curriculum/paths/{id}/sections`, `POST /api/v1/admin/curriculum/paths/{id}/sections/{sectionId}/items`.
+- **Gamification, Analytics & Chat (`modules/gamification`, `modules/analytics`, `modules/chat`, `modules/assessment`)**:
+  - Learner Gamification: `GET /api/v1/gamification/summary`, `GET /api/v1/gamification/missions`, `POST /api/v1/gamification/missions/{missionId}/claim` (manual claim with optional `Idempotency-Key`), `GET /api/v1/gamification/achievements`, `GET /api/v1/gamification/achievements/{id}/badge` (`If-None-Match` `304`), `GET /api/v1/gamification/ledger` (`{balance, items, total, page, size, hasMore}`).
+  - Admin Gamification: `GET /api/v1/admin/gamification/learners/{learnerId}`, `POST /api/v1/admin/gamification/learners/{learnerId}/diamonds`, `GET/POST /api/v1/admin/gamification/missions`, `PUT /api/v1/admin/gamification/missions/{id}`, `GET/POST /api/v1/admin/gamification/achievements`, `PUT /api/v1/admin/gamification/achievements/{id}`, `GET/PUT /api/v1/admin/gamification/reward-policy` (`ruleVersion` optional; changes audited to `reward_policy_audit`).
+    In the Admin learner summary, `currentStreak` is zero after a full UTC day without study or when there is no history.
+  - Learner Analytics: `GET /api/v1/analytics/overview`.
+  - Admin Analytics: `GET /api/v1/admin/analytics/summary`, `GET /api/v1/admin/analytics/dashboard?days=7|14|30` (unified operational dashboard KPIs with prior-period deltas, continuous daily series, jobs/AI/account health, content inventory, top curriculum paths, and weakness hotspots), `GET /api/v1/admin/analytics/learners/{learnerId}`, `GET /api/v1/admin/analytics/learners/{learnerId}/study-profile`.
+  - Learner Chat: `POST /api/v1/chat/ask` (supports `Idempotency-Key` replay / `409` conflict), `GET /api/v1/chat/conversations` (paginated `{items, total, page, size, hasMore}` with `lastMessagePreview` & `messageCount`), `GET/PATCH/DELETE /api/v1/chat/conversations/{id}`.
+  - Admin Chat: `GET /api/v1/admin/chat/summary` (privacy-preserving aggregate telemetry & thread metadata only).
+  - Admin Content Media: `GET /api/v1/admin/content-media` (`page`, `size`, `query`, `kind`), `POST /api/v1/admin/content-media`, `GET /api/v1/admin/content-media/{id}`, `DELETE /api/v1/admin/content-media/{id}`, `GET /api/v1/admin/content-media/{id}/file`.

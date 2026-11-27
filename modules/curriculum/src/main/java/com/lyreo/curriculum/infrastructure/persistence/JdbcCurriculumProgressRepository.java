@@ -1,30 +1,87 @@
 package com.lyreo.curriculum.infrastructure.persistence;
 
 import com.lyreo.curriculum.application.port.CurriculumProgressRepository;
+import com.lyreo.curriculum.domain.CurriculumEnrollment;
+import com.lyreo.curriculum.domain.CurriculumItem;
 import com.lyreo.curriculum.domain.CurriculumItem.ContentType;
+import com.lyreo.curriculum.domain.CurriculumItemProgress;
+import com.lyreo.curriculum.domain.CurriculumPath;
+import com.lyreo.curriculum.domain.CurriculumPathSummary;
+import com.lyreo.curriculum.domain.CurriculumSection;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 public final class JdbcCurriculumProgressRepository implements CurriculumProgressRepository {
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private final NamedParameterJdbcTemplate jdbc;
+    private final ObjectMapper mapper;
 
     public JdbcCurriculumProgressRepository(NamedParameterJdbcTemplate jdbc) {
+        this(jdbc, new ObjectMapper());
+    }
+
+    public JdbcCurriculumProgressRepository(NamedParameterJdbcTemplate jdbc, ObjectMapper mapper) {
         this.jdbc = jdbc;
+        this.mapper = mapper == null ? new ObjectMapper() : mapper;
     }
 
     @Override
     public List<UUID> itemIdsReferencing(ContentType type, UUID referenceId) {
         return jdbc.query(
             """
-            SELECT id
-            FROM curriculum_item
-            WHERE content_type = :type
-              AND content_reference_id = :referenceId
+            SELECT ci.id
+            FROM curriculum_item ci
+            JOIN curriculum_section cs ON cs.id = ci.section_id
+            JOIN curriculum_path cp ON cp.id = cs.path_id
+            WHERE ci.content_type = :type
+              AND ci.content_reference_id = :referenceId
+              AND cp.status = 'PUBLISHED'
             """,
             Map.of("type", type.name(), "referenceId", referenceId),
             (rs, rowNumber) -> rs.getObject("id", UUID.class)
+        );
+    }
+
+    @Override
+    public List<ActiveItemTarget> activeEnrolledItemTargetsReferencing(
+        UUID learnerId,
+        ContentType type,
+        UUID contentReferenceId
+    ) {
+        return jdbc.query(
+            """
+            SELECT ci.id AS item_id, cp.id AS path_id, ci.config_json
+            FROM curriculum_item ci
+            JOIN curriculum_section cs ON cs.id = ci.section_id
+            JOIN curriculum_path cp ON cp.id = cs.path_id
+            JOIN curriculum_enrollment ce ON ce.path_id = cp.id AND ce.learner_id = :learnerId
+            WHERE ci.content_type = :type
+              AND ci.content_reference_id = :referenceId
+              AND cp.status = 'PUBLISHED'
+              AND ce.status = 'ACTIVE'
+            """,
+            Map.of(
+                "learnerId", learnerId,
+                "type", type.name(),
+                "referenceId", contentReferenceId
+            ),
+            (rs, rowNumber) -> new ActiveItemTarget(
+                rs.getObject("item_id", UUID.class),
+                rs.getObject("path_id", UUID.class),
+                decodeConfig(rs.getString("config_json"))
+            )
         );
     }
 
@@ -34,14 +91,739 @@ public final class JdbcCurriculumProgressRepository implements CurriculumProgres
             """
             INSERT INTO curriculum_item_progress(
                 learner_id, item_id, status, started_at, completed_at
-            ) VALUES (
-                :learnerId, :itemId, 'COMPLETED', now(), now()
             )
+            SELECT :learnerId, ci.id, 'COMPLETED', now(), now()
+            FROM curriculum_item ci
+            JOIN curriculum_section cs ON cs.id = ci.section_id
+            JOIN curriculum_path cp ON cp.id = cs.path_id
+            JOIN curriculum_enrollment ce ON ce.path_id = cp.id AND ce.learner_id = :learnerId
+            WHERE ci.id = :itemId
+              AND cp.status = 'PUBLISHED'
+              AND ce.status = 'ACTIVE'
             ON CONFLICT(learner_id, item_id) DO UPDATE SET
                 status = 'COMPLETED',
+                started_at = COALESCE(curriculum_item_progress.started_at, now()),
                 completed_at = COALESCE(curriculum_item_progress.completed_at, now())
             """,
             Map.of("learnerId", learnerId, "itemId", itemId)
         );
+    }
+
+    @Override
+    public void upsertItemProgressStatus(UUID learnerId, UUID itemId, String status) {
+        jdbc.update(
+            """
+            INSERT INTO curriculum_item_progress(learner_id, item_id, status)
+            VALUES (:learnerId, :itemId, :status)
+            ON CONFLICT(learner_id, item_id) DO UPDATE SET
+                status = CASE
+                    WHEN curriculum_item_progress.status IN ('COMPLETED', 'IN_PROGRESS')
+                        THEN curriculum_item_progress.status
+                    ELSE excluded.status
+                END
+            """,
+            Map.of("learnerId", learnerId, "itemId", itemId, "status", status)
+        );
+    }
+
+    @Override
+    public Optional<CurriculumPath> findPathById(UUID pathId) {
+        return jdbc.query(
+            """
+            SELECT id, code, name, level, description, status, cover_asset_id, access_mode, required_feature_key, created_at, updated_at
+            FROM curriculum_path
+            WHERE id = :pathId
+            """,
+            Map.of("pathId", pathId),
+            (rs, rowNum) -> mapPath(rs)
+        ).stream().findFirst();
+    }
+
+    @Override
+    public Optional<UUID> findPublishedCoverAssetId(UUID pathId) {
+        return jdbc.query(
+            """
+            SELECT cover_asset_id
+            FROM curriculum_path
+            WHERE id = :pathId AND status = 'PUBLISHED' AND cover_asset_id IS NOT NULL
+            """,
+            Map.of("pathId", pathId),
+            (rs, rowNum) -> rs.getObject("cover_asset_id", UUID.class)
+        ).stream().findFirst();
+    }
+
+    @Override
+    public List<CurriculumPathSummary> listPublishedPaths(UUID learnerId) {
+        return jdbc.query(
+            """
+            SELECT
+                cp.id,
+                cp.code,
+                cp.name,
+                cp.level,
+                cp.description,
+                cp.status,
+                cp.cover_asset_id,
+                cp.access_mode,
+                cp.required_feature_key,
+                ce.status AS enrollment_status,
+                COUNT(ci.id)::int AS total_items,
+                COUNT(ci.id) FILTER (WHERE ci.required)::int AS required_items,
+                COUNT(cip.item_id) FILTER (WHERE ci.required AND cip.status = 'COMPLETED')::int AS completed_required_items,
+                cp.created_at,
+                cp.updated_at
+            FROM curriculum_path cp
+            LEFT JOIN curriculum_enrollment ce
+                ON ce.path_id = cp.id AND ce.learner_id = :learnerId
+            LEFT JOIN curriculum_section cs ON cs.path_id = cp.id
+            LEFT JOIN curriculum_item ci ON ci.section_id = cs.id
+            LEFT JOIN curriculum_item_progress cip
+                ON cip.item_id = ci.id AND cip.learner_id = :learnerId
+            WHERE cp.status = 'PUBLISHED'
+            GROUP BY cp.id, ce.status
+            ORDER BY cp.created_at ASC, cp.code ASC
+            """,
+            new MapSqlParameterSource("learnerId", learnerId),
+            (rs, rowNum) -> new CurriculumPathSummary(
+                rs.getObject("id", UUID.class),
+                rs.getString("code"),
+                rs.getString("name"),
+                rs.getString("level"),
+                rs.getString("description"),
+                rs.getString("status"),
+                rs.getObject("cover_asset_id", UUID.class),
+                rs.getString("access_mode"),
+                rs.getString("required_feature_key"),
+                false,
+                rs.getString("enrollment_status"),
+                rs.getInt("total_items"),
+                rs.getInt("required_items"),
+                rs.getInt("completed_required_items"),
+                toInstant(rs.getTimestamp("created_at")),
+                toInstant(rs.getTimestamp("updated_at"))
+            )
+        );
+    }
+
+    @Override
+    public List<CurriculumPath> listAllPaths() {
+        return jdbc.query(
+            """
+            SELECT id, code, name, level, description, status, cover_asset_id, access_mode, required_feature_key, created_at, updated_at
+            FROM curriculum_path
+            ORDER BY created_at DESC, code ASC
+            """,
+            (rs, rowNum) -> mapPath(rs)
+        );
+    }
+
+    @Override
+    public List<CurriculumSection> findSectionsByPathId(UUID pathId) {
+        return jdbc.query(
+            """
+            SELECT id, path_id, title, "position"
+            FROM curriculum_section
+            WHERE path_id = :pathId
+            ORDER BY "position" ASC
+            """,
+            Map.of("pathId", pathId),
+            (rs, rowNum) -> new CurriculumSection(
+                rs.getObject("id", UUID.class),
+                rs.getObject("path_id", UUID.class),
+                rs.getString("title"),
+                rs.getInt("position")
+            )
+        );
+    }
+
+    @Override
+    public List<CurriculumItem> findItemsByPathId(UUID pathId) {
+        return jdbc.query(
+            """
+            SELECT ci.id, ci.section_id, ci."position", ci.content_type,
+                   ci.content_reference_id, ci.required, ci.unlock_rule, ci.config_json
+            FROM curriculum_item ci
+            JOIN curriculum_section cs ON cs.id = ci.section_id
+            WHERE cs.path_id = :pathId
+            ORDER BY cs."position" ASC, ci."position" ASC
+            """,
+            Map.of("pathId", pathId),
+            (rs, rowNum) -> new CurriculumItem(
+                rs.getObject("id", UUID.class),
+                rs.getObject("section_id", UUID.class),
+                rs.getInt("position"),
+                ContentType.valueOf(rs.getString("content_type")),
+                rs.getObject("content_reference_id", UUID.class),
+                rs.getBoolean("required"),
+                rs.getString("unlock_rule"),
+                decodeConfig(rs.getString("config_json"))
+            )
+        );
+    }
+
+    @Override
+    public Optional<CurriculumEnrollment> findEnrollment(UUID learnerId, UUID pathId) {
+        return jdbc.query(
+            """
+            SELECT learner_id, path_id, status, started_at, completed_at
+            FROM curriculum_enrollment
+            WHERE learner_id = :learnerId AND path_id = :pathId
+            """,
+            Map.of("learnerId", learnerId, "pathId", pathId),
+            (rs, rowNum) -> mapEnrollment(rs)
+        ).stream().findFirst();
+    }
+
+    @Override
+    public List<CurriculumEnrollment> findActivePublishedEnrollments(UUID learnerId) {
+        return jdbc.query(
+            """
+            SELECT ce.learner_id, ce.path_id, ce.status, ce.started_at, ce.completed_at
+            FROM curriculum_enrollment ce
+            JOIN curriculum_path cp ON cp.id = ce.path_id
+            WHERE ce.learner_id = :learnerId
+              AND ce.status = 'ACTIVE'
+              AND cp.status = 'PUBLISHED'
+            ORDER BY ce.started_at DESC
+            """,
+            Map.of("learnerId", learnerId),
+            (rs, rowNum) -> mapEnrollment(rs)
+        );
+    }
+
+    @Override
+    public List<CurriculumItemProgress> findItemProgressByPath(UUID learnerId, UUID pathId) {
+        return jdbc.query(
+            """
+            SELECT cip.learner_id, cip.item_id, cip.status, cip.started_at, cip.completed_at
+            FROM curriculum_item_progress cip
+            JOIN curriculum_item ci ON ci.id = cip.item_id
+            JOIN curriculum_section cs ON cs.id = ci.section_id
+            WHERE cip.learner_id = :learnerId
+              AND cs.path_id = :pathId
+            """,
+            Map.of("learnerId", learnerId, "pathId", pathId),
+            (rs, rowNum) -> new CurriculumItemProgress(
+                rs.getObject("learner_id", UUID.class),
+                rs.getObject("item_id", UUID.class),
+                rs.getString("status"),
+                toInstant(rs.getTimestamp("started_at")),
+                toInstant(rs.getTimestamp("completed_at"))
+            )
+        );
+    }
+
+    @Override
+    public void ensureActiveEnrollment(UUID learnerId, UUID pathId) {
+        jdbc.update(
+            """
+            INSERT INTO curriculum_enrollment(learner_id, path_id, status, started_at)
+            VALUES (:learnerId, :pathId, 'ACTIVE', now())
+            ON CONFLICT(learner_id, path_id) DO NOTHING
+            """,
+            Map.of("learnerId", learnerId, "pathId", pathId)
+        );
+    }
+
+    @Override
+    public void markEnrollmentCompleted(UUID learnerId, UUID pathId) {
+        jdbc.update(
+            """
+            UPDATE curriculum_enrollment
+            SET status = 'COMPLETED',
+                completed_at = COALESCE(completed_at, now())
+            WHERE learner_id = :learnerId
+              AND path_id = :pathId
+              AND status = 'ACTIVE'
+            """,
+            Map.of("learnerId", learnerId, "pathId", pathId)
+        );
+    }
+
+    @Override
+    public void reopenCompletedEnrollment(UUID learnerId, UUID pathId) {
+        jdbc.update("""
+            UPDATE curriculum_enrollment
+            SET status = 'ACTIVE', completed_at = NULL
+            WHERE learner_id = :learnerId AND path_id = :pathId AND status = 'COMPLETED'
+            """, Map.of("learnerId", learnerId, "pathId", pathId));
+    }
+
+    @Override
+    public CurriculumPath insertPath(
+        UUID id,
+        String code,
+        String name,
+        String level,
+        String description,
+        String status,
+        UUID coverAssetId,
+        String accessMode,
+        String requiredFeatureKey
+    ) {
+        String mode = accessMode == null || accessMode.isBlank() ? "PUBLIC" : accessMode.trim();
+        String feature = "FEATURE".equals(mode) ? requiredFeatureKey : null;
+        return jdbc.queryForObject(
+            """
+            INSERT INTO curriculum_path(
+                id, code, name, level, description, status, cover_asset_id, access_mode, required_feature_key, created_at, updated_at
+            )
+            VALUES (
+                :id, :code, :name, :level, :description, :status,
+                CAST(:coverAssetId AS uuid), :accessMode, CAST(:requiredFeatureKey AS varchar), now(), now()
+            )
+            RETURNING id, code, name, level, description, status, cover_asset_id, access_mode, required_feature_key, created_at, updated_at
+            """,
+            new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("code", code)
+                .addValue("name", name)
+                .addValue("level", level)
+                .addValue("description", description)
+                .addValue("status", status)
+                .addValue("coverAssetId", coverAssetId, Types.OTHER)
+                .addValue("accessMode", mode)
+                .addValue("requiredFeatureKey", feature, Types.VARCHAR),
+            (rs, rowNum) -> mapPath(rs)
+        );
+    }
+
+    @Override
+    public Optional<CurriculumPath> updatePath(
+        UUID id,
+        String code,
+        String name,
+        String level,
+        String description,
+        UUID coverAssetId,
+        String accessMode,
+        String requiredFeatureKey
+    ) {
+        String mode = accessMode == null || accessMode.isBlank() ? null : accessMode.trim();
+        String feature = mode == null ? null : ("FEATURE".equals(mode) ? requiredFeatureKey : null);
+        return jdbc.query(
+            """
+            UPDATE curriculum_path
+            SET code = :code,
+                name = :name,
+                level = :level,
+                description = :description,
+                cover_asset_id = CAST(:coverAssetId AS uuid),
+                access_mode = COALESCE(CAST(:accessMode AS varchar), access_mode),
+                required_feature_key = CASE
+                    WHEN CAST(:accessMode AS varchar) = 'PUBLIC' THEN NULL
+                    WHEN CAST(:accessMode AS varchar) = 'FEATURE' THEN CAST(:requiredFeatureKey AS varchar)
+                    ELSE required_feature_key
+                END,
+                updated_at = now()
+            WHERE id = :id
+            RETURNING id, code, name, level, description, status, cover_asset_id, access_mode, required_feature_key, created_at, updated_at
+            """,
+            new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("code", code)
+                .addValue("name", name)
+                .addValue("level", level)
+                .addValue("description", description)
+                .addValue("coverAssetId", coverAssetId, Types.OTHER)
+                .addValue("accessMode", mode, Types.VARCHAR)
+                .addValue("requiredFeatureKey", feature, Types.VARCHAR),
+            (rs, rowNum) -> mapPath(rs)
+        ).stream().findFirst();
+    }
+
+    @Override
+    public Optional<CurriculumPath> updatePathStatus(UUID id, String status) {
+        return jdbc.query(
+            """
+            UPDATE curriculum_path
+            SET status = :status,
+                updated_at = now()
+            WHERE id = :id
+            RETURNING id, code, name, level, description, status, cover_asset_id, access_mode, required_feature_key, created_at, updated_at
+            """,
+            Map.of("id", id, "status", status),
+            (rs, rowNum) -> mapPath(rs)
+        ).stream().findFirst();
+    }
+
+    @Override
+    public boolean deletePath(UUID id) {
+        return jdbc.update("DELETE FROM curriculum_path WHERE id = :id", Map.of("id", id)) > 0;
+    }
+
+    @Override
+    public CurriculumSection insertSection(UUID id, UUID pathId, String title, int position) {
+        return jdbc.queryForObject(
+            """
+            INSERT INTO curriculum_section(id, path_id, title, "position")
+            VALUES (:id, :pathId, :title, :position)
+            RETURNING id, path_id, title, "position"
+            """,
+            Map.of("id", id, "pathId", pathId, "title", title, "position", position),
+            (rs, rowNum) -> new CurriculumSection(
+                rs.getObject("id", UUID.class),
+                rs.getObject("path_id", UUID.class),
+                rs.getString("title"),
+                rs.getInt("position")
+            )
+        );
+    }
+
+    @Override
+    public CurriculumItem insertItem(
+        UUID id,
+        UUID sectionId,
+        int position,
+        ContentType contentType,
+        UUID contentReferenceId,
+        boolean required,
+        String unlockRule,
+        String configJson
+    ) {
+        return jdbc.queryForObject(
+            """
+            INSERT INTO curriculum_item(
+                id, section_id, "position", content_type, content_reference_id,
+                required, unlock_rule, config_json
+            )
+            VALUES (
+                :id, :sectionId, :position, :contentType, :contentReferenceId,
+                :required, :unlockRule, CAST(:configJson AS jsonb)
+            )
+            RETURNING id, section_id, "position", content_type, content_reference_id, required, unlock_rule, config_json
+            """,
+            new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("sectionId", sectionId)
+                .addValue("position", position)
+                .addValue("contentType", contentType.name())
+                .addValue("contentReferenceId", contentReferenceId)
+                .addValue("required", required)
+                .addValue("unlockRule", unlockRule)
+                .addValue("configJson", configJson == null || configJson.isBlank() ? "{}" : configJson),
+            (rs, rowNum) -> new CurriculumItem(
+                rs.getObject("id", UUID.class),
+                rs.getObject("section_id", UUID.class),
+                rs.getInt("position"),
+                ContentType.valueOf(rs.getString("content_type")),
+                rs.getObject("content_reference_id", UUID.class),
+                rs.getBoolean("required"),
+                rs.getString("unlock_rule"),
+                decodeConfig(rs.getString("config_json"))
+            )
+        );
+    }
+
+    @Override
+    public CurriculumSection updateSection(UUID id, String title, int position) {
+        return jdbc.queryForObject(
+            """
+            UPDATE curriculum_section
+            SET title = :title,
+                "position" = :position
+            WHERE id = :id
+            RETURNING id, path_id, title, "position"
+            """,
+            Map.of("id", id, "title", title, "position", position),
+            (rs, rowNum) -> new CurriculumSection(
+                rs.getObject("id", UUID.class),
+                rs.getObject("path_id", UUID.class),
+                rs.getString("title"),
+                rs.getInt("position")
+            )
+        );
+    }
+
+    @Override
+    public CurriculumItem updateItem(
+        UUID id,
+        UUID sectionId,
+        int position,
+        ContentType contentType,
+        UUID contentReferenceId,
+        boolean required,
+        String unlockRule,
+        String configJson
+    ) {
+        return jdbc.queryForObject(
+            """
+            UPDATE curriculum_item
+            SET section_id = :sectionId,
+                "position" = :position,
+                content_type = :contentType,
+                content_reference_id = :contentReferenceId,
+                required = :required,
+                unlock_rule = :unlockRule,
+                config_json = CAST(:configJson AS jsonb)
+            WHERE id = :id
+            RETURNING id, section_id, "position", content_type, content_reference_id, required, unlock_rule, config_json
+            """,
+            new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("sectionId", sectionId)
+                .addValue("position", position)
+                .addValue("contentType", contentType.name())
+                .addValue("contentReferenceId", contentReferenceId)
+                .addValue("required", required)
+                .addValue("unlockRule", unlockRule)
+                .addValue("configJson", configJson == null || configJson.isBlank() ? "{}" : configJson),
+            (rs, rowNum) -> new CurriculumItem(
+                rs.getObject("id", UUID.class),
+                rs.getObject("section_id", UUID.class),
+                rs.getInt("position"),
+                ContentType.valueOf(rs.getString("content_type")),
+                rs.getObject("content_reference_id", UUID.class),
+                rs.getBoolean("required"),
+                rs.getString("unlock_rule"),
+                decodeConfig(rs.getString("config_json"))
+            )
+        );
+    }
+
+    @Override
+    public void deleteItemsByIds(List<UUID> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) {
+            return;
+        }
+        jdbc.update(
+            "DELETE FROM curriculum_item WHERE id IN (:ids)",
+            new MapSqlParameterSource("ids", itemIds)
+        );
+    }
+
+    @Override
+    public void deleteSectionsByIds(List<UUID> sectionIds) {
+        if (sectionIds == null || sectionIds.isEmpty()) {
+            return;
+        }
+        jdbc.update(
+            "DELETE FROM curriculum_section WHERE id IN (:ids)",
+            new MapSqlParameterSource("ids", sectionIds)
+        );
+    }
+
+    @Override
+    public void offsetSectionPositions(UUID pathId, int offset) {
+        jdbc.update(
+            """
+            UPDATE curriculum_section
+            SET "position" = "position" + :offset
+            WHERE path_id = :pathId
+            """,
+            Map.of("pathId", pathId, "offset", offset)
+        );
+    }
+
+    @Override
+    public void offsetItemPositions(UUID pathId, int offset) {
+        jdbc.update(
+            """
+            UPDATE curriculum_item ci
+            SET "position" = ci."position" + :offset
+            FROM curriculum_section cs
+            WHERE cs.id = ci.section_id
+              AND cs.path_id = :pathId
+            """,
+            Map.of("pathId", pathId, "offset", offset)
+        );
+    }
+
+    @Override
+    public void deleteSectionsByPathId(UUID pathId) {
+        jdbc.update("DELETE FROM curriculum_section WHERE path_id = :pathId", Map.of("pathId", pathId));
+    }
+
+    @Override
+    public List<UUID> findEnrolledLearnerIds(UUID pathId) {
+        return jdbc.query(
+            "SELECT learner_id FROM curriculum_enrollment WHERE path_id = :pathId",
+            Map.of("pathId", pathId),
+            (rs, rowNum) -> rs.getObject("learner_id", UUID.class)
+        );
+    }
+
+    @Override
+    public Optional<CurriculumSection> findSectionById(UUID sectionId) {
+        return jdbc.query(
+            """
+            SELECT id, path_id, title, "position"
+            FROM curriculum_section
+            WHERE id = :sectionId
+            """,
+            Map.of("sectionId", sectionId),
+            (rs, rowNum) -> new CurriculumSection(
+                rs.getObject("id", UUID.class),
+                rs.getObject("path_id", UUID.class),
+                rs.getString("title"),
+                rs.getInt("position")
+            )
+        ).stream().findFirst();
+    }
+
+    @Override
+    public boolean existsByCode(String code, UUID excludePathId) {
+        Integer count = jdbc.queryForObject(
+            """
+            SELECT count(*)
+            FROM curriculum_path
+            WHERE code = :code
+              AND (:excludePathId::uuid IS NULL OR id <> :excludePathId::uuid)
+            """,
+            new MapSqlParameterSource()
+                .addValue("code", code)
+                .addValue("excludePathId", excludePathId),
+            Integer.class
+        );
+        return count != null && count > 0;
+    }
+
+    @Override
+    public Map<UUID, String> resolveContentTitles(List<CurriculumItem> items) {
+        if (items == null || items.isEmpty()) {
+            return Map.of();
+        }
+        Set<UUID> lessonIds = new LinkedHashSet<>();
+        Set<UUID> vocabIds = new LinkedHashSet<>();
+        Set<UUID> grammarIds = new LinkedHashSet<>();
+        Set<UUID> toeicIds = new LinkedHashSet<>();
+
+        for (CurriculumItem item : items) {
+            if (item.contentReferenceId() == null) {
+                continue;
+            }
+            switch (item.contentType()) {
+                case LESSON -> lessonIds.add(item.contentReferenceId());
+                case VOCABULARY_REVIEW -> vocabIds.add(item.contentReferenceId());
+                case GRAMMAR_PRACTICE -> grammarIds.add(item.contentReferenceId());
+                case TOEIC_DRILL, TOEIC_TEST -> toeicIds.add(item.contentReferenceId());
+            }
+        }
+
+        Map<UUID, String> titles = new HashMap<>();
+
+        if (!lessonIds.isEmpty()) {
+            jdbc.query(
+                """
+                SELECT l.id, m.title
+                FROM lesson l
+                JOIN lesson_metadata m ON m.lesson_id = l.id AND m.deleted_at IS NULL
+                WHERE l.id IN (:ids)
+                """,
+                new MapSqlParameterSource("ids", lessonIds),
+                rs -> {
+                    titles.put(rs.getObject("id", UUID.class), rs.getString("title"));
+                }
+            );
+        }
+
+        if (!vocabIds.isEmpty()) {
+            Set<UUID> remainingVocabIds = new LinkedHashSet<>(vocabIds);
+            jdbc.query(
+                """
+                SELECT u.id, COALESCE(NULLIF(p.title_vi, ''), p.title_en) || ' · ' || u.title AS title
+                FROM vocabulary_unit u
+                JOIN vocabulary_pack p ON p.id = u.pack_id
+                WHERE u.id IN (:ids)
+                """,
+                new MapSqlParameterSource("ids", vocabIds),
+                rs -> {
+                    UUID id = rs.getObject("id", UUID.class);
+                    titles.put(id, rs.getString("title"));
+                    remainingVocabIds.remove(id);
+                }
+            );
+            if (!remainingVocabIds.isEmpty()) {
+                jdbc.query(
+                    """
+                    SELECT id, COALESCE(NULLIF(title_vi, ''), title_en) AS title
+                    FROM vocabulary_pack
+                    WHERE id IN (:ids)
+                    """,
+                    new MapSqlParameterSource("ids", remainingVocabIds),
+                    rs -> {
+                        titles.put(rs.getObject("id", UUID.class), rs.getString("title"));
+                    }
+                );
+            }
+        }
+
+        if (!grammarIds.isEmpty()) {
+            jdbc.query(
+                """
+                SELECT c.id, COALESCE(NULLIF(v.title_vi, ''), v.title_en, 'Grammar Topic') AS title
+                FROM grammar_topic_catalog c
+                JOIN grammar_topic_version v ON v.catalog_id = c.id
+                JOIN dataset_active_release a ON a.release_id = v.release_id AND a.domain = 'grammar-toeic'
+                WHERE c.id IN (:ids)
+                """,
+                new MapSqlParameterSource("ids", grammarIds),
+                rs -> {
+                    titles.put(rs.getObject("id", UUID.class), rs.getString("title"));
+                }
+            );
+        }
+
+        if (!toeicIds.isEmpty()) {
+            jdbc.query(
+                """
+                SELECT c.id,
+                       CASE WHEN v.name ILIKE '%' || v.year::text || '%' THEN v.name
+                            ELSE 'TOEIC ' || v.year || ' · ' || v.name END AS title
+                FROM toeic_test_catalog c
+                JOIN toeic_test_version v ON v.catalog_id = c.id
+                JOIN dataset_active_release a ON a.release_id = v.release_id AND a.domain = 'grammar-toeic'
+                WHERE c.id IN (:ids)
+                """,
+                new MapSqlParameterSource("ids", toeicIds),
+                rs -> {
+                    titles.put(rs.getObject("id", UUID.class), rs.getString("title"));
+                }
+            );
+        }
+
+        return titles;
+    }
+
+    private Map<String, Object> decodeConfig(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            Map<String, Object> parsed = mapper.readValue(json, MAP_TYPE);
+            return parsed == null ? Map.of() : parsed;
+        } catch (Exception ignored) {
+            return Map.of();
+        }
+    }
+
+    private static CurriculumPath mapPath(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new CurriculumPath(
+            rs.getObject("id", UUID.class),
+            rs.getString("code"),
+            rs.getString("name"),
+            rs.getString("level"),
+            rs.getString("description"),
+            rs.getString("status"),
+            rs.getObject("cover_asset_id", UUID.class),
+            rs.getString("access_mode"),
+            rs.getString("required_feature_key"),
+            toInstant(rs.getTimestamp("created_at")),
+            toInstant(rs.getTimestamp("updated_at"))
+        );
+    }
+
+    private static CurriculumEnrollment mapEnrollment(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new CurriculumEnrollment(
+            rs.getObject("learner_id", UUID.class),
+            rs.getObject("path_id", UUID.class),
+            rs.getString("status"),
+            toInstant(rs.getTimestamp("started_at")),
+            toInstant(rs.getTimestamp("completed_at"))
+        );
+    }
+
+    private static Instant toInstant(Timestamp ts) {
+        return ts == null ? null : ts.toInstant();
     }
 }

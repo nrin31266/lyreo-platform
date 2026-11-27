@@ -51,15 +51,33 @@ public class JdbcQuestionSource implements QuestionSource {
         return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM toeic_placement WHERE item_id=:id AND group_id IS NOT NULL)",Map.of("id",id),Boolean.class));
     }
     public List<Map<String,Object>> context(UUID id) {
-        return jdbc.queryForList("""
-            SELECT 'IMPORTED_REFERENCE' AS provenance,p.part,p.gap_number,g.transcript_en,
+        var contexts = jdbc.queryForList("""
+            SELECT 'IMPORTED_REFERENCE' AS provenance,t.catalog_id AS test_id,t.name AS test_title,
+                p.part,p.question_number,p.gap_number,g.transcript_en,
+                COALESCE((
+                    SELECT jsonb_agg(DISTINCT jsonb_build_object('assetId', asset.id, 'role', media.role))
+                    FROM media_asset_use media
+                    JOIN release_media_asset asset ON asset.release_id=media.release_id AND asset.package_asset_id=media.asset_id
+                    WHERE media.group_id=g.id
+                ), '[]'::jsonb)::text AS media_json,
                 COALESCE((SELECT string_agg(d.html,E'\\n' ORDER BY d.ordinal) FROM toeic_document d WHERE d.group_id=g.id),g.render_html) AS passage_html
-            FROM toeic_placement p JOIN toeic_stimulus_group g ON g.id=p.group_id WHERE p.item_id=:id ORDER BY p.id LIMIT 5
+            FROM toeic_placement p
+            JOIN toeic_test_version t ON t.id=p.test_version_id
+            LEFT JOIN dataset_active_release a ON a.domain='grammar-toeic' AND a.release_id=p.release_id
+            LEFT JOIN toeic_stimulus_group g ON g.id=p.group_id
+            WHERE p.item_id=:id OR (a.release_id IS NOT NULL AND EXISTS(
+                SELECT 1 FROM content_source_alias alias
+                WHERE alias.namespace='assessment' AND alias.document_id=:id AND alias.source_id=p.item_id
+            ))
+            ORDER BY (a.release_id IS NOT NULL) DESC,t.name,p.question_number,p.id
+            LIMIT 5
             """,Map.of("id",id));
+        contexts.forEach(context -> context.put("media", json.readTree((String) context.remove("media_json"))));
+        return contexts;
     }
     public List<Summary> list(String query,Integer difficulty,String status,int page,int size) {
         return jdbc.query(catalogQuery(false),parameters(query,difficulty,status,page,size),
-            (rs,n)->new Summary(rs.getObject("id",UUID.class),rs.getString("title"),rs.getObject("difficulty",Integer.class),rs.getString("status"),rs.getBoolean("edited"),rs.getString("type"),rs.getBoolean("requires_context")));
+            (rs,n)->new Summary(rs.getObject("id",UUID.class),rs.getString("title"),rs.getObject("difficulty",Integer.class),rs.getString("status"),rs.getBoolean("edited"),rs.getString("type"),rs.getBoolean("requires_context"),rs.getObject("toeic_part",Integer.class)));
     }
     public long count(String query,Integer difficulty,String status) {
         return jdbc.queryForObject(catalogQuery(true),parameters(query,difficulty,status,0,1),Long.class);
@@ -70,19 +88,28 @@ public class JdbcQuestionSource implements QuestionSource {
             WITH items AS (
                 SELECT COALESCE(d.id,i.id) AS id,COALESCE(d.draft->>'title',i.stem_en,'') AS title,CASE WHEN d.id IS NULL THEN i.difficulty_level ELSE CAST(d.draft->>'difficultyLevel' AS integer) END AS difficulty,
                     COALESCE(NULLIF(d.status,'DRAFT'),'PUBLISHED') AS status,d.id IS NOT NULL AS edited,COALESCE(d.draft->>'kind',i.kind) AS type,
-                    COALESCE(d.draft->>'kind',i.kind)='CLOZE' OR EXISTS(SELECT 1 FROM toeic_placement p WHERE p.item_id=i.id AND p.group_id IS NOT NULL) AS requires_context
+                    (COALESCE(d.draft->>'kind',i.kind)='CLOZE'
+                    OR btrim(COALESCE(d.draft->>'title',i.stem_en,''))=''
+                    OR EXISTS(SELECT 1 FROM toeic_placement p WHERE p.item_id=i.id AND p.group_id IS NOT NULL)) AS requires_context,
+                    i.id AS source_id
                 FROM assessment_item i JOIN dataset_active_release a ON a.release_id=i.release_id
                 LEFT JOIN content_source_alias alias ON alias.namespace='assessment' AND alias.source_id=i.id
                 LEFT JOIN content_source_binding binding ON binding.namespace=alias.namespace AND binding.document_id=alias.document_id AND binding.enabled
                 LEFT JOIN content_document d ON d.namespace='assessment' AND d.id=COALESCE(binding.document_id,i.id)
                   AND NOT EXISTS(SELECT 1 FROM content_source_binding off WHERE off.namespace=d.namespace AND off.document_id=d.id AND NOT off.enabled)
                 WHERE a.domain='grammar-toeic'
-                UNION ALL SELECT d.id,COALESCE(d.draft->>'title',''),CAST(d.draft->>'difficultyLevel' AS integer),d.status,true,d.draft->>'kind',COALESCE(d.draft->>'kind'='CLOZE',false)
+                UNION ALL SELECT d.id,COALESCE(d.draft->>'title',''),CAST(d.draft->>'difficultyLevel' AS integer),d.status,true,d.draft->>'kind',COALESCE(d.draft->>'kind'='CLOZE',false) OR btrim(COALESCE(d.draft->>'title',''))='',NULL
                 FROM content_document d WHERE d.namespace='assessment' AND NOT EXISTS(SELECT 1 FROM content_source_binding off WHERE off.namespace=d.namespace AND off.document_id=d.id AND NOT off.enabled) AND NOT EXISTS(SELECT 1 FROM assessment_item i WHERE i.id=d.id)
-            ) SELECT %s FROM items WHERE (:q='' OR title ILIKE :pattern)
+            ), matching AS (SELECT * FROM items WHERE (:q='' OR title ILIKE :pattern)
                 AND (CAST(:difficulty AS integer) IS NULL OR difficulty=:difficulty) AND (:status='' OR status=:status)
-            %s
-            """ .formatted(count ? "count(*)" : "*", count ? "" : "ORDER BY id LIMIT :size OFFSET :offset");
+                %s
+            ) SELECT %s FROM matching %s
+            """.formatted(count ? "" : "ORDER BY id LIMIT :size OFFSET :offset",
+                count ? "count(*)" : """
+                    matching.*, CASE WHEN btrim(title) = '' THEN
+                        (SELECT MIN(p.part) FROM toeic_placement p WHERE p.item_id = matching.source_id)
+                    END AS toeic_part
+                    """, count ? "" : "ORDER BY id");
     }
     private MapSqlParameterSource parameters(String query,Integer difficulty,String status,int page,int size) {
         return new MapSqlParameterSource().addValue("q",query).addValue("pattern","%"+query+"%")

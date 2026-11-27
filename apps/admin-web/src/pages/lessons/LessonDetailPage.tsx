@@ -25,7 +25,8 @@ import { LessonBuilderPage } from "@/pages/lesson-builder/LessonBuilderPage";
 import { fetchDraft } from "@/pages/lesson-builder/lesson-builder.api";
 import { LessonPlayer } from "@/pages/lesson-builder/AudioPreview";
 import { useMetadata, catalogKeys } from "./catalog.queries";
-import { setVisibility } from "./catalog.api";
+import { saveLessonAccess, setVisibility } from "./catalog.api";
+import { AccessTierBadge, CefrLevelBadge } from "@/components/ContentBadges";
 import { CatalogError, CatalogSkeleton, CatalogImage } from "./CatalogFeedback";
 import { LessonMetadataForm } from "./LessonMetadataForm";
 function sourceSurface(text: string, start: number, end: number) {
@@ -72,9 +73,20 @@ function PublishedLesson({ id }: { id: string }) {
     enabled: !lesson.authoring,
   });
   const visibility = useMutation({
-    mutationFn: () => setVisibility(id, !lesson.visible,lesson.version),
+    mutationFn: () => setVisibility(id, !lesson.visible, lesson.version),
     onSuccess: async () => {
       setConfirm(false);
+      await client.invalidateQueries({ queryKey: catalogKeys.all });
+    },
+  });
+  const accessMutation = useMutation({
+    mutationFn: (plus: boolean) =>
+      saveLessonAccess(id, {
+        accessMode: plus ? "FEATURE" : "PUBLIC",
+        requiredFeatureKey: plus ? "lesson.plus-lessons" : null,
+        version: lesson.version,
+      }),
+    onSuccess: async () => {
       await client.invalidateQueries({ queryKey: catalogKeys.all });
     },
   });
@@ -86,11 +98,25 @@ function PublishedLesson({ id }: { id: string }) {
             {t("catalog.lessons")}
           </Link>
           <h1>{lesson.title}</h1>
-          <Badge variant="secondary">
-            {t(lesson.channelVisible === false ? "catalog.hiddenByChannel" : lesson.visible ? "catalog.published" : "catalog.hiddenIndividually")}
-          </Badge>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <Badge variant={lesson.channelVisible !== false && lesson.visible ? "success" : "secondary"}>
+              {t(lesson.channelVisible === false ? "catalog.hiddenByChannel" : lesson.visible ? "catalog.published" : "catalog.hiddenIndividually")}
+            </Badge>
+            <AccessTierBadge accessMode={lesson.accessMode} />
+            <CefrLevelBadge level={lesson.cefr} />
+          </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={accessMutation.isPending}
+            onClick={() => accessMutation.mutate(lesson.accessMode !== "FEATURE")}
+          >
+            {lesson.accessMode === "FEATURE"
+              ? t("plansConsole.tiers.FREE")
+              : t("plansConsole.tiers.PLUS")}
+          </Button>
           <Button variant="outline" onClick={() => setEditing(true)}>
             {t("catalog.editMetadata")}
           </Button>

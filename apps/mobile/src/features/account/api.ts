@@ -4,6 +4,7 @@ export type CurrentUser = {
   id: string;
   subject: string;
   email: string;
+  roles?: string[];
 };
 
 export function getCurrentUser(client: ApiClient, signal?: AbortSignal): Promise<CurrentUser> {

@@ -1,10 +1,11 @@
 package com.lyreo.toeic.infrastructure.persistence;
+
+import com.lyreo.assessment.domain.QuestionContent;
 import com.lyreo.toeic.application.port.ToeicEditorSource;
 import com.lyreo.toeic.domain.ToeicDraft;
-import com.lyreo.assessment.domain.QuestionContent;
 import java.util.*;
-import org.springframework.stereotype.Repository;
 import org.springframework.jdbc.core.namedparam.*;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcToeicEditorSource implements ToeicEditorSource {
@@ -49,6 +50,22 @@ public class JdbcToeicEditorSource implements ToeicEditorSource {
             """,Map.of("id",id),(rs,n)->new Metadata(new ToeicDraft(rs.getString("name"),"SOURCE-"+rs.getInt("year")+"-"+rs.getInt("test_number"),"FULL_TEST",rs.getInt("year"),rs.getInt("test_number"),rs.getObject("listening_duration_seconds",Integer.class),rs.getObject("reading_duration_seconds",Integer.class),rs.getString("access_mode"),rs.getString("required_feature_key"),List.of(),List.of()),rs.getInt("total_questions"),rs.getBoolean("source_blocked"))).stream().findFirst();
     }
     public String status(UUID id) {return jdbc.queryForObject("SELECT publication_status FROM toeic_test_catalog WHERE id=:id",Map.of("id",id),String.class);}
+    @Override
+    public void updateAccess(UUID id, String accessMode, String requiredFeatureKey) {
+        jdbc.update(
+            """
+            UPDATE toeic_test_catalog
+            SET access_mode = :accessMode,
+                required_feature_key = :featureKey,
+                updated_at = now()
+            WHERE id = :id
+            """,
+            new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("accessMode", accessMode)
+                .addValue("featureKey", requiredFeatureKey)
+        );
+    }
     public List<Summary> list(String query,Integer year,String status,int page,int size) {return list(query,year,status,"","","",page,size);}
     public List<Summary> list(String query,Integer year,String status,String type,String access,String quality,int page,int size) {
         return jdbc.query(catalogQuery(false),parameters(query,year,status,type,access,quality,page,size),
@@ -57,6 +74,88 @@ public class JdbcToeicEditorSource implements ToeicEditorSource {
     public long count(String query,Integer year,String status,String type,String access,String quality) {
         return jdbc.queryForObject(catalogQuery(true),parameters(query,year,status,type,access,quality,0,1),Long.class);
     }
+
+    @Override
+    public List<PublishedSummary> listPublished(int page, int size) {
+        return jdbc.query(
+            publishedQuery(false),
+            Map.of("size", size, "offset", page * size),
+            (rs, n) -> new PublishedSummary(
+                rs.getObject("id", UUID.class),
+                rs.getString("title"),
+                rs.getString("type"),
+                rs.getObject("year", Integer.class),
+                rs.getInt("question_count"),
+                rs.getObject("listening_duration_seconds", Integer.class),
+                rs.getObject("reading_duration_seconds", Integer.class),
+                rs.getString("access_mode"),
+                rs.getString("required_feature_key")
+            )
+        );
+    }
+
+    @Override
+    public long countPublished() {
+        Long count = jdbc.queryForObject(publishedQuery(true), Map.of(), Long.class);
+        return count == null ? 0L : count;
+    }
+
+    private String publishedQuery(boolean count) {
+        String selectClause = count ? "count(*)" : "*";
+        String orderClause = count ? "" : "ORDER BY year DESC NULLS LAST, test_number NULLS LAST, title, id LIMIT :size OFFSET :offset";
+        return """
+            WITH tests AS (
+                SELECT c.id,
+                    CASE WHEN p.id IS NOT NULL THEN p.content->>'title' ELSE v.name END AS title,
+                    CASE WHEN p.id IS NOT NULL THEN COALESCE(p.content->>'type', 'FULL_TEST') ELSE 'FULL_TEST' END AS type,
+                    CASE WHEN p.id IS NOT NULL THEN CAST(p.content->>'year' AS integer) ELSE v.year END AS year,
+                    CASE WHEN p.id IS NOT NULL THEN jsonb_array_length(p.content->'placements') ELSE v.total_questions END AS question_count,
+                    CASE WHEN p.id IS NOT NULL THEN CAST(p.content->>'listeningDurationSeconds' AS integer) ELSE v.listening_duration_seconds END AS listening_duration_seconds,
+                    CASE WHEN p.id IS NOT NULL THEN CAST(p.content->>'readingDurationSeconds' AS integer) ELSE v.reading_duration_seconds END AS reading_duration_seconds,
+                    CASE WHEN p.id IS NOT NULL THEN p.content->>'accessMode' ELSE c.access_mode END AS access_mode,
+                    CASE WHEN p.id IS NOT NULL THEN p.content->>'requiredFeatureKey' ELSE c.required_feature_key END AS required_feature_key,
+                    CASE WHEN p.id IS NOT NULL THEN CAST(p.content->>'testNumber' AS integer) ELSE v.test_number END AS test_number
+                FROM toeic_test_version v
+                JOIN toeic_test_catalog c ON c.id = v.catalog_id
+                JOIN dataset_active_release a ON a.release_id = v.release_id
+                LEFT JOIN content_document d ON d.namespace = 'toeic' AND d.id = c.id
+                    AND NOT EXISTS(SELECT 1 FROM content_source_binding b WHERE b.namespace = d.namespace AND b.document_id = d.id AND NOT b.enabled)
+                LEFT JOIN content_publication p ON p.id = d.publication_id AND d.status = 'PUBLISHED'
+                WHERE a.domain = 'grammar-toeic'
+                  AND (
+                      (d.id IS NOT NULL AND d.status = 'PUBLISHED' AND p.id IS NOT NULL)
+                      OR (
+                          (d.id IS NULL OR (d.status = 'DRAFT' AND d.publication_id IS NULL))
+                          AND c.publication_status = 'PUBLISHED'
+                          AND NOT EXISTS(SELECT 1 FROM toeic_stimulus_group g WHERE g.test_version_id = v.id AND jsonb_array_length(g.source_issues) > 0)
+                      )
+                  )
+                UNION ALL
+                SELECT d.id,
+                    p.content->>'title' AS title,
+                    COALESCE(p.content->>'type', 'FULL_TEST') AS type,
+                    CAST(p.content->>'year' AS integer) AS year,
+                    jsonb_array_length(p.content->'placements') AS question_count,
+                    CAST(p.content->>'listeningDurationSeconds' AS integer) AS listening_duration_seconds,
+                    CAST(p.content->>'readingDurationSeconds' AS integer) AS reading_duration_seconds,
+                    p.content->>'accessMode' AS access_mode,
+                    p.content->>'requiredFeatureKey' AS required_feature_key,
+                    CAST(p.content->>'testNumber' AS integer) AS test_number
+                FROM content_document d
+                JOIN content_publication p ON p.id = d.publication_id
+                WHERE d.namespace = 'toeic'
+                  AND d.status = 'PUBLISHED'
+                  AND NOT EXISTS(SELECT 1 FROM toeic_test_version v JOIN dataset_active_release a ON a.release_id = v.release_id WHERE a.domain = 'grammar-toeic' AND v.catalog_id = d.id)
+                  AND NOT EXISTS(SELECT 1 FROM content_source_binding off WHERE off.namespace = d.namespace AND off.document_id = d.id AND NOT off.enabled)
+            )
+            SELECT %s
+            FROM tests
+            WHERE type = 'FULL_TEST'
+              AND question_count = 200
+            %s
+            """.formatted(selectClause, orderClause);
+    }
+
     private String catalogQuery(boolean count) {
 
         return """

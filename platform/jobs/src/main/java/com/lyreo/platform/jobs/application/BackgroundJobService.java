@@ -55,6 +55,10 @@ public class BackgroundJobService {
         return repository.list(statuses, type, page, size);
     }
 
+    public JobHealthCounts healthCounts(java.time.Instant since) {
+        return repository.healthCounts(since);
+    }
+
     public Optional<BackgroundJob> latest(String type, String ownerModule, UUID ownerReferenceId) {
         return repository.latest(type, ownerModule, ownerReferenceId);
     }

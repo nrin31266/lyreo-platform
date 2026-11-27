@@ -1,16 +1,43 @@
 package com.lyreo.lesson.application.port;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 /** Persistence port for learner attempts/progress owned by the Lesson module. */
 public interface LessonPracticeRepository {
 
+    default Optional<LessonAccess> findLessonAccess(UUID lessonId) {
+        return Optional.empty();
+    }
+
+    default List<UUID> findCompletedSentenceIds(UUID learnerId, UUID activityId, int completionScore) {
+        return List.of();
+    }
+
+    default List<UUID> findActivitySentenceIds(UUID lessonId, UUID activityId) {
+        return List.of();
+    }
+
+    record LessonAccess(String accessMode, String requiredFeatureKey) {}
+
     Optional<DictationTarget> findDictationTarget(
         UUID lessonId,
         UUID activityId,
         UUID sentenceId
     );
+
+    default boolean isLessonAvailable(UUID lessonId) {
+        return false;
+    }
+
+    default Optional<ShadowingTarget> findShadowingTarget(
+        UUID lessonId,
+        UUID activityId,
+        UUID sentenceId
+    ) {
+        return Optional.empty();
+    }
 
     UUID appendDictationAttempt(
         UUID learnerId,
@@ -19,6 +46,27 @@ public interface LessonPracticeRepository {
         int serverScore,
         String detailJson
     );
+
+    default void appendShadowingAttempt(
+        UUID attemptId,
+        UUID learnerId,
+        UUID lessonId,
+        UUID activityId,
+        UUID sentenceId,
+        int serverScore,
+        String transcript,
+        String detailJson
+    ) {
+        throw new UnsupportedOperationException("appendShadowingAttempt is not implemented");
+    }
+
+    default Optional<WatchTarget> findWatchTarget(UUID lessonId, UUID activityId) {
+        return Optional.empty();
+    }
+
+    default WatchCompletion completeWatchActivity(UUID learnerId, UUID lessonId, UUID activityId, int totalItems) {
+        throw new UnsupportedOperationException("completeWatchActivity is not implemented");
+    }
 
     ActivityProgress refreshActivityProgress(
         UUID learnerId,
@@ -36,6 +84,29 @@ public interface LessonPracticeRepository {
         UUID activityId,
         UUID sentenceId,
         String expectedText
+    ) {}
+
+    record ShadowingTarget(
+        UUID lessonId,
+        UUID activityId,
+        UUID sentenceId,
+        String expectedText,
+        Long audioStartMs,
+        Long audioEndMs,
+        boolean playable
+    ) {}
+
+    record WatchTarget(
+        UUID lessonId,
+        UUID activityId,
+        String activityType,
+        int totalItems
+    ) {}
+
+    record WatchCompletion(
+        int completedItems,
+        int totalItems,
+        boolean newlyCompleted
     ) {}
 
     record ActivityProgress(int completedItems, int totalItems, Integer bestScore) {}

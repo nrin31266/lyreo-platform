@@ -85,3 +85,10 @@ it('refreshes the list and selected job after cancellation is accepted', async (
   expect(api.fetchJobs).toHaveBeenCalledTimes(2);
   expect(api.fetchJob).toHaveBeenCalledTimes(2);
 });
+it('filters with quick status pills and links directly to authoring lessons from table rows', async () => {
+  show();
+  const row = await screen.findByRole('row', { name: /Lesson authoring/ });
+  expect(within(row).getByRole('link', { name: /Open lesson 11111111/i })).toHaveAttribute('href', '/lessons/lesson-a');
+  fireEvent.click(screen.getByRole('button', { name: 'Failed' }));
+  await waitFor(() => expect(vi.mocked(api.fetchJobs).mock.calls.at(-1)![0].get('status')).toBe('FAILED'));
+});

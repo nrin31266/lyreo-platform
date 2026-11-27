@@ -26,17 +26,24 @@ Use the versions in `.java-version`, `.nvmrc`, and `package.json#packageManager`
 make init-env
 # Add the team's R2 endpoint and credentials to apps/core-service/.env and tools/data-import/.env.
 make setup
-make seed-lessons
-make setup-data
 ```
 
-New environment files select the shared R2 bucket. `make setup` checks the storage settings,
-syncs dependencies, starts PostgreSQL and Keycloak, applies Flyway migrations, and creates demo
-accounts. `make seed-lessons` adds published sample lessons with audio on R2. `make setup-data`
-imports the dictionary, Grammar/TOEIC and Vocabulary catalogs. For isolated development without
-R2 credentials, set `STORAGE_MODE=local` in both files and run `make setup` for basic dev data.
+New environment files select the shared R2 bucket. Setup checks the storage settings, syncs dependencies,
+starts PostgreSQL and Keycloak, imports all frozen datasets and seeds demo data. For isolated development
+without R2 credentials, set `STORAGE_MODE=local` in both files before running `make setup` to seed demo
+data with filesystem storage. `SKIP_DATA=1 make setup` skips the dataset import in R2 mode.
 
-See the [Data Import guide](tools/data-import/README.md) for individual catalog imports.
+To install datasets separately:
+
+```bash
+make setup-data DATASET=lexicon        # Dictionary
+make setup-data DATASET=grammar-toeic  # Grammar and TOEIC L&R
+make setup-data DATASET=vocabulary     # Curated Vocabulary packs
+make setup-data                        # Import all three frozen releases + run make seed
+```
+
+The second and third commands verify or reuse the shared R2 media if both environments select R2.
+See the [Data Import guide](tools/data-import/README.md).
 Application source runs on the host. With `make dev-infra` running, start Core, AI and Admin in one
 terminal with prefixed logs, or start each process in its own terminal:
 
@@ -59,7 +66,8 @@ business modules. It follows your editor's save behavior; it does not change aut
 See [Core development](apps/core-service/README.md#local-run-and-verification) for setup and reload details.
 
 `make mobile` starts Metro. Install the Expo development build first using the [Mobile guide](apps/mobile/README.md).
-The sample lessons and their R2 audio are ready to use after setup. Run local AI models for tasks that need to generate new audio or transcripts locally.
+With R2 configured, sample lessons and their audio are ready to use after setup. Use `make ai-local`
+for tasks that need local models to generate audio or transcripts.
 
 ## Common commands
 
@@ -69,9 +77,8 @@ The sample lessons and their R2 audio are ready to use after setup. Run local AI
 | `make dev-infra` | Start local PostgreSQL and Keycloak after initial `make setup` |
 | `make db-shell`, `make db-reset` | Inspect DB or preview lesson-only reset; [scope and confirmation](docs/DEVELOPMENT.md) |
 | `make db-recreate`, `make down-v` | Guarded destructive DB/volume operations; see the same guide |
-| `make migrate`, `make seed-dev` | Apply schema and add reference categories without overwriting edits |
-| `make seed-lessons` | Add published sample lessons that use shared R2 audio |
-| `make setup-data`, `make data-storage-check` | Import frozen catalogs or check media storage alignment |
+| `make migrate`, `make seed` | Apply schema and seed reference data, learners, lessons, curriculum paths, and demo media |
+| `make setup-data`, `make data-storage-check` | Import frozen datasets (+ `make seed` for `all`) or check media storage alignment |
 | `make data-check`, `make data-fetch` | Verify or acquire the clean Grammar/TOEIC release |
 | `make setup-media` | Install the Core YouTube downloader; FFmpeg/ffprobe required on the host |
 | `make validate`, `make check` | Offline guards or full verification |

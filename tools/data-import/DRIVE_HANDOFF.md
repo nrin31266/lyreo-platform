@@ -1,11 +1,25 @@
-# Bàn giao gói dữ liệu qua Drive
+# Bàn giao gói dữ liệu qua Drive (ĐÃ ĐÓNG BĂNG / CHỈ ĐỌC)
 
-Hai archive dùng Drive nằm trong `.data/releases/`. Upload đúng hai file này vào thư mục Drive của nhóm.
+> **CHÍNH SÁCH KHÓA DRIVE (READ-ONLY):** Thư mục Google Drive [`1XrAmgAaSDtar8UAeKT9URq3KbRGN2UH4`](https://drive.google.com/drive/folders/1XrAmgAaSDtar8UAeKT9URq3KbRGN2UH4) và toàn bộ 7 file release đã được đóng băng tại [release-lock.json](release-lock.json). **Không sửa, ghi đè hoặc upload trực tiếp lên các gói trên Drive nữa.** Mọi cập nhật nội dung vận hành thực hiện qua Admin UI, PostgreSQL, seed trong Git ([infra/postgres/seed/](../../infra/postgres/seed/)) và R2. Các lệnh tải Drive được khóa cứng chỉ đọc (`assert_drive_url_locked` + `make validate`).
 
-| Archive | SHA-256 |
-| --- | --- |
-| `lexicon-2.0.1.tar.gz` | `ef183fa9cedc4bc2bd8f80b884116825f7735d3c7528acb30ceb9272a736972a` |
-| `grammar-toeic-2.0.12.tar.gz` | `10b090b40e1b69fff690f99e79f5e09711c3eb0c7bd422031676c98c1b7226ba` |
+Hai archive dùng Drive nằm trong `.data/releases/`. Các file hiện có trong thư mục Drive của nhóm (đã đối chiếu khớp SHA-256 với `release-checksums-manifest.json` và `release-lock.json`):
+
+| Archive | Role | Objects | SHA-256 | Drive Link |
+| --- | --- | --- | --- | --- |
+| `lexicon-2.0.1.tar.gz` | Full release | — | `ef183fa9cedc4bc2bd8f80b884116825f7735d3c7528acb30ceb9272a736972a` | [Drive](https://drive.google.com/file/d/1FcdLfF5cqmwl3U_et_jK-pHOcWW-cMCW/view) |
+| `grammar-toeic-2.0.12.tar.gz` | Full release (rollback baseline) | — | `10b090b40e1b69fff690f99e79f5e09711c3eb0c7bd422031676c98c1b7226ba` | [Drive](https://drive.google.com/file/d/1ZbgXuQA33zsaNC9SBFMraTdtiCMtiyVd/view) |
+| `grammar-toeic-catalog-2.0.12.tar.gz` | Catalog-only (`--catalog-only`) | — | `48ad50623e8565758084a0a3a8dfd3e046a255cde1936af404e4a4624d9c43a9` | [Drive](https://drive.google.com/file/d/1rNd1Xv8v70CBGC81evSu8HwXq6M6NIJx/view) |
+| `grammar-toeic-media-2.0.12.tar.gz` | Media backup (`lyreo.media-backup`) | 4,875 | `df07a2650ad33f5d53ba504020f5abea61bb284f88c735614ad2b6bdc40bcf50` | [Drive](https://drive.google.com/file/d/1Z-d1rdfJkH6EUSm-QPeKU7bVlHU4ivse/view) |
+| `vocabulary-catalog-1.3.0.tar.gz` | Catalog-only | — | `2fd037e2824c2663edcff72ff1ba48b958acb1d9953aa8e6935511a8551f2c51` | [Drive](https://drive.google.com/file/d/1PzxSDGzxihgs1gNW6FwvOuKI59bl2r0P/view) |
+| `vocabulary-media-1.3.0.tar.gz` | R2 media backup (`lyreo.media-backup`) | 30,203 | `b59a02b92b4d0543abcf2b25f16e53f66059820cb55074200853cd62f6cb2464` | [Drive](https://drive.google.com/file/d/17O60vxpGbVgSPsVeA2mJcUgS98DwI3bd/view) |
+| `release-checksums-manifest.json` | Release checksums index | — | `7ba47bde4a61982317fe760b718329342512b88cb9d919e058b60a6ac5094271` | [Drive](https://drive.google.com/file/d/1CXhomCiiC3b8PkzdoeE7oLjgn1LZhB6X/view) |
+
+Thư mục Drive dùng chung: [Google Drive Release Folder](https://drive.google.com/drive/folders/1XrAmgAaSDtar8UAeKT9URq3KbRGN2UH4).
+
+## Quy trình `--catalog-only` & Khôi phục Media Backup
+
+- Cài/kiểm tra Grammar/TOEIC chỉ phần catalog (khi media đã có trên R2 hoặc `LOCAL_STORAGE_ROOT`): đặt `GRAMMAR_TOEIC_RELEASE_URL` và `GRAMMAR_TOEIC_RELEASE_SHA256` trỏ sang `grammar-toeic-catalog-2.0.12.tar.gz` rồi chạy `scripts/fetch_release.py --catalog-only` (hoặc đặt `GRAMMAR_TOEIC_CATALOG_ONLY=true`).
+- Khôi phục media dự phòng từ `grammar-toeic-media-2.0.12.tar.gz` hoặc `vocabulary-media-1.3.0.tar.gz` lên storage đích: giải nén archive vào thư mục tạm rồi chạy `uv run --locked --extra dev python release_media.py --restore-media <EXTRACTED_DIR>` (có thể kiểm chéo thêm với `--release` khi có catalog).
 
 Các thay đổi Admin và API dùng cùng hai archive. Giữ nguyên tên file và bytes để checksum khớp.
 Mỗi archive chứa manifest, nội dung, nguồn và kiểm tra toàn vẹn. Dữ liệu thô, thư mục đã giải nén, log, bản dump DB và file `.env` nằm ngoài bộ bàn giao.

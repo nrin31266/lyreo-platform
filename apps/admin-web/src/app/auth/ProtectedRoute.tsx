@@ -1,17 +1,8 @@
-import { RiShieldKeyholeLine as ShieldAlert } from "@remixicon/react";
-import type { PropsWithChildren } from 'react';
+import { useEffect, useRef, useState, type PropsWithChildren } from 'react';
+import { RiShieldKeyholeLine as ShieldAlert } from '@remixicon/react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import { LoginForm } from '@/components/login-form';
 import { useAuth } from './AuthProvider';
-
-export function Login() {
-  return (
-    <main className="login-page">
-      <LoginForm />
-    </main>
-  );
-}
 
 export function Unauthorized() {
   const { t } = useTranslation(['admin', 'common']);
@@ -33,15 +24,43 @@ export function Unauthorized() {
 }
 
 export function ProtectedRoute({ children }: PropsWithChildren) {
-  const { isLoading, isAuthenticated, isAdmin } = useAuth();
+  const { isLoading, isAuthenticated, isAdmin, login } = useAuth();
   const { t } = useTranslation('admin');
-  if (isLoading)
+  const triggered = useRef(false);
+  const [loginFailed, setLoginFailed] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated && !triggered.current) {
+      triggered.current = true;
+      void login().catch(() => setLoginFailed(true));
+    }
+  }, [isLoading, isAuthenticated, login]);
+
+  if (isLoading || (!isAuthenticated && !loginFailed)) {
     return (
       <div className="center" role="status">
         {t('loading')}
       </div>
     );
-  if (!isAuthenticated) return <Login />;
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <main className="center gap-3">
+        <p className="text-sm text-muted-foreground">{t('authRedirectError')}</p>
+        <Button
+          onClick={() => {
+            setLoginFailed(false);
+            triggered.current = true;
+            void login().catch(() => setLoginFailed(true));
+          }}
+        >
+          {t('signInAction')}
+        </Button>
+      </main>
+    );
+  }
+
   if (!isAdmin) return <Unauthorized />;
   return <>{children}</>;
 }
