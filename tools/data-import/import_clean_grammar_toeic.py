@@ -820,7 +820,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"))
     parser.add_argument("--batch-size", type=int, default=500)
     parser.add_argument("--apply", action="store_true", help="Write to PostgreSQL/storage; default is a full dry run")
-    parser.add_argument("--catalog-only", action="store_true", help="Install catalog without requiring extracted media on disk")
+    parser.add_argument(
+        "--catalog-only",
+        action="store_true",
+        default=os.getenv("GRAMMAR_TOEIC_CATALOG_ONLY", "").strip().lower() in {"1", "true", "yes"},
+        help="Install catalog without requiring extracted media on disk",
+    )
     parser.add_argument("--allow-upgrade", action="store_true", help="Cut over dataset_active_release after a SUCCEEDED APPLY")
     parser.add_argument("--backup-media", type=Path, help="Export manifest-referenced media objects to a backup directory")
     parser.add_argument("--restore-media", type=Path, help="Restore backed-up media objects to target storage")

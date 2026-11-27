@@ -16,12 +16,16 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -61,6 +65,10 @@ public class AdminGamificationController {
             .stream()
             .map(DiamondTransactionEntry::from)
             .toList();
+        LocalDate lastStudy = summary.lastStudyDate();
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        int activeStreak = lastStudy == null || lastStudy.isBefore(today.minusDays(1))
+            || lastStudy.isAfter(today) ? 0 : summary.currentStreak();
         return new LearnerGamificationResponse(
             summary.learnerId(),
             summary.xp(),
@@ -68,9 +76,9 @@ public class AdminGamificationController {
             summary.xpIntoCurrentLevel(),
             summary.xpPerLevel(),
             summary.diamondBalance(),
-            summary.currentStreak(),
+            activeStreak,
             summary.longestStreak(),
-            summary.lastStudyDate(),
+            lastStudy,
             transactions
         );
     }
@@ -245,7 +253,13 @@ public class AdminGamificationController {
     }
 
     @PutMapping("/reward-policy")
-    public RewardPolicyConfig updateRewardPolicy(@Valid @RequestBody SaveRewardPolicyRequest request) {
+    public RewardPolicyConfig updateRewardPolicy(
+        @AuthenticationPrincipal Jwt jwt,
+        @Valid @RequestBody SaveRewardPolicyRequest request
+    ) {
+        String actor = jwt != null
+            ? Optional.ofNullable(jwt.getClaimAsString("email")).filter(s -> !s.isBlank()).orElse(jwt.getSubject())
+            : "admin";
         return adminService.updateRewardPolicy(
             request.ruleVersion(),
             request.directLessonActivityDiamondsEnabled(),
@@ -268,7 +282,8 @@ public class AdminGamificationController {
                 : RewardPolicyConfig.DEFAULT_MILESTONE_DIAMOND_BASE,
             request.milestoneDiamondGrowth() != null
                 ? request.milestoneDiamondGrowth()
-                : RewardPolicyConfig.DEFAULT_MILESTONE_DIAMOND_GROWTH
+                : RewardPolicyConfig.DEFAULT_MILESTONE_DIAMOND_GROWTH,
+            actor
         );
     }
 
@@ -330,15 +345,15 @@ public class AdminGamificationController {
     }
 
     public record SaveRewardPolicyRequest(
-        @NotBlank String ruleVersion,
+        String ruleVersion,
         boolean directLessonActivityDiamondsEnabled,
         Instant cutoverEffectiveAt,
-        @Min(1) int xpPerLevel,
-        @Min(0) Integer xpGrowthPerLevel,
+        @Min(1) @Max(100000) int xpPerLevel,
+        @Min(0) @Max(10000) Integer xpGrowthPerLevel,
         @Min(1) @Max(99) Integer maxLevel,
         Double xpLevelMultiplier,
         @Min(0) @Max(50) Integer milestoneInterval,
-        @Min(0) Integer milestoneDiamondBase,
-        @Min(0) Integer milestoneDiamondGrowth
+        @Min(0) @Max(10000) Integer milestoneDiamondBase,
+        @Min(0) @Max(5000) Integer milestoneDiamondGrowth
     ) {}
 }

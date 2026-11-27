@@ -13,14 +13,19 @@ import com.lyreo.gamification.domain.AdminMissionDefinition;
 import com.lyreo.gamification.domain.DiamondTransaction;
 import com.lyreo.gamification.domain.MissionDefinition;
 import com.lyreo.gamification.domain.RewardPolicyConfig;
+import java.sql.Types;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 /** Admin-initiated idempotent diamond ledger adjustments and mission/achievement/policy management. */
 public class GamificationAdminService {
@@ -29,13 +34,15 @@ public class GamificationAdminService {
     private final Predicate<UUID> learnerExists;
     private final MissionProgressRepository missions;
     private final AchievementRepository achievements;
+    private final NamedParameterJdbcTemplate jdbc;
+    private final ObjectMapper mapper;
 
     public GamificationAdminService(
         DiamondLedger ledger,
         RewardPolicyConfigRepository policyConfig,
         Predicate<UUID> learnerExists
     ) {
-        this(ledger, policyConfig, learnerExists, null, null);
+        this(ledger, policyConfig, learnerExists, null, null, null, null);
     }
 
     public GamificationAdminService(
@@ -45,11 +52,25 @@ public class GamificationAdminService {
         MissionProgressRepository missions,
         AchievementRepository achievements
     ) {
+        this(ledger, policyConfig, learnerExists, missions, achievements, null, null);
+    }
+
+    public GamificationAdminService(
+        DiamondLedger ledger,
+        RewardPolicyConfigRepository policyConfig,
+        Predicate<UUID> learnerExists,
+        MissionProgressRepository missions,
+        AchievementRepository achievements,
+        NamedParameterJdbcTemplate jdbc,
+        ObjectMapper mapper
+    ) {
         this.ledger = Objects.requireNonNull(ledger, "ledger");
         this.policyConfig = Objects.requireNonNull(policyConfig, "policyConfig");
         this.learnerExists = Objects.requireNonNull(learnerExists, "learnerExists");
         this.missions = missions;
         this.achievements = achievements;
+        this.jdbc = jdbc;
+        this.mapper = mapper != null ? mapper : new ObjectMapper();
     }
 
     public List<AdminMissionDefinition> listMissions() {
@@ -341,9 +362,35 @@ public class GamificationAdminService {
         int milestoneDiamondBase,
         int milestoneDiamondGrowth
     ) {
-        if (ruleVersion == null || ruleVersion.isBlank()) {
-            throw new RequestValidationException("ruleVersion is required");
-        }
+        return updateRewardPolicy(
+            ruleVersion,
+            directLessonActivityDiamondsEnabled,
+            cutoverEffectiveAt,
+            xpPerLevel,
+            xpGrowthPerLevel,
+            maxLevel,
+            xpLevelMultiplier,
+            milestoneInterval,
+            milestoneDiamondBase,
+            milestoneDiamondGrowth,
+            null
+        );
+    }
+
+    @Transactional
+    public RewardPolicyConfig updateRewardPolicy(
+        String ruleVersion,
+        boolean directLessonActivityDiamondsEnabled,
+        Instant cutoverEffectiveAt,
+        int xpPerLevel,
+        int xpGrowthPerLevel,
+        int maxLevel,
+        double xpLevelMultiplier,
+        int milestoneInterval,
+        int milestoneDiamondBase,
+        int milestoneDiamondGrowth,
+        String actor
+    ) {
         if (xpPerLevel <= 0 || xpPerLevel > 100_000) {
             throw new RequestValidationException("xpPerLevel must be between 1 and 100000");
         }
@@ -362,11 +409,17 @@ public class GamificationAdminService {
         if (milestoneDiamondBase < 0 || milestoneDiamondBase > 10_000 || milestoneDiamondGrowth < 0 || milestoneDiamondGrowth > 5_000) {
             throw new RequestValidationException("milestone diamond values out of range");
         }
+        RewardPolicyConfig before = policyConfig.current();
+        String resolvedVersion = (ruleVersion != null && !ruleVersion.isBlank())
+            ? ruleVersion.trim()
+            : (before != null ? before.normalizedRuleVersion() : RewardPolicyConfig.DEFAULT_RULE_VERSION);
         Instant cutover = cutoverEffectiveAt != null
             ? cutoverEffectiveAt
-            : RewardPolicyConfig.DEFAULT_CUTOVER;
-        return policyConfig.save(new RewardPolicyConfig(
-            ruleVersion.trim(),
+            : (before != null && before.cutoverEffectiveAt() != null
+                ? before.cutoverEffectiveAt()
+                : RewardPolicyConfig.DEFAULT_CUTOVER);
+        RewardPolicyConfig saved = policyConfig.save(new RewardPolicyConfig(
+            resolvedVersion,
             directLessonActivityDiamondsEnabled,
             cutover,
             xpPerLevel,
@@ -377,6 +430,44 @@ public class GamificationAdminService {
             milestoneDiamondBase,
             milestoneDiamondGrowth
         ));
+        recordRewardPolicyAudit(actor, before, saved);
+        return saved;
+    }
+
+    private void recordRewardPolicyAudit(
+        String actor,
+        RewardPolicyConfig before,
+        RewardPolicyConfig after
+    ) {
+        if (jdbc == null) {
+            return;
+        }
+        String summary = String.format(
+            Locale.ROOT,
+            "XP %d (+%d, x%.2f), Lv.%d, milestones every %d (+%d/+%d), direct diamonds: %s",
+            after.xpPerLevel(),
+            after.normalizedXpGrowthPerLevel(),
+            after.normalizedXpLevelMultiplier(),
+            after.normalizedMaxLevel(),
+            after.normalizedMilestoneInterval(),
+            after.normalizedMilestoneDiamondBase(),
+            after.normalizedMilestoneDiamondGrowth(),
+            after.directLessonActivityDiamondsEnabled() ? "ON" : "OFF"
+        );
+        String resolvedActor = (actor != null && !actor.isBlank()) ? actor.trim() : null;
+        String beforeJson = before != null ? mapper.writeValueAsString(before) : null;
+        String afterJson = mapper.writeValueAsString(after);
+        jdbc.update(
+            """
+            INSERT INTO reward_policy_audit(actor, summary, before_json, after_json)
+            VALUES (:actor, :summary, CAST(:beforeJson AS jsonb), CAST(:afterJson AS jsonb))
+            """,
+            new MapSqlParameterSource()
+                .addValue("actor", resolvedActor)
+                .addValue("summary", summary)
+                .addValue("beforeJson", beforeJson, Types.VARCHAR)
+                .addValue("afterJson", afterJson, Types.VARCHAR)
+        );
     }
 
     private static AdminMissionDefinition validateMission(

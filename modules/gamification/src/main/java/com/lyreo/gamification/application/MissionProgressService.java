@@ -1,5 +1,7 @@
 package com.lyreo.gamification.application;
 
+import com.lyreo.contracts.errors.ResourceNotFoundException;
+import com.lyreo.contracts.errors.StateConflictException;
 import com.lyreo.gamification.application.port.DiamondLedger;
 import com.lyreo.gamification.application.port.MissionProgressRepository;
 import com.lyreo.gamification.application.port.RewardPolicyConfigRepository;
@@ -14,6 +16,7 @@ import java.time.ZoneOffset;
 import java.time.temporal.WeekFields;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
@@ -68,26 +71,36 @@ public class MissionProgressService {
             return;
         }
 
-        RewardPolicyConfig config = policyConfig != null
-            ? policyConfig.current()
-            : RewardPolicyConfig.defaults();
-
         for (MissionProgressRepository.MissionRewardTarget mission : missions.activeRewardTargetsByMetric(metric)) {
             String periodKey = periodKey(mission.recurrence(), occurredAt);
             missions.increment(learnerId, mission.id(), periodKey, mission.target(), amount);
-            autoClaimIfCompleted(learnerId, mission, periodKey, config);
         }
     }
 
-    private void autoClaimIfCompleted(
-        UUID learnerId,
-        MissionProgressRepository.MissionRewardTarget mission,
-        String periodKey,
-        RewardPolicyConfig config
-    ) {
-        if (mission.diamondReward() <= 0 && mission.xpReward() <= 0) {
-            return;
+    @Transactional
+    public ClaimResult claim(UUID learnerId, UUID missionId) {
+        Objects.requireNonNull(learnerId, "learnerId");
+        Objects.requireNonNull(missionId, "missionId");
+
+        MissionProgressRepository.MissionRewardTarget mission = missions.findActiveRewardTargetById(missionId)
+            .orElseThrow(() -> new ResourceNotFoundException("Mission not found"));
+
+        Instant now = Instant.now();
+        String periodKey = periodKey(mission.recurrence(), now);
+        MissionProgressRepository.MissionProgressStatus status = missions
+            .findMissionProgressStatus(learnerId, missionId, periodKey)
+            .orElse(null);
+
+        if (status == null || status.completedAt() == null) {
+            throw new StateConflictException("Mission is not completed yet");
         }
+        if (status.claimedAt() != null) {
+            throw new StateConflictException("Mission reward has already been claimed");
+        }
+
+        RewardPolicyConfig config = policyConfig != null
+            ? policyConfig.current()
+            : RewardPolicyConfig.defaults();
 
         String ruleVersion = (mission.ruleVersion() != null && !mission.ruleVersion().isBlank())
             ? mission.ruleVersion()
@@ -95,34 +108,36 @@ public class MissionProgressService {
         String snapshotJson = buildSnapshotJson(mission, periodKey, ruleVersion);
 
         if (!missions.markClaimedIfCompleted(learnerId, mission.id(), periodKey, snapshotJson)) {
-            return;
+            throw new StateConflictException("Mission reward has already been claimed");
         }
 
-        Instant now = Instant.now();
-        if (mission.diamondReward() > 0) {
+        int diamondsAwarded = Math.max(0, mission.diamondReward());
+        int xpAwarded = Math.max(0, mission.xpReward());
+
+        if (diamondsAwarded > 0) {
             String key = "mission:" + mission.id() + ":" + learnerId + ":" + periodKey;
             ledger.append(new DiamondTransaction(
                 UUID.randomUUID(),
                 learnerId,
                 DiamondTransaction.Type.MISSION_REWARD,
-                mission.diamondReward(),
+                diamondsAwarded,
                 key,
                 "MISSION",
                 mission.id(),
                 now,
-                mission.code() != null ? "Mission completed: " + mission.code() : "Mission completed",
+                mission.code() != null ? "Mission claimed: " + mission.code() : "Mission claimed",
                 ruleVersion
             ));
         }
 
-        if (mission.xpReward() > 0 && xpLedger != null) {
+        if (xpAwarded > 0 && xpLedger != null) {
             String xpKey = "mission-xp:" + mission.id() + ":" + learnerId + ":" + periodKey;
             xpLedger.append(
                 new XpTransaction(
                     UUID.randomUUID(),
                     learnerId,
                     "MISSION_REWARD",
-                    mission.xpReward(),
+                    xpAwarded,
                     xpKey,
                     ruleVersion,
                     mission.id(),
@@ -131,7 +146,27 @@ public class MissionProgressService {
                 config
             );
         }
+
+        return new ClaimResult(
+            mission.id(),
+            mission.code(),
+            periodKey,
+            xpAwarded,
+            diamondsAwarded,
+            ledger.balance(learnerId),
+            now
+        );
     }
+
+    public record ClaimResult(
+        UUID missionId,
+        String code,
+        String periodKey,
+        int xpAwarded,
+        int diamondsAwarded,
+        int diamondBalance,
+        Instant claimedAt
+    ) {}
 
     private String buildSnapshotJson(
         MissionProgressRepository.MissionRewardTarget mission,

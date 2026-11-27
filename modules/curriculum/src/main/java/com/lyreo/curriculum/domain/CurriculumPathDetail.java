@@ -49,6 +49,11 @@ public record CurriculumPathDetail(
         );
     }
 
+    @com.fasterxml.jackson.annotation.JsonProperty("coverUrl")
+    public String coverUrl() {
+        return coverAssetId != null ? "/api/v1/curriculum/paths/" + id + "/cover" : null;
+    }
+
     public record SectionView(
         UUID id,
         String title,
@@ -65,7 +70,8 @@ public record CurriculumPathDetail(
         String unlockRule,
         String progressStatus,
         Instant completedAt,
-        Map<String, Object> config
+        Map<String, Object> config,
+        String contentTitle
     ) {
         public ItemView(
             UUID id,
@@ -77,7 +83,21 @@ public record CurriculumPathDetail(
             String progressStatus,
             Instant completedAt
         ) {
-            this(id, position, contentType, contentReferenceId, required, unlockRule, progressStatus, completedAt, Map.of());
+            this(id, position, contentType, contentReferenceId, required, unlockRule, progressStatus, completedAt, Map.of(), null);
+        }
+
+        public ItemView(
+            UUID id,
+            int position,
+            CurriculumItem.ContentType contentType,
+            UUID contentReferenceId,
+            boolean required,
+            String unlockRule,
+            String progressStatus,
+            Instant completedAt,
+            Map<String, Object> config
+        ) {
+            this(id, position, contentType, contentReferenceId, required, unlockRule, progressStatus, completedAt, config, null);
         }
     }
 }

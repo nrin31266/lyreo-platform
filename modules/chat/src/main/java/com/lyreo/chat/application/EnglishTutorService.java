@@ -13,6 +13,7 @@ import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.entitlement.api.EntitlementService;
 import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.entitlement.api.QuotaDecision;
+import com.lyreo.platform.config.application.OperationIdempotencyService;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -29,9 +30,10 @@ public class EnglishTutorService {
     private final EnglishTutorPrompt prompts;
     private final EntitlementService entitlements;
     private final ChatRepository chatRepository;
+    private final OperationIdempotencyService idempotency;
 
     public EnglishTutorService(AiInvocationService ai, EnglishTutorPrompt prompts) {
-        this(ai, prompts, null, null);
+        this(ai, prompts, null, null, null);
     }
 
     public EnglishTutorService(
@@ -40,10 +42,21 @@ public class EnglishTutorService {
         EntitlementService entitlements,
         ChatRepository chatRepository
     ) {
+        this(ai, prompts, entitlements, chatRepository, null);
+    }
+
+    public EnglishTutorService(
+        AiInvocationService ai,
+        EnglishTutorPrompt prompts,
+        EntitlementService entitlements,
+        ChatRepository chatRepository,
+        OperationIdempotencyService idempotency
+    ) {
         this.ai = Objects.requireNonNull(ai, "ai");
         this.prompts = Objects.requireNonNull(prompts, "prompts");
         this.entitlements = entitlements;
         this.chatRepository = chatRepository;
+        this.idempotency = idempotency;
     }
 
     public String ask(String learnerLevel, String question) {
@@ -68,7 +81,34 @@ public class EnglishTutorService {
         if (question == null || question.isBlank()) {
             throw new RequestValidationException("question is required");
         }
+        String normalizedQuestion = question.trim();
+        if (idempotency != null && idempotencyKey != null && !idempotencyKey.isBlank()) {
+            String key = idempotencyKey.trim();
+            String fingerprint = (conversationId != null ? conversationId : "new")
+                + ":"
+                + (learnerLevel != null ? learnerLevel.trim() : "")
+                + ":"
+                + normalizedQuestion;
+            return idempotency.execute(
+                learnerId,
+                "CHAT_ASK",
+                key,
+                fingerprint,
+                AskResult.class,
+                () -> executeAsk(learnerId, conversationId, learnerLevel, normalizedQuestion, title, key)
+            );
+        }
+        return executeAsk(learnerId, conversationId, learnerLevel, normalizedQuestion, title, idempotencyKey);
+    }
 
+    private AskResult executeAsk(
+        UUID learnerId,
+        UUID conversationId,
+        String learnerLevel,
+        String normalizedQuestion,
+        String title,
+        String idempotencyKey
+    ) {
         List<ChatMessage> history = List.of();
         if (conversationId != null && chatRepository != null) {
             chatRepository.findOwnedConversation(conversationId, learnerId)
@@ -84,7 +124,7 @@ public class EnglishTutorService {
             : new QuotaDecision(FEATURE_CHAT_TUTOR.value(), operationId, true, 0, 0, null, "dev-v1");
 
         Map<String, Object> input = new LinkedHashMap<>();
-        input.put("question", question.trim());
+        input.put("question", normalizedQuestion);
         if (!history.isEmpty()) {
             List<Map<String, String>> recent = history.stream()
                 .skip(Math.max(0, history.size() - 6))
@@ -112,12 +152,12 @@ public class EnglishTutorService {
             );
         }
 
-        String resolvedTitle = resolveTitle(title, question);
+        String resolvedTitle = resolveTitle(title, normalizedQuestion);
         ChatRepository.ChatTurnPersistenceResult saved = chatRepository.persistTurn(
             conversationId,
             learnerId,
             resolvedTitle,
-            question.trim(),
+            normalizedQuestion,
             answer,
             result.invocationId()
         );
@@ -140,6 +180,48 @@ public class EnglishTutorService {
         }
         return chatRepository.listOwnedConversations(learnerId, page, size);
     }
+
+    public ConversationPage listConversationsPage(UUID learnerId, int page, int size) {
+        if (page < 0 || page > 100000 || size < 1 || size > 100) {
+            throw new RequestValidationException("Invalid conversation page or size");
+        }
+        if (chatRepository == null) {
+            return new ConversationPage(List.of(), 0L, page, size, false);
+        }
+        long total = chatRepository.countOwnedConversations(learnerId);
+        List<ChatConversation> items = chatRepository.listOwnedConversations(learnerId, page, size);
+        boolean hasMore = (long) (page + 1) * size < total;
+        return new ConversationPage(items, total, page, size, hasMore);
+    }
+
+    public ChatConversation renameConversation(UUID learnerId, UUID conversationId, String title) {
+        Objects.requireNonNull(learnerId, "learnerId");
+        Objects.requireNonNull(conversationId, "conversationId");
+        if (title == null || title.isBlank() || title.trim().length() > 120) {
+            throw new RequestValidationException("title must be non-blank and <= 120 characters");
+        }
+        if (chatRepository == null) {
+            throw new ResourceNotFoundException("Conversation not found");
+        }
+        return chatRepository.renameOwnedConversation(conversationId, learnerId, title.trim())
+            .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+    }
+
+    public void deleteConversation(UUID learnerId, UUID conversationId) {
+        Objects.requireNonNull(learnerId, "learnerId");
+        Objects.requireNonNull(conversationId, "conversationId");
+        if (chatRepository == null || !chatRepository.deleteOwnedConversation(conversationId, learnerId)) {
+            throw new ResourceNotFoundException("Conversation not found");
+        }
+    }
+
+    public record ConversationPage(
+        List<ChatConversation> items,
+        long total,
+        int page,
+        int size,
+        boolean hasMore
+    ) {}
 
     public ChatConversationDetail getConversation(UUID learnerId, UUID conversationId) {
         if (chatRepository == null) {

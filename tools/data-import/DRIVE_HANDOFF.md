@@ -1,6 +1,8 @@
-# Bàn giao gói dữ liệu qua Drive
+# Bàn giao gói dữ liệu qua Drive (ĐÃ ĐÓNG BĂNG / CHỈ ĐỌC)
 
-Hai archive dùng Drive nằm trong `.data/releases/`. Upload đúng hai file này vào thư mục Drive của nhóm.
+> **CHÍNH SÁCH KHÓA DRIVE (READ-ONLY):** Thư mục Google Drive [`1XrAmgAaSDtar8UAeKT9URq3KbRGN2UH4`](https://drive.google.com/drive/folders/1XrAmgAaSDtar8UAeKT9URq3KbRGN2UH4) và toàn bộ 7 file release đã được đóng băng tại [release-lock.json](release-lock.json). **Không sửa, ghi đè hoặc upload trực tiếp lên các gói trên Drive nữa.** Mọi cập nhật nội dung vận hành thực hiện qua Admin UI, PostgreSQL, seed trong Git ([infra/postgres/seed/](../../infra/postgres/seed/)) và R2. Các lệnh tải Drive được khóa cứng chỉ đọc (`assert_drive_url_locked` + `make validate`).
+
+Hai archive dùng Drive nằm trong `.data/releases/`. Các file hiện có trong thư mục Drive của nhóm (đã đối chiếu khớp SHA-256 với `release-checksums-manifest.json` và `release-lock.json`):
 
 | Archive | Role | Objects | SHA-256 | Drive Link |
 | --- | --- | --- | --- | --- |

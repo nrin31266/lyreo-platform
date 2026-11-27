@@ -10,6 +10,7 @@ import java.util.Locale;
 import javax.imageio.ImageIO;
 import javax.imageio.stream.MemoryCacheImageInputStream;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
@@ -67,6 +68,22 @@ final class LearnerAvatarImage {
     static ResponseEntity<byte[]> response(byte[] png) {
         return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).cacheControl(CacheControl.noStore())
             .header("X-Content-Type-Options", "nosniff").body(png);
+    }
+
+    static ResponseEntity<byte[]> cachedResponse(byte[] png, String etag) {
+        return ResponseEntity.ok()
+            .contentType(MediaType.IMAGE_PNG)
+            .cacheControl(CacheControl.noCache().cachePrivate().mustRevalidate())
+            .eTag(etag)
+            .header("X-Content-Type-Options", "nosniff")
+            .body(png);
+    }
+
+    static ResponseEntity<byte[]> notModified(String etag) {
+        return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
+            .cacheControl(CacheControl.noCache().cachePrivate().mustRevalidate())
+            .eTag(etag)
+            .build();
     }
 
     private static RequestValidationException unsupported() {

@@ -10,10 +10,12 @@ Deterministic editorial illustrations materialized into content-addressed local 
 - `vocab-office-standup.webp` — Software studio standup & Kanban schedule
 - `vocab-hotel-concierge.webp` — Hotel concierge desk & travel suitcase
 
-## Learning Path Covers (`512 x 320` stripped WebP)
-- `paths/path-cover-realworld.webp` — Warm editorial illustration of daily city life, cafe & transit scenes
-- `paths/path-cover-workplace.webp` — Modern engineering standup & collaborative office communication scene
-- `paths/path-cover-toeic.webp` — Crisp academic study desk & TOEIC exam preparation scene
+## Learning Path Covers (`640 x 360` stripped WebP, rendered from `apps/admin-web/public/covers/*.svg`)
+- `paths/path-cover-realworld.webp` — Warm editorial dialogue & cafe arch artwork (`real-world-english.svg`)
+- `paths/path-cover-workplace.webp` — Executive collaboration board & metrics artwork (`workplace-fluency.svg`)
+- `paths/path-cover-toeic.webp` — Deep navy structured Part 1–5 workbook & waveform artwork (`toeic-foundation.svg`)
+- `paths/path-cover-toeic-pro.webp` — Midnight indigo-gold dual-section mastery console artwork (`toeic-mastery.svg`)
+- `paths/path-cover-toeic-a1.webp` — Fresh mint-emerald A1 starter workbook & slow-listening wave artwork (`toeic-a1-starter.svg`, `TOEIC_A1_STARTER`)
 
 ## Achievement Badges (`256 x 256` stripped WebP)
 - `badges/badge-streak-7.webp` — Bronze flame streak crest (7-day streak)

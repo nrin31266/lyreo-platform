@@ -3,21 +3,22 @@ BEGIN;
 
 CREATE TEMP TABLE demo_learner_seed (
     id uuid, subject uuid, email text, name text, goal text, level text,
-    minutes integer, focus text, age interval
+    minutes integer, focus text, age interval, fallback_subject text
 ) ON COMMIT DROP;
 
 INSERT INTO demo_learner_seed VALUES
     ('30000000-0000-0000-0000-000000000001', '__MINH_ANH_SUBJECT__',
-     'minh-anh@example.test', 'Minh Anh', 'CONVERSATION', 'A2', 10, 'LISTENING', interval '2 days'),
+     'minh-anh@example.test', 'Minh Anh', 'CONVERSATION', 'A2', 10, 'LISTENING', interval '2 days', 'lyreo-learner-minh-anh'),
     ('30000000-0000-0000-0000-000000000002', '__GIA_HUY_SUBJECT__',
-     'gia-huy@example.test', 'Gia Huy', 'TOEIC', 'B1', 20, 'VOCABULARY', interval '1 day'),
+     'gia-huy@example.test', 'Gia Huy', 'TOEIC', 'B1', 20, 'VOCABULARY', interval '1 day', 'lyreo-learner-gia-huy'),
     ('30000000-0000-0000-0000-000000000003', '__NEW_LEARNER_SUBJECT__',
-     'learner-moi@example.test', NULL, NULL, NULL, NULL, NULL, interval '30 minutes');
+     'learner-moi@example.test', NULL, NULL, NULL, NULL, NULL, interval '30 minutes', 'lyreo-learner-tuan-kiet');
 
 -- Reuse the fixture profile when Keycloak assigns a new subject to the demo account.
-UPDATE app_user u SET keycloak_subject = demo.subject::text
+UPDATE app_user u SET keycloak_subject = demo.subject::text, email_snapshot = demo.email
 FROM demo_learner_seed demo
-WHERE u.id = demo.id AND u.email_snapshot = demo.email AND u.keycloak_subject <> demo.subject::text
+WHERE u.id = demo.id AND (u.email_snapshot = demo.email OR u.keycloak_subject = demo.fallback_subject)
+  AND u.keycloak_subject <> demo.subject::text
   AND NOT EXISTS (SELECT 1 FROM app_user real_user WHERE real_user.keycloak_subject = demo.subject::text);
 
 INSERT INTO app_user (id, keycloak_subject, email_snapshot)
@@ -37,6 +38,7 @@ WHERE learner_profile.first_seen_at IS NULL;
 UPDATE learner_profile p SET first_seen_at = NULL
 FROM demo_learner_seed demo JOIN app_user old_user ON old_user.id = demo.id
 JOIN app_user real_user ON real_user.keycloak_subject = demo.subject::text
-WHERE p.learner_id = old_user.id AND old_user.email_snapshot = demo.email AND old_user.id <> real_user.id;
+WHERE p.learner_id = old_user.id AND (old_user.email_snapshot = demo.email OR old_user.keycloak_subject = demo.fallback_subject)
+  AND old_user.id <> real_user.id;
 
 COMMIT;

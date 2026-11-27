@@ -1,4 +1,3 @@
-import { LearnerWeaknesses } from './LearnerWeaknesses';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -30,6 +29,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { CatalogError } from '@/pages/lessons/CatalogFeedback';
 import { fetchAdminAnalyticsSummary, fetchLearnerAnalytics } from '@/pages/overview/admin-ops.api';
 import { fetchLearners } from './learners.api';
+import { LearnerWeaknesses } from './LearnerWeaknesses';
+import { MetricHelp } from './MetricHelp';
 
 function formatMinutes(seconds: number) {
   return `${Math.round(seconds / 60)}m`;
@@ -121,7 +122,10 @@ export function LearnerProgressPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>{t('learnerProgress.metrics.active7d')}</CardDescription>
+            <CardDescription className="flex items-center gap-1">
+              {t('learnerProgress.metrics.active7d')}
+              <MetricHelp label={t('learnerProgress.metrics.active7d')} calculation="active7d" />
+            </CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold tabular-nums">
             {summaryQuery.isPending ? (
@@ -133,7 +137,10 @@ export function LearnerProgressPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>{t('learnerProgress.metrics.studyMinutes7d')}</CardDescription>
+            <CardDescription className="flex items-center gap-1">
+              {t('learnerProgress.metrics.studyMinutes7d')}
+              <MetricHelp label={t('learnerProgress.metrics.studyMinutes7d')} calculation="studyMinutes7d" />
+            </CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold tabular-nums">
             {summaryQuery.isPending ? (
@@ -145,7 +152,10 @@ export function LearnerProgressPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>{t('learnerProgress.metrics.lessons7d')}</CardDescription>
+            <CardDescription className="flex items-center gap-1">
+              {t('learnerProgress.metrics.lessons7d')}
+              <MetricHelp label={t('learnerProgress.metrics.lessons7d')} calculation="lessons7d" />
+            </CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold tabular-nums">
             {summaryQuery.isPending ? (
@@ -157,7 +167,10 @@ export function LearnerProgressPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>{t('learnerProgress.metrics.vocab7d')}</CardDescription>
+            <CardDescription className="flex items-center gap-1">
+              {t('learnerProgress.metrics.vocab7d')}
+              <MetricHelp label={t('learnerProgress.metrics.vocab7d')} calculation="vocab7d" />
+            </CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold tabular-nums">
             {summaryQuery.isPending ? (
@@ -169,7 +182,10 @@ export function LearnerProgressPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>{t('learnerProgress.metrics.grammarToeic7d')}</CardDescription>
+            <CardDescription className="flex items-center gap-1">
+              {t('learnerProgress.metrics.grammarToeic7d')}
+              <MetricHelp label={t('learnerProgress.metrics.grammarToeic7d')} calculation="grammarToeic7d" />
+            </CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold tabular-nums">
             {summaryQuery.isPending ? (
@@ -183,7 +199,10 @@ export function LearnerProgressPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{t('overviewDashboard.dailyActivityTitle')}</CardTitle>
+          <CardTitle className="flex items-center gap-1">
+            {t('overviewDashboard.dailyActivityTitle')}
+            <MetricHelp label={t('overviewDashboard.dailyActivityTitle')} calculation="platformDaily" />
+          </CardTitle>
           <CardDescription>{t('overviewDashboard.dailyActivityHelp')}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -377,8 +396,9 @@ export function LearnerProgressPage() {
               <>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-xl border bg-muted/20 p-3">
-                    <p className="text-xs text-muted-foreground">
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground">
                       {t('learnerProgress.todayWindow')}
+                      <MetricHelp label={t('learnerProgress.todayWindow')} calculation="window" />
                     </p>
                     <p className="mt-1 text-lg font-semibold tabular-nums">
                       {formatMinutes(learnerAnalyticsQuery.data.today.studySeconds)} ·{' '}
@@ -389,8 +409,9 @@ export function LearnerProgressPage() {
                     </p>
                   </div>
                   <div className="rounded-xl border bg-muted/20 p-3">
-                    <p className="text-xs text-muted-foreground">
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground">
                       {t('learnerProgress.weekWindow')}
+                      <MetricHelp label={t('learnerProgress.weekWindow')} calculation="window" />
                     </p>
                     <p className="mt-1 text-lg font-semibold tabular-nums">
                       {formatMinutes(learnerAnalyticsQuery.data.week.studySeconds)} ·{' '}
@@ -403,7 +424,10 @@ export function LearnerProgressPage() {
                 </div>
 
                 <div>
-                  <h2 className="mb-2 text-sm font-medium">{t('learnerProgress.skillsTitle')}</h2>
+                  <h2 className="mb-2 flex items-center gap-1 text-sm font-medium">
+                    {t('learnerProgress.skillsTitle')}
+                    <MetricHelp label={t('learnerProgress.skillsTitle')} calculation="skills" />
+                  </h2>
                   {learnerAnalyticsQuery.data.skills.length === 0 ? (
                     <p className="text-sm text-muted-foreground">{t('learnerProgress.noSkills')}</p>
                   ) : viewMode === 'chart' ? (
@@ -451,8 +475,9 @@ export function LearnerProgressPage() {
                 </div>
 
                 <div>
-                  <h2 className="mb-2 text-sm font-medium">
+                  <h2 className="mb-2 flex items-center gap-1 text-sm font-medium">
                     {t('learnerProgress.weaknessesTitle')}
+                    <MetricHelp label={t('learnerProgress.weaknessesTitle')} calculation="weaknesses" />
                   </h2>
                   <LearnerWeaknesses items={learnerAnalyticsQuery.data.weaknesses} />
                 </div>

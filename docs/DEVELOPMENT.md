@@ -33,17 +33,14 @@ The foundation closeout starts with `V001` for schema and `V002` for reference d
 append from `V003`. Databases from the pre-closeout 31-migration history need a fresh application
 database and a new import. Keep a backup of application data you need before resetting. [D-035](DECISIONS.md#d-035--consolidate-the-foundation-schema-before-team-onboarding-2026-11-22) records the cutover.
 
-Development defaults live in [`infra/postgres/seed/dev.sql`](../infra/postgres/seed/dev.sql).
-Run `make seed-dev` to migrate and bootstrap the datasource configured in Core's `.env`; it does
-not select the Compose database independently. It adds 24 stable categories with English
-names and Vietnamese translations, plus [development AI defaults](CONFIGURATION.md#development-ai-defaults).
-Rerunning preserves existing categories, providers, credentials and routes.
-No automatic reseeding runs at startup. Large banks stay under the [import tools](DATA_PIPELINES.md).
-
-`make seed-lessons` adds the ten published lessons in the tracked fixture after bootstrap.
-Each snapshot includes transcript timing, practice content and source metadata. Core needs
-access to the canonical audio objects in the shared development bucket. Rerunning preserves
-existing lessons and metadata.
+Development defaults live in [`infra/postgres/seed/dev.sql`](../infra/postgres/seed/dev.sql),
+published text lessons live in [`infra/postgres/seed/lessons.sql`](../infra/postgres/seed/lessons.sql), and
+curated curriculum paths, badges, learners, and cover media live in [`infra/postgres/seed/demo.sql`](../infra/postgres/seed/demo.sql).
+Run `make seed` to migrate and idempotently apply all three layers (`dev.sql` -> `lessons.sql` ->
+`seed-demo.sh` + `demo.sql`) against the datasource configured in Core's `.env`. It adds 24 stable
+categories with English names and Vietnamese translations, [development AI defaults](CONFIGURATION.md#development-ai-defaults),
+published demo lessons, and curated learning paths without overwriting existing edits or routes.
+No automatic reseeding runs at startup. Large banks stay under the frozen [import tools](../tools/data-import/README.md).
 
 Set `LESSON_SEED_FILE` to use a separately exported SQL snapshot. Keep private raw corpora and
 credentials out of Git.

@@ -6,16 +6,17 @@ import com.lyreo.curriculum.domain.CurriculumItem;
 import com.lyreo.curriculum.domain.CurriculumItem.ContentType;
 import com.lyreo.curriculum.domain.CurriculumItemProgress;
 import com.lyreo.curriculum.domain.CurriculumPath;
-import com.lyreo.curriculum.domain.CurriculumPathDiagnostic;
 import com.lyreo.curriculum.domain.CurriculumPathSummary;
 import com.lyreo.curriculum.domain.CurriculumSection;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
-import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -134,6 +135,19 @@ public final class JdbcCurriculumProgressRepository implements CurriculumProgres
             """,
             Map.of("pathId", pathId),
             (rs, rowNum) -> mapPath(rs)
+        ).stream().findFirst();
+    }
+
+    @Override
+    public Optional<UUID> findPublishedCoverAssetId(UUID pathId) {
+        return jdbc.query(
+            """
+            SELECT cover_asset_id
+            FROM curriculum_path
+            WHERE id = :pathId AND status = 'PUBLISHED' AND cover_asset_id IS NOT NULL
+            """,
+            Map.of("pathId", pathId),
+            (rs, rowNum) -> rs.getObject("cover_asset_id", UUID.class)
         ).stream().findFirst();
     }
 
@@ -384,7 +398,7 @@ public final class JdbcCurriculumProgressRepository implements CurriculumProgres
                 name = :name,
                 level = :level,
                 description = :description,
-                cover_asset_id = COALESCE(CAST(:coverAssetId AS uuid), cover_asset_id),
+                cover_asset_id = CAST(:coverAssetId AS uuid),
                 access_mode = COALESCE(CAST(:accessMode AS varchar), access_mode),
                 required_feature_key = CASE
                     WHEN CAST(:accessMode AS varchar) = 'PUBLIC' THEN NULL
@@ -532,255 +546,110 @@ public final class JdbcCurriculumProgressRepository implements CurriculumProgres
     }
 
     @Override
-    public CurriculumPathDiagnostic diagnosePath(UUID pathId) {
-        record Row(
-            UUID itemId,
-            int sectionPos,
-            int itemPos,
-            ContentType type,
-            UUID refId,
-            Map<String, Object> config
-        ) {}
-        List<Row> rows = jdbc.query(
-            """
-            SELECT ci.id AS item_id, cs."position" AS section_pos, ci."position" AS item_pos,
-                   ci.content_type, ci.content_reference_id, ci.config_json
-            FROM curriculum_item ci
-            JOIN curriculum_section cs ON cs.id = ci.section_id
-            WHERE cs.path_id = :pathId
-            ORDER BY cs."position" ASC, ci."position" ASC
-            """,
-            Map.of("pathId", pathId),
-            (rs, rowNum) -> new Row(
-                rs.getObject("item_id", UUID.class),
-                rs.getInt("section_pos"),
-                rs.getInt("item_pos"),
-                ContentType.valueOf(rs.getString("content_type")),
-                rs.getObject("content_reference_id", UUID.class),
-                decodeConfig(rs.getString("config_json"))
-            )
-        );
-        List<CurriculumPathDiagnostic.ItemCheck> checks = new ArrayList<>(rows.size());
-        int valid = 0;
-        int missing = 0;
-        int lockedForFree = 0;
-        for (Row row : rows) {
-            CurriculumPathDiagnostic.ItemCheck check = checkItem(row.itemId(), row.sectionPos(), row.itemPos(), row.type(), row.refId(), row.config());
-            checks.add(check);
-            if (check.exists() && check.sliceValid()) {
-                valid++;
+    public Map<UUID, String> resolveContentTitles(List<CurriculumItem> items) {
+        if (items == null || items.isEmpty()) {
+            return Map.of();
+        }
+        Set<UUID> lessonIds = new LinkedHashSet<>();
+        Set<UUID> vocabIds = new LinkedHashSet<>();
+        Set<UUID> grammarIds = new LinkedHashSet<>();
+        Set<UUID> toeicIds = new LinkedHashSet<>();
+
+        for (CurriculumItem item : items) {
+            if (item.contentReferenceId() == null) {
+                continue;
             }
-            if (!check.exists()) {
-                missing++;
-            }
-            if ("FEATURE".equals(check.accessMode())) {
-                lockedForFree++;
+            switch (item.contentType()) {
+                case LESSON -> lessonIds.add(item.contentReferenceId());
+                case VOCABULARY_REVIEW -> vocabIds.add(item.contentReferenceId());
+                case GRAMMAR_PRACTICE -> grammarIds.add(item.contentReferenceId());
+                case TOEIC_DRILL, TOEIC_TEST -> toeicIds.add(item.contentReferenceId());
             }
         }
-        return new CurriculumPathDiagnostic(pathId, rows.size(), valid, missing, lockedForFree, checks);
-    }
 
-    private CurriculumPathDiagnostic.ItemCheck checkItem(
-        UUID itemId,
-        int sectionPos,
-        int itemPos,
-        ContentType type,
-        UUID refId,
-        Map<String, Object> config
-    ) {
-        return switch (type) {
-            case LESSON -> checkLesson(itemId, sectionPos, itemPos, type, refId, config);
-            case VOCABULARY_REVIEW -> checkVocabulary(itemId, sectionPos, itemPos, type, refId, config);
-            case GRAMMAR_PRACTICE -> checkGrammar(itemId, sectionPos, itemPos, type, refId);
-            case TOEIC_DRILL, TOEIC_TEST -> checkToeic(itemId, sectionPos, itemPos, type, refId, config);
-        };
-    }
+        Map<UUID, String> titles = new HashMap<>();
 
-    private CurriculumPathDiagnostic.ItemCheck checkLesson(
-        UUID itemId, int sectionPos, int itemPos, ContentType type, UUID refId, Map<String, Object> config
-    ) {
-        var found = jdbc.query(
-            """
-            SELECT m.title, l.status, m.access_mode, m.required_feature_key
-            FROM lesson l
-            JOIN lesson_metadata m ON m.lesson_id = l.id AND m.deleted_at IS NULL
-            WHERE l.id = :refId
-            """,
-            Map.of("refId", refId),
-            (rs, n) -> new Object[] {
-                rs.getString("title"), rs.getString("status"),
-                rs.getString("access_mode"), rs.getString("required_feature_key")
-            }
-        );
-        if (found.isEmpty()) {
-            return new CurriculumPathDiagnostic.ItemCheck(itemId, sectionPos, itemPos, type, refId, null, false, "PUBLIC", null, false, 0, "Referenced lesson not found");
-        }
-        String title = (String) found.getFirst()[0];
-        String status = (String) found.getFirst()[1];
-        String accessMode = (String) found.getFirst()[2];
-        String featureKey = (String) found.getFirst()[3];
-        List<UUID> sentenceIds = extractUuidList(config.get("sentenceIds"));
-        int sliceCount;
-        boolean sliceValid;
-        String msg;
-        if (!sentenceIds.isEmpty()) {
-            Integer count = jdbc.queryForObject(
-                "SELECT count(*) FROM lesson_sentence WHERE lesson_id = :refId AND id IN (:ids)",
-                new MapSqlParameterSource("refId", refId).addValue("ids", sentenceIds),
-                Integer.class
-            );
-            sliceCount = count == null ? 0 : count;
-            sliceValid = sliceCount == sentenceIds.size();
-            msg = sliceValid ? ("OK (" + status + ", " + sliceCount + " sentences)") : ("Expected " + sentenceIds.size() + " curated sentences, found " + sliceCount);
-        } else {
-            Integer count = jdbc.queryForObject("SELECT count(*) FROM lesson_sentence WHERE lesson_id = :refId", Map.of("refId", refId), Integer.class);
-            sliceCount = count == null ? 0 : count;
-            sliceValid = "PUBLISHED".equals(status);
-            msg = sliceValid ? "OK (Published lesson)" : ("Lesson status is " + status);
-        }
-        return new CurriculumPathDiagnostic.ItemCheck(itemId, sectionPos, itemPos, type, refId, title, true, accessMode, featureKey, sliceValid, sliceCount, msg);
-    }
-
-    private CurriculumPathDiagnostic.ItemCheck checkVocabulary(
-        UUID itemId, int sectionPos, int itemPos, ContentType type, UUID refId, Map<String, Object> config
-    ) {
-        var unitFound = jdbc.query(
-            """
-            SELECT u.title, p.title_en, p.access_mode, p.required_feature_key
-            FROM vocabulary_unit u
-            JOIN vocabulary_pack p ON p.id = u.pack_id
-            WHERE u.id = :refId
-            """,
-            Map.of("refId", refId),
-            (rs, n) -> new Object[] {
-                rs.getString("title_en") + " · " + rs.getString("title"),
-                rs.getString("access_mode"),
-                rs.getString("required_feature_key"),
-                true
-            }
-        );
-        if (unitFound.isEmpty()) {
-            unitFound = jdbc.query(
-                "SELECT title_en, access_mode, required_feature_key FROM vocabulary_pack WHERE id = :refId",
-                Map.of("refId", refId),
-                (rs, n) -> new Object[] {
-                    rs.getString("title_en"),
-                    rs.getString("access_mode"),
-                    rs.getString("required_feature_key"),
-                    false
+        if (!lessonIds.isEmpty()) {
+            jdbc.query(
+                """
+                SELECT l.id, m.title
+                FROM lesson l
+                JOIN lesson_metadata m ON m.lesson_id = l.id AND m.deleted_at IS NULL
+                WHERE l.id IN (:ids)
+                """,
+                new MapSqlParameterSource("ids", lessonIds),
+                rs -> {
+                    titles.put(rs.getObject("id", UUID.class), rs.getString("title"));
                 }
             );
         }
-        if (unitFound.isEmpty()) {
-            return new CurriculumPathDiagnostic.ItemCheck(itemId, sectionPos, itemPos, type, refId, null, false, "PUBLIC", null, false, 0, "Referenced vocabulary pack/unit not found");
-        }
-        String title = (String) unitFound.getFirst()[0];
-        String accessMode = (String) unitFound.getFirst()[1];
-        String featureKey = (String) unitFound.getFirst()[2];
-        boolean isUnit = (Boolean) unitFound.getFirst()[3];
-        List<UUID> entryIds = extractUuidList(config.get("entryIds"));
-        int sliceCount;
-        boolean sliceValid;
-        String msg;
-        if (!entryIds.isEmpty()) {
-            Integer count = jdbc.queryForObject(
-                isUnit
-                    ? "SELECT count(*) FROM vocabulary_unit_entry WHERE unit_id = :refId AND id IN (:ids)"
-                    : "SELECT count(*) FROM vocabulary_unit_entry e JOIN vocabulary_unit u ON u.id = e.unit_id WHERE u.pack_id = :refId AND e.id IN (:ids)",
-                new MapSqlParameterSource("refId", refId).addValue("ids", entryIds),
-                Integer.class
-            );
-            sliceCount = count == null ? 0 : count;
-            sliceValid = sliceCount == entryIds.size();
-            msg = sliceValid ? ("OK (" + sliceCount + " curated words)") : ("Expected " + entryIds.size() + " words, found " + sliceCount);
-        } else {
-            Integer count = jdbc.queryForObject(
-                isUnit
-                    ? "SELECT count(*) FROM vocabulary_unit_entry WHERE unit_id = :refId"
-                    : "SELECT count(*) FROM vocabulary_unit_entry e JOIN vocabulary_unit u ON u.id = e.unit_id WHERE u.pack_id = :refId",
-                Map.of("refId", refId),
-                Integer.class
-            );
-            sliceCount = count == null ? 0 : count;
-            sliceValid = sliceCount > 0;
-            msg = sliceValid ? ("OK (" + sliceCount + " words)") : "No entries in vocabulary unit";
-        }
-        return new CurriculumPathDiagnostic.ItemCheck(itemId, sectionPos, itemPos, type, refId, title, true, accessMode, featureKey, sliceValid, sliceCount, msg);
-    }
 
-    private CurriculumPathDiagnostic.ItemCheck checkGrammar(
-        UUID itemId, int sectionPos, int itemPos, ContentType type, UUID refId
-    ) {
-        var found = jdbc.query(
-            """
-            SELECT c.publication_status, c.access_mode, c.required_feature_key,
-                   COALESCE((SELECT v.title_en FROM grammar_topic_version v WHERE v.catalog_id = c.id LIMIT 1), 'Grammar Topic') AS title
-            FROM grammar_topic_catalog c
-            WHERE c.id = :refId
-            """,
-            Map.of("refId", refId),
-            (rs, n) -> new Object[] {
-                rs.getString("title"), rs.getString("publication_status"),
-                rs.getString("access_mode"), rs.getString("required_feature_key")
+        if (!vocabIds.isEmpty()) {
+            Set<UUID> remainingVocabIds = new LinkedHashSet<>(vocabIds);
+            jdbc.query(
+                """
+                SELECT u.id, COALESCE(NULLIF(p.title_vi, ''), p.title_en) || ' · ' || u.title AS title
+                FROM vocabulary_unit u
+                JOIN vocabulary_pack p ON p.id = u.pack_id
+                WHERE u.id IN (:ids)
+                """,
+                new MapSqlParameterSource("ids", vocabIds),
+                rs -> {
+                    UUID id = rs.getObject("id", UUID.class);
+                    titles.put(id, rs.getString("title"));
+                    remainingVocabIds.remove(id);
+                }
+            );
+            if (!remainingVocabIds.isEmpty()) {
+                jdbc.query(
+                    """
+                    SELECT id, COALESCE(NULLIF(title_vi, ''), title_en) AS title
+                    FROM vocabulary_pack
+                    WHERE id IN (:ids)
+                    """,
+                    new MapSqlParameterSource("ids", remainingVocabIds),
+                    rs -> {
+                        titles.put(rs.getObject("id", UUID.class), rs.getString("title"));
+                    }
+                );
             }
-        );
-        if (found.isEmpty()) {
-            return new CurriculumPathDiagnostic.ItemCheck(itemId, sectionPos, itemPos, type, refId, null, false, "PUBLIC", null, false, 0, "Referenced grammar topic not found");
         }
-        String title = (String) found.getFirst()[0];
-        String status = (String) found.getFirst()[1];
-        String accessMode = (String) found.getFirst()[2];
-        String featureKey = (String) found.getFirst()[3];
-        boolean valid = "PUBLISHED".equals(status);
-        return new CurriculumPathDiagnostic.ItemCheck(itemId, sectionPos, itemPos, type, refId, title, true, accessMode, featureKey, valid, 1, valid ? "OK" : ("Grammar topic status: " + status));
-    }
 
-    private CurriculumPathDiagnostic.ItemCheck checkToeic(
-        UUID itemId, int sectionPos, int itemPos, ContentType type, UUID refId, Map<String, Object> config
-    ) {
-        var found = jdbc.query(
-            """
-            SELECT c.publication_status, c.access_mode, c.required_feature_key,
-                   COALESCE((SELECT v.name FROM toeic_test_version v WHERE v.catalog_id = c.id LIMIT 1), 'TOEIC ' || c.year || ' Test ' || c.test_number) AS title
-            FROM toeic_test_catalog c
-            WHERE c.id = :refId
-            """,
-            Map.of("refId", refId),
-            (rs, n) -> new Object[] {
-                rs.getString("title"), rs.getString("publication_status"),
-                rs.getString("access_mode"), rs.getString("required_feature_key")
-            }
-        );
-        if (found.isEmpty()) {
-            return new CurriculumPathDiagnostic.ItemCheck(itemId, sectionPos, itemPos, type, refId, null, false, "PUBLIC", null, false, 0, "Referenced TOEIC test not found");
+        if (!grammarIds.isEmpty()) {
+            jdbc.query(
+                """
+                SELECT c.id, COALESCE(NULLIF(v.title_vi, ''), v.title_en, 'Grammar Topic') AS title
+                FROM grammar_topic_catalog c
+                JOIN grammar_topic_version v ON v.catalog_id = c.id
+                JOIN dataset_active_release a ON a.release_id = v.release_id AND a.domain = 'grammar-toeic'
+                WHERE c.id IN (:ids)
+                """,
+                new MapSqlParameterSource("ids", grammarIds),
+                rs -> {
+                    titles.put(rs.getObject("id", UUID.class), rs.getString("title"));
+                }
+            );
         }
-        String title = (String) found.getFirst()[0];
-        String status = (String) found.getFirst()[1];
-        String accessMode = (String) found.getFirst()[2];
-        String featureKey = (String) found.getFirst()[3];
-        List<Integer> parts = extractIntList(config.get("parts"));
-        Integer avail = jdbc.queryForObject(
-            parts.isEmpty()
-                ? """
-                  SELECT count(*) FROM toeic_placement tp
-                  JOIN toeic_test_version tv ON tv.id = tp.test_version_id
-                  WHERE tv.catalog_id = :refId
-                  """
-                : """
-                  SELECT count(*) FROM toeic_placement tp
-                  JOIN toeic_test_version tv ON tv.id = tp.test_version_id
-                  WHERE tv.catalog_id = :refId AND tp.part IN (:parts)
-                  """,
-            parts.isEmpty() ? new MapSqlParameterSource("refId", refId) : new MapSqlParameterSource("refId", refId).addValue("parts", parts),
-            Integer.class
-        );
-        int totalAvail = avail == null ? 0 : avail;
-        int requestedCount = config.get("questionCount") instanceof Number num ? num.intValue() : totalAvail;
-        boolean sliceValid = "PUBLISHED".equals(status) && totalAvail > 0 && requestedCount > 0 && requestedCount <= totalAvail;
-        String msg = sliceValid
-            ? ("OK (" + Math.min(requestedCount, totalAvail) + " / " + totalAvail + " questions)")
-            : ("TOEIC status=" + status + ", available=" + totalAvail + ", requested=" + requestedCount);
-        return new CurriculumPathDiagnostic.ItemCheck(itemId, sectionPos, itemPos, type, refId, title, true, accessMode, featureKey, sliceValid, Math.min(requestedCount, totalAvail), msg);
+
+        if (!toeicIds.isEmpty()) {
+            jdbc.query(
+                """
+                SELECT c.id,
+                       CASE WHEN v.name ILIKE '%' || v.year::text || '%' THEN v.name
+                            ELSE 'TOEIC ' || v.year || ' · ' || v.name END AS title
+                FROM toeic_test_catalog c
+                JOIN toeic_test_version v ON v.catalog_id = c.id
+                JOIN dataset_active_release a ON a.release_id = v.release_id AND a.domain = 'grammar-toeic'
+                WHERE c.id IN (:ids)
+                """,
+                new MapSqlParameterSource("ids", toeicIds),
+                rs -> {
+                    titles.put(rs.getObject("id", UUID.class), rs.getString("title"));
+                }
+            );
+        }
+
+        return titles;
     }
 
     private Map<String, Object> decodeConfig(String json) {
@@ -793,42 +662,6 @@ public final class JdbcCurriculumProgressRepository implements CurriculumProgres
         } catch (Exception ignored) {
             return Map.of();
         }
-    }
-
-    private static List<UUID> extractUuidList(Object raw) {
-        if (!(raw instanceof List<?> list)) {
-            return List.of();
-        }
-        List<UUID> out = new ArrayList<>();
-        for (Object entry : list) {
-            if (entry != null) {
-                try {
-                    out.add(UUID.fromString(entry.toString()));
-                } catch (IllegalArgumentException ignored) {
-                    // ignore malformed slice entry
-                }
-            }
-        }
-        return out;
-    }
-
-    private static List<Integer> extractIntList(Object raw) {
-        if (!(raw instanceof List<?> list)) {
-            return List.of();
-        }
-        List<Integer> out = new ArrayList<>();
-        for (Object entry : list) {
-            if (entry instanceof Number num) {
-                out.add(num.intValue());
-            } else if (entry != null) {
-                try {
-                    out.add(Integer.parseInt(entry.toString()));
-                } catch (NumberFormatException ignored) {
-                    // ignore non-numeric entry
-                }
-            }
-        }
-        return out;
     }
 
     private static CurriculumPath mapPath(java.sql.ResultSet rs) throws java.sql.SQLException {

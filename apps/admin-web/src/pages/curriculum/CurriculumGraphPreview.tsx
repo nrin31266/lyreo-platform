@@ -1,22 +1,25 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  RiAwardLine,
-  RiBookOpenLine,
+  RiCheckDoubleLine,
   RiCheckLine,
-  RiFileList3Line,
   RiFlagLine,
   RiLockLine,
-  RiPlayFill,
   RiRefreshLine,
-  RiStarFill,
-  RiVipCrownLine,
-  RiVolumeUpLine,
+  RiScissorsCutLine,
 } from '@remixicon/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import type { CurriculumContentType, ItemSliceConfig } from './curriculum.api';
+import {
+  BossCrownIcon,
+  BranchTrailIcon,
+  contentAccentVar,
+  ContentTypeIcon,
+  formatCurriculumSliceBadge,
+} from './curriculumMeta';
 
 export type GraphPreviewItem = {
   key: string;
@@ -37,116 +40,80 @@ export type GraphPreviewSection = {
 type FlattenedStage = {
   stageNumber: number;
   sectionIndex: number;
+  sectionKey: string;
   sectionTitle: string;
   item: GraphPreviewItem;
   unlocked: boolean;
   completed: boolean;
   isActive: boolean;
   isBoss: boolean;
-  plusLocked: boolean;
 };
-
-
-const typeBadgeClass: Record<CurriculumContentType, string> = {
-  LESSON: 'bg-[var(--node-lesson)] text-primary-foreground',
-  VOCABULARY_REVIEW: 'bg-[var(--node-vocab)] text-primary-foreground',
-  GRAMMAR_PRACTICE: 'bg-[var(--node-grammar)] text-primary-foreground',
-  TOEIC_DRILL: 'bg-[var(--node-toeic)] text-primary-foreground',
-  TOEIC_TEST: 'bg-[var(--node-toeic)] text-primary-foreground',
-};
-
-function ContentTypeIcon({ type }: { type: CurriculumContentType }) {
-  const cls = 'size-5';
-  if (type === 'VOCABULARY_REVIEW') return <RiBookOpenLine className={cls} aria-hidden="true" />;
-  if (type === 'GRAMMAR_PRACTICE') return <RiAwardLine className={cls} aria-hidden="true" />;
-  if (type === 'TOEIC_DRILL' || type === 'TOEIC_TEST') {
-    return <RiFileList3Line className={cls} aria-hidden="true" />;
-  }
-  return <RiVolumeUpLine className={cls} aria-hidden="true" />;
-}
-
-function formatSliceBadge(
-  config: ItemSliceConfig | undefined,
-  t: (k: string, o?: Record<string, unknown>) => string,
-): string | null {
-  if (!config) return null;
-  if (Array.isArray(config.sentenceIds) && config.sentenceIds.length > 0) {
-    return t('curriculumWorkspace.graph.sliceSentences', {
-      count: config.sentenceIds.length,
-    });
-  }
-  if (Array.isArray(config.entryIds) && config.entryIds.length > 0) {
-    return t('curriculumWorkspace.graph.sliceWords', { count: config.entryIds.length });
-  }
-  if (config.questionCount != null || (Array.isArray(config.parts) && config.parts.length > 0)) {
-    const partLabel =
-      Array.isArray(config.parts) && config.parts.length > 0 ? config.parts.join(',') : 'ALL';
-    return t('curriculumWorkspace.graph.sliceQuestions', {
-      count: config.questionCount ?? 10,
-      part: partLabel,
-    });
-  }
-  if (config.targetTurns != null) {
-    return t('curriculumWorkspace.graph.sliceTurns', { count: config.targetTurns });
-  }
-  if (config.activityType) return String(config.activityType);
-  return null;
-}
 
 export function CurriculumGraphPreview({
   sections,
-  pathAccessMode,
   titleLookup = {},
 }: {
   sections: GraphPreviewSection[];
-  pathAccessMode: 'PUBLIC' | 'FEATURE';
   titleLookup?: Record<string, string>;
 }) {
   const { t } = useTranslation('admin');
   const [completedKeys, setCompletedKeys] = useState<string[]>([]);
-  const [simTier, setSimTier] = useState<'FREE' | 'PLUS'>('PLUS');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [chapterFilter, setChapterFilter] = useState<number | 'ALL'>('ALL');
 
   const stages = useMemo<FlattenedStage[]>(() => {
     const out: FlattenedStage[] = [];
     let runningStage = 0;
-    const totalCount = sections.reduce((sum, sec) => sum + sec.items.length, 0);
+    let allPrevRequiredDone = true;
 
     sections.forEach((sec, secIdx) => {
+      let lastRequiredIdx = -1;
+      sec.items.forEach((it, idx) => {
+        if (it.required !== false) lastRequiredIdx = idx;
+      });
+
       sec.items.forEach((item, itemIdx) => {
         runningStage += 1;
-        const prev = out[out.length - 1];
-        const prevCompleted = prev ? completedKeys.includes(prev.item.key) : true;
         const completed = completedKeys.includes(item.key);
-        const plusLocked = simTier === 'FREE' && pathAccessMode === 'FEATURE';
+        const isOptional = item.required === false;
         const unlocked =
-          !plusLocked &&
-          (item.unlockRule === 'NONE' ||
-            runningStage === 1 ||
-            prevCompleted ||
-            itemIdx === 0 && secIdx === 0);
-        const isLastInSection = itemIdx === sec.items.length - 1;
-        const isLastInPath = runningStage === totalCount;
+          runningStage === 1 ||
+          allPrevRequiredDone ||
+          (!isOptional && item.unlockRule === 'NONE');
+
+        const isHardToeic =
+          item.contentType === 'TOEIC_TEST' ||
+          (item.contentType === 'TOEIC_DRILL' &&
+            (itemIdx === lastRequiredIdx || (item.config?.questionCount ?? 0) >= 15));
+        const isSectionCapstone =
+          sec.items.length >= 3 && !isOptional && itemIdx === lastRequiredIdx;
+
         out.push({
           stageNumber: runningStage,
           sectionIndex: secIdx,
+          sectionKey: sec.key,
           sectionTitle: sec.title,
           item,
           unlocked,
           completed,
           isActive: false,
-          isBoss: isLastInPath || (sec.items.length > 2 && isLastInSection),
-          plusLocked,
+          isBoss: isHardToeic || isSectionCapstone,
         });
+
+        if (!isOptional && !completed) {
+          allPrevRequiredDone = false;
+        }
       });
     });
 
-    const firstPlayable = out.find((s) => s.unlocked && !s.completed);
+    const firstPlayable =
+      out.find((s) => s.unlocked && !s.completed && s.item.required !== false) ??
+      out.find((s) => s.unlocked && !s.completed);
     if (firstPlayable) {
       firstPlayable.isActive = true;
     }
     return out;
-  }, [sections, completedKeys, simTier, pathAccessMode]);
+  }, [sections, completedKeys]);
 
   const activeStage = useMemo(() => {
     if (selectedKey) {
@@ -156,16 +123,22 @@ export function CurriculumGraphPreview({
     return stages.find((s) => s.isActive) ?? stages[0] ?? null;
   }, [stages, selectedKey]);
 
-  const stagesBySection = useMemo(() => {
-    return sections.map((sec, secIdx) => ({
-      section: sec,
-      secIdx,
-      stages: stages.filter((s) => s.sectionIndex === secIdx),
-    }));
-  }, [sections, stages]);
+  const visibleChapters = useMemo(
+    () =>
+      sections
+        .map((section, secIdx) => ({
+          section,
+          secIdx,
+          secStages: stages.filter((s) => s.sectionIndex === secIdx),
+        }))
+        .filter(
+          ({ secIdx, secStages }) =>
+            secStages.length > 0 && (chapterFilter === 'ALL' || chapterFilter === secIdx),
+        ),
+    [sections, stages, chapterFilter],
+  );
 
   function toggleComplete(stage: FlattenedStage) {
-    if (stage.plusLocked) return;
     setCompletedKeys((prev) =>
       prev.includes(stage.item.key)
         ? prev.filter((k) => k !== stage.item.key)
@@ -173,9 +146,16 @@ export function CurriculumGraphPreview({
     );
   }
 
+  function completeSectionStages(secIdx: number) {
+    const keysInSec = stages
+      .filter((s) => s.sectionIndex === secIdx)
+      .map((s) => s.item.key);
+    setCompletedKeys((prev) => Array.from(new Set([...prev, ...keysInSec])));
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 px-4 py-3">
+    <div className="grid gap-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-3.5 py-2.5">
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <Badge variant="outline" className="tabular-nums">
             {t('curriculumWorkspace.graph.completedCount', {
@@ -183,34 +163,46 @@ export function CurriculumGraphPreview({
               total: stages.length,
             })}
           </Badge>
-          {pathAccessMode === 'FEATURE' ? (
-            <Badge variant="warning" className="gap-1">
-              <RiVipCrownLine className="size-3.5" aria-hidden="true" />
-              Plus
-            </Badge>
-          ) : null}
+          <span className="hidden text-muted-foreground sm:inline">
+            {t('curriculumWorkspace.graph.simulatorHelp')}
+          </span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          {sections.length > 1 ? (
+            <>
+              <Button
+                type="button"
+                size="xs"
+                variant={chapterFilter === 'ALL' ? 'secondary' : 'ghost'}
+                className="tabular-nums"
+                onClick={() => setChapterFilter('ALL')}
+              >
+                {t('curriculumWorkspace.graph.allChapters', { count: stages.length })}
+              </Button>
+              {sections.map((sec, idx) => {
+                const secDone = stages.filter(
+                  (s) => s.sectionIndex === idx && s.completed,
+                ).length;
+                return (
+                  <Button
+                    key={sec.key}
+                    type="button"
+                    size="xs"
+                    variant={chapterFilter === idx ? 'secondary' : 'ghost'}
+                    className="tabular-nums"
+                    onClick={() => setChapterFilter(idx)}
+                  >
+                    {t('curriculumWorkspace.graph.chapterBadge', { number: idx + 1 })} ({secDone}/
+                    {sec.items.length})
+                  </Button>
+                );
+              })}
+            </>
+          ) : null}
           <Button
             type="button"
-            size="sm"
-            variant={simTier === 'FREE' ? 'default' : 'outline'}
-            onClick={() => setSimTier('FREE')}
-          >
-            {t('curriculumWorkspace.graph.simulateFree')}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={simTier === 'PLUS' ? 'default' : 'outline'}
-            onClick={() => setSimTier('PLUS')}
-          >
-            <RiVipCrownLine data-icon="inline-start" aria-hidden="true" />
-            {t('curriculumWorkspace.graph.simulatePlus')}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
+            size="xs"
             variant="ghost"
             onClick={() => setCompletedKeys([])}
           >
@@ -220,169 +212,152 @@ export function CurriculumGraphPreview({
         </div>
       </div>
 
-      <div className="grid items-start gap-5 xl:grid-cols-12">
-        <div className="xl:col-span-8 rounded-2xl border bg-[var(--map-canvas)] p-4 sm:p-6">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_19rem] xl:grid-cols-[minmax(0,1fr)_20.5rem]">
+        <div className="space-y-4 rounded-2xl border bg-[var(--map-canvas)] p-3.5 sm:p-5">
           {stages.length === 0 ? (
             <div className="py-16 text-center text-sm text-muted-foreground">
               {t('curriculumWorkspace.graph.emptyMap')}
             </div>
           ) : (
-            <div className="space-y-8">
-              {stagesBySection.map(({ section, secIdx, stages: secStages }) => {
-                const secDone = secStages.filter((s) => s.completed).length;
-                const sCurveX = [210, 410, 480, 310, 180, 370] as const;
-                const stepY = 132;
-                const topPad = 76;
-                const requiredStages = secStages.filter((s) => s.item.required !== false);
-                const mainSource = requiredStages.length > 0 ? requiredStages : secStages;
-                const mainKeys = new Set(mainSource.map((s) => s.item.key));
+            visibleChapters.map(({ section, secIdx, secStages }) => {
+              const doneCount = secStages.filter((s) => s.completed).length;
+              const allDone = secStages.length > 0 && doneCount === secStages.length;
 
-                const mainNodes = mainSource.map((stage, idx) => ({
-                  stage,
-                  x: sCurveX[idx % sCurveX.length],
-                  y: topPad + idx * stepY,
-                  isBranch: false as const,
-                }));
-
-                const branchCounts = new Map<string, number>();
-                let anchor = mainNodes[0] ?? { x: 210, y: topPad };
-                const branchNodes: Array<{
-                  stage: (typeof secStages)[number];
-                  x: number;
-                  y: number;
-                  isBranch: true;
-                  anchorX: number;
-                  anchorY: number;
-                }> = [];
-
-                let mainCursor = 0;
-                for (const stage of secStages) {
-                  if (mainKeys.has(stage.item.key)) {
-                    anchor = mainNodes[mainCursor] ?? anchor;
-                    mainCursor += 1;
-                    continue;
-                  }
-                  const anchorKey = `${anchor.x}:${anchor.y}`;
-                  const count = branchCounts.get(anchorKey) ?? 0;
-                  branchCounts.set(anchorKey, count + 1);
-                  const dir = anchor.x > 340 ? -1 : 1;
-                  branchNodes.push({
-                    stage,
-                    x: Math.max(96, Math.min(584, anchor.x + dir * 160)),
-                    y: anchor.y + 18 + count * 92,
-                    isBranch: true,
-                    anchorX: anchor.x,
-                    anchorY: anchor.y,
-                  });
-                }
-
-                const allNodes = [...mainNodes, ...branchNodes];
-                const canvasHeight =
-                  Math.max(...allNodes.map((node) => node.y), topPad) + 96;
-
-                return (
-                  <div key={section.key} className="space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-background/90 px-4 py-2.5 shadow-2xs">
-                      <div className="flex items-center gap-2.5">
-                        <Badge variant="default" className="tabular-nums">
-                          {t('curriculumWorkspace.graph.chapterBadge', { number: secIdx + 1 })}
-                        </Badge>
-                        <h3 className="text-sm font-semibold">{section.title}</h3>
-                      </div>
-                      <span className="text-xs font-medium text-muted-foreground tabular-nums">
-                        {secDone} / {secStages.length}
-                      </span>
-                    </div>
-
-                    <div
-                      className="relative mx-auto w-full max-w-[680px]"
-                      style={{ height: `${canvasHeight}px` }}
-                    >
-                      <svg
-                        viewBox={`0 0 680 ${canvasHeight}`}
-                        preserveAspectRatio="none"
-                        className="pointer-events-none absolute inset-0 h-full w-full"
-                        aria-hidden="true"
+              return (
+                <section
+                  key={section.key}
+                  className={cn(
+                    'rounded-2xl border bg-card/95 p-3.5 shadow-2xs sm:p-4',
+                    allDone ? 'border-success/50' : 'border-border',
+                  )}
+                >
+                  <header className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b pb-2.5">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <Badge
+                        variant={allDone ? 'success' : 'default'}
+                        className="shrink-0 tabular-nums"
                       >
-                        {mainNodes.slice(0, -1).map((from, idx) => {
-                          const to = mainNodes[idx + 1];
-                          const midY = (from.y + to.y) / 2;
-                          const d = `M ${from.x} ${from.y} C ${from.x} ${midY}, ${to.x} ${midY}, ${to.x} ${to.y}`;
-                          return (
-                            <g key={`spine-${from.stage.item.key}-${to.stage.item.key}`}>
-                              <path
-                                d={d}
-                                fill="none"
-                                stroke="var(--map-road)"
-                                strokeWidth="18"
-                                strokeLinecap="round"
-                                opacity="0.55"
-                              />
-                              <path
-                                d={d}
-                                fill="none"
-                                stroke={
-                                  from.stage.completed
-                                    ? 'var(--map-road-done)'
-                                    : 'var(--map-stone-locked-edge)'
-                                }
-                                strokeWidth="3.5"
-                                strokeDasharray="6 8"
-                                strokeLinecap="round"
-                              />
-                            </g>
-                          );
-                        })}
-                        {branchNodes.map((node) => {
-                          const ctrlX = (node.anchorX + node.x) / 2;
-                          const ctrlY = node.anchorY - 14;
-                          const d = `M ${node.anchorX} ${node.anchorY} Q ${ctrlX} ${ctrlY} ${node.x} ${node.y}`;
-                          return (
-                            <path
-                              key={`branch-${node.stage.item.key}`}
-                              d={d}
-                              fill="none"
-                              stroke={
-                                node.stage.completed
-                                  ? 'var(--map-road-done)'
-                                  : 'var(--map-branch)'
-                              }
-                              strokeWidth="3.5"
-                              strokeDasharray="5 6"
-                              strokeLinecap="round"
-                            />
-                          );
-                        })}
-                      </svg>
+                        {t('curriculumWorkspace.graph.chapterBadge', { number: secIdx + 1 })}
+                      </Badge>
+                      <h3 className="truncate text-sm font-semibold">{section.title}</h3>
+                    </div>
+                    <span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
+                      {doneCount} / {secStages.length}
+                    </span>
+                  </header>
 
-                      {allNodes.map((node) => {
-                        const { stage } = node;
-                        const title =
-                          titleLookup[stage.item.contentReferenceId] ||
-                          t(`curriculumWorkspace.contentTypes.${stage.item.contentType}`);
-                        const sliceTag = formatSliceBadge(stage.item.config, t);
-                        const isSelected = activeStage?.item.key === stage.item.key;
-                        const isBoss = stage.isBoss;
+                  <div className="grid">
+                    {secStages.map((stage, idx) => {
+                      const title =
+                        titleLookup[stage.item.contentReferenceId] ||
+                        t(`curriculumWorkspace.contentTypes.${stage.item.contentType}`);
+                      const sliceTag = formatCurriculumSliceBadge(stage.item.config, t);
+                      const isSelected = activeStage?.item.key === stage.item.key;
+                      const accent = contentAccentVar[stage.item.contentType];
+                      const isOptional = stage.item.required === false;
 
-                        const stoneColor = stage.completed
-                          ? 'bg-[var(--map-stone-done)] border-[var(--map-stone-done-edge)] text-primary-foreground'
-                          : stage.isActive
-                            ? 'bg-[var(--map-stone-active)] border-[var(--map-stone-active-edge)] text-primary-foreground ring-4 ring-warning/30'
-                            : isBoss && stage.unlocked && !stage.plusLocked
-                              ? 'bg-[var(--map-boss-bg)] border-[var(--map-boss-ring)] text-[var(--map-boss-ink)] ring-4 ring-[var(--map-boss-ring)]/55'
-                              : stage.unlocked
-                                ? 'bg-background border-primary/45 text-foreground hover:border-primary'
-                                : 'bg-[var(--map-stone-locked)] border-[var(--map-stone-locked-edge)] text-muted-foreground opacity-85';
+                      let prevMain: FlattenedStage | null = null;
+                      for (let i = idx - 1; i >= 0; i--) {
+                        if (secStages[i].item.required !== false) {
+                          prevMain = secStages[i];
+                          break;
+                        }
+                      }
+                      let nextMain: FlattenedStage | null = null;
+                      for (let i = idx + 1; i < secStages.length; i++) {
+                        if (secStages[i].item.required !== false) {
+                          nextMain = secStages[i];
+                          break;
+                        }
+                      }
+
+                      const hasMainAbove = Boolean(prevMain);
+                      const hasMainBelow = Boolean(nextMain);
+                      const spineAboveDone = Boolean(
+                        prevMain?.completed && (isOptional ? nextMain?.completed : stage.completed),
+                      );
+                      const spineBelowDone = Boolean(
+                        (isOptional ? prevMain?.completed : stage.completed) && nextMain?.completed,
+                      );
+
+                      if (isOptional) {
+                        const branchStroke = stage.completed
+                          ? 'var(--map-road-done)'
+                          : stage.unlocked
+                            ? accent
+                            : 'var(--map-stone-locked-edge)';
 
                         return (
                           <div
                             key={stage.item.key}
-                            style={{
-                              left: `${(node.x / 680) * 100}%`,
-                              top: `${node.y}px`,
-                            }}
-                            className="absolute z-10 flex w-36 -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center"
+                            className="relative flex items-center gap-3 py-1.5 pl-14"
                           >
+                            <div
+                              className="pointer-events-none absolute inset-y-0 left-0 w-14"
+                              aria-hidden="true"
+                            >
+                              {hasMainAbove ? (
+                                <span
+                                  className={cn(
+                                    'absolute top-0 left-[27px] w-0.5',
+                                    hasMainBelow ? 'bottom-0' : 'h-1/2',
+                                    spineAboveDone && spineBelowDone
+                                      ? 'bg-[var(--map-road-done)]'
+                                      : 'bg-[var(--map-road)]',
+                                  )}
+                                />
+                              ) : null}
+                              <svg
+                                viewBox="0 0 40 56"
+                                className="absolute top-0 left-[27px] h-full w-10 overflow-visible"
+                              >
+                                <path
+                                  d="M 1 0 C 1 20, 10 28, 30 28"
+                                  fill="none"
+                                  stroke={branchStroke}
+                                  strokeWidth="2.5"
+                                  strokeDasharray={stage.completed ? undefined : '4 4'}
+                                  strokeLinecap="round"
+                                />
+                              </svg>
+                            </div>
+
+                            <div
+                              style={
+                                stage.completed
+                                  ? undefined
+                                  : stage.unlocked
+                                    ? {
+                                        borderColor: `color-mix(in srgb, ${accent} 65%, var(--border))`,
+                                        color: accent,
+                                      }
+                                    : undefined
+                              }
+                              className={cn(
+                                'relative z-10 flex size-11 shrink-0 items-center justify-center rounded-full border-2 border-dashed shadow-2xs transition-colors',
+                                stage.completed
+                                  ? 'border-solid border-[var(--map-stone-done-edge)] bg-[var(--map-stone-done)] text-primary-foreground'
+                                  : stage.unlocked
+                                    ? 'bg-background'
+                                    : 'border-[var(--map-stone-locked-edge)] bg-[var(--map-stone-locked)] text-muted-foreground',
+                              )}
+                            >
+                              <ContentTypeIcon
+                                type={stage.item.contentType}
+                                config={stage.item.config}
+                                className="size-4.5"
+                              />
+                              {stage.completed ? (
+                                <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full border border-background bg-[var(--map-stone-done-edge)] text-primary-foreground">
+                                  <RiCheckLine className="size-2.5" aria-hidden="true" />
+                                </span>
+                              ) : !stage.unlocked ? (
+                                <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full border border-background bg-muted text-muted-foreground">
+                                  <RiLockLine className="size-2.5" aria-hidden="true" />
+                                </span>
+                              ) : null}
+                            </div>
+
                             <button
                               type="button"
                               onClick={() => setSelectedKey(stage.item.key)}
@@ -390,147 +365,353 @@ export function CurriculumGraphPreview({
                                 stage: stage.stageNumber,
                                 title,
                               })}
-                              className={`group relative flex flex-col items-center justify-center rounded-full border-2 border-b-4 transition-all hover:-translate-y-0.5 active:translate-y-0 ${
-                                isBoss
-                                  ? 'size-20'
-                                  : node.isBranch
-                                    ? 'size-14 border-dashed'
-                                    : 'size-16'
-                              } ${stoneColor} ${
-                                isSelected ? 'scale-105 outline-2 outline-ring outline-offset-3' : ''
-                              }`}
-                            >
-                              {isBoss ? (
-                                <span className="absolute -top-3.5 rounded-full border border-[var(--map-boss-ring)] bg-[var(--map-boss-bg)] px-2 py-0.5 text-[10px] font-bold tracking-wide text-[var(--map-boss-ink)] uppercase shadow-xs">
-                                  {t('curriculumWorkspace.graph.bossBadge')}
-                                </span>
-                              ) : stage.isActive ? (
-                                <span className="absolute -top-3 rounded-full bg-warning px-2 py-0.5 text-[10px] font-bold tracking-wide text-primary-foreground uppercase shadow-xs">
-                                  {t('curriculumWorkspace.graph.startHere')}
-                                </span>
-                              ) : node.isBranch ? (
-                                <span className="absolute -top-2.5 rounded-full border bg-background px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground shadow-2xs">
-                                  {t('curriculumWorkspace.graph.bonusSideQuest')}
-                                </span>
-                              ) : null}
-
-                              {stage.plusLocked ? (
-                                <RiLockLine className="size-5" aria-hidden="true" />
-                              ) : stage.completed ? (
-                                <RiCheckLine className="size-6" aria-hidden="true" />
-                              ) : isBoss ? (
-                                <RiVipCrownLine className="size-6" aria-hidden="true" />
-                              ) : stage.isActive ? (
-                                <RiPlayFill className="size-6" aria-hidden="true" />
-                              ) : stage.unlocked ? (
-                                <ContentTypeIcon type={stage.item.contentType} />
-                              ) : (
-                                <RiLockLine className="size-5" aria-hidden="true" />
+                              className={cn(
+                                'flex min-w-0 flex-1 items-center justify-between gap-3 rounded-2xl border border-dashed bg-muted/20 px-4 py-2.5 text-left transition-colors hover:bg-muted/45 focus-visible:outline-2 focus-visible:outline-ring',
+                                isSelected
+                                  ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                                  : 'border-border/80',
                               )}
+                            >
+                              <div className="min-w-0 flex-1 space-y-1.5">
+                                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                                  <span className="font-mono font-semibold text-muted-foreground tabular-nums">
+                                    #{stage.stageNumber}
+                                  </span>
+                                  <span
+                                    className="inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 font-medium"
+                                    style={{
+                                      borderColor: `color-mix(in srgb, ${accent} 35%, var(--border))`,
+                                      backgroundColor: `color-mix(in srgb, ${accent} 10%, var(--card))`,
+                                      color: accent,
+                                    }}
+                                  >
+                                    <ContentTypeIcon
+                                      type={stage.item.contentType}
+                                      config={stage.item.config}
+                                      className="size-3.5"
+                                    />
+                                    {t(`curriculumWorkspace.contentTypes.${stage.item.contentType}`)}
+                                  </span>
+                                  <Badge variant="outline" className="h-5 gap-1 px-2 text-xs">
+                                    <BranchTrailIcon className="size-3.5" />
+                                    {t('curriculumWorkspace.graph.branchTrail')}
+                                  </Badge>
+                                </div>
+                                <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground sm:text-[15px]">
+                                  {title}
+                                </p>
+                                {sliceTag ? (
+                                  <p className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
+                                    <RiScissorsCutLine className="size-3.5 shrink-0" aria-hidden="true" />
+                                    <span className="truncate">{sliceTag}</span>
+                                  </p>
+                                ) : null}
+                              </div>
 
-                              <span className="mt-0.5 text-[10px] font-bold tabular-nums opacity-90">
-                                #{stage.stageNumber}
-                              </span>
+                              <Badge
+                                variant={
+                                  stage.completed
+                                    ? 'success'
+                                    : stage.unlocked
+                                      ? 'secondary'
+                                      : 'outline'
+                                }
+                                className="shrink-0"
+                              >
+                                {stage.completed
+                                  ? t('curriculumWorkspace.graph.statusCompleted')
+                                  : stage.unlocked
+                                    ? t('curriculumWorkspace.graph.statusUnlocked')
+                                    : t('curriculumWorkspace.graph.statusLocked')}
+                              </Badge>
                             </button>
-
-                            <div className="mt-1 flex items-center gap-0.5 rounded-full bg-background/85 px-1.5 py-0.5 shadow-2xs">
-                              {[1, 2, 3].map((star) => (
-                                <RiStarFill
-                                  key={star}
-                                  className={`size-2.5 ${
-                                    stage.completed
-                                      ? 'text-warning'
-                                      : 'text-muted-foreground/30'
-                                  }`}
-                                  aria-hidden="true"
-                                />
-                              ))}
-                            </div>
-
-                            <div className="mt-1 rounded-lg bg-background/90 px-2 py-0.5 shadow-2xs backdrop-blur-xs">
-                              <p className="line-clamp-2 text-[11px] font-medium leading-tight">
-                                {title}
-                              </p>
-                              {sliceTag ? (
-                                <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                                  {sliceTag}
-                                </span>
-                              ) : null}
-                            </div>
                           </div>
                         );
-                      })}
-                    </div>
+                      }
+
+                      return (
+                        <div key={stage.item.key} className="flex items-stretch gap-3">
+                          <div className="flex w-14 shrink-0 flex-col items-center">
+                            <div
+                              className={cn(
+                                'h-3.5 w-0.5',
+                                !hasMainAbove
+                                  ? 'opacity-0'
+                                  : spineAboveDone
+                                    ? 'bg-[var(--map-road-done)]'
+                                    : 'bg-[var(--map-road)]',
+                              )}
+                              aria-hidden="true"
+                            />
+
+                            <div
+                              style={
+                                stage.completed
+                                  ? undefined
+                                  : stage.isBoss && stage.unlocked
+                                    ? {
+                                        backgroundColor: 'var(--map-boss-bg)',
+                                        borderColor: 'var(--map-boss-ring)',
+                                        color: 'var(--map-boss-ink)',
+                                      }
+                                    : stage.isActive
+                                      ? {
+                                          backgroundColor: accent,
+                                          borderColor: accent,
+                                        }
+                                      : stage.unlocked
+                                        ? {
+                                            borderColor: `color-mix(in srgb, ${accent} 65%, var(--border))`,
+                                            color: accent,
+                                          }
+                                        : undefined
+                              }
+                              className={cn(
+                                'relative flex shrink-0 items-center justify-center border-2 shadow-xs transition-colors',
+                                stage.isBoss ? 'size-12 rounded-2xl' : 'size-11 rounded-full',
+                                stage.completed
+                                  ? 'border-[var(--map-stone-done-edge)] bg-[var(--map-stone-done)] text-primary-foreground'
+                                  : stage.isBoss && stage.unlocked
+                                    ? 'ring-4 ring-amber-400/25'
+                                    : stage.isActive
+                                      ? 'text-primary-foreground ring-4 ring-primary/20'
+                                      : stage.unlocked
+                                        ? 'bg-background'
+                                        : 'border-[var(--map-stone-locked-edge)] bg-[var(--map-stone-locked)] text-muted-foreground',
+                              )}
+                            >
+                              {stage.isBoss ? (
+                                <span
+                                  className={cn(
+                                    'absolute -top-2.5 left-1/2 flex size-5.5 -translate-x-1/2 items-center justify-center rounded-full border shadow-2xs',
+                                    stage.unlocked || stage.completed
+                                      ? 'border-amber-600 bg-amber-400 text-amber-950'
+                                      : 'border-border bg-muted text-amber-600/80',
+                                  )}
+                                  aria-hidden="true"
+                                >
+                                  <BossCrownIcon className="size-3.5" />
+                                </span>
+                              ) : null}
+
+                              <ContentTypeIcon
+                                type={stage.item.contentType}
+                                config={stage.item.config}
+                                className="size-5"
+                              />
+
+                              {stage.completed ? (
+                                <span className="absolute -right-1 -bottom-1 flex size-4 items-center justify-center rounded-full border border-background bg-[var(--map-stone-done-edge)] text-primary-foreground">
+                                  <RiCheckLine className="size-2.5" aria-hidden="true" />
+                                </span>
+                              ) : !stage.unlocked ? (
+                                <span className="absolute -right-1 -bottom-1 flex size-4 items-center justify-center rounded-full border border-background bg-muted text-muted-foreground">
+                                  <RiLockLine className="size-2.5" aria-hidden="true" />
+                                </span>
+                              ) : null}
+                            </div>
+
+                            <div
+                              className={cn(
+                                'min-h-3.5 w-0.5 flex-1',
+                                !hasMainBelow
+                                  ? 'opacity-0'
+                                  : spineBelowDone
+                                    ? 'bg-[var(--map-road-done)]'
+                                    : 'bg-[var(--map-road)]',
+                              )}
+                              aria-hidden="true"
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setSelectedKey(stage.item.key)}
+                            aria-label={t('curriculumWorkspace.graph.stageAriaLabel', {
+                              stage: stage.stageNumber,
+                              title,
+                            })}
+                            className={cn(
+                              'my-1.5 flex min-w-0 flex-1 items-center justify-between gap-3 rounded-2xl border bg-background px-4 py-3 text-left transition-all hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring',
+                              isSelected
+                                ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                                : stage.isBoss && stage.unlocked
+                                  ? 'border-amber-500/50 bg-gradient-to-r from-amber-500/[0.04] to-violet-500/[0.03]'
+                                  : stage.isActive
+                                    ? 'border-primary/55 shadow-2xs'
+                                    : 'border-border/80',
+                            )}
+                          >
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                                <span className="font-mono font-semibold text-muted-foreground tabular-nums">
+                                  #{stage.stageNumber}
+                                </span>
+                                <span
+                                  className="inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 font-medium"
+                                  style={{
+                                    borderColor: `color-mix(in srgb, ${accent} 35%, var(--border))`,
+                                    backgroundColor: `color-mix(in srgb, ${accent} 10%, var(--card))`,
+                                    color: accent,
+                                  }}
+                                >
+                                  <ContentTypeIcon
+                                    type={stage.item.contentType}
+                                    config={stage.item.config}
+                                    className="size-3.5"
+                                  />
+                                  {t(`curriculumWorkspace.contentTypes.${stage.item.contentType}`)}
+                                </span>
+                                {stage.isActive ? (
+                                  <Badge variant="default" className="h-5 px-2 text-xs">
+                                    {t('curriculumWorkspace.graph.startHere')}
+                                  </Badge>
+                                ) : null}
+                                {stage.isBoss ? (
+                                  <Badge
+                                    variant="warning"
+                                    className="h-5 gap-1 px-2 text-xs"
+                                  >
+                                    <BossCrownIcon className="size-3.5" />
+                                    {t('curriculumWorkspace.graph.challengeBadge')}
+                                  </Badge>
+                                ) : null}
+                              </div>
+
+                              <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground sm:text-[15px]">
+                                {title}
+                              </p>
+
+                              {sliceTag ? (
+                                <p className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
+                                  <RiScissorsCutLine className="size-3.5 shrink-0" aria-hidden="true" />
+                                  <span className="truncate">{sliceTag}</span>
+                                </p>
+                              ) : null}
+                            </div>
+
+                            <Badge
+                              variant={
+                                stage.completed
+                                  ? 'success'
+                                  : stage.unlocked
+                                    ? 'secondary'
+                                    : 'outline'
+                              }
+                              className="shrink-0"
+                            >
+                              {stage.completed
+                                ? t('curriculumWorkspace.graph.statusCompleted')
+                                : stage.unlocked
+                                  ? t('curriculumWorkspace.graph.statusUnlocked')
+                                  : t('curriculumWorkspace.graph.statusLocked')}
+                            </Badge>
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
+                </section>
+              );
+            })
           )}
         </div>
 
-        <Card className="xl:col-span-4">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
+        <Card size="sm" className="lg:sticky lg:top-4">
+          <CardHeader className="border-b">
+            <CardTitle className="flex items-center gap-2 text-sm">
               <RiFlagLine className="size-4 text-primary" aria-hidden="true" />
               {t('curriculumWorkspace.graph.inspectorTitle')}
             </CardTitle>
-            <CardDescription>{t('curriculumWorkspace.graph.inspectorHelp')}</CardDescription>
+            <CardDescription className="text-xs">
+              {t('curriculumWorkspace.graph.inspectorHelp')}
+            </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-3.5">
             {activeStage ? (
-              <div className="space-y-4">
+              <div className="space-y-3.5">
                 <div className="space-y-2 rounded-xl border bg-muted/20 p-3.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span
-                      className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${typeBadgeClass[activeStage.item.contentType]}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs font-medium"
+                      style={{
+                        borderColor: `color-mix(in srgb, ${contentAccentVar[activeStage.item.contentType]} 35%, var(--border))`,
+                        backgroundColor: `color-mix(in srgb, ${contentAccentVar[activeStage.item.contentType]} 10%, var(--card))`,
+                        color: contentAccentVar[activeStage.item.contentType],
+                      }}
                     >
+                      <ContentTypeIcon
+                        type={activeStage.item.contentType}
+                        config={activeStage.item.config}
+                        className="size-4"
+                      />
                       {t(`curriculumWorkspace.contentTypes.${activeStage.item.contentType}`)}
                     </span>
-                    <Badge variant={activeStage.completed ? 'success' : activeStage.unlocked ? 'warning' : 'outline'}>
-                      {activeStage.plusLocked
-                        ? t('curriculumWorkspace.graph.statusPlusLocked')
-                        : activeStage.completed
-                          ? t('curriculumWorkspace.graph.statusCompleted')
+                    <Badge
+                      variant={
+                        activeStage.completed
+                          ? 'success'
                           : activeStage.unlocked
-                            ? t('curriculumWorkspace.graph.statusUnlocked')
-                            : t('curriculumWorkspace.graph.statusLocked')}
+                            ? 'secondary'
+                            : 'outline'
+                      }
+                    >
+                      {activeStage.completed
+                        ? t('curriculumWorkspace.graph.statusCompleted')
+                        : activeStage.unlocked
+                          ? t('curriculumWorkspace.graph.statusUnlocked')
+                          : t('curriculumWorkspace.graph.statusLocked')}
                     </Badge>
                   </div>
-                  <p className="text-sm font-semibold">
+                  <p className="text-sm font-semibold leading-snug break-words tabular-nums">
                     #{activeStage.stageNumber} ·{' '}
                     {titleLookup[activeStage.item.contentReferenceId] ||
                       activeStage.item.contentReferenceId}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground break-words">
                     {activeStage.sectionTitle}
                   </p>
                 </div>
 
                 <dl className="space-y-2 text-xs">
-                  <div className="flex items-center justify-between gap-2 border-b pb-1.5">
-                    <dt className="text-muted-foreground">
-                      {t('curriculumWorkspace.unlockRule')}
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b pb-1.5">
+                    <dt className="shrink-0 text-muted-foreground">
+                      {t('curriculumWorkspace.graph.roleLabel')}
                     </dt>
-                    <dd className="font-medium">
-                      {t(`curriculumWorkspace.unlockRules.${activeStage.item.unlockRule}`, {
-                        defaultValue: activeStage.item.unlockRule,
-                      })}
+                    <dd className="text-right font-medium">
+                      {activeStage.isBoss
+                        ? t('curriculumWorkspace.graph.challengeBadge')
+                        : activeStage.item.required !== false
+                          ? t('curriculumWorkspace.graph.standardType')
+                          : t('curriculumWorkspace.graph.branchTrail')}
                     </dd>
                   </div>
-                  <div className="flex items-center justify-between gap-2 border-b pb-1.5">
-                    <dt className="text-muted-foreground">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b pb-1.5">
+                    <dt className="shrink-0 text-muted-foreground">
+                      {t('curriculumWorkspace.unlockRule')}
+                    </dt>
+                    <dd className="text-right font-medium break-words">
+                      {activeStage.item.required === false
+                        ? t('curriculumWorkspace.graph.branchHint')
+                        : t(`curriculumWorkspace.unlockRules.${activeStage.item.unlockRule}`, {
+                            defaultValue: activeStage.item.unlockRule,
+                          })}
+                    </dd>
+                  </div>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b pb-1.5">
+                    <dt className="shrink-0 text-muted-foreground">
                       {t('curriculumWorkspace.graph.sliceLabel')}
                     </dt>
-                    <dd className="font-medium">
-                      {formatSliceBadge(activeStage.item.config, t) ??
+                    <dd className="text-right font-medium break-words tabular-nums">
+                      {formatCurriculumSliceBadge(activeStage.item.config, t) ??
                         t('curriculumWorkspace.graph.fullSlice')}
                     </dd>
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <dt className="text-muted-foreground">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <dt className="shrink-0 text-muted-foreground">
                       {t('curriculumWorkspace.requiredItem')}
                     </dt>
-                    <dd className="font-medium">
+                    <dd className="text-right font-medium">
                       {activeStage.item.required
                         ? t('curriculumWorkspace.graph.yes')
                         : t('curriculumWorkspace.graph.no')}
@@ -538,17 +719,29 @@ export function CurriculumGraphPreview({
                   </div>
                 </dl>
 
-                <Button
-                  type="button"
-                  className="w-full"
-                  variant={activeStage.completed ? 'outline' : 'default'}
-                  disabled={activeStage.plusLocked}
-                  onClick={() => toggleComplete(activeStage)}
-                >
-                  {activeStage.completed
-                    ? t('curriculumWorkspace.graph.markIncomplete')
-                    : t('curriculumWorkspace.graph.markCompleted')}
-                </Button>
+                <div className="grid gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full"
+                    variant={activeStage.completed ? 'outline' : 'default'}
+                    onClick={() => toggleComplete(activeStage)}
+                  >
+                    {activeStage.completed
+                      ? t('curriculumWorkspace.graph.markIncomplete')
+                      : t('curriculumWorkspace.graph.markCompleted')}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => completeSectionStages(activeStage.sectionIndex)}
+                  >
+                    <RiCheckDoubleLine data-icon="inline-start" aria-hidden="true" />
+                    {t('curriculumWorkspace.graph.completeChapter')}
+                  </Button>
+                </div>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">

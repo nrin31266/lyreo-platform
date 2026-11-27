@@ -5,6 +5,7 @@ import com.lyreo.entitlement.application.internal.DefaultEntitlementService;
 import com.lyreo.entitlement.application.internal.EntitlementGrantAdminService;
 import com.lyreo.entitlement.application.port.EntitlementAuditRepository;
 import com.lyreo.entitlement.application.port.FeatureRepository;
+import com.lyreo.entitlement.application.port.LearnerPlanRepository;
 import com.lyreo.entitlement.application.port.QuotaPolicyRepository;
 import com.lyreo.entitlement.application.port.UsageQuotaRepository;
 import com.lyreo.entitlement.application.port.UserEntitlementGrantRepository;
@@ -18,14 +19,14 @@ public class EntitlementConfiguration {
     @Bean
     EntitlementService entitlementService(
         FeatureRepository featureRepository,
-        UserEntitlementGrantRepository grantRepository,
+        LearnerPlanRepository plans,
         QuotaPolicyRepository quotaPolicyRepository,
         UsageQuotaRepository usageQuotaRepository,
         EntitlementAuditRepository auditRepository
     ) {
         return new DefaultEntitlementService(
             featureRepository,
-            grantRepository,
+            plans,
             quotaPolicyRepository,
             usageQuotaRepository,
             auditRepository,

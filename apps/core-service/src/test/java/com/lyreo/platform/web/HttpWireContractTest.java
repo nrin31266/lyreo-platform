@@ -392,24 +392,32 @@ class HttpWireContractTest {
         UUID lexiconId = UUID.randomUUID();
         Instant nextReview = Instant.parse("2026-09-12T10:00:00Z");
 
-        when(vocabularyCommandService.due(any(), anyInt()))
-            .thenReturn(List.of(new VocabularyCard(
-                cardId, learnerId, lexiconId, "LESSON", UUID.randomUUID(),
-                nextReview, 2.5, 3.0, 0, 1
-            )));
+        when(vocabularyCommandService.duePage(any(), anyInt(), anyInt()))
+            .thenReturn(new VocabularyCommandService.DuePage(
+                List.of(new VocabularyCard(
+                    cardId, learnerId, lexiconId, "LESSON", UUID.randomUUID(),
+                    nextReview, 2.5, 3.0, 0, 1
+                )),
+                1L,
+                0,
+                20,
+                false
+            ));
 
         vocabularyMvc.perform(get("/api/v1/vocabulary/due")
                 .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(MOCK_JWT)))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].id").value(cardId.toString()))
-            .andExpect(jsonPath("$[0].learnerId").value(learnerId.toString()))
-            .andExpect(jsonPath("$[0].headwordId").value(lexiconId.toString()))
-            .andExpect(jsonPath("$[0].sourceContextType").value("LESSON"))
-            .andExpect(jsonPath("$[0].nextReviewAt").value("2026-09-12T10:00:00Z"))
-            .andExpect(jsonPath("$[0].stability").value(2.5))
-            .andExpect(jsonPath("$[0].difficulty").value(3.0))
-            .andExpect(jsonPath("$[0].lapseCount").value(0))
-            .andExpect(jsonPath("$[0].reviewCount").value(1));
+            .andExpect(jsonPath("$.total").value(1))
+            .andExpect(jsonPath("$.hasMore").value(false))
+            .andExpect(jsonPath("$.items[0].id").value(cardId.toString()))
+            .andExpect(jsonPath("$.items[0].learnerId").value(learnerId.toString()))
+            .andExpect(jsonPath("$.items[0].headwordId").value(lexiconId.toString()))
+            .andExpect(jsonPath("$.items[0].sourceContextType").value("LESSON"))
+            .andExpect(jsonPath("$.items[0].nextReviewAt").value("2026-09-12T10:00:00Z"))
+            .andExpect(jsonPath("$.items[0].stability").value(2.5))
+            .andExpect(jsonPath("$.items[0].difficulty").value(3.0))
+            .andExpect(jsonPath("$.items[0].lapseCount").value(0))
+            .andExpect(jsonPath("$.items[0].reviewCount").value(1));
 
         when(vocabularyCommandService.review(any(), eq(cardId), any()))
             .thenReturn(new SpacedRepetitionScheduler.ScheduleResult(nextReview, 2.7, 2.9));

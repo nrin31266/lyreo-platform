@@ -1,6 +1,7 @@
 package com.lyreo.entitlement.api;
 
 import com.lyreo.identity.application.AppUserProvisioningService;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,11 +27,19 @@ public class LearnerEntitlementController {
     @GetMapping
     public LearnerEntitlementsResponse list(@AuthenticationPrincipal Jwt jwt) {
         var user = users.provision(jwt.getSubject(), jwt.getClaimAsString("email"));
-        return new LearnerEntitlementsResponse(user.id(), entitlements.listLearnerEntitlements(user.id()));
+        var plan = entitlements.currentPlan(user.id());
+        return new LearnerEntitlementsResponse(
+            user.id(),
+            plan.tier(),
+            plan.validUntil(),
+            entitlements.listLearnerEntitlements(user.id())
+        );
     }
 
     public record LearnerEntitlementsResponse(
         UUID learnerId,
+        String tier,
+        Instant validUntil,
         List<FeatureAccess> entitlements
     ) {}
 }

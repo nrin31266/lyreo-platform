@@ -767,7 +767,7 @@ class DemoUpgradeAndMediaTest(unittest.TestCase):
         assets_dir = REPO_ROOT / "infra/postgres/seed/assets"
         path_webps = sorted((assets_dir / "paths").glob("*.webp"))
         badge_webps = sorted((assets_dir / "badges").glob("*.webp"))
-        self.assertEqual(len(path_webps), 4)
+        self.assertEqual(len(path_webps), 5)
         self.assertEqual(len(badge_webps), 14)
         for webp in (*path_webps, *badge_webps):
             digest = hashlib.sha256(webp.read_bytes()).hexdigest()
@@ -779,6 +779,7 @@ class DemoUpgradeAndMediaTest(unittest.TestCase):
 
         # Key curated-slice paths, badges, Plus gates & notifications present
         for marker in (
+            "TOEIC_A1_STARTER",
             "REAL_WORLD_ENGLISH_A2_B1",
             "WORKPLACE_FLUENCY_B1_B2",
             "TOEIC_500_FOUNDATION",

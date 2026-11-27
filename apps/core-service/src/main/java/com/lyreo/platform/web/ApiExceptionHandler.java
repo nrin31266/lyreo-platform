@@ -27,12 +27,14 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -104,11 +106,69 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     @Override
     protected ResponseEntity<Object> handleMaxUploadSizeExceededException(
-        org.springframework.web.multipart.MaxUploadSizeExceededException ex,HttpHeaders headers,HttpStatusCode status,WebRequest request
+        org.springframework.web.multipart.MaxUploadSizeExceededException ex,
+        HttpHeaders headers,
+        HttpStatusCode status,
+        WebRequest request
     ) {
-        var problem=ApiProblemFactory.create(HttpStatus.valueOf(413),"payload-too-large","Upload too large",
-            "Audio uploads support up to 30 MiB per file.","PAYLOAD_TOO_LARGE",resolveHttpServletRequest(request),null);
-        return new ResponseEntity<>(problem,problemHeaders(headers),status);
+        ProblemDetail problem = ApiProblemFactory.create(
+            HttpStatus.valueOf(413),
+            "payload-too-large",
+            "Upload too large",
+            "Uploaded file exceeds the maximum allowed size.",
+            ApiErrorCodes.PAYLOAD_TOO_LARGE,
+            resolveHttpServletRequest(request),
+            null
+        );
+        return new ResponseEntity<>(problem, problemHeaders(headers), status);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleMissingServletRequestPart(
+        MissingServletRequestPartException ex,
+        HttpHeaders headers,
+        HttpStatusCode status,
+        WebRequest request
+    ) {
+        List<ApiFieldViolation> errors = List.of(new ApiFieldViolation(
+            ex.getRequestPartName(),
+            "MissingPart",
+            "Required multipart part '" + ex.getRequestPartName() + "' is missing"
+        ));
+        ProblemDetail problem = ApiProblemFactory.create(
+            HttpStatus.BAD_REQUEST,
+            "request-validation-failed",
+            "Request validation failed",
+            "Required multipart part is missing.",
+            ApiErrorCodes.REQUEST_VALIDATION_FAILED,
+            resolveHttpServletRequest(request),
+            errors
+        );
+        return new ResponseEntity<>(problem, problemHeaders(headers), HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ProblemDetail> handleMissingRequestHeader(
+        MissingRequestHeaderException ex,
+        HttpServletRequest request
+    ) {
+        List<ApiFieldViolation> errors = List.of(new ApiFieldViolation(
+            ex.getHeaderName(),
+            "MissingHeader",
+            "Required request header '" + ex.getHeaderName() + "' is missing"
+        ));
+        ProblemDetail problem = ApiProblemFactory.create(
+            HttpStatus.BAD_REQUEST,
+            "request-validation-failed",
+            "Request validation failed",
+            "Required request header is missing.",
+            ApiErrorCodes.REQUEST_VALIDATION_FAILED,
+            request,
+            errors
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .contentType(ApiProblemWriter.APPLICATION_PROBLEM_JSON)
+            .body(problem);
     }
 
     @Override
@@ -378,9 +438,13 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         if (status == null) status = HttpStatus.INTERNAL_SERVER_ERROR;
         String slug = status.name().toLowerCase().replace('_', '-');
         String code = status.is4xxClientError() ? "CLIENT_ERROR" : "SERVER_ERROR";
+        if (status == HttpStatus.BAD_REQUEST) code = ApiErrorCodes.REQUEST_VALIDATION_FAILED;
         if (status == HttpStatus.UNAUTHORIZED) code = ApiErrorCodes.AUTHENTICATION_REQUIRED;
         if (status == HttpStatus.FORBIDDEN) code = ApiErrorCodes.ACCESS_DENIED;
         if (status == HttpStatus.NOT_FOUND) code = ApiErrorCodes.RESOURCE_NOT_FOUND;
+        if (status == HttpStatus.CONFLICT) code = ApiErrorCodes.STATE_CONFLICT;
+        if (status == HttpStatus.TOO_MANY_REQUESTS) code = ApiErrorCodes.RATE_LIMITED;
+        if (status == HttpStatus.SERVICE_UNAVAILABLE) code = ApiErrorCodes.SERVICE_UNAVAILABLE;
 
         ProblemDetail problem = ApiProblemFactory.create(
             status,

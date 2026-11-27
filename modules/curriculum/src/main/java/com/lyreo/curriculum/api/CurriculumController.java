@@ -12,6 +12,7 @@ import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -19,6 +20,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -71,18 +73,27 @@ public class CurriculumController {
     @GetMapping("/paths/{id}/cover")
     public ResponseEntity<byte[]> cover(
         @AuthenticationPrincipal Jwt jwt,
-        @PathVariable UUID id
+        @PathVariable UUID id,
+        @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch
     ) {
-        CurriculumPathDetail detail = curriculum.getPublishedPathDetail(learnerId(jwt), id);
-        if (detail.coverAssetId() == null || assets == null) {
+        learnerId(jwt);
+        if (assets == null) {
             throw new ResourceNotFoundException("Curriculum cover image not found");
         }
-        AssetStore.Asset meta = assets.get(detail.coverAssetId());
-        byte[] bytes = assets.bytes(detail.coverAssetId());
+        UUID coverAssetId = curriculum.getPublishedCoverAssetId(id);
+        AssetStore.Asset meta = assets.get(coverAssetId);
+        String etag = "\"" + coverAssetId + "-" + meta.sizeBytes() + "\"";
+        if (etag.equals(ifNoneMatch != null ? ifNoneMatch.strip() : null)) {
+            return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
+                .cacheControl(CacheControl.noCache().mustRevalidate())
+                .eTag(etag)
+                .build();
+        }
+        byte[] bytes = assets.bytes(coverAssetId);
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType(meta.mimeType()))
             .cacheControl(CacheControl.noCache().mustRevalidate())
-            .eTag("\"" + detail.coverAssetId() + "-" + meta.sizeBytes() + "\"")
+            .eTag(etag)
             .header("X-Content-Type-Options", "nosniff")
             .body(bytes);
     }

@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360" fill="none">
+  <defs>
+    <linearGradient id="bgReal" x1="0" y1="0" x2="640" y2="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FDF8F3"/>
+      <stop offset="55%" stop-color="#F7EDE2"/>
+      <stop offset="100%" stop-color="#EFE0CF"/>
+    </linearGradient>
+    <linearGradient id="archGrad" x1="220" y1="54" x2="420" y2="306" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1E4D40"/>
+      <stop offset="100%" stop-color="#13352C"/>
+    </linearGradient>
+    <linearGradient id="terracotta" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#D97742"/>
+      <stop offset="100%" stop-color="#B85328"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="640" height="360" fill="url(#bgReal)"/>
+
+  <!-- Warm sunlit geometric shapes -->
+  <circle cx="486" cy="92" r="96" fill="#F5D0B5" fill-opacity="0.45"/>
+  <circle cx="156" cy="278" r="110" fill="#D5E8DF" fill-opacity="0.55"/>
+
+  <!-- Central editorial cafe/city arch (anchors both 1:1 thumbnail and 16:9) -->
+  <path d="M222 302V162C222 107.876 265.876 64 320 64C374.124 64 418 107.876 418 162V302H222Z" fill="url(#archGrad)"/>
+  <path d="M236 290V162C236 115.608 273.608 78 320 78C366.392 78 404 115.608 404 162V290H236Z" stroke="#A7F3D0" stroke-opacity="0.25" stroke-width="1.5"/>
+
+  <!-- Left conversational bubble card -->
+  <g transform="translate(154, 108)">
+    <rect x="0" y="0" width="136" height="64" rx="16" fill="#FFFFFF" stroke="#E7D8C9" stroke-width="1.5"/>
+    <circle cx="26" cy="32" r="12" fill="#D1FAE5"/>
+    <path d="M22 32H30M26 28V36" stroke="#047857" stroke-width="2" stroke-linecap="round"/>
+    <rect x="48" y="21" width="68" height="8" rx="4" fill="#1F2937"/>
+    <rect x="48" y="36" width="48" height="7" rx="3.5" fill="#9CA3AF"/>
+  </g>
+
+  <!-- Right reply dialogue card with soundwave -->
+  <g transform="translate(348, 134)">
+    <rect x="0" y="0" width="138" height="64" rx="16" fill="url(#terracotta)"/>
+    <g stroke="#FFF7ED" stroke-width="3" stroke-linecap="round">
+      <line x1="26" y1="38" x2="26" y2="26"/>
+      <line x1="37" y1="43" x2="37" y2="21"/>
+      <line x1="48" y1="46" x2="48" y2="18"/>
+      <line x1="59" y1="40" x2="59" y2="24"/>
+      <line x1="70" y1="44" x2="70" y2="20"/>
+    </g>
+    <rect x="86" y="24" width="36" height="7" rx="3.5" fill="#FFEDD5"/>
+    <rect x="86" y="36" width="24" height="6" rx="3" fill="#FED7AA" fill-opacity="0.85"/>
+  </g>
+
+  <!-- Warm ceramic coffee cup & saucer on table foreground -->
+  <rect x="202" y="286" width="236" height="18" rx="9" fill="#C97B53"/>
+  <g transform="translate(274, 214)">
+    <path d="M18 18H70V44C70 57.255 59.255 68 46 68H42C28.745 68 18 57.255 18 44V18Z" fill="#FFFBEB"/>
+    <path d="M70 26H78C84.627 26 90 31.373 90 38C90 44.627 84.627 50 78 50H70" stroke="#FFFBEB" stroke-width="6" stroke-linecap="round"/>
+    <rect x="8" y="66" width="72" height="7" rx="3.5" fill="#FDE68A"/>
+    <!-- Gentle steam / voice curves -->
+    <path d="M35 8C35 2 41 0 41 -6" stroke="#A7F3D0" stroke-opacity="0.75" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M51 10C51 4 57 2 57 -4" stroke="#A7F3D0" stroke-opacity="0.55" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+</svg>

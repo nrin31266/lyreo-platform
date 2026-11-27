@@ -5,10 +5,10 @@ import com.lyreo.curriculum.domain.CurriculumItem;
 import com.lyreo.curriculum.domain.CurriculumItem.ContentType;
 import com.lyreo.curriculum.domain.CurriculumItemProgress;
 import com.lyreo.curriculum.domain.CurriculumPath;
-import com.lyreo.curriculum.domain.CurriculumPathDiagnostic;
 import com.lyreo.curriculum.domain.CurriculumPathSummary;
 import com.lyreo.curriculum.domain.CurriculumSection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -26,6 +26,12 @@ public interface CurriculumProgressRepository {
     void upsertItemProgressStatus(UUID learnerId, UUID itemId, String status);
 
     Optional<CurriculumPath> findPathById(UUID pathId);
+
+    default Optional<UUID> findPublishedCoverAssetId(UUID pathId) {
+        return findPathById(pathId)
+            .filter(CurriculumPath::isPublished)
+            .map(CurriculumPath::coverAssetId);
+    }
 
     List<CurriculumPathSummary> listPublishedPaths(UUID learnerId);
 
@@ -80,8 +86,8 @@ public interface CurriculumProgressRepository {
 
     boolean deletePath(UUID id);
 
-    default CurriculumPathDiagnostic diagnosePath(UUID pathId) {
-        return new CurriculumPathDiagnostic(pathId, 0, 0, 0, 0, List.of());
+    default Map<UUID, String> resolveContentTitles(List<CurriculumItem> items) {
+        return Map.of();
     }
 
     CurriculumSection insertSection(UUID id, UUID pathId, String title, int position);

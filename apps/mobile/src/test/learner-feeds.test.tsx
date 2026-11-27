@@ -22,7 +22,14 @@ it('shows the learner announcements returned by Core', async () => {
   coreResource.mockReturnValue({
     resource: {
       status: 'ready',
-      data: [{ id: 'message', title: 'New practice path', body: 'Open the new listening unit.', category: 'SYSTEM', publishedAt: null }],
+      data: {
+        items: [{ id: 'message', title: 'New practice path', body: 'Open the new listening unit.', category: 'SYSTEM', publishedAt: null, read: false, readAt: null }],
+        total: 1,
+        page: 0,
+        size: 20,
+        hasMore: false,
+        unreadCount: 1,
+      },
     },
     reload: jest.fn(),
   });

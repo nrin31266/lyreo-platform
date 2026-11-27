@@ -11,6 +11,6 @@ public record LearnerDirectory(List<Entry> items, long total, int page, int size
         UUID learnerId, String displayName, String email, Instant firstSeenAt,
         Status onboardingStatus, Instant onboardingCompletedAt,
         String goal, String currentLevel, Integer dailyMinutes, String focusArea,
-        String avatarPreset, UUID avatarUploadId
+        String avatarPreset, UUID avatarUploadId, Integer toeicTargetScore
     ) {}
 }

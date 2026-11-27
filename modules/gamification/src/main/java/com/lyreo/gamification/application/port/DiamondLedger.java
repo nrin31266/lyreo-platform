@@ -19,4 +19,8 @@ public interface DiamondLedger {
     default List<DiamondTransaction> listByLearner(UUID learnerId, int page, int size) {
         return List.of();
     }
+
+    default long countByLearner(UUID learnerId) {
+        return 0L;
+    }
 }

@@ -1,9 +1,11 @@
 package com.lyreo.notification.api;
 
 import com.lyreo.notification.application.LearnerNotificationService;
+import com.lyreo.notification.application.LearnerNotificationService.ActivityPage;
 import com.lyreo.notification.domain.LearnerNotification;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -36,6 +39,12 @@ public class AdminNotificationController {
     @GetMapping
     public List<LearnerNotification> list() {
         return service.listAllForAdmin();
+    }
+
+    @GetMapping("/activity")
+    public ActivityPage activity(@RequestParam(required = false) String category,
+                                 @RequestParam(defaultValue = "0") int page) {
+        return service.listActivity(category, page);
     }
 
     @PostMapping
@@ -60,8 +69,8 @@ public class AdminNotificationController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) {
-        service.delete(id);
+    public void delete(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        service.delete(id, jwt == null ? "admin" : jwt.getSubject());
     }
 
     private static LearnerNotificationService.SaveCommand toCommand(SaveNotificationRequest r) {
@@ -72,7 +81,8 @@ public class AdminNotificationController {
             r.targetAudience(),
             r.status(),
             r.publishedAt(),
-            r.expiresAt()
+            r.expiresAt(),
+            r.recipientIds()
         );
     }
 
@@ -83,6 +93,7 @@ public class AdminNotificationController {
         String targetAudience,
         String status,
         Instant publishedAt,
-        Instant expiresAt
+        Instant expiresAt,
+        @Size(max = 100) List<UUID> recipientIds
     ) {}
 }

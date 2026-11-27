@@ -211,12 +211,11 @@ class VocabularyStudyIT {
         assertThatThrownBy(() -> studyService.authorizedMedia(learnerA, entryAchieve, audioRun))
             .isInstanceOf(ResourceNotFoundException.class);
 
-        // Grant PLUS feature -> unlocks plusPack and its media
+        // Plus unlocks plusPack and its media
         jdbc.update("""
-            INSERT INTO user_entitlement_grant(
-                id, user_id, feature_key, valid_from, valid_until, status, source_type, source_reference, created_by
-            ) VALUES (?, ?, 'vocabulary.plus-packs', now() - interval '1 minute', now() + interval '1 hour', 'ACTIVE', 'MANUAL', 'test', 'admin')
-            """, UUID.randomUUID(), learnerA);
+            INSERT INTO learner_plus_period(learner_id, starts_at, ends_at, started_by)
+            VALUES (?, now() - interval '1 minute', now() + interval '1 hour', 'admin')
+            """, learnerA);
         assertThat(studyService.listPacks(learnerA).get(1).locked()).isFalse();
         assertThat(studyService.authorizedMedia(learnerA, entryPlus, audioPlus).id()).isEqualTo(audioPlus);
 

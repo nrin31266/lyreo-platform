@@ -21,6 +21,7 @@ import com.lyreo.gamification.application.StreakService;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -137,6 +138,29 @@ class GamificationIdempotencyIT {
     }
 
     @Test
+    void adminSummaryResetsTheCurrentStreakAfterAMissedDay() throws Exception {
+        var learner = UUID.randomUUID();
+        jdbc.update("INSERT INTO app_user (id, keycloak_subject) VALUES (?, ?)", learner, learner.toString());
+        var today = LocalDate.now(ZoneOffset.UTC);
+        var admin = auth("streak-admin", "ADMIN");
+        var url = "/api/v1/admin/gamification/learners/" + learner;
+
+        for (int daysAgo : new int[]{2, 3}) {
+            streakService.recordActivity(UUID.randomUUID(), learner,
+                today.minusDays(daysAgo).atTime(12, 0).toInstant(ZoneOffset.UTC));
+        }
+        mvc.perform(get(url).with(admin))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.currentStreak").value(0))
+            .andExpect(jsonPath("$.longestStreak").value(2));
+
+        streakService.recordActivity(UUID.randomUUID(), learner, today.minusDays(1).atTime(12, 0).toInstant(ZoneOffset.UTC));
+        mvc.perform(get(url).with(admin))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.currentStreak").value(3));
+    }
+
+    @Test
     void deduplicatesPartialMissionProgressAwardsXpAndDiamondsOnceAndEvaluatesStreaksAchievementsAndCutover() throws Exception {
         String subject = "gam-learner-" + UUID.randomUUID();
         var learnerAuth = auth(subject, "LEARNER");
@@ -155,12 +179,14 @@ class GamificationIdempotencyIT {
             subject
         );
 
-        // 1. Mission deduplication at 1/5 (DAILY_GRAMMAR_5)
-        Instant day1 = Instant.parse("2026-11-26T10:00:00Z");
+        // 1. Mission deduplication at 1/5 (DAILY_GRAMMAR_5) in today's active UTC period
+        Instant today = LocalDate.now(ZoneOffset.UTC).atTime(10, 0).toInstant(ZoneOffset.UTC);
+        Instant twoDaysAgo = today.minusSeconds(2L * 86_400L);
+        Instant yesterday = today.minusSeconds(86_400L);
         UUID grammarAttempt1 = UUID.randomUUID();
         UUID grammarItem1 = UUID.randomUUID();
         var grammar1 = new GrammarQuestionAnsweredEvent(
-            learnerId, grammarAttempt1, grammarItem1, UUID.randomUUID(), UUID.randomUUID(), 2, true, day1
+            learnerId, grammarAttempt1, grammarItem1, UUID.randomUUID(), UUID.randomUUID(), 2, true, today
         );
         missionListener.grammar(grammar1);
         // Replay at 1/5 -> must stay 1/5!
@@ -176,10 +202,15 @@ class GamificationIdempotencyIT {
         );
         assertThat(progressAfterReplay).isEqualTo(1);
 
+        // Completing an uncompleted mission via manual claim is rejected with 409
+        mvc.perform(post("/api/v1/gamification/missions/{id}/claim", "10000000-0000-0000-0000-000000000003")
+                .with(learnerAuth))
+            .andExpect(status().isConflict());
+
         // Complete remaining 4 distinct grammar answers
         for (int i = 2; i <= 5; i++) {
             var evt = new GrammarQuestionAnsweredEvent(
-                learnerId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), 2, true, day1
+                learnerId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), 2, true, today
             );
             missionListener.grammar(evt);
             if (i == 5) {
@@ -187,6 +218,34 @@ class GamificationIdempotencyIT {
                 missionListener.grammar(evt);
             }
         }
+
+        // Completed mission is NOT auto-claimed; manual claim populates snapshot & awards 10 XP / 2 Diamonds once
+        String beforeClaimSnapshot = jdbc.queryForObject(
+            "SELECT reward_snapshot_json::text FROM mission_progress WHERE learner_id = ? AND mission_id = '10000000-0000-0000-0000-000000000004'",
+            String.class,
+            learnerId
+        );
+        assertThat(beforeClaimSnapshot).isNull();
+
+        mvc.perform(post("/api/v1/gamification/missions/{id}/claim", "10000000-0000-0000-0000-000000000004")
+                .with(learnerAuth)
+                .header("Idempotency-Key", "claim-grammar-1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.xpAwarded").value(10))
+            .andExpect(jsonPath("$.diamondsAwarded").value(2))
+            .andExpect(jsonPath("$.diamondBalance").value(2));
+
+        // Replaying with the same Idempotency-Key succeeds cleanly without double awarding
+        mvc.perform(post("/api/v1/gamification/missions/{id}/claim", "10000000-0000-0000-0000-000000000004")
+                .with(learnerAuth)
+                .header("Idempotency-Key", "claim-grammar-1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.diamondBalance").value(2));
+
+        // Calling claim again without replay fails with 409
+        mvc.perform(post("/api/v1/gamification/missions/{id}/claim", "10000000-0000-0000-0000-000000000004")
+                .with(learnerAuth))
+            .andExpect(status().isConflict());
 
         // DAILY_GRAMMAR_5: 10 XP, 2 Diamonds, snapshot populated
         String snapshotJson = jdbc.queryForObject(
@@ -218,9 +277,9 @@ class GamificationIdempotencyIT {
 
         // 3. Achievements: FIRST_LESSON (badge-only 0 diamonds, 20 XP) & FIVE_LESSONS (5 distinct lessons -> 50 XP, 5 diamonds)
         UUID repeatedLesson = UUID.randomUUID();
-        missionListener.lesson(new LessonCompletedEvent(UUID.randomUUID(), learnerId, repeatedLesson, day1));
+        missionListener.lesson(new LessonCompletedEvent(UUID.randomUUID(), learnerId, repeatedLesson, twoDaysAgo));
         // Completing the same lesson again must NOT advance FIVE_LESSONS past 1/5
-        missionListener.lesson(new LessonCompletedEvent(UUID.randomUUID(), learnerId, repeatedLesson, day1));
+        missionListener.lesson(new LessonCompletedEvent(UUID.randomUUID(), learnerId, repeatedLesson, twoDaysAgo));
 
         Integer fiveLessonsProgress = jdbc.queryForObject(
             """
@@ -239,7 +298,7 @@ class GamificationIdempotencyIT {
         )).isZero();
 
         for (int i = 0; i < 4; i++) {
-            missionListener.lesson(new LessonCompletedEvent(UUID.randomUUID(), learnerId, UUID.randomUUID(), day1));
+            missionListener.lesson(new LessonCompletedEvent(UUID.randomUUID(), learnerId, UUID.randomUUID(), twoDaysAgo));
         }
         assertThat(jdbc.queryForObject(
             "SELECT count(*) FROM diamond_transaction WHERE learner_id = ? AND transaction_type = 'ACHIEVEMENT_REWARD'",
@@ -269,12 +328,12 @@ class GamificationIdempotencyIT {
         assertThat(skippedDay.currentStreak()).isEqualTo(1);
         assertThat(skippedDay.longestStreak()).isEqualTo(3);
 
-        // Trigger STREAK_3_DAYS achievement on main learner across 3 UTC days
+        // Trigger STREAK_3_DAYS achievement on main learner across 3 UTC days ending today
         missionListener.lesson(new LessonCompletedEvent(
-            UUID.randomUUID(), learnerId, UUID.randomUUID(), Instant.parse("2026-11-27T00:05:00Z")
+            UUID.randomUUID(), learnerId, UUID.randomUUID(), yesterday
         ));
         missionListener.lesson(new LessonCompletedEvent(
-            UUID.randomUUID(), learnerId, UUID.randomUUID(), Instant.parse("2026-11-28T00:05:00Z")
+            UUID.randomUUID(), learnerId, UUID.randomUUID(), today
         ));
 
         // 5. Admin diamond adjustment requires reason + idempotencyKey and detects conflict
@@ -323,7 +382,10 @@ class GamificationIdempotencyIT {
 
         mvc.perform(get("/api/v1/gamification/ledger").with(learnerAuth))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.transactions").isArray());
+            .andExpect(jsonPath("$.balance").isNumber())
+            .andExpect(jsonPath("$.total").isNumber())
+            .andExpect(jsonPath("$.hasMore").isBoolean())
+            .andExpect(jsonPath("$.items").isArray());
     }
 
     private static RequestPostProcessor auth(String subject, String role) {

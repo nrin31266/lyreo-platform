@@ -2,8 +2,10 @@ package com.lyreo.analytics.application;
 
 import com.lyreo.analytics.application.port.AnalyticsProjectionRepository;
 import com.lyreo.analytics.domain.AdminAnalyticsSummary;
+import com.lyreo.analytics.domain.AdminDashboardSummary;
 import com.lyreo.analytics.domain.AdminLearnerStudyProfile;
 import com.lyreo.analytics.domain.AnalyticsOverview;
+import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.lesson.ShadowingAssessedEvent;
 import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent.PartResult;
 import com.lyreo.platform.config.application.ConsumerReceiptStore;
@@ -23,6 +25,7 @@ public class AnalyticsService {
     private final AnalyticsProjectionRepository projections;
     private final ConsumerReceiptStore receipts;
     private final Clock clock;
+    private final JobHealthSource jobHealth;
 
     public AnalyticsService(AnalyticsProjectionRepository projections) {
         this(projections, null, Clock.systemUTC());
@@ -33,6 +36,16 @@ public class AnalyticsService {
         ConsumerReceiptStore receipts,
         Clock clock
     ) {
+        this(projections, receipts, clock, null);
+    }
+
+    public AnalyticsService(
+        AnalyticsProjectionRepository projections,
+        ConsumerReceiptStore receipts,
+        Clock clock,
+        JobHealthSource jobHealth
+    ) {
+        this.jobHealth = jobHealth;
         this.projections = Objects.requireNonNull(projections, "projections");
         this.receipts = receipts;
         this.clock = clock != null ? clock : Clock.systemUTC();
@@ -246,6 +259,34 @@ public class AnalyticsService {
     public AdminAnalyticsSummary platformSummary() {
         LocalDate todayUtc = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
         return projections.summarizePlatform(todayUtc);
+    }
+
+    @Transactional(readOnly = true)
+    public AdminDashboardSummary adminDashboard(int days) {
+        if (days != 7 && days != 14 && days != 30) {
+            throw new RequestValidationException("days must be 7, 14, or 30");
+        }
+        LocalDate todayUtc = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
+        AdminDashboardSummary summary = projections.loadAdminDashboard(todayUtc, days);
+        if (jobHealth == null) {
+            return summary;
+        }
+        JobHealthSource.Counts jobs = jobHealth.counts(clock.instant().minusSeconds(86_400L));
+        var ops = summary.operations();
+        return new AdminDashboardSummary(
+            summary.period(),
+            summary.kpis(),
+            summary.dailySeries(),
+            new AdminDashboardSummary.OperationsHealth(
+                jobs.active(), jobs.failedSince(), jobs.succeededSince(),
+                ops.aiProvidersEnabled(), ops.aiProvidersHealthy(), ops.aiProvidersUnhealthy(),
+                ops.aiInvocations24h(), ops.aiErrors24h(), ops.aiAvgLatencyMs24h(),
+                ops.lockedAccounts(), ops.pendingAccountSync(), ops.scheduledNotifications()
+            ),
+            summary.contentInventory(),
+            summary.topCurriculumPaths(),
+            summary.topWeaknesses()
+        );
     }
 
     @Transactional(readOnly = true)

@@ -155,6 +155,16 @@ public class VocabularyStudyService {
         );
     }
 
+    public AssetStore.Asset authorizedPackCover(UUID learnerId, UUID packId) {
+        PackRow pack = repository.findVisiblePack(packId)
+            .orElseThrow(() -> new ResourceNotFoundException("Vocabulary pack not found"));
+        requirePackEntitlement(learnerId, pack.accessMode(), pack.requiredFeatureKey());
+        if (pack.coverImageId() == null) {
+            throw new ResourceNotFoundException("Vocabulary pack cover not found");
+        }
+        return assets.get(pack.coverImageId());
+    }
+
     public AssetStore.Asset authorizedMedia(UUID learnerId, UUID entryId, UUID assetId) {
         EntryMediaAccessRow entry = repository.findVisibleEntryForMedia(entryId)
             .orElseThrow(() -> new ResourceNotFoundException("Vocabulary entry not found"));
@@ -232,30 +242,42 @@ public class VocabularyStudyService {
     }
 
     public List<SessionSummary> listSessions(UUID learnerId, UUID unitId, String status) {
-        if (status != null && !status.isBlank() && !Set.of("OPEN", "SUBMITTED", "EXPIRED").contains(status)) {
+        return listSessionsPage(learnerId, unitId, status, 0, 100).items();
+    }
+
+    public SessionPage listSessionsPage(UUID learnerId, UUID unitId, String status, int page, int size) {
+        if (page < 0 || page > 100000 || size < 1 || size > 100) {
+            throw new RequestValidationException("page must be between 0 and 100000 and size between 1 and 100");
+        }
+        String normalizedStatus = (status == null || status.isBlank()) ? null : status.trim().toUpperCase(Locale.ROOT);
+        if (normalizedStatus != null && !Set.of("OPEN", "SUBMITTED", "EXPIRED").contains(normalizedStatus)) {
             throw new RequestValidationException("status must be OPEN, SUBMITTED, or EXPIRED");
         }
-        String normalizedStatus = (status == null || status.isBlank()) ? null : status;
-        return repository.findSessions(learnerId, unitId, normalizedStatus).stream()
-            .map(row -> {
-                SessionSnapshot snapshot = readSnapshot(row);
-                SessionResult result = readResult(row);
-                return new SessionSummary(
-                    row.id(),
-                    row.packId(),
-                    row.unitId(),
-                    row.mode(),
-                    statusOf(row),
-                    row.revision(),
-                    snapshot.questions().size(),
-                    result != null ? result.correctCount() : null,
-                    result != null ? result.totalCount() : null,
-                    row.createdAt(),
-                    row.expiresAt(),
-                    row.submittedAt()
-                );
-            })
-            .toList();
+        long total = repository.countSessions(learnerId, unitId, normalizedStatus);
+        List<SessionSummary> items = total == 0
+            ? List.of()
+            : repository.findSessionsPage(learnerId, unitId, normalizedStatus, page * size, size).stream()
+                .map(row -> {
+                    SessionSnapshot snapshot = readSnapshot(row);
+                    SessionResult result = readResult(row);
+                    return new SessionSummary(
+                        row.id(),
+                        row.packId(),
+                        row.unitId(),
+                        snapshot.unitTitle(),
+                        row.mode(),
+                        statusOf(row),
+                        row.revision(),
+                        snapshot.questions().size(),
+                        result != null ? result.correctCount() : null,
+                        result != null ? result.totalCount() : null,
+                        row.createdAt(),
+                        row.expiresAt(),
+                        row.submittedAt()
+                    );
+                })
+                .toList();
+        return new SessionPage(items, total, page, size, (long) (page + 1) * size < total);
     }
 
     public SessionView getSession(UUID learnerId, UUID sessionId) {
@@ -487,6 +509,19 @@ public class VocabularyStudyService {
         boolean locked,
         String lockReason,
         UUID coverImageId
+    ) {
+        @com.fasterxml.jackson.annotation.JsonProperty("coverUrl")
+        public String coverUrl() {
+            return coverImageId != null ? "/api/v1/vocabulary/packs/" + id + "/cover" : null;
+        }
+    }
+
+    public record SessionPage(
+        List<SessionSummary> items,
+        long total,
+        int page,
+        int size,
+        boolean hasMore
     ) {}
 
     public record UnitSummary(

@@ -11,7 +11,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -20,6 +22,7 @@ import com.lyreo.ai.application.execution.AiExecutionResult;
 import com.lyreo.ai.application.execution.AiInvocationService;
 import com.lyreo.ai.domain.AiCapability;
 import com.lyreo.analytics.application.LearningAnalyticsListener;
+import com.lyreo.contracts.errors.IdempotencyConflictException;
 import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.grammar.GrammarQuestionAnsweredEvent;
@@ -125,6 +128,14 @@ class AnalyticsAndChatIT {
             ResponseEntity<Map<String, String>> badRequest(RequestValidationException ex) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("detail", ex.getMessage()));
             }
+
+            @ExceptionHandler(IdempotencyConflictException.class)
+            ResponseEntity<Map<String, String>> idempotencyConflict(IdempotencyConflictException ex) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                    "code", "IDEMPOTENCY_CONFLICT",
+                    "detail", ex.getMessage()
+                ));
+            }
         }
     }
 
@@ -224,6 +235,22 @@ class AnalyticsAndChatIT {
             .andExpect(jsonPath("$.skills.length()").value(4))
             .andExpect(jsonPath("$.weaknesses.length()").value(5))
             .andExpect(jsonPath("$.breakdown.lessonsCompleted").value(0));
+
+        mvc.perform(get("/api/v1/admin/analytics/dashboard").with(admin))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.period.days").value(14))
+            .andExpect(jsonPath("$.dailySeries.length()").value(14))
+            .andExpect(jsonPath("$.kpis.activeLearners").isNumber())
+            .andExpect(jsonPath("$.operations.jobsRunning").isNumber())
+            .andExpect(jsonPath("$.contentInventory.lessonsPublished").isNumber());
+
+        mvc.perform(get("/api/v1/admin/analytics/dashboard").param("days", "7").with(admin))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.period.days").value(7))
+            .andExpect(jsonPath("$.dailySeries.length()").value(7));
+
+        mvc.perform(get("/api/v1/admin/analytics/dashboard").param("days", "99").with(admin))
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -236,7 +263,9 @@ class AnalyticsAndChatIT {
         // Provision learnerB too
         mvc.perform(get("/api/v1/chat/conversations").with(learnerB))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$").isEmpty());
+            .andExpect(jsonPath("$.items").isEmpty())
+            .andExpect(jsonPath("$.total").value(0))
+            .andExpect(jsonPath("$.hasMore").value(false));
 
         when(aiInvocationService.execute(eq(AiCapability.GENERAL_LLM), anyString(), anyMap(), anyMap()))
             .thenAnswer(invocation -> {
@@ -259,9 +288,10 @@ class AnalyticsAndChatIT {
                 );
             });
 
-        // Ask first question -> creates conversation and persists USER + ASSISTANT messages
+        // Ask first question with Idempotency-Key -> creates conversation and persists USER + ASSISTANT messages
         String askBody = mvc.perform(post("/api/v1/chat/ask")
                 .with(learnerA)
+                .header("Idempotency-Key", "chat-ask-1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"learnerLevel\":\"B1\",\"question\":\"When do I use since vs for?\"}"))
             .andExpect(status().isOk())
@@ -273,14 +303,42 @@ class AnalyticsAndChatIT {
             .getResponse()
             .getContentAsString();
 
-        UUID conversationId = UUID.fromString(mapper.readTree(askBody).get("conversationId").asString());
-        verify(aiInvocationService).execute(eq(AiCapability.GENERAL_LLM), anyString(), anyMap(), anyMap());
+        // Idempotent replay returns identical response without invoking AI or deducting quota again
+        mvc.perform(post("/api/v1/chat/ask")
+                .with(learnerA)
+                .header("Idempotency-Key", "chat-ask-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"learnerLevel\":\"B1\",\"question\":\"When do I use since vs for?\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.remainingQuota").value(9));
 
-        // Owner A can list and read conversation with 2 messages (USER + ASSISTANT)
+        // Same Idempotency-Key with different payload rejects cleanly
+        mvc.perform(post("/api/v1/chat/ask")
+                .with(learnerA)
+                .header("Idempotency-Key", "chat-ask-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"learnerLevel\":\"B1\",\"question\":\"Changed question\"}"))
+            .andExpect(status().isConflict());
+
+        UUID conversationId = UUID.fromString(mapper.readTree(askBody).get("conversationId").asString());
+        verify(aiInvocationService, times(1)).execute(eq(AiCapability.GENERAL_LLM), anyString(), anyMap(), anyMap());
+
+        // Owner A can list paginated conversations and rename conversation
         mvc.perform(get("/api/v1/chat/conversations").with(learnerA))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(1))
-            .andExpect(jsonPath("$[0].id").value(conversationId.toString()));
+            .andExpect(jsonPath("$.total").value(1))
+            .andExpect(jsonPath("$.hasMore").value(false))
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].id").value(conversationId.toString()))
+            .andExpect(jsonPath("$.items[0].messageCount").value(2))
+            .andExpect(jsonPath("$.items[0].lastMessagePreview").isNotEmpty());
+
+        mvc.perform(patch("/api/v1/chat/conversations/{id}", conversationId)
+                .with(learnerA)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Since vs For grammar\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.title").value("Since vs For grammar"));
 
         mvc.perform(get("/api/v1/chat/conversations/{id}", conversationId).with(learnerA))
             .andExpect(status().isOk())
@@ -330,6 +388,14 @@ class AnalyticsAndChatIT {
             Integer.class,
             conversationId
         )).isEqualTo(20);
+
+        // Non-owner cannot delete A's conversation; owner A deletes it (204) and GET returns 404
+        mvc.perform(delete("/api/v1/chat/conversations/{id}", conversationId).with(learnerB))
+            .andExpect(status().isNotFound());
+        mvc.perform(delete("/api/v1/chat/conversations/{id}", conversationId).with(learnerA))
+            .andExpect(status().isNoContent());
+        mvc.perform(get("/api/v1/chat/conversations/{id}", conversationId).with(learnerA))
+            .andExpect(status().isNotFound());
     }
 
     private static RequestPostProcessor auth(String subject) {

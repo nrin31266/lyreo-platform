@@ -11,6 +11,11 @@ public interface LearnerProfileRepository {
     Optional<LearnerProfile> findByLearnerId(UUID learnerId);
     void recordFirstSeen(UUID learnerId);
     LearnerProfile completeOnboarding(UUID learnerId, LearnerProfile.Goal goal, LearnerProfile.Level level, int minutes);
+    default LearnerProfile completeOnboarding(
+        UUID learnerId, LearnerProfile.Goal goal, LearnerProfile.Level level, int minutes, Integer toeicTargetScore
+    ) {
+        return completeOnboarding(learnerId, goal, level, minutes);
+    }
     Optional<LearnerProfile> patchProfile(UUID learnerId, LearnerProfile.Patch patch);
     boolean patchAppearance(UUID learnerId, LearnerProfile.Appearance appearance);
     boolean uploadAvatar(UUID learnerId, byte[] png, boolean completedOnly);

@@ -24,6 +24,8 @@ CORE_CLIENT_UUID=$(
 )
 if [[ -n "$CORE_CLIENT_UUID" && -n "${LYREO_CORE_CLIENT_SECRET:-}" ]]; then
   kcadm update "clients/$CORE_CLIENT_UUID" -r "$REALM" -s "secret=$LYREO_CORE_CLIENT_SECRET" >/dev/null
+  kcadm add-roles -r "$REALM" --uusername service-account-lyreo-core-service \
+    --cclientid realm-management --rolename manage-users >/dev/null
 fi
 
 # Keep the installed development realm aligned with the exact native callback used by AuthSession.

@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
 import {
   RiAddLine,
-  RiCheckDoubleLine,
+  RiBookOpenLine,
+  RiCoupon3Line,
   RiDeleteBinLine,
   RiEditLine,
+  RiGiftLine,
+  RiHistoryLine,
   RiMegaphoneLine,
-  RiShieldKeyholeLine,
 } from '@remixicon/react';
 import { statusBadgeVariant } from '@/components/ContentBadges';
 import { Badge } from '@/components/ui/badge';
@@ -29,9 +30,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { NotificationActivity, activityKey } from './NotificationActivity';
+import { NotificationRecipientPicker, type NotificationRecipient } from './NotificationRecipientPicker';
 import { CatalogError } from '@/pages/lessons/CatalogFeedback';
-import { fetchEntitlementAudit } from '@/pages/overview/admin-ops.api';
 import {
   createAdminNotification,
   deleteAdminNotification,
@@ -50,9 +51,12 @@ type FormState = {
   title: string;
   body: string;
   category: NotificationCategory;
-  targetAudience: NotificationAudience;
+  targetAudience: NotificationAudience | '';
   status: NotificationStatus;
+  originalStatus: NotificationStatus;
   expiresAt: string | null;
+  publishedAt: string | null;
+  recipients: NotificationRecipient[];
 };
 
 function emptyForm(): FormState {
@@ -61,9 +65,12 @@ function emptyForm(): FormState {
     title: '',
     body: '',
     category: 'SYSTEM',
-    targetAudience: 'ALL',
+    targetAudience: '',
     status: 'DRAFT',
+    originalStatus: 'DRAFT',
     expiresAt: null,
+    publishedAt: null,
+    recipients: [],
   };
 }
 
@@ -75,7 +82,10 @@ function toForm(item: LearnerNotification): FormState {
     category: item.category,
     targetAudience: item.targetAudience,
     status: item.status,
+    originalStatus: item.status,
     expiresAt: item.expiresAt,
+    publishedAt: item.publishedAt ?? (item.status === 'PUBLISHED' ? item.createdAt : null),
+    recipients: (item.recipientIds ?? []).map((id, index) => ({ id, label: item.recipientLabels?.[index] || id })),
   };
 }
 
@@ -86,11 +96,12 @@ function categoryVariant(cat: NotificationCategory): 'default' | 'secondary' | '
   return 'secondary';
 }
 
-function auditVariant(decision: string) {
-  if (decision.startsWith('DENIED') || decision === 'GRANT_REVOKED') return 'destructive';
-  if (['ALLOWED', 'GRANT_CREATED', 'SETTLED'].includes(decision)) return 'success';
-  return 'secondary';
-}
+const categoryIcons = {
+  SYSTEM: RiMegaphoneLine,
+  STUDY_REMINDER: RiBookOpenLine,
+  REWARD: RiGiftLine,
+  PROMO: RiCoupon3Line,
+};
 
 export function NotificationsPage() {
   const { t, i18n } = useTranslation('admin');
@@ -106,28 +117,26 @@ export function NotificationsPage() {
     queryFn: ({ signal }) => fetchAdminNotifications(signal),
   });
 
-  const auditQuery = useQuery({
-    queryKey: ['admin-notifications-activity-feed'],
-    enabled: tab === 'activity',
-    queryFn: ({ signal }) => fetchEntitlementAudit({ limit: 30 }, signal),
-  });
-
   const saveMutation = useMutation({
     mutationFn: (state: FormState) => {
       const payload: SaveNotificationInput = {
         title: state.title.trim(),
         body: state.body.trim(),
         category: state.category,
-        targetAudience: state.targetAudience,
+        targetAudience: state.targetAudience || undefined,
         status: state.status,
         expiresAt: state.expiresAt,
+        recipientIds: state.targetAudience === 'SELECTED' ? state.recipients.map(item => item.id) : [],
       };
       return state.id
         ? updateAdminNotification(state.id, payload)
         : createAdminNotification(payload);
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: notificationsKey });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: notificationsKey }),
+        queryClient.invalidateQueries({ queryKey: activityKey }),
+      ]);
       setDialogOpen(false);
     },
   });
@@ -136,7 +145,10 @@ export function NotificationsPage() {
     mutationFn: (id: string) => deleteAdminNotification(id),
     onSuccess: async () => {
       setDeleteTarget(null);
-      await queryClient.invalidateQueries({ queryKey: notificationsKey });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: notificationsKey }),
+        queryClient.invalidateQueries({ queryKey: activityKey }),
+      ]);
     },
   });
 
@@ -160,6 +172,24 @@ export function NotificationsPage() {
     });
   }
 
+  const audienceLocked = form.publishedAt !== null && Date.parse(form.publishedAt) <= Date.now();
+  const publishing = form.status === 'PUBLISHED' && form.originalStatus !== 'PUBLISHED';
+  const invalidAudience = (publishing && !form.targetAudience)
+    || (form.targetAudience === 'SELECTED' && form.recipients.length === 0)
+    || (form.category === 'STUDY_REMINDER' && form.targetAudience === 'ALL' && form.status === 'PUBLISHED');
+  let saveLabel = t('catalog.save');
+  if (publishing) {
+    saveLabel = t('notificationsCenter.publish');
+    if (form.targetAudience === 'SELECTED' && form.recipients.length > 0) {
+      saveLabel = form.recipients.length === 1 ? t('notificationsCenter.publishToOne')
+        : t('notificationsCenter.publishToMany', { count: form.recipients.length });
+    } else if (form.targetAudience && form.targetAudience !== 'SELECTED') {
+      saveLabel = t('notificationsCenter.publishTo', {
+        audience: t(`notificationsCenter.audiences.${form.targetAudience}`),
+      });
+    }
+  }
+
   return (
     <section className="grid w-full gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -180,7 +210,7 @@ export function NotificationsPage() {
             {t('notificationsCenter.tabs.announcements')}
           </TabsTrigger>
           <TabsTrigger value="activity">
-            <RiShieldKeyholeLine className="size-4" aria-hidden="true" />
+            <RiHistoryLine className="size-4" aria-hidden="true" />
             {t('notificationsCenter.tabs.activity')}
           </TabsTrigger>
         </TabsList>
@@ -203,26 +233,29 @@ export function NotificationsPage() {
               </EmptyHeader>
             </Empty>
           ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="divide-y rounded-lg border">
               {notificationsQuery.data.map((item) => {
                 const published = item.status === 'PUBLISHED' && item.publishedAt;
                 const expired = item.status === 'PUBLISHED' && item.expiresAt && Date.parse(item.expiresAt) <= Date.now();
                 const scheduled = published && Date.parse(published) > Date.now();
+                const Icon = categoryIcons[item.category];
                 return (
-                <Card key={item.id} size="sm">
+                <Card key={item.id} size="sm" className="rounded-none bg-transparent shadow-none ring-0">
                   <CardHeader>
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge variant={categoryVariant(item.category)}>
+                            <Icon aria-hidden="true" />
                             {t(`notificationsCenter.categories.${item.category}`, {
                               defaultValue: item.category,
                             })}
                           </Badge>
                           <Badge variant="outline">
-                            {t(`notificationsCenter.audiences.${item.targetAudience}`, {
-                              defaultValue: item.targetAudience,
-                            })}
+                            {item.targetAudience === 'SELECTED'
+                              ? (item.recipientLabels?.length === 1 ? item.recipientLabels[0]
+                                : t('notificationsCenter.recipientCount', { count: item.recipientIds?.length ?? 0 }))
+                              : t(`notificationsCenter.audiences.${item.targetAudience}`)}
                           </Badge>
                           <Badge variant={statusBadgeVariant(expired ? 'EXPIRED' : scheduled ? 'SCHEDULED' : item.status)}>
                             {expired ? t('notificationsCenter.expired') : scheduled ? t('notificationsCenter.scheduled')
@@ -252,7 +285,7 @@ export function NotificationsPage() {
                           variant="ghost"
                           className="text-destructive"
                           aria-label={t('notificationsCenter.deleteButton')}
-                          onClick={() => setDeleteTarget(item)}
+                          onClick={() => { deleteMutation.reset(); setDeleteTarget(item); }}
                         >
                           <RiDeleteBinLine aria-hidden="true" />
                         </Button>
@@ -269,70 +302,13 @@ export function NotificationsPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="activity" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('notificationsCenter.activityTitle')}</CardTitle>
-              <CardDescription>{t('notificationsCenter.activityHelp')}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <CatalogError error={auditQuery.error} retry={() => void auditQuery.refetch()} />
-              {auditQuery.isPending ? (
-                <Skeleton className="h-40 w-full" />
-              ) : !auditQuery.data || auditQuery.data.length === 0 ? (
-                <Empty className="border py-8">
-                  <EmptyHeader>
-                    <RiCheckDoubleLine className="size-8 text-muted-foreground" aria-hidden="true" />
-                    <EmptyTitle>{t('notificationsCenter.activityEmpty')}</EmptyTitle>
-                  </EmptyHeader>
-                </Empty>
-              ) : (
-                <div className="overflow-hidden rounded-xl border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>{t('notificationsCenter.columns.time')}</TableHead>
-                        <TableHead>{t('notificationsCenter.columns.feature')}</TableHead>
-                        <TableHead>{t('notificationsCenter.columns.decision')}</TableHead>
-                        <TableHead>{t('notificationsCenter.columns.account')}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {auditQuery.data.map((entry) => (
-                        <TableRow key={entry.id}>
-                          <TableCell className="text-xs tabular-nums text-muted-foreground">
-                            <time dateTime={entry.occurredAt}>{formatFriendlyTime(entry.occurredAt)}</time>
-                          </TableCell>
-                          <TableCell className="whitespace-normal">
-                            {t(`plansConsole.features.${entry.featureKey}`, { defaultValue: entry.featureKey })}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={auditVariant(entry.decision)}>
-                              {t(`notificationsCenter.decisions.${entry.decision}`, { defaultValue: entry.decision })}
-                            </Badge>
-                            {typeof entry.detail?.limit === 'number' &&
-                              <p className="mt-1 text-xs text-muted-foreground">{t('notificationsCenter.auditLimit', { limit: entry.detail.limit })}</p>}
-                          </TableCell>
-                          <TableCell>
-                            {entry.decision === 'QUOTA_UPDATED' ? '—' : (
-                              <Link className="text-xs underline underline-offset-2" to={`/learners/${encodeURIComponent(entry.userId)}`}>
-                                {t('notificationsCenter.learnerLink', { id: entry.userId.slice(-8) })}
-                              </Link>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="activity" className="mt-4" forceMount hidden={tab !== 'activity'}>
+          <NotificationActivity active={tab === 'activity'} />
         </TabsContent>
       </Tabs>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
               {form.id
@@ -347,7 +323,7 @@ export function NotificationsPage() {
             className="grid gap-3"
             onSubmit={(e) => {
               e.preventDefault();
-              saveMutation.mutate(form);
+              if (!invalidAudience && !saveMutation.isPending) saveMutation.mutate(form);
             }}
           >
             <div className="grid gap-1">
@@ -373,12 +349,12 @@ export function NotificationsPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="grid gap-1">
-                <Label>{t('notificationsCenter.fields.category')}</Label>
+                <Label htmlFor="announcement-category">{t('notificationsCenter.fields.category')}</Label>
                 <Select
                   value={form.category}
                   onValueChange={(v) => setForm({ ...form, category: v as NotificationCategory })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="announcement-category" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -391,18 +367,19 @@ export function NotificationsPage() {
                 </Select>
               </div>
               <div className="grid gap-1">
-                <Label>{t('notificationsCenter.fields.audience')}</Label>
+                <Label htmlFor="announcement-audience">{t('notificationsCenter.fields.audience')}</Label>
                 <Select
                   value={form.targetAudience}
+                  disabled={audienceLocked}
                   onValueChange={(v) =>
                     setForm({ ...form, targetAudience: v as NotificationAudience })
                   }
                 >
-                  <SelectTrigger>
-                    <SelectValue />
+                  <SelectTrigger id="announcement-audience" className="w-full">
+                    <SelectValue placeholder={t('notificationsCenter.chooseAudience')} />
                   </SelectTrigger>
                   <SelectContent>
-                    {(['ALL', 'FREE', 'PLUS'] as const).map((aud) => (
+                    {(['ALL', 'FREE', 'PLUS', 'SELECTED'] as const).map((aud) => (
                       <SelectItem key={aud} value={aud}>
                         {t(`notificationsCenter.audiences.${aud}`, { defaultValue: aud })}
                       </SelectItem>
@@ -416,7 +393,7 @@ export function NotificationsPage() {
                   value={form.status}
                   onValueChange={(v) => setForm({ ...form, status: v as NotificationStatus })}
                 >
-                  <SelectTrigger id="announcement-status">
+                  <SelectTrigger id="announcement-status" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -429,13 +406,21 @@ export function NotificationsPage() {
                 </Select>
               </div>
             </div>
+            {audienceLocked && <p className="text-xs text-muted-foreground">{t('notificationsCenter.audienceLocked')}</p>}
+            {publishing && !form.targetAudience &&
+              <p className="text-sm text-muted-foreground">{t('notificationsCenter.publishAudienceRequired')}</p>}
+            {form.category === 'STUDY_REMINDER' && form.targetAudience === 'ALL' &&
+              <p className="text-sm text-muted-foreground">{t('notificationsCenter.reminderAudience')}</p>}
+            {form.targetAudience === 'SELECTED' && <NotificationRecipientPicker
+              selected={form.recipients} readOnly={audienceLocked}
+              onChange={recipients => setForm(current => ({ ...current, recipients }))} />}
           </form>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
               {t('catalog.cancel')}
             </Button>
-            <Button type="submit" form="announcement-form" disabled={saveMutation.isPending}>
-              {t(saveMutation.isPending ? 'catalog.saving' : 'catalog.save')}
+            <Button type="submit" form="announcement-form" disabled={saveMutation.isPending || invalidAudience}>
+              {saveMutation.isPending ? t('catalog.saving') : saveLabel}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -449,6 +434,7 @@ export function NotificationsPage() {
               {t('notificationsCenter.deleteConfirm', { title: deleteTarget?.title ?? '' })}
             </DialogDescription>
           </DialogHeader>
+          <CatalogError error={deleteMutation.error} />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>
               {t('catalog.cancel')}

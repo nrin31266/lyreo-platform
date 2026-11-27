@@ -10,7 +10,7 @@ import static org.mockito.Mockito.when;
 import com.lyreo.entitlement.api.FeatureEntitlementRequiredException;
 import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.entitlement.application.port.FeatureRepository;
-import com.lyreo.entitlement.application.port.UserEntitlementGrantRepository;
+import com.lyreo.entitlement.application.port.LearnerPlanRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -23,20 +23,20 @@ class DefaultEntitlementServiceTest {
     private static final Instant NOW = Instant.parse("2026-09-27T00:00:00Z");
 
     private final FeatureRepository features = mock(FeatureRepository.class);
-    private final UserEntitlementGrantRepository grants = mock(UserEntitlementGrantRepository.class);
+    private final LearnerPlanRepository plans = mock(LearnerPlanRepository.class);
     private final DefaultEntitlementService service = new DefaultEntitlementService(
         features,
-        grants,
+        plans,
         Clock.fixed(NOW, ZoneOffset.UTC)
     );
 
     @Test
-    void permitsAUserWithAnActiveGrant() {
+    void permitsAUserWithPlus() {
         when(features.isActive(FEATURE)).thenReturn(true);
-        when(grants.hasActiveGrant(USER_ID, FEATURE, NOW)).thenReturn(true);
+        when(plans.isPlus(USER_ID, NOW)).thenReturn(true);
 
         assertThat(service.hasFeature(USER_ID, FEATURE)).isTrue();
-        verify(grants).hasActiveGrant(USER_ID, FEATURE, NOW);
+        verify(plans).isPlus(USER_ID, NOW);
     }
 
     @Test
@@ -44,13 +44,13 @@ class DefaultEntitlementServiceTest {
         when(features.isActive(FEATURE)).thenReturn(false);
 
         assertThat(service.hasFeature(USER_ID, FEATURE)).isFalse();
-        verifyNoInteractions(grants);
+        verifyNoInteractions(plans);
     }
 
     @Test
     void requireFeatureUsesTheApplicationsAccessDeniedConvention() {
         when(features.isActive(FEATURE)).thenReturn(true);
-        when(grants.hasActiveGrant(USER_ID, FEATURE, NOW)).thenReturn(false);
+        when(plans.isPlus(USER_ID, NOW)).thenReturn(false);
 
         assertThatThrownBy(() -> service.requireFeature(USER_ID, FEATURE))
             .isInstanceOf(FeatureEntitlementRequiredException.class)

@@ -61,6 +61,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import com.lyreo.assessment.api.AssessmentLibrary;
 
 @SpringBootTest(classes = GrammarToeicPracticeIT.Config.class)
 class GrammarToeicPracticeIT {
@@ -204,6 +206,7 @@ class GrammarToeicPracticeIT {
 
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper json;
+    @Autowired AssessmentLibrary questions;
     @Autowired Events events;
     @Autowired GrammarCatalogController grammarController;
     @Autowired PublishedGrammarCatalogs grammarCatalogs;
@@ -261,12 +264,11 @@ class GrammarToeicPracticeIT {
         return itemId;
     }
 
-    private void grantFeature(UUID userId, String featureKey) {
+    private void upgradeToPlus(UUID userId) {
         jdbc.update("""
-            INSERT INTO user_entitlement_grant(
-                id, user_id, feature_key, status, valid_from, valid_until, source_type, created_by
-            ) VALUES (?, ?, ?, 'ACTIVE', now() - interval '1 hour', now() + interval '1 day', 'MANUAL_ADMIN', 'test')
-            """, UUID.randomUUID(), userId, featureKey);
+            INSERT INTO learner_plus_period(learner_id, starts_at, ends_at, started_by)
+            VALUES (?, now() - interval '1 hour', now() + interval '1 day', 'test')
+            """, userId);
     }
 
     @Test
@@ -354,6 +356,21 @@ class GrammarToeicPracticeIT {
 
         activateRelease(release);
 
+        UUID clozeId = jdbc.queryForObject("""
+            SELECT item_id FROM toeic_placement WHERE test_version_id = ? AND question_number = 131
+            """, UUID.class, lockedVersionId);
+        assertThat(questions.context(clozeId)).singleElement().satisfies(context -> assertThat(context)
+            .containsEntry("test_id", lockedTestId)
+            .containsEntry("question_number", 131)
+            .containsEntry("gap_number", 131)
+            .containsEntry("passage_html", "<p>Passage</p>"));
+        UUID listeningId = jdbc.queryForObject("""
+            SELECT item_id FROM toeic_placement WHERE test_version_id = ? AND question_number = 32
+            """, UUID.class, lockedVersionId);
+        var listening = questions.context(listeningId).getFirst();
+        assertThat(((JsonNode) listening.get("media")).get(0).get("assetId").asString())
+            .isEqualTo(releaseAssetId.toString());
+
         Jwt freeJwt = jwtFor("toeic-free-" + UUID.randomUUID());
         Jwt otherJwt = jwtFor("toeic-other-" + UUID.randomUUID());
 
@@ -383,7 +400,7 @@ class GrammarToeicPracticeIT {
         )).isInstanceOf(FeatureEntitlementRequiredException.class);
 
         UUID freeLearnerId = users.provision(freeJwt.getSubject(), freeJwt.getClaimAsString("email")).id();
-        grantFeature(freeLearnerId, "toeic.full-access");
+        upgradeToPlus(freeLearnerId);
 
         var unlockedDetail = toeicController.detail(freeJwt, lockedTestId);
         assertThat(unlockedDetail.locked()).isFalse();
@@ -417,8 +434,9 @@ class GrammarToeicPracticeIT {
             .flatMap(g -> g.media().stream())
             .map(QuestionContent.Media::assetId)
             .findFirst().orElseThrow();
-        assertThat(sessionController.media(freeJwt, mediaSession.id(), groupAudioId).getStatusCode().value()).isEqualTo(200);
-        assertThatThrownBy(() -> sessionController.media(otherJwt, mediaSession.id(), groupAudioId))
+        assertThat(sessionController.media(freeJwt, mediaSession.id(), groupAudioId, null).getStatusCode().value()).isEqualTo(200);
+        assertThat(sessionController.media(freeJwt, mediaSession.id(), groupAudioId, "bytes=0-3").getStatusCode().value()).isEqualTo(206);
+        assertThatThrownBy(() -> sessionController.media(otherJwt, mediaSession.id(), groupAudioId, null))
             .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -585,11 +603,11 @@ class GrammarToeicPracticeIT {
             VALUES (?, ?, 'grammar', ?, 'PRACTICE', CAST(? AS jsonb), now() - interval '25 hours', now() - interval '1 hour')
             """, expiredC, learnerId, catalogA, json.writeValueAsString(snapA));
 
-        assertThat(sessionController.history(learnerJwt, "grammar", "OPEN", catalogA, 0, 20))
+        assertThat(sessionController.history(learnerJwt, "grammar", "OPEN", catalogA, 0, 20).items())
             .extracting(AssessmentSessions.History::id).containsExactly(openA.id());
-        assertThat(sessionController.history(learnerJwt, "grammar", "SUBMITTED", null, 0, 20))
+        assertThat(sessionController.history(learnerJwt, "grammar", "SUBMITTED", null, 0, 20).items())
             .extracting(AssessmentSessions.History::id).containsExactly(submittedB.id());
-        assertThat(sessionController.history(learnerJwt, "grammar", "EXPIRED", catalogA, 0, 20))
+        assertThat(sessionController.history(learnerJwt, "grammar", "EXPIRED", catalogA, 0, 20).items())
             .extracting(AssessmentSessions.History::id).containsExactly(expiredC);
 
         // StaleRevisionException on save & submit

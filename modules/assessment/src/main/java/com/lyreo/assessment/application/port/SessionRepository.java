@@ -12,6 +12,9 @@ public interface SessionRepository {
     default List<Row> history(UUID learnerId,String domain,String status,UUID catalogId,int page,int size) {
         return history(learnerId,domain,page,size);
     }
+    default long countHistory(UUID learnerId,String domain,String status,UUID catalogId) {
+        return 0L;
+    }
     void answers(UUID id,long revision,String answers);
     void submit(UUID id,String result);
 }

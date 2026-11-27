@@ -5,6 +5,7 @@ import com.lyreo.lesson.application.practice.LessonPracticeService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.util.UUID;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -67,6 +68,7 @@ public class LessonPracticeController {
         @NotNull(message = "sentenceId is required")
         UUID sentenceId,
         @NotBlank(message = "answer is required")
+        @Size(max = 1000)
         String answer
     ) {}
 

@@ -1,27 +1,24 @@
 package com.lyreo.entitlement.api;
 
 import com.lyreo.entitlement.application.internal.EntitlementGrantAdminService;
-import com.lyreo.entitlement.application.port.FeatureRepository;
+import com.lyreo.entitlement.application.internal.LearnerPlanAdminService;
 import com.lyreo.entitlement.domain.EntitlementAuditEntry;
 import com.lyreo.entitlement.domain.EntitlementGrant;
+import com.lyreo.entitlement.domain.LearnerPlan;
 import com.lyreo.entitlement.domain.QuotaPolicy;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,8 +31,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminEntitlementController {
     private final EntitlementGrantAdminService grantAdmin;
 
-    public AdminEntitlementController(EntitlementGrantAdminService grantAdmin) {
+    private final LearnerPlanAdminService plans;
+
+    public AdminEntitlementController(EntitlementGrantAdminService grantAdmin, LearnerPlanAdminService plans) {
         this.grantAdmin = grantAdmin;
+        this.plans = plans;
     }
 
     @GetMapping("/grants")
@@ -48,34 +48,22 @@ public class AdminEntitlementController {
             .toList();
     }
 
-    @PostMapping("/grants")
-    public ResponseEntity<GrantResponse> createGrant(
-        @AuthenticationPrincipal Jwt admin,
-        @Valid @RequestBody CreateGrantRequest request
-    ) {
-        String actor = admin != null && admin.getSubject() != null ? admin.getSubject() : "admin";
-        EntitlementGrant created = grantAdmin.createGrant(
-            request.userId(),
-            request.featureKey(),
-            request.validFrom(),
-            request.validUntil(),
-            request.sourceType(),
-            request.sourceReference(),
-            actor
-        );
-        return ResponseEntity.status(HttpStatus.CREATED).body(GrantResponse.from(created));
+    @GetMapping("/learners/{learnerId}/plan")
+    public LearnerPlan readPlan(@PathVariable UUID learnerId) {
+        return plans.read(learnerId);
     }
 
-    @PostMapping("/grants/{grantId}/revoke")
-    public GrantResponse revokeGrant(
-        @PathVariable UUID grantId,
+    @PutMapping("/learners/{learnerId}/plan")
+    public LearnerPlan changePlan(
+        @PathVariable UUID learnerId,
         @AuthenticationPrincipal Jwt admin,
-        @RequestBody(required = false) @Valid RevokeGrantRequest request
+        @Valid @RequestBody ChangePlanRequest request
     ) {
         String actor = admin != null && admin.getSubject() != null ? admin.getSubject() : "admin";
-        String reason = request == null ? null : request.reason();
-        return GrantResponse.from(grantAdmin.revokeGrant(grantId, actor, reason));
+        return plans.change(learnerId, request.tier(), request.durationDays(), actor);
     }
+
+    public record ChangePlanRequest(@NotNull LearnerPlan.Tier tier, Integer durationDays) {}
 
     @GetMapping("/features")
     public List<FeatureResponse> listFeatures() {
@@ -173,19 +161,6 @@ public class AdminEntitlementController {
             );
         }
     }
-
-    public record CreateGrantRequest(
-        @NotNull UUID userId,
-        @NotBlank @Size(max = 64) String featureKey,
-        Instant validFrom,
-        Instant validUntil,
-        @Size(max = 64) String sourceType,
-        @Size(max = 500) String sourceReference
-    ) {}
-
-    public record RevokeGrantRequest(
-        @Size(max = 500) String reason
-    ) {}
 
     public record GrantResponse(
         UUID id,

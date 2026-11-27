@@ -180,3 +180,36 @@ def test_catalog_only_flag_propagates_to_verify_release(tmp_path: Path) -> None:
     assert verify.call_count == 2
     for call in verify.call_args_list:
         assert call.kwargs.get("catalog_only") is True
+
+
+def test_frozen_drive_lock_enforces_pinned_ids_and_checksums(tmp_path: Path) -> None:
+    from release_lock import assert_drive_url_locked, default_release_pin
+
+    for domain in ("lexicon", "grammar-toeic", "vocabulary"):
+        url, sha = default_release_pin(domain)
+        assert_drive_url_locked(domain, url, sha)
+
+    # Grammar/TOEIC catalog-only artifact is also pinned in release-lock.json
+    assert_drive_url_locked(
+        "grammar-toeic",
+        "https://drive.google.com/file/d/1rNd1Xv8v70CBGC81evSu8HwXq6M6NIJx/view",
+        "48ad50623e8565758084a0a3a8dfd3e046a255cde1936af404e4a4624d9c43a9",
+    )
+
+    with pytest.raises(ValueError, match="release-lock.json"):
+        assert_drive_url_locked(
+            "grammar-toeic",
+            "https://drive.google.com/file/d/unpinned_drive_file/view",
+            "10b090b40e1b69fff690f99e79f5e09711c3eb0c7bd422031676c98c1b7226ba",
+        )
+
+    with pytest.raises(ValueError, match="release-lock.json"):
+        assert_drive_url_locked(
+            "vocabulary",
+            "https://drive.google.com/file/d/1PzxSDGzxihgs1gNW6FwvOuKI59bl2r0P/view",
+            "0" * 64,
+        )
+
+    # Local archive / file:// overrides remain allowed for offline tests
+    local_archive = tmp_path / "local.tar.gz"
+    assert_drive_url_locked("lexicon", local_archive.as_uri(), "0" * 64)

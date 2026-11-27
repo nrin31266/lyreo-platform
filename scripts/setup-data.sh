@@ -17,7 +17,10 @@ case "$dataset" in
   grammar-toeic) ./scripts/check-data-storage.sh ;;
 esac
 if ((${#fetch[@]})); then make "${fetch[@]}"; fi
-make seed-dev
+make migrate
 for target in "${imports[@]}"; do
   make "$target" ARGS='--apply'
 done
+if [[ "$dataset" == "all" ]]; then
+  make seed
+fi

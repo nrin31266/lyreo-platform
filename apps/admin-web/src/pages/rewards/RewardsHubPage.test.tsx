@@ -124,4 +124,5 @@ it('displays missions, switches to achievements tab, and creates a mission', asy
   await user.click(screen.getByRole('tab', { name: 'Reward Policy' }));
   expect(await screen.findByText('Level progression curve preview')).toBeInTheDocument();
   expect(screen.getByText('Lv. 99')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Active rule version')).not.toBeInTheDocument();
 });

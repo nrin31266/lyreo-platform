@@ -26,6 +26,18 @@ public interface MissionProgressRepository {
             .toList();
     }
 
+    default Optional<MissionRewardTarget> findActiveRewardTargetById(UUID missionId) {
+        return Optional.empty();
+    }
+
+    default Optional<MissionProgressStatus> findMissionProgressStatus(
+        UUID learnerId,
+        UUID missionId,
+        String periodKey
+    ) {
+        return Optional.empty();
+    }
+
     void increment(UUID learnerId, UUID missionId, String periodKey, int target, int amount);
 
     boolean markClaimedIfCompleted(UUID learnerId, UUID missionId, String periodKey);
@@ -76,5 +88,12 @@ public interface MissionProgressRepository {
         int diamondReward,
         int xpReward,
         String ruleVersion
+    ) {}
+
+    record MissionProgressStatus(
+        int progress,
+        Instant completedAt,
+        Instant claimedAt,
+        String rewardSnapshotJson
     ) {}
 }

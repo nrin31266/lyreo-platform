@@ -27,9 +27,17 @@ public class JdbcChatRepository implements ChatRepository {
     public Optional<ChatConversation> findOwnedConversation(UUID conversationId, UUID learnerId) {
         return jdbc.query(
             """
-            SELECT id, learner_id, title, created_at, updated_at
-            FROM chat_conversation
-            WHERE id = :id AND learner_id = :learnerId
+            SELECT c.id, c.learner_id, c.title, c.created_at, c.updated_at,
+                   (SELECT LEFT(m.content, 160)
+                    FROM chat_message m
+                    WHERE m.conversation_id = c.id
+                    ORDER BY m.created_at DESC, m.id DESC
+                    LIMIT 1) AS last_message_preview,
+                   (SELECT count(*)::int
+                    FROM chat_message m
+                    WHERE m.conversation_id = c.id) AS message_count
+            FROM chat_conversation c
+            WHERE c.id = :id AND c.learner_id = :learnerId
             """,
             Map.of("id", conversationId, "learnerId", learnerId),
             (rs, rowNum) -> mapConversation(rs)
@@ -40,10 +48,18 @@ public class JdbcChatRepository implements ChatRepository {
     public List<ChatConversation> listOwnedConversations(UUID learnerId, int page, int size) {
         return jdbc.query(
             """
-            SELECT id, learner_id, title, created_at, updated_at
-            FROM chat_conversation
-            WHERE learner_id = :learnerId
-            ORDER BY COALESCE(updated_at, created_at) DESC, id DESC
+            SELECT c.id, c.learner_id, c.title, c.created_at, c.updated_at,
+                   (SELECT LEFT(m.content, 160)
+                    FROM chat_message m
+                    WHERE m.conversation_id = c.id
+                    ORDER BY m.created_at DESC, m.id DESC
+                    LIMIT 1) AS last_message_preview,
+                   (SELECT count(*)::int
+                    FROM chat_message m
+                    WHERE m.conversation_id = c.id) AS message_count
+            FROM chat_conversation c
+            WHERE c.learner_id = :learnerId
+            ORDER BY COALESCE(c.updated_at, c.created_at) DESC, c.id DESC
             LIMIT :limit OFFSET :offset
             """,
             Map.of(
@@ -53,6 +69,42 @@ public class JdbcChatRepository implements ChatRepository {
             ),
             (rs, rowNum) -> mapConversation(rs)
         );
+    }
+
+    @Override
+    public long countOwnedConversations(UUID learnerId) {
+        Long count = jdbc.queryForObject(
+            "SELECT count(*) FROM chat_conversation WHERE learner_id = :learnerId",
+            Map.of("learnerId", learnerId),
+            Long.class
+        );
+        return count != null ? count : 0L;
+    }
+
+    @Override
+    @Transactional
+    public Optional<ChatConversation> renameOwnedConversation(UUID conversationId, UUID learnerId, String title) {
+        int updated = jdbc.update(
+            """
+            UPDATE chat_conversation
+            SET title = :title, updated_at = now()
+            WHERE id = :id AND learner_id = :learnerId
+            """,
+            Map.of("id", conversationId, "learnerId", learnerId, "title", title)
+        );
+        if (updated == 0) {
+            return Optional.empty();
+        }
+        return findOwnedConversation(conversationId, learnerId);
+    }
+
+    @Override
+    @Transactional
+    public boolean deleteOwnedConversation(UUID conversationId, UUID learnerId) {
+        return jdbc.update(
+            "DELETE FROM chat_conversation WHERE id = :id AND learner_id = :learnerId",
+            Map.of("id", conversationId, "learnerId", learnerId)
+        ) > 0;
     }
 
     @Override
@@ -204,7 +256,9 @@ public class JdbcChatRepository implements ChatRepository {
             rs.getObject("learner_id", UUID.class),
             rs.getString("title"),
             rs.getTimestamp("created_at").toInstant(),
-            updated == null ? null : updated.toInstant()
+            updated == null ? null : updated.toInstant(),
+            rs.getString("last_message_preview"),
+            rs.getInt("message_count")
         );
     }
 }

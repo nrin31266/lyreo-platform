@@ -15,7 +15,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { CatalogError } from "@/pages/lessons/CatalogFeedback";
 import { DraftLoader, DraftWorkspace, TextField } from "./LibraryWorkspace";
 import { MediaEditor, MediaPreview } from "./ContentMedia";
-import type { CatalogPage, Document, Question, QuestionRef, Summary } from "./library.types";
+import { PassagePreview } from "./PassageEditor";
+import type { CatalogPage, Document, Media, Question, QuestionRef, Summary } from "./library.types";
 
 
 export function QuestionFields({ value, onChange, part }: { part?: number; value: Question; onChange: (value: Question) => void }) {
@@ -27,7 +28,7 @@ export function QuestionFields({ value, onChange, part }: { part?: number; value
       <TabsList><TabsTrigger value="content"><RiQuestionLine aria-hidden="true" />{t("library.content")}</TabsTrigger><TabsTrigger value="translation"><RiTranslate2 aria-hidden="true" />{t("library.translationNotes")}</TabsTrigger><TabsTrigger value="media">{part != null && part >= 5 ? <RiImageLine aria-hidden="true" /> : <RiVolumeUpLine aria-hidden="true" />}{t(part != null && part >= 5 ? "library.questionImages" : "library.mediaTranscript")}</TabsTrigger></TabsList>
       <TabsContent value="content" className="mt-5 grid gap-4">
         {value.kind === "CLOZE" && <p className="text-sm text-muted-foreground">{t("library.clozeContextHelp")}</p>}
-        <TextField label={t("library.questionText")} value={value.title} onChange={next => change("title", next)} multiline />
+        <TextField label={t(value.kind === "CLOZE" || part === 1 ? "library.optionalQuestionStem" : "library.questionText")} value={value.title} onChange={next => change("title", next)} multiline />
         <div className="grid gap-3"><div><h2 className="flex items-center gap-2 text-base font-semibold"><RiListCheck2 className="size-4" aria-hidden="true" />{t("library.answerOptions")}</h2><p className="mt-1 text-sm text-muted-foreground">{t("library.answerOptionsHelp")}</p></div><div className="grid items-start gap-3 xl:grid-cols-2">
           {value.options.map((option, index) => <div key={option.key} className="flex items-start gap-3 rounded-xl border bg-card p-3">
             <label className="flex h-9 shrink-0 cursor-pointer items-center gap-2 text-sm font-medium"><input type="radio" name={radio} aria-label={t("library.correctOption", { key: option.key })} checked={value.correctOption === option.key} onChange={() => change("correctOption", option.key)} />{option.key}</label>
@@ -82,13 +83,84 @@ export function QuestionPicker({ onSelect, excludeIds = [] }: { onSelect: (refer
       setSelected([]); setOpen(false);
     } catch (cause) { setError(cause); } finally { setPending(false); }
   }
-  return <><Button tooltip={t("library.help.pickQuestions")} variant="outline" onClick={() => setOpen(true)}><RiAddLine aria-hidden="true" />{t("library.pickQuestions")}</Button><Dialog open={open} onOpenChange={setOpen}><DialogContent className="flex max-h-[85vh] flex-col sm:max-w-2xl"><DialogHeader><DialogTitle>{t("library.pickQuestions")}</DialogTitle></DialogHeader><Input aria-label={t("library.search")} value={input} onChange={event => setInput(event.target.value)} /><CatalogError error={error ?? list.error} /><div className="min-h-0 overflow-y-auto">{list.isPending && <p role="status" className="py-4 text-sm text-muted-foreground">{t("library.loadingQuestions")}</p>}{list.data?.items.length === 0 && <p className="py-4 text-sm text-muted-foreground">{t("library.noFilterMatches")}</p>}{list.data?.items.map(row => <label key={row.id} className="flex cursor-pointer items-center gap-3 border-b py-3"><Checkbox aria-label={t("library.selectItem", {title:row.title || t(row.type === "CLOZE" ? "library.clozeQuestion" : "library.untitledQuestion")})} checked={excludeIds.includes(row.id) || selected.includes(row.id)} disabled={pending || row.requiresContext || excludeIds.includes(row.id) || row.status !== "PUBLISHED" || !selected.includes(row.id) && selected.length >= 100} onCheckedChange={checked => setSelected(previous => checked === true ? [...previous,row.id] : previous.filter(id => id !== row.id))} /><span className="min-w-0 flex-1 line-clamp-3 text-sm">{row.title || t(row.type === "CLOZE" ? "library.clozeQuestion" : "library.untitledQuestion")}</span>{row.requiresContext && <span className="text-xs text-muted-foreground">{t("library.requiresContext")}</span>}{excludeIds.includes(row.id) && <span className="text-xs text-muted-foreground">{t("library.alreadyAdded")}</span>}</label>)}</div>{list.data && <AdminPagination page={page} pageCount={Math.ceil(list.data.total / list.data.size)} disabled={list.isFetching || list.isError} onPageChange={setPage} />}<Button tooltip={t("library.help.addQuestions")} disabled={pending || !selected.length} onClick={() => void addSelected()}><RiAddLine aria-hidden="true" />{t("library.addQuestions", {count:selected.length})}</Button></DialogContent></Dialog></>;
+  return <><Button tooltip={t("library.help.pickQuestions")} variant="outline" onClick={() => setOpen(true)}><RiAddLine aria-hidden="true" />{t("library.pickQuestions")}</Button><Dialog open={open} onOpenChange={setOpen}><DialogContent className="flex max-h-[85vh] flex-col sm:max-w-2xl"><DialogHeader><DialogTitle>{t("library.pickQuestions")}</DialogTitle></DialogHeader><Input aria-label={t("library.search")} value={input} onChange={event => setInput(event.target.value)} /><CatalogError error={error ?? list.error} /><div className="min-h-0 overflow-y-auto">{list.isPending && <p role="status" className="py-4 text-sm text-muted-foreground">{t("library.loadingQuestions")}</p>}{list.data?.items.length === 0 && <p className="py-4 text-sm text-muted-foreground">{t("library.noFilterMatches")}</p>}{list.data?.items.map(row => <label key={row.id} className="flex cursor-pointer items-center gap-3 border-b py-3"><Checkbox aria-label={t("library.selectItem", {title:row.title?.trim() || t(row.toeicPart === 1 ? "library.toeicPhotoQuestion" : row.type === "CLOZE" ? "library.clozeQuestion" : "library.untitledQuestion")})} checked={excludeIds.includes(row.id) || selected.includes(row.id)} disabled={pending || row.requiresContext || excludeIds.includes(row.id) || row.status !== "PUBLISHED" || !selected.includes(row.id) && selected.length >= 100} onCheckedChange={checked => setSelected(previous => checked === true ? [...previous,row.id] : previous.filter(id => id !== row.id))} /><span className="min-w-0 flex-1 line-clamp-3 text-sm">{row.title?.trim() || t(row.toeicPart === 1 ? "library.toeicPhotoQuestion" : row.type === "CLOZE" ? "library.clozeQuestion" : "library.untitledQuestion")}</span>{row.requiresContext && <span className="text-xs text-muted-foreground">{t("library.requiresContext")}</span>}{excludeIds.includes(row.id) && <span className="text-xs text-muted-foreground">{t("library.alreadyAdded")}</span>}</label>)}</div>{list.data && <AdminPagination page={page} pageCount={Math.ceil(list.data.total / list.data.size)} disabled={list.isFetching || list.isError} onPageChange={setPage} />}<Button tooltip={t("library.help.addQuestions")} disabled={pending || !selected.length} onClick={() => void addSelected()}><RiAddLine aria-hidden="true" />{t("library.addQuestions", {count:selected.length})}</Button></DialogContent></Dialog></>;
 
+}
+
+type ImportedQuestionContext = {
+  test_id: string;
+  test_title: string;
+  part: number;
+  question_number: number;
+  gap_number: number | null;
+  passage_html: string | null;
+  transcript_en: string | null;
+  media: Media[];
+};
+
+export function QuestionContext({ value, source }: { value: Question; source?: ImportedQuestionContext }) {
+  const { t } = useTranslation("admin");
+  const withoutStem = !value.title?.trim();
+  const transcript = source?.transcript_en?.trim() || (withoutStem ? value.transcriptEn?.trim() : "");
+  const media = [...(source?.media ?? []), ...(withoutStem ? value.media : [])];
+  const uniqueMedia = [...new Map(media.map(item => [item.assetId, item])).values()];
+  if (!source && !uniqueMedia.length && !transcript) return null;
+
+  return <section aria-label={t("library.questionContext")} className="grid gap-3 rounded-lg border p-4">
+    {source && <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <h2 className="text-sm font-semibold">
+        {t("library.part", { number: source.part })} · {t("library.questionNumber", { number: source.question_number })}
+        {source.gap_number != null && ` · ${t("library.gapNumber", { number: source.gap_number })}`}
+      </h2>
+      <Link className="text-sm text-primary underline underline-offset-2" to={`/toeic/${source.test_id}?tab=content&part=${source.part}&question=${source.question_number}`}>
+        {t("library.openQuestionInTest", { title: source.test_title })}
+      </Link>
+    </div>}
+    {withoutStem && source?.part === 1 && <p className="text-sm text-muted-foreground">{t("library.toeicPhotoContext")}</p>}
+    {source?.passage_html && <PassagePreview html={source.passage_html} />}
+    {uniqueMedia.length > 0 && <div className="grid gap-2">
+      {uniqueMedia.map(item => <MediaPreview key={item.assetId} {...item} />)}
+    </div>}
+    {transcript && <details>
+      <summary className="cursor-pointer text-sm font-medium">{t("library.transcript")}</summary>
+      <p className="mt-2 whitespace-pre-wrap text-sm">{transcript}</p>
+    </details>}
+  </section>;
 }
 
 export function QuestionDetailPage() {
   const { id = "" } = useParams();
   const { t } = useTranslation("admin");
-  const usage = useQuery({ queryKey: ["question-usage", id], queryFn: ({ signal }) => api<{ domain: string; id: string; title: string }[]>(`/api/v1/admin/assessment-items/${id}/usage`, { signal }) });
-  return <DraftLoader<Question> endpoint="/api/v1/admin/assessment-items" id={id}>{document => <DraftWorkspace key={id} document={document} endpoint="/api/v1/admin/assessment-items" route="/grammar/questions" assistant={(current, dirty, adopt) => <AiSuggestions endpoint="/api/v1/admin/assessment-items" document={current} dirty={dirty} adopt={adopt} />}>{(value, change) => <><QuestionFields value={value} onChange={change} />{usage.data && <div className="rounded-lg border p-4"><h2 className="mb-3 font-medium">{t("library.usage")}</h2>{usage.data.map((row, i) => <p key={`${row.id}-${i}`} className="py-1 text-sm"><Link className="underline" to={row.domain === "TOEIC" || row.domain === "toeic" ? `/toeic/${row.id}` : `/grammar/${row.domain.startsWith("grammar-") ? row.domain.slice(8) : "topic"}/${row.id}`}>{row.title}</Link></p>)}<p className="mt-3 text-xs text-muted-foreground">{t("library.sharedQuestionHelp")}</p></div>}</>}</DraftWorkspace>}</DraftLoader>;
+  const endpoint = "/api/v1/admin/assessment-items";
+  const usage = useQuery({
+    queryKey: ["question-usage", id],
+    queryFn: ({ signal }) => api<{ domain: string; id: string; title: string }[]>(`${endpoint}/${id}/usage`, { signal }),
+  });
+  const context = useQuery({
+    queryKey: ["question-context", id],
+    queryFn: ({ signal }) => api<ImportedQuestionContext[]>(`${endpoint}/${id}/context`, { signal }),
+  });
+  const source = context.data?.[0];
+  return <DraftLoader<Question> endpoint={endpoint} id={id}>{document =>
+    <DraftWorkspace key={id} document={document} endpoint={endpoint} route="/grammar/questions"
+      fallbackTitle={source?.part === 1 ? t("library.toeicPhotoQuestion") : document.draft.kind === "CLOZE" ? t("library.clozeQuestion") : undefined}
+      assistant={(current, dirty, adopt) => <AiSuggestions endpoint={endpoint} document={current} dirty={dirty} adopt={adopt} />}>
+      {(value, change) => <>
+        <CatalogError error={context.error} retry={() => void context.refetch()} retrying={context.isFetching} />
+        <QuestionContext value={value} source={source} />
+        <QuestionFields value={value} onChange={change} part={source?.part} />
+        {!!usage.data?.length && <div className="rounded-lg border p-4">
+          <h2 className="mb-3 font-medium">{t("library.usage")}</h2>
+          {usage.data.map((row, i) => <p key={`${row.id}-${i}`} className="py-1 text-sm">
+            <Link className="underline" to={row.domain.toLowerCase() === "toeic"
+              ? `/toeic/${row.id}`
+              : `/grammar/${row.domain.startsWith("grammar-") ? row.domain.slice(8) : "topic"}/${row.id}`}>
+              {row.title}
+            </Link>
+          </p>)}
+          <p className="mt-3 text-xs text-muted-foreground">{t("library.sharedQuestionHelp")}</p>
+        </div>}
+      </>}
+    </DraftWorkspace>
+  }</DraftLoader>;
 }

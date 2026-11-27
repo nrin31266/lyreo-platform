@@ -12,8 +12,10 @@ import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -56,13 +59,30 @@ public class VocabularyController {
     }
 
     @GetMapping("/due")
-    public List<VocabularyCardResponse> due(
+    public DueCardsPageResponse due(
         @AuthenticationPrincipal Jwt jwt,
-        @RequestParam(defaultValue = "20") int limit
+        @RequestParam(defaultValue = "0") @Min(0) @Max(100000) int page,
+        @RequestParam(required = false) @Min(1) @Max(100) Integer size,
+        @RequestParam(required = false) @Min(1) @Max(100) Integer limit
     ) {
-        return vocabulary.due(learnerId(jwt), limit).stream()
-            .map(VocabularyCardResponse::from)
-            .toList();
+        int effectiveSize = size != null ? size : (limit != null ? limit : 20);
+        VocabularyCommandService.DuePage duePage = vocabulary.duePage(learnerId(jwt), page, effectiveSize);
+        return new DueCardsPageResponse(
+            duePage.items().stream().map(VocabularyCardResponse::from).toList(),
+            duePage.total(),
+            duePage.page(),
+            duePage.size(),
+            duePage.hasMore()
+        );
+    }
+
+    @DeleteMapping("/cards/{cardId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteCard(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable UUID cardId
+    ) {
+        vocabulary.deleteCard(learnerId(jwt), cardId);
     }
 
     @PostMapping("/cards/{cardId}/review")
@@ -155,25 +175,83 @@ public class VocabularyController {
         double difficulty
     ) {}
 
+    public record DueCardsPageResponse(
+        List<VocabularyCardResponse> items,
+        long total,
+        int page,
+        int size,
+        boolean hasMore
+    ) {}
+
     public record VocabularyCardResponse(
         UUID id,
         UUID learnerId,
         UUID headwordId,
+        String term,
+        String partOfSpeech,
+        String meaningVi,
+        String definitionEn,
+        String ipa,
+        String contextSentence,
+        String contextTranslationVi,
         String sourceContextType,
         UUID sourceContextId,
+        UUID sourceEntryId,
+        Integer senseIndex,
+        UUID audioAssetId,
+        UUID imageAssetId,
+        String audioUrl,
+        String imageUrl,
         Instant nextReviewAt,
         double stability,
         double difficulty,
         int lapseCount,
         int reviewCount
     ) {
+        public VocabularyCardResponse(
+            UUID id,
+            UUID learnerId,
+            UUID headwordId,
+            String sourceContextType,
+            UUID sourceContextId,
+            Instant nextReviewAt,
+            double stability,
+            double difficulty,
+            int lapseCount,
+            int reviewCount
+        ) {
+            this(
+                id, learnerId, headwordId,
+                null, null, null, null, null, null, null,
+                sourceContextType, sourceContextId, null, null, null, null, null, null,
+                nextReviewAt, stability, difficulty, lapseCount, reviewCount
+            );
+        }
+
         public static VocabularyCardResponse from(VocabularyCard card) {
             return new VocabularyCardResponse(
                 card.id(),
                 card.learnerId(),
                 card.headwordId(),
+                card.term(),
+                card.partOfSpeech(),
+                card.meaningVi(),
+                card.definitionEn(),
+                card.ipa(),
+                card.contextSentence(),
+                card.contextTranslationVi(),
                 card.sourceContextType(),
                 card.sourceContextId(),
+                card.sourceEntryId(),
+                card.senseIndex(),
+                card.audioAssetId(),
+                card.imageAssetId(),
+                card.audioAssetId() != null
+                    ? "/api/v1/vocabulary/saved-items/" + card.id() + "/media/" + card.audioAssetId()
+                    : null,
+                card.imageAssetId() != null
+                    ? "/api/v1/vocabulary/saved-items/" + card.id() + "/media/" + card.imageAssetId()
+                    : null,
                 card.nextReviewAt(),
                 card.stability(),
                 card.difficulty(),

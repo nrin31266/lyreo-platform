@@ -8,10 +8,11 @@ import com.lyreo.curriculum.domain.CurriculumItem;
 import com.lyreo.curriculum.domain.CurriculumItem.ContentType;
 import com.lyreo.curriculum.domain.CurriculumPath;
 import com.lyreo.curriculum.domain.CurriculumPathDetail;
-import com.lyreo.curriculum.domain.CurriculumPathDiagnostic;
 import com.lyreo.curriculum.domain.CurriculumSection;
 import com.lyreo.entitlement.api.FeatureKey;
+import java.text.Normalizer;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -61,33 +62,21 @@ public class CurriculumAdminService {
         return curriculumService.buildPathDetail(null, path);
     }
 
-    @Transactional(readOnly = true)
-    public CurriculumPathDiagnostic diagnosePath(UUID pathId) {
-        if (repository.findPathById(pathId).isEmpty()) {
-            throw new ResourceNotFoundException("Curriculum path not found");
-        }
-        return repository.diagnosePath(pathId);
-    }
-
     @Transactional
     public CurriculumPathDetail createPath(SavePathCommand command) {
-        String code = requireNonBlank(command.code(), "code");
         String name = requireNonBlank(command.name(), "name");
+        String code = resolveCreateCode(command.code(), name);
         String status = normalizeStatus(command.status(), CurriculumPath.STATUS_DRAFT);
         String accessMode = normalizeAccessMode(command.accessMode(), "PUBLIC");
         String featureKey = resolveFeatureKey(accessMode, command.requiredFeatureKey());
-
-        if (repository.existsByCode(code, null)) {
-            throw new StateConflictException("Curriculum path code already exists: " + code);
-        }
 
         UUID pathId = UUID.randomUUID();
         CurriculumPath created = repository.insertPath(
             pathId,
             code,
             name,
-            command.level(),
-            command.description(),
+            trimToNull(command.level()),
+            trimToNull(command.description()),
             status,
             command.coverAssetId(),
             accessMode,
@@ -127,9 +116,9 @@ public class CurriculumAdminService {
             pathId,
             code,
             name,
-            command.level() != null ? command.level() : existing.level(),
-            command.description() != null ? command.description() : existing.description(),
-            command.coverAssetId() != null ? command.coverAssetId() : existing.coverAssetId(),
+            trimToNull(command.level()),
+            trimToNull(command.description()),
+            command.coverAssetId(),
             accessMode,
             featureKey
         ).orElseThrow(() -> new ResourceNotFoundException("Curriculum path not found"));
@@ -190,7 +179,7 @@ public class CurriculumAdminService {
             Objects.requireNonNull(itemSpec.contentType(), "contentType is required"),
             Objects.requireNonNull(itemSpec.contentReferenceId(), "contentReferenceId is required"),
             itemSpec.required(),
-            itemSpec.unlockRule(),
+            normalizeUnlockRule(itemSpec.unlockRule(), itemSpec.required()),
             encodeConfig(itemSpec.config())
         );
     }
@@ -219,7 +208,7 @@ public class CurriculumAdminService {
                         Objects.requireNonNull(itemSpec.contentType(), "contentType is required"),
                         Objects.requireNonNull(itemSpec.contentReferenceId(), "contentReferenceId is required"),
                         itemSpec.required(),
-                        itemSpec.unlockRule(),
+                        normalizeUnlockRule(itemSpec.unlockRule(), itemSpec.required()),
                         encodeConfig(itemSpec.config())
                     );
                 }
@@ -271,6 +260,69 @@ public class CurriculumAdminService {
             throw new RequestValidationException("Invalid curriculum status: " + rawStatus);
         }
         return normalized;
+    }
+
+    private String resolveCreateCode(String rawCode, String name) {
+        if (rawCode != null && !rawCode.isBlank()) {
+            String trimmed = rawCode.trim();
+            if (repository.existsByCode(trimmed, null)) {
+                throw new StateConflictException("Curriculum path code already exists: " + trimmed);
+            }
+            return trimmed;
+        }
+        String base = generateCodeBase(name);
+        if (!repository.existsByCode(base, null)) {
+            return base;
+        }
+        for (int suffix = 2; suffix < 10_000; suffix++) {
+            String tail = "_" + suffix;
+            int maxBaseLen = Math.max(1, 80 - tail.length());
+            String prefix = base.length() > maxBaseLen
+                ? base.substring(0, maxBaseLen).replaceAll("_+$", "")
+                : base;
+            String candidate = (prefix.isEmpty() ? "PATH" : prefix) + tail;
+            if (!repository.existsByCode(candidate, null)) {
+                return candidate;
+            }
+        }
+        return base + "_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
+    }
+
+    private static String generateCodeBase(String name) {
+        String replaced = name.replace('đ', 'd').replace('Đ', 'D');
+        String normalized = Normalizer.normalize(replaced, Normalizer.Form.NFD)
+            .replaceAll("\\p{M}+", "")
+            .toUpperCase(Locale.ROOT)
+            .replaceAll("[^A-Z0-9]+", "_")
+            .replaceAll("^_+|_+$", "");
+        if (normalized.isEmpty()) {
+            return "PATH";
+        }
+        if (normalized.length() > 56) {
+            normalized = normalized.substring(0, 56).replaceAll("_+$", "");
+        }
+        return normalized.isEmpty() ? "PATH" : normalized;
+    }
+
+    private static String normalizeUnlockRule(String raw, boolean required) {
+        String normalized = raw == null || raw.isBlank()
+            ? "PREVIOUS_REQUIRED"
+            : raw.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("NONE", "PREVIOUS_REQUIRED", "OPEN", "FREE").contains(normalized)) {
+            throw new RequestValidationException("Invalid unlock rule: " + raw);
+        }
+        if (!required && "NONE".equals(normalized)) {
+            return "PREVIOUS_REQUIRED";
+        }
+        return normalized;
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private static String requireNonBlank(String value, String field) {

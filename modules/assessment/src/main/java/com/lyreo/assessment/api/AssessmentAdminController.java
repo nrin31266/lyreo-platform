@@ -24,6 +24,10 @@ public class AssessmentAdminController {
     }
     @GetMapping("/{id}") public DocumentStore.Document<QuestionContent> get(@PathVariable UUID id) {return library.get(id);}
     @GetMapping("/{id}/usage") public List<Map<String,Object>> usage(@PathVariable UUID id) {return source.usage(id);}
+    @GetMapping("/{id}/context") public List<Map<String,Object>> context(@PathVariable UUID id) {
+        library.get(id);
+        return source.context(id);
+    }
     @PutMapping("/{id}/draft") public DocumentStore.Document<QuestionContent> save(@PathVariable UUID id,@RequestBody Save input,@AuthenticationPrincipal Jwt jwt) {return library.save(id,input.revision(),input.content(),jwt.getSubject());}
     @PostMapping("/{id}/publish") public DocumentStore.Document<QuestionContent> publish(@PathVariable UUID id,@RequestBody Action a,@AuthenticationPrincipal Jwt jwt) {return library.publish(id,a.revision(),a.reason(),jwt.getSubject());}
     @GetMapping("/{id}/history") public List<DocumentStore.Publication<QuestionContent>> history(@PathVariable UUID id) {return documents.history("assessment",id,QuestionContent.class);}

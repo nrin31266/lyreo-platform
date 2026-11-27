@@ -65,6 +65,9 @@ management:
         include: health,info,metrics
 
 lyreo:
+  identity:
+    admin-realm-url: ${KEYCLOAK_ADMIN_REALM_URL:${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/lyreo}}
+    admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:}
   jobs:
     poll-interval-ms: ${JOB_POLL_INTERVAL_MS:1000}
     recover-interval-ms: ${JOB_RECOVER_INTERVAL_MS:30000}

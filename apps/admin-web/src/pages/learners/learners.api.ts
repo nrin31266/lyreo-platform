@@ -17,6 +17,7 @@ export type LearnerEntry = {
   focusArea: string | null;
   avatarPreset: AvatarPreset | null;
   avatarUploadId: string | null;
+  toeicTargetScore: number | null;
 };
 
 type LearnerPage = {
@@ -57,41 +58,12 @@ export async function fetchLearnerAvatar(id: string, signal?: AbortSignal) {
   return response.data;
 }
 
-export const entitlementFeatureKeys = [
-  'lesson.plus-lessons',
-  'vocabulary.plus-packs',
-  'vocabulary.saved-cards',
-  'speech.shadowing',
-  'toeic.full-access',
-  'grammar.advanced',
-  'chat.tutor',
-] as const;
+export type LearnerPlanTier = 'FREE' | 'PLUS';
 
-export type EntitlementFeatureKey = (typeof entitlementFeatureKeys)[number];
-
-export type EntitlementGrantEntry = {
-  id: string;
-  userId: string;
-  featureKey: string;
-  status: 'ACTIVE' | 'REVOKED' | 'EXPIRED' | string;
-  validFrom: string;
+export type LearnerPlan = {
+  tier: LearnerPlanTier;
   validUntil: string | null;
-  sourceType: string | null;
-  sourceReference: string | null;
-  createdBy: string;
-  createdAt: string;
-  revokedAt: string | null;
-  revokedBy: string | null;
-  revocationReason: string | null;
-};
-
-export type CreateEntitlementGrantInput = {
-  userId: string;
-  featureKey: string;
-  validFrom?: string;
-  validUntil?: string | null;
-  sourceType?: string;
-  sourceReference?: string;
+  history: { tier: LearnerPlanTier; changedAt: string }[];
 };
 
 export type DiamondTransactionEntry = {
@@ -134,25 +106,20 @@ export type AdjustDiamondsResponse = {
   createdAt: string;
 };
 
-const entitlementsBase = '/api/v1/admin/entitlements/grants';
 const gamificationBase = '/api/v1/admin/gamification/learners';
 
-export function fetchLearnerGrants(userId: string, signal?: AbortSignal) {
-  const params = new URLSearchParams({ userId });
-  return api<EntitlementGrantEntry[]>(`${entitlementsBase}?${params}`, { signal });
+function planUrl(learnerId: string) {
+  return `/api/v1/admin/entitlements/learners/${encodeURIComponent(learnerId)}/plan`;
 }
 
-export function createLearnerGrant(input: CreateEntitlementGrantInput) {
-  return api<EntitlementGrantEntry>(entitlementsBase, {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
+export function fetchLearnerPlan(learnerId: string, signal?: AbortSignal) {
+  return api<LearnerPlan>(planUrl(learnerId), { signal });
 }
 
-export function revokeLearnerGrant(grantId: string, reason: string) {
-  return api<EntitlementGrantEntry>(`${entitlementsBase}/${encodeURIComponent(grantId)}/revoke`, {
-    method: 'POST',
-    body: JSON.stringify({ reason }),
+export function updateLearnerPlan(learnerId: string, tier: LearnerPlanTier, durationDays?: number) {
+  return api<LearnerPlan>(planUrl(learnerId), {
+    method: 'PUT',
+    body: JSON.stringify({ tier, durationDays }),
   });
 }
 
@@ -164,5 +131,33 @@ export function adjustLearnerDiamonds(learnerId: string, input: AdjustLearnerDia
   return api<AdjustDiamondsResponse>(`${gamificationBase}/${encodeURIComponent(learnerId)}/diamonds`, {
     method: 'POST',
     body: JSON.stringify(input),
+  });
+}
+
+export type LearnerAccountStatus = {
+  management: 'AVAILABLE' | 'UNCONFIGURED' | 'UNMANAGED';
+  locked: boolean;
+  syncPending: boolean;
+};
+
+function accountUrl(learnerId: string) {
+  return `${base}/${encodeURIComponent(learnerId)}/account`;
+}
+
+export function fetchLearnerAccount(learnerId: string, signal?: AbortSignal) {
+  return api<LearnerAccountStatus>(accountUrl(learnerId), { signal });
+}
+
+export function resetLearnerPassword(learnerId: string, password: string, changeOnNextLogin: boolean) {
+  return api<void>(`${accountUrl(learnerId)}/password`, {
+    method: 'PUT',
+    body: JSON.stringify({ password, changeOnNextLogin }),
+  });
+}
+
+export function setLearnerAccountLock(learnerId: string, locked: boolean, reason?: string) {
+  return api<LearnerAccountStatus>(`${accountUrl(learnerId)}/lock`, {
+    method: 'PUT',
+    body: JSON.stringify({ locked, reason }),
   });
 }

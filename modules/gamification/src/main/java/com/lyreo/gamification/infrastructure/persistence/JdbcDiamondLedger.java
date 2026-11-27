@@ -117,6 +117,16 @@ public class JdbcDiamondLedger implements DiamondLedger {
         );
     }
 
+    @Override
+    public long countByLearner(UUID learnerId) {
+        Long count = jdbc.queryForObject(
+            "SELECT count(*) FROM diamond_transaction WHERE learner_id = :learnerId",
+            Map.of("learnerId", learnerId),
+            Long.class
+        );
+        return count != null ? count : 0L;
+    }
+
     private static DiamondTransaction mapTransaction(ResultSet rs) throws SQLException {
         return new DiamondTransaction(
             rs.getObject("id", UUID.class),

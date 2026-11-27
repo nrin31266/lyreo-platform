@@ -57,9 +57,26 @@ public class CurriculumService {
         if (entitlements == null || learnerId == null) {
             return paths;
         }
+        Map<String, Boolean> lockedCache = new HashMap<>();
         return paths.stream()
-            .map(summary -> summary.withLocked(isLocked(learnerId, summary.accessMode(), summary.requiredFeatureKey())))
+            .map(summary -> {
+                if (!"FEATURE".equals(summary.accessMode()) || summary.requiredFeatureKey() == null
+                    || summary.requiredFeatureKey().isBlank()) {
+                    return summary;
+                }
+                boolean locked = lockedCache.computeIfAbsent(
+                    summary.requiredFeatureKey(),
+                    key -> isLocked(learnerId, summary.accessMode(), key)
+                );
+                return summary.withLocked(locked);
+            })
             .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public UUID getPublishedCoverAssetId(UUID pathId) {
+        return repository.findPublishedCoverAssetId(pathId)
+            .orElseThrow(() -> new ResourceNotFoundException("Curriculum cover image not found"));
     }
 
     @Transactional(readOnly = true)
@@ -141,6 +158,10 @@ public class CurriculumService {
                     matchedItem.id(),
                     matchedItem.contentType(),
                     matchedItem.contentReferenceId(),
+                    matchedItem.contentTitle(),
+                    matchedItem.config(),
+                    detail.coverAssetId(),
+                    detail.coverUrl(),
                     matchedItem.progressStatus(),
                     detail.completedRequiredItems(),
                     detail.totalRequiredItems()
@@ -224,7 +245,8 @@ public class CurriculumService {
                 }
 
                 if (!isCompleted && !CurriculumItemProgress.STATUS_IN_PROGRESS.equals(currentStatus)) {
-                    boolean isOpen = isOpenRule(item.unlockRule());
+                    boolean isOpen = isOpenRule(item.unlockRule())
+                        && (item.required() || !"NONE".equalsIgnoreCase(item.unlockRule().trim()));
                     String desiredStatus = (previousRequiredCompleted || isOpen)
                         ? CurriculumItemProgress.STATUS_UNLOCKED
                         : CurriculumItemProgress.STATUS_LOCKED;
@@ -265,6 +287,8 @@ public class CurriculumService {
             itemsBySection.computeIfAbsent(item.sectionId(), ignored -> new ArrayList<>()).add(item);
         }
 
+        Map<UUID, String> contentTitles = repository.resolveContentTitles(items);
+
         int totalRequired = 0;
         int completedRequired = 0;
         List<CurriculumPathDetail.SectionView> sectionViews = new ArrayList<>();
@@ -290,7 +314,8 @@ public class CurriculumService {
                     item.unlockRule(),
                     itemStatus,
                     progress != null ? progress.completedAt() : null,
-                    item.config()
+                    item.config(),
+                    contentTitles.get(item.contentReferenceId())
                 ));
             }
             sectionViews.add(new CurriculumPathDetail.SectionView(
@@ -332,8 +357,13 @@ public class CurriculumService {
     }
 
     private static boolean isOpenRule(String unlockRule) {
-        return unlockRule != null
-            && ("OPEN".equalsIgnoreCase(unlockRule.trim()) || "FREE".equalsIgnoreCase(unlockRule.trim()));
+        if (unlockRule == null) {
+            return false;
+        }
+        String normalized = unlockRule.trim();
+        return "NONE".equalsIgnoreCase(normalized)
+            || "OPEN".equalsIgnoreCase(normalized)
+            || "FREE".equalsIgnoreCase(normalized);
     }
 
     private static boolean isActionable(String status) {

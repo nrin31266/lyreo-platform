@@ -11,7 +11,7 @@ import com.lyreo.entitlement.application.port.EntitlementAuditRepository;
 import com.lyreo.entitlement.application.port.FeatureRepository;
 import com.lyreo.entitlement.application.port.QuotaPolicyRepository;
 import com.lyreo.entitlement.application.port.UsageQuotaRepository;
-import com.lyreo.entitlement.application.port.UserEntitlementGrantRepository;
+import com.lyreo.entitlement.application.port.LearnerPlanRepository;
 import com.lyreo.entitlement.domain.EntitlementAuditEntry;
 import com.lyreo.entitlement.domain.QuotaPolicy;
 import com.lyreo.entitlement.domain.UsageCounter;
@@ -28,7 +28,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Evaluates runtime grants, capacity limits, periodic quotas, and reservations. */
+/** Evaluates membership, capacity limits, periodic quotas, and reservations. */
 public class DefaultEntitlementService implements EntitlementService {
     private static final String TIER_FREE = "FREE";
     private static final String TIER_PLUS = "PLUS";
@@ -38,7 +38,7 @@ public class DefaultEntitlementService implements EntitlementService {
     private static final String DEFAULT_POLICY_VERSION = "dev-v1";
 
     private final FeatureRepository features;
-    private final UserEntitlementGrantRepository grants;
+    private final LearnerPlanRepository plans;
     private final QuotaPolicyRepository quotaPolicies;
     private final UsageQuotaRepository usageQuotas;
     private final EntitlementAuditRepository auditLogs;
@@ -46,12 +46,12 @@ public class DefaultEntitlementService implements EntitlementService {
 
     public DefaultEntitlementService(
         FeatureRepository features,
-        UserEntitlementGrantRepository grants,
+        LearnerPlanRepository plans,
         Clock clock
     ) {
         this(
             features,
-            grants,
+            plans,
             (featureKey, tier) -> Optional.empty(),
             UsageQuotaRepository.noop(),
             EntitlementAuditRepository.noop(),
@@ -61,18 +61,35 @@ public class DefaultEntitlementService implements EntitlementService {
 
     public DefaultEntitlementService(
         FeatureRepository features,
-        UserEntitlementGrantRepository grants,
+        LearnerPlanRepository plans,
         QuotaPolicyRepository quotaPolicies,
         UsageQuotaRepository usageQuotas,
         EntitlementAuditRepository auditLogs,
         Clock clock
     ) {
         this.features = Objects.requireNonNull(features, "features");
-        this.grants = Objects.requireNonNull(grants, "grants");
+        this.plans = Objects.requireNonNull(plans, "plans");
         this.quotaPolicies = Objects.requireNonNull(quotaPolicies, "quotaPolicies");
         this.usageQuotas = Objects.requireNonNull(usageQuotas, "usageQuotas");
         this.auditLogs = Objects.requireNonNull(auditLogs, "auditLogs");
         this.clock = Objects.requireNonNull(clock, "clock");
+    }
+
+    @Override
+    public boolean isPlus(UUID userId) {
+        return plans.isPlus(userId, clock.instant());
+    }
+
+    @Override
+    public PlanSummary currentPlan(UUID userId) {
+        Objects.requireNonNull(userId, "userId");
+        Instant now = clock.instant();
+        var plan = plans.readPlan(userId, now);
+        if (plan == null) {
+            boolean plus = plans.isPlus(userId, now);
+            return new PlanSummary(plus ? TIER_PLUS : TIER_FREE, null);
+        }
+        return new PlanSummary(plan.tier().name(), plan.validUntil());
     }
 
     @Override
@@ -83,8 +100,7 @@ public class DefaultEntitlementService implements EntitlementService {
             return false;
         }
 
-        Instant now = clock.instant();
-        return grants.hasActiveGrant(userId, featureKey, now);
+        return isPlus(userId);
     }
 
     @Override
@@ -99,6 +115,11 @@ public class DefaultEntitlementService implements EntitlementService {
         Objects.requireNonNull(userId, "userId");
         Objects.requireNonNull(featureKey, "featureKey");
 
+        Instant now = clock.instant();
+        return evaluateFeature(userId, featureKey, now, plans.isPlus(userId, now));
+    }
+
+    private FeatureAccess evaluateFeature(UUID userId, FeatureKey featureKey, Instant now, boolean plus) {
         if (!features.isActive(featureKey)) {
             return new FeatureAccess(
                 featureKey.value(),
@@ -114,22 +135,20 @@ public class DefaultEntitlementService implements EntitlementService {
             );
         }
 
-        Instant now = clock.instant();
-        boolean hasGrant = grants.hasActiveGrant(userId, featureKey, now);
-        String tier = hasGrant ? TIER_PLUS : TIER_FREE;
+        String tier = plus ? TIER_PLUS : TIER_FREE;
 
         Optional<QuotaPolicy> policyOpt = quotaPolicies.findPolicy(featureKey, tier);
         if (policyOpt.isEmpty()) {
             return new FeatureAccess(
                 featureKey.value(),
-                hasGrant,
+                plus,
                 tier,
                 LIMIT_TYPE_GRANT,
                 null,
                 null,
                 null,
                 null,
-                hasGrant ? null : "FEATURE_GRANT_REQUIRED",
+                plus ? null : "FEATURE_GRANT_REQUIRED",
                 DEFAULT_POLICY_VERSION
             );
         }
@@ -174,8 +193,10 @@ public class DefaultEntitlementService implements EntitlementService {
     @Override
     public List<FeatureAccess> listLearnerEntitlements(UUID userId) {
         Objects.requireNonNull(userId, "userId");
+        Instant now = clock.instant();
+        boolean plus = plans.isPlus(userId, now);
         return features.findAllActiveKeys().stream()
-            .map(key -> evaluateFeature(userId, key))
+            .map(key -> evaluateFeature(userId, key, now, plus))
             .toList();
     }
 
@@ -196,11 +217,11 @@ public class DefaultEntitlementService implements EntitlementService {
             throw new FeatureEntitlementRequiredException(featureKey);
         }
 
-        boolean hasGrant = grants.hasActiveGrant(userId, featureKey, now);
-        String tier = hasGrant ? TIER_PLUS : TIER_FREE;
+        boolean plus = plans.isPlus(userId, now);
+        String tier = plus ? TIER_PLUS : TIER_FREE;
         Optional<QuotaPolicy> policyOpt = quotaPolicies.findPolicy(featureKey, tier);
         if (policyOpt.isEmpty()) {
-            if (!hasGrant) {
+            if (!plus) {
                 recordAudit(userId, featureKey, normalizedOpId, "DENIED_GRANT_REQUIRED", DEFAULT_POLICY_VERSION,
                     Map.of("tier", tier), now);
                 throw new FeatureEntitlementRequiredException(featureKey);
@@ -257,7 +278,7 @@ public class DefaultEntitlementService implements EntitlementService {
             return buildExistingReservationView(userId, featureKey, existingOpt.get(), now);
         }
 
-        String tier = grants.hasActiveGrant(userId, featureKey, now) ? TIER_PLUS : TIER_FREE;
+        String tier = plans.isPlus(userId, now) ? TIER_PLUS : TIER_FREE;
         QuotaPolicy policy = requirePeriodUsagePolicy(featureKey, tier);
         UtcDayWindow window = currentUtcDayWindow(now);
 
@@ -427,7 +448,7 @@ public class DefaultEntitlementService implements EntitlementService {
             );
         }
 
-        String tier = grants.hasActiveGrant(userId, featureKey, now) ? TIER_PLUS : TIER_FREE;
+        String tier = plans.isPlus(userId, now) ? TIER_PLUS : TIER_FREE;
         QuotaPolicy policy = requirePeriodUsagePolicy(featureKey, tier);
         UtcDayWindow window = currentUtcDayWindow(now);
 
@@ -500,7 +521,7 @@ public class DefaultEntitlementService implements EntitlementService {
         UsageReservation existing,
         Instant now
     ) {
-        String tier = grants.hasActiveGrant(userId, featureKey, now) ? TIER_PLUS : TIER_FREE;
+        String tier = plans.isPlus(userId, now) ? TIER_PLUS : TIER_FREE;
         int limit = quotaPolicies.findPolicy(featureKey, tier)
             .map(QuotaPolicy::maxAmount)
             .orElse(0);

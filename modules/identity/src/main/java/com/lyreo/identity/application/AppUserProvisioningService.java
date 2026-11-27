@@ -2,6 +2,7 @@ package com.lyreo.identity.application;
 
 import com.lyreo.identity.application.port.AppUserRepository;
 import com.lyreo.identity.domain.AppUser;
+import java.util.UUID;
 import org.springframework.modulith.NamedInterface;
 
 @NamedInterface(value = "application", propagate = false)
@@ -10,6 +11,10 @@ public final class AppUserProvisioningService {
 
     public AppUserProvisioningService(AppUserRepository repository) {
         this.repository = repository;
+    }
+
+    public boolean exists(UUID id) {
+        return repository.existsById(id);
     }
 
     /**

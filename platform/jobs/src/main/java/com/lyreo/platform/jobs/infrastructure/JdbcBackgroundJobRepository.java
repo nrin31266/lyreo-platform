@@ -24,6 +24,20 @@ public final class JdbcBackgroundJobRepository implements BackgroundJobRepositor
         this.jdbc = jdbc;
     }
 
+    @Override public com.lyreo.platform.jobs.application.JobHealthCounts healthCounts(Instant since) {
+        return jdbc.queryForObject(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE status IN ('QUEUED', 'RUNNING'))::int AS active,
+                COUNT(*) FILTER (WHERE status = 'FAILED' AND created_at >= :since)::int AS failed,
+                COUNT(*) FILTER (WHERE status = 'SUCCEEDED' AND created_at >= :since)::int AS succeeded
+            FROM background_job
+            """,
+            new MapSqlParameterSource("since", Timestamp.from(since)),
+            (rs, n) -> new com.lyreo.platform.jobs.application.JobHealthCounts(
+                rs.getInt("active"), rs.getInt("failed"), rs.getInt("succeeded")));
+    }
+
     @Override public List<UUID> matchingIds(String type,String ownerModule,java.util.Set<BackgroundJobStatus> statuses) {
         if(statuses.isEmpty()) return List.of();
         return jdbc.query("SELECT id FROM background_job WHERE job_type=:type AND owner_module=:owner AND status IN (:statuses)",Map.of("type",type,"owner",ownerModule,"statuses",statuses.stream().map(Enum::name).toList()),(rs,n)->rs.getObject(1,UUID.class));

@@ -117,6 +117,7 @@ export function RewardPolicyPanel() {
       setPolicyDraft(saved);
       setPolicySaved(true);
       void queryClient.invalidateQueries({ queryKey: ['admin-gamification-policy'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-activity'] });
     },
   });
 
@@ -139,17 +140,6 @@ export function RewardPolicyPanel() {
           <CatalogError error={policyQuery.error || policyMutation.error} />
           {policyDraft ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-1">
-                <Label htmlFor="policy-rule-version">{t('rewardsConsole.ruleVersion')}</Label>
-                <Input
-                  id="policy-rule-version"
-                  value={policyDraft.ruleVersion}
-                  onChange={(e) => {
-                    setPolicyDraft({ ...policyDraft, ruleVersion: e.target.value });
-                    setPolicySaved(false);
-                  }}
-                />
-              </div>
               <div className="grid gap-1">
                 <Label htmlFor="policy-xp-base">{t('rewardsConsole.xpPerLevel')}</Label>
                 <Input

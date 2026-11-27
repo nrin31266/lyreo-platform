@@ -2,7 +2,7 @@ package com.lyreo.assessment.application.port;
 import com.lyreo.assessment.domain.QuestionContent;
 import java.util.*;
 public interface QuestionSource {
-    record Summary(UUID id,String title,Integer difficultyLevel,String status,boolean edited,String type,boolean requiresContext) {}
+    record Summary(UUID id,String title,Integer difficultyLevel,String status,boolean edited,String type,boolean requiresContext,Integer toeicPart) {}
     boolean requiresContext(UUID id);
     List<Map<String,Object>> context(UUID id);
     Optional<QuestionContent> find(UUID id);

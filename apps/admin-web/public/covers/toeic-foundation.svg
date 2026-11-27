@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="640" y2="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0F1D35"/>
+      <stop offset="55%" stop-color="#172C4F"/>
+      <stop offset="100%" stop-color="#1E3F6E"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="320" cy="176" r="210" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#0F1D35" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cardSurface" x1="200" y1="70" x2="440" y2="290" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F8FAFC"/>
+      <stop offset="100%" stop-color="#E8EFF8"/>
+    </linearGradient>
+    <linearGradient id="accentBlue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#0EA5E9"/>
+    </linearGradient>
+    <linearGradient id="waveBlue" x1="256" y1="133" x2="392" y2="133" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#0EA5E9"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="640" height="360" fill="url(#bg)"/>
+  <rect width="640" height="360" fill="url(#glow)"/>
+
+  <!-- Subtle architectural grid -->
+  <g stroke="#93C5FD" stroke-opacity="0.08" stroke-width="1">
+    <line x1="0" y1="72" x2="640" y2="72"/>
+    <line x1="0" y1="144" x2="640" y2="144"/>
+    <line x1="0" y1="216" x2="640" y2="216"/>
+    <line x1="0" y1="288" x2="640" y2="288"/>
+    <line x1="128" y1="0" x2="128" y2="360"/>
+    <line x1="256" y1="0" x2="256" y2="360"/>
+    <line x1="384" y1="0" x2="384" y2="360"/>
+    <line x1="512" y1="0" x2="512" y2="360"/>
+  </g>
+
+  <!-- Ambient acoustic rings -->
+  <circle cx="320" cy="180" r="142" stroke="#60A5FA" stroke-opacity="0.14" stroke-width="1.5" stroke-dasharray="5 7"/>
+  <circle cx="320" cy="180" r="108" stroke="#93C5FD" stroke-opacity="0.18" stroke-width="1.5"/>
+
+  <!-- Secondary background folio -->
+  <rect x="196" y="76" width="212" height="214" rx="18" transform="rotate(-5 196 76)" fill="#1E3A63" stroke="#60A5FA" stroke-opacity="0.3" stroke-width="1.5"/>
+
+  <!-- Main structured study sheet (centered for thumbnail + 16:9) -->
+  <rect x="218" y="64" width="208" height="232" rx="18" fill="url(#cardSurface)" stroke="#CBD5E1" stroke-width="1.5"/>
+
+  <!-- Header bar inside study sheet -->
+  <rect x="238" y="86" width="84" height="10" rx="5" fill="#1E3A8A"/>
+  <rect x="372" y="83" width="34" height="16" rx="8" fill="#DBEAFE"/>
+  <circle cx="389" cy="91" r="4" fill="#2563EB"/>
+
+  <!-- Acoustic listening wave strip -->
+  <rect x="238" y="110" width="168" height="46" rx="10" fill="#EFF6FF" stroke="#BFDBFE"/>
+  <g stroke="url(#waveBlue)" stroke-width="3.5" stroke-linecap="round">
+    <line x1="258" y1="138" x2="258" y2="128"/>
+    <line x1="270" y1="143" x2="270" y2="123"/>
+    <line x1="282" y1="147" x2="282" y2="119"/>
+    <line x1="294" y1="140" x2="294" y2="126"/>
+    <line x1="306" y1="148" x2="306" y2="118"/>
+    <line x1="318" y1="144" x2="318" y2="122"/>
+    <line x1="330" y1="139" x2="330" y2="127"/>
+    <line x1="342" y1="146" x2="342" y2="120"/>
+    <line x1="354" y1="141" x2="354" y2="125"/>
+    <line x1="366" y1="137" x2="366" y2="129"/>
+    <line x1="378" y1="143" x2="378" y2="123"/>
+    <line x1="390" y1="138" x2="390" y2="128"/>
+  </g>
+
+  <!-- Structured Part 1-5 answer rows -->
+  <g>
+    <circle cx="250" cy="180" r="8" fill="#10B981"/>
+    <path d="M246.5 180.2L249 182.7L253.8 177.5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="268" y="176" width="96" height="8" rx="4" fill="#334155"/>
+    <rect x="374" y="176" width="28" height="8" rx="4" fill="#94A3B8"/>
+
+    <circle cx="250" cy="208" r="8" fill="#10B981"/>
+    <path d="M246.5 208.2L249 210.7L253.8 205.5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="268" y="204" width="112" height="8" rx="4" fill="#334155"/>
+    <rect x="386" y="204" width="16" height="8" rx="4" fill="#94A3B8"/>
+
+    <circle cx="250" cy="236" r="8" fill="#2563EB"/>
+    <circle cx="250" cy="236" r="3" fill="#FFFFFF"/>
+    <rect x="268" y="232" width="82" height="8" rx="4" fill="#475569"/>
+    <rect x="358" y="232" width="44" height="8" rx="4" fill="#BFDBFE"/>
+  </g>
+
+  <!-- Bottom progress meter -->
+  <rect x="238" y="264" width="168" height="10" rx="5" fill="#E2E8F0"/>
+  <rect x="238" y="264" width="114" height="10" rx="5" fill="url(#accentBlue)"/>
+
+  <!-- Floating headphone emblem badge on right -->
+  <g transform="translate(392, 198)">
+    <rect x="0" y="0" width="76" height="76" rx="20" fill="#0F172A" stroke="#38BDF8" stroke-opacity="0.55" stroke-width="1.5"/>
+    <path d="M22 42V36C22 27.163 29.163 20 38 20C46.837 20 54 27.163 54 36V42" stroke="#38BDF8" stroke-width="3.5" stroke-linecap="round"/>
+    <rect x="18" y="39" width="9" height="16" rx="4.5" fill="#F8FAFC"/>
+    <rect x="49" y="39" width="9" height="16" rx="4.5" fill="#F8FAFC"/>
+  </g>
+
+  <!-- Floating vocabulary pill on left -->
+  <g transform="translate(158, 122)">
+    <rect x="0" y="0" width="78" height="54" rx="14" fill="#0F766E" stroke="#5EEAD4" stroke-opacity="0.5" stroke-width="1.5"/>
+    <rect x="14" y="16" width="32" height="7" rx="3.5" fill="#CCFBF1"/>
+    <rect x="14" y="30" width="50" height="7" rx="3.5" fill="#5EEAD4" fill-opacity="0.75"/>
+  </g>
+</svg>

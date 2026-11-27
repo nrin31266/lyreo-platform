@@ -6,6 +6,7 @@ import com.lyreo.chat.application.EnglishTutorService;
 import com.lyreo.chat.application.port.ChatRepository;
 import com.lyreo.chat.infrastructure.persistence.JdbcChatRepository;
 import com.lyreo.entitlement.api.EntitlementService;
+import com.lyreo.platform.config.application.OperationIdempotencyService;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -28,13 +29,15 @@ public class ChatConfiguration {
         AiInvocationService ai,
         EnglishTutorPrompt prompt,
         ObjectProvider<EntitlementService> entitlementsProvider,
-        ObjectProvider<ChatRepository> chatRepositoryProvider
+        ObjectProvider<ChatRepository> chatRepositoryProvider,
+        ObjectProvider<OperationIdempotencyService> idempotencyProvider
     ) {
         return new EnglishTutorService(
             ai,
             prompt,
             entitlementsProvider.getIfAvailable(),
-            chatRepositoryProvider.getIfAvailable()
+            chatRepositoryProvider.getIfAvailable(),
+            idempotencyProvider.getIfAvailable()
         );
     }
 }

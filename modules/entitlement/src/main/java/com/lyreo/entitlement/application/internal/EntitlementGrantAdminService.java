@@ -2,7 +2,6 @@ package com.lyreo.entitlement.application.internal;
 
 import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
-import com.lyreo.contracts.errors.StateConflictException;
 import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.entitlement.application.port.EntitlementAuditRepository;
 import com.lyreo.entitlement.application.port.FeatureRepository;
@@ -12,16 +11,13 @@ import com.lyreo.entitlement.domain.EntitlementAuditEntry;
 import com.lyreo.entitlement.domain.EntitlementGrant;
 import com.lyreo.entitlement.domain.QuotaPolicy;
 import java.time.Clock;
-import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Administrative service for listing, creating, and revoking user entitlement grants. */
+/** Admin reads legacy grants and manages feature quota policy. */
 public class EntitlementGrantAdminService {
     private static final String DEFAULT_POLICY_VERSION = "dev-v1";
 
@@ -135,117 +131,6 @@ public class EntitlementGrantAdminService {
             ? null
             : parseFeatureKey(rawFeatureKey);
         return grants.findGrants(userId, featureKey);
-    }
-
-    @Transactional
-    public EntitlementGrant createGrant(
-        UUID userId,
-        String rawFeatureKey,
-        Instant validFrom,
-        Instant validUntil,
-        String sourceType,
-        String sourceReference,
-        String createdBy
-    ) {
-        Objects.requireNonNull(userId, "userId");
-        FeatureKey featureKey = parseFeatureKey(rawFeatureKey);
-        if (!features.exists(featureKey)) {
-            throw new ResourceNotFoundException("Entitlement feature not found: " + featureKey.value());
-        }
-        if (!features.isActive(featureKey)) {
-            throw new StateConflictException("Entitlement feature is not active: " + featureKey.value());
-        }
-
-        Instant now = clock.instant();
-        Instant effectiveFrom = validFrom != null ? validFrom : now;
-        if (validUntil != null && !validUntil.isAfter(effectiveFrom)) {
-            throw new RequestValidationException("validUntil must be after validFrom");
-        }
-
-        String normalizedSourceType = sourceType == null || sourceType.isBlank() ? "MANUAL" : sourceType.trim();
-        String normalizedSourceRef = sourceReference == null || sourceReference.isBlank() ? null : sourceReference.trim();
-        String actor = createdBy == null || createdBy.isBlank() ? "admin" : createdBy.trim();
-
-        EntitlementGrant toCreate = new EntitlementGrant(
-            UUID.randomUUID(),
-            userId,
-            featureKey.value(),
-            EntitlementGrant.STATUS_ACTIVE,
-            effectiveFrom,
-            validUntil,
-            normalizedSourceType,
-            normalizedSourceRef,
-            actor,
-            now,
-            null,
-            null,
-            null
-        );
-
-        EntitlementGrant created;
-        try {
-            created = grants.createGrant(toCreate);
-        } catch (DataIntegrityViolationException ex) {
-            throw new ResourceNotFoundException("Target user does not exist: " + userId, ex);
-        }
-
-        Map<String, Object> detail = new LinkedHashMap<>();
-        detail.put("grantId", created.id().toString());
-        detail.put("sourceType", created.sourceType());
-        detail.put("createdBy", created.createdBy());
-        detail.put("validFrom", created.validFrom().toString());
-        if (created.validUntil() != null) {
-            detail.put("validUntil", created.validUntil().toString());
-        }
-        auditLogs.record(new EntitlementAuditEntry(
-            UUID.randomUUID(),
-            created.userId(),
-            created.featureKey(),
-            null,
-            "GRANT_CREATED",
-            DEFAULT_POLICY_VERSION,
-            detail,
-            now
-        ));
-
-        return created;
-    }
-
-    @Transactional
-    public EntitlementGrant revokeGrant(UUID grantId, String revokedBy, String reason) {
-        Objects.requireNonNull(grantId, "grantId");
-        String actor = revokedBy == null || revokedBy.isBlank() ? "admin" : revokedBy.trim();
-        String normalizedReason = reason == null || reason.isBlank() ? null : reason.trim();
-        Instant now = clock.instant();
-
-        var revokedOpt = grants.revokeGrant(grantId, actor, normalizedReason, now);
-        if (revokedOpt.isEmpty()) {
-            var existingOpt = grants.findById(grantId);
-            if (existingOpt.isEmpty()) {
-                throw new ResourceNotFoundException("Entitlement grant not found: " + grantId);
-            }
-            throw new StateConflictException("Entitlement grant is already revoked: " + grantId);
-        }
-
-        EntitlementGrant revoked = revokedOpt.get();
-        Map<String, Object> detail = new LinkedHashMap<>();
-        detail.put("grantId", revoked.id().toString());
-        detail.put("revokedBy", actor);
-        if (normalizedReason != null) {
-            detail.put("reason", normalizedReason);
-        }
-        auditLogs.record(new EntitlementAuditEntry(
-            UUID.randomUUID(),
-            revoked.userId(),
-            revoked.featureKey(),
-            null,
-            "GRANT_REVOKED",
-            DEFAULT_POLICY_VERSION,
-            detail,
-            now
-        ));
-
-        return revoked;
     }
 
     private static FeatureKey parseFeatureKey(String rawFeatureKey) {

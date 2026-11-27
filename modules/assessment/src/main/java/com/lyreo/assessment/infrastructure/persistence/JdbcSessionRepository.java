@@ -44,6 +44,26 @@ public class JdbcSessionRepository implements SessionRepository {
              LIMIT :size OFFSET :offset
             """, params, this::row);
     }
+    public long countHistory(UUID learnerId,String domain,String status,UUID catalogId) {
+        var params = new MapSqlParameterSource()
+            .addValue("user", learnerId)
+            .addValue("domain", domain)
+            .addValue("status", status, Types.VARCHAR)
+            .addValue("catalogId", catalogId, Types.OTHER);
+        Long total = jdbc.queryForObject("""
+            SELECT count(*) FROM assessment_session
+             WHERE learner_id = :user
+               AND domain = :domain
+               AND (CAST(:catalogId AS uuid) IS NULL OR catalog_id = :catalogId)
+               AND (
+                   CAST(:status AS text) IS NULL
+                   OR (:status = 'SUBMITTED' AND submitted_at IS NOT NULL)
+                   OR (:status = 'OPEN' AND submitted_at IS NULL AND expires_at > now())
+                   OR (:status = 'EXPIRED' AND submitted_at IS NULL AND expires_at <= now())
+               )
+            """, params, Long.class);
+        return total == null ? 0L : total;
+    }
     public void answers(UUID id,long revision,String answers) {
         if(jdbc.update("UPDATE assessment_session SET answers=CAST(:answers AS jsonb),revision=revision+1 WHERE id=:id AND revision=:revision AND submitted_at IS NULL",Map.of("answers",answers,"id",id,"revision",revision))!=1) {
             throw new StaleRevisionException("Session changed; reload answers before saving");

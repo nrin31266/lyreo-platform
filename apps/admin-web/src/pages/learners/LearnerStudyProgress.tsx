@@ -1,4 +1,3 @@
-import { LearnerWeaknesses } from './LearnerWeaknesses';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -20,11 +19,14 @@ import {
 } from '@remixicon/react';
 import { AuthenticatedImage } from '@/components/AuthenticatedImage';
 import { AchievementTierBadge, CefrLevelBadge } from '@/components/ContentBadges';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CatalogError } from '@/pages/lessons/CatalogFeedback';
 import { fetchLearnerStudyProfile } from '@/pages/overview/admin-ops.api';
+import { LearnerWeaknesses } from './LearnerWeaknesses';
+import { MetricHelp } from './MetricHelp';
+import { LearnerSkillScores } from './LearnerSkillScores';
 
 export function LearnerStudyProgress({ learnerId }: { learnerId: string }) {
   const { t } = useTranslation('admin');
@@ -38,27 +40,26 @@ export function LearnerStudyProgress({ learnerId }: { learnerId: string }) {
   const chartData = (data?.dailySeries ?? []).map((pt) => ({
     date: pt.date.slice(5),
     minutes: Math.round(pt.studySeconds / 60),
-    lessons: pt.lessonCount,
-    vocab: pt.vocabularyReviewCount,
   }));
 
   return (
-    <Card>
+    <Card size="sm" className="rounded-xl border shadow-none ring-0">
       <CardHeader>
         <CardTitle>{t('learnerProgress.inspectorTitle')}</CardTitle>
-        <CardDescription>{t('learnerProgress.inspectorHelp')}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4">
         {query.error ? (
           <CatalogError error={query.error} retry={() => void query.refetch()} />
         ) : query.isPending ? (
           <Skeleton className="h-44 w-full" />
         ) : !data?.hasHistory ? (
-          <p className="text-sm text-muted-foreground">{t('learnerProgress.noHistoryHelp')}</p>
+          <>
+            <LearnerSkillScores scores={[]} />
+            <p className="text-sm text-muted-foreground">{t('learnerProgress.noHistoryHelp')}</p>
+          </>
         ) : (
           <>
-            {/* Today / 7d / 30d Study Windows */}
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-3">
               {(
                 [
                   ['todayWindow', data.today],
@@ -66,11 +67,12 @@ export function LearnerStudyProgress({ learnerId }: { learnerId: string }) {
                   ['monthWindow', data.month],
                 ] as const
               ).map(([labelKey, win]) => (
-                <div key={labelKey} className="rounded-xl border bg-muted/20 p-3">
+                <div key={labelKey} className="rounded-lg border bg-muted/20 p-2.5">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">
+                    <div className="inline-flex flex-wrap items-center text-xs text-muted-foreground">
                       {t(`learnerProgress.${labelKey}`)}
-                    </p>
+                      <MetricHelp label={t(`learnerProgress.${labelKey}`)} calculation="window" />
+                    </div>
                     <span className="text-[11px] font-medium text-muted-foreground tabular-nums">
                       {t('learnerProgress.activeDaysCount', { days: win.activeDays })}
                     </span>
@@ -86,16 +88,24 @@ export function LearnerStudyProgress({ learnerId }: { learnerId: string }) {
               ))}
             </div>
 
-            {/* Practice Breakdown Mini-KPIs */}
+            <div className="space-y-2">
+              <h4 className="flex items-center gap-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                {t('learnerProgress.weaknessesTitle')}
+                <MetricHelp label={t('learnerProgress.weaknessesTitle')} calculation="weaknesses" />
+              </h4>
+              <LearnerWeaknesses items={data.weaknesses} />
+            </div>
+            <LearnerSkillScores scores={data.skills} />
             <div className="space-y-2">
               <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                 {t('learnerProgress.practiceBreakdown')}
               </h4>
-              <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-2.5 sm:grid-cols-2 2xl:grid-cols-4">
                 <div className="rounded-xl border bg-card p-3">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <div className="flex items-start gap-1 text-xs text-muted-foreground [&>span]:pt-1 [&>svg]:mt-1 [&>svg]:shrink-0">
                     <RiBookOpenLine className="size-3.5 text-primary" aria-hidden="true" />
                     <span>{t('learnerProgress.lessonsDone')}</span>
+                    <MetricHelp label={t('learnerProgress.lessonsDone')} calculation="lessons" />
                   </div>
                   <p className="mt-1 text-lg font-semibold tabular-nums">
                     {data.breakdown.lessonsCompleted}
@@ -108,9 +118,10 @@ export function LearnerStudyProgress({ learnerId }: { learnerId: string }) {
                 </div>
 
                 <div className="rounded-xl border bg-card p-3">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <div className="flex items-start gap-1 text-xs text-muted-foreground [&>span]:pt-1 [&>svg]:mt-1 [&>svg]:shrink-0">
                     <RiTranslate2 className="size-3.5 text-primary" aria-hidden="true" />
                     <span>{t('learnerProgress.vocabMastered')}</span>
+                    <MetricHelp label={t('learnerProgress.vocabMastered')} calculation="mastered" />
                   </div>
                   <p className="mt-1 text-lg font-semibold tabular-nums">
                     {data.breakdown.vocabCardsMastered} / {data.breakdown.vocabCardsTotal}
@@ -118,35 +129,33 @@ export function LearnerStudyProgress({ learnerId }: { learnerId: string }) {
                 </div>
 
                 <div className="rounded-xl border bg-card p-3">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <div className="flex items-start gap-1 text-xs text-muted-foreground [&>span]:pt-1 [&>svg]:mt-1 [&>svg]:shrink-0">
                     <RiSparklingLine className="size-3.5 text-primary" aria-hidden="true" />
                     <span>{t('learnerProgress.grammarAccuracy')}</span>
+                    <MetricHelp label={t('learnerProgress.grammarAccuracy')} calculation="grammarAccuracy" />
                   </div>
                   <p className="mt-1 text-lg font-semibold tabular-nums">
-                    {data.breakdown.grammarAccuracyPct}%
+                    {data.breakdown.grammarAttempts > 0 ? `${data.breakdown.grammarAccuracyPct}%` : '—'}
                   </p>
                   <p className="text-[11px] text-muted-foreground tabular-nums">
-                    {t('learnerProgress.attemptsCount', {
+                    {t('learnerProgress.grammarAnswersCount', {
                       count: data.breakdown.grammarAttempts,
                     })}
                   </p>
                 </div>
 
                 <div className="rounded-xl border bg-card p-3">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <div className="flex items-start gap-1 text-xs text-muted-foreground [&>span]:pt-1 [&>svg]:mt-1 [&>svg]:shrink-0">
                     <RiFileList3Line className="size-3.5 text-primary" aria-hidden="true" />
-                    <span>{t('learnerProgress.toeicBest')}</span>
+                    <span>{t('learnerProgress.toeicSubmissions')}</span>
+                    <MetricHelp label={t('learnerProgress.toeicSubmissions')} calculation="toeicBest" />
                   </div>
-                  <p className="mt-1 text-lg font-semibold tabular-nums">
-                    {data.breakdown.bestToeicScore != null
-                      ? data.breakdown.bestToeicScore
-                      : t('learnerProgress.noToeicYet')}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground tabular-nums">
-                    {t('learnerProgress.attemptsCount', {
-                      count: data.breakdown.toeicAttempts,
-                    })}
-                  </p>
+                  <p className="mt-1 text-lg font-semibold tabular-nums">{data.breakdown.toeicAttempts}</p>
+                  {data.breakdown.bestToeicScore != null && (
+                    <p className="text-[11px] text-muted-foreground tabular-nums">
+                      {t('learnerProgress.bestScaledToeic', { score: data.breakdown.bestToeicScore })}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -154,8 +163,9 @@ export function LearnerStudyProgress({ learnerId }: { learnerId: string }) {
             {/* 14-Day Study Activity BarChart */}
             {chartData.length > 0 ? (
               <div className="space-y-2">
-                <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                <h4 className="flex items-center gap-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                   {t('learnerProgress.dailyChartTitle')}
+                  <MetricHelp label={t('learnerProgress.dailyChartTitle')} calculation="dailyMinutes" />
                 </h4>
                 <div className="h-44 w-full rounded-xl border bg-muted/10 p-3">
                   <ResponsiveContainer width="100%" height="100%">
@@ -183,36 +193,11 @@ export function LearnerStudyProgress({ learnerId }: { learnerId: string }) {
               </div>
             ) : null}
 
-            {/* Skill Mastery */}
-            {data.skills.length > 0 ? (
-              <div className="space-y-2.5">
-                <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  {t('learnerProgress.skillsTitle')}
-                </h4>
-                <div className="space-y-2">
-                  {data.skills.map((skill) => (
-                    <div key={skill.skillCode} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-medium">
-                          {t(`learnerProgress.skills.${skill.skillCode}`, {
-                            defaultValue: skill.skillCode,
-                          })}
-                        </span>
-                        <span className="text-muted-foreground tabular-nums">
-                          {Number(skill.score).toFixed(1)}%
-                        </span>
-                      </div>
-                      <Progress value={Math.min(100, Math.max(0, Number(skill.score)))} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
             {/* Enrolled Learning Paths */}
             <div className="space-y-2.5">
-              <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              <h4 className="flex items-center gap-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                 {t('learnerProgress.enrolledPathsTitle')}
+                <MetricHelp label={t('learnerProgress.enrolledPathsTitle')} calculation="paths" />
               </h4>
               {data.enrolledPaths.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
@@ -299,12 +284,6 @@ export function LearnerStudyProgress({ learnerId }: { learnerId: string }) {
               )}
             </div>
 
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                {t('learnerProgress.weaknessesTitle')}
-              </h4>
-              <LearnerWeaknesses items={data.weaknesses} />
-            </div>
           </>
         )}
       </CardContent>

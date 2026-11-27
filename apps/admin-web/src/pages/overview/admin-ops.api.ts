@@ -17,6 +17,97 @@ export type AnalyticsWeaknessHotspot = {
   averageSeverity: number;
   totalSamples: number;
   lastUpdatedAt: string | null;
+  label?: string | null;
+  labelEn?: string | null;
+};
+
+export type DashboardPeriodDays = 7 | 14 | 30;
+
+export type DashboardDailyPoint = {
+  activityDate: string;
+  activeLearners: number;
+  newLearners: number;
+  studySeconds: number;
+  lessonCount: number;
+  vocabularyReviewCount: number;
+  grammarAnswerCount: number;
+  toeicQuestionCount: number;
+};
+
+export type DashboardOperationsHealth = {
+  jobsRunning: number;
+  jobsFailed24h: number;
+  jobsSucceeded24h: number;
+  aiProvidersEnabled: number;
+  aiProvidersHealthy: number;
+  aiProvidersUnhealthy: number;
+  aiInvocations24h: number;
+  aiErrors24h: number;
+  aiAvgLatencyMs24h: number;
+  lockedAccounts: number;
+  pendingAccountSync: number;
+  scheduledNotifications: number;
+};
+
+export type DashboardContentInventory = {
+  lessonsPublished: number;
+  lessonsDraft: number;
+  curriculumPathsPublished: number;
+  curriculumPathsDraft: number;
+  curriculumEnrollmentsActive: number;
+  curriculumEnrollmentsCompleted: number;
+  vocabularyPacksPublished: number;
+  vocabularyUnitsTotal: number;
+  grammarTopicsPublished: number;
+  toeicTestsPublished: number;
+  lexiconHeadwordsTotal: number;
+};
+
+export type DashboardCurriculumPathMetric = {
+  pathId: string;
+  code: string;
+  name: string;
+  level: string;
+  status: string;
+  enrolledLearners: number;
+  completedLearners: number;
+  averageCompletionPercent: number;
+};
+
+export type AdminDashboardSummary = {
+  period: {
+    days: number;
+    fromDate: string;
+    toDate: string;
+  };
+  kpis: {
+    activeLearners: number;
+    previousActiveLearners: number;
+    activeLearnersToday: number;
+    totalLearners: number;
+    newLearners: number;
+    previousNewLearners: number;
+    onboardedLearners: number;
+    activePlusLearners: number;
+    plusStartedInPeriod: number;
+    studySeconds: number;
+    previousStudySeconds: number;
+    lessonsCompleted: number;
+    vocabularyReviews: number;
+    grammarAnswers: number;
+    toeicQuestions: number;
+    practiceTotal: number;
+    previousPracticeTotal: number;
+    aiTutorTurns: number;
+    aiTutorTurnsToday: number;
+    aiTutorActiveLearners: number;
+    aiTutorTotalConversations: number;
+  };
+  dailySeries: DashboardDailyPoint[];
+  operations: DashboardOperationsHealth;
+  contentInventory: DashboardContentInventory;
+  topCurriculumPaths: DashboardCurriculumPathMetric[];
+  topWeaknesses: AnalyticsWeaknessHotspot[];
 };
 
 export type AdminAnalyticsSummary = {
@@ -294,6 +385,10 @@ export type ContentMediaPage = {
 
 export function fetchAdminAnalyticsSummary(signal?: AbortSignal) {
   return api<AdminAnalyticsSummary>('/api/v1/admin/analytics/summary', { signal });
+}
+
+export function fetchAdminDashboard(days: DashboardPeriodDays = 14, signal?: AbortSignal) {
+  return api<AdminDashboardSummary>(`/api/v1/admin/analytics/dashboard?days=${days}`, { signal });
 }
 
 export function fetchLearnerAnalytics(learnerId: string, signal?: AbortSignal) {

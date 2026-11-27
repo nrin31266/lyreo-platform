@@ -86,6 +86,7 @@ export function VoiceSelect({ value, onChange, disabled = false }: { value: stri
 }
 
 const TTS_SPEED_PRESETS = [
+  { value: '0.75', key: 'media.ttsSpeedVerySlow' },
   { value: '0.8', key: 'media.ttsSpeedSlow' },
   { value: '0.9', key: 'media.ttsSpeedGentle' },
   { value: '1', key: 'media.ttsSpeedNormal' },
@@ -105,8 +106,12 @@ export function TtsSpeedSelect({
   disabled?: boolean;
 }) {
   const { t } = useTranslation('admin');
-  const normalized = String(value ?? 1);
-  const current = TTS_SPEED_PRESETS.some((preset) => preset.value === normalized) ? normalized : '1';
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? Number(value.toFixed(2)) : 1;
+  const normalized = String(numeric);
+  const hasPreset = TTS_SPEED_PRESETS.some((preset) => Number(preset.value) === numeric);
+  const current = hasPreset
+    ? TTS_SPEED_PRESETS.find((preset) => Number(preset.value) === numeric)!.value
+    : normalized;
   return (
     <Field>
       <FieldLabel htmlFor="tts-speed">{t('media.ttsSpeed')}</FieldLabel>
@@ -119,6 +124,9 @@ export function TtsSpeedSelect({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
+          {!hasPreset && (
+            <SelectItem value={normalized}>{`${normalized}×`}</SelectItem>
+          )}
           {TTS_SPEED_PRESETS.map((preset) => (
             <SelectItem key={preset.value} value={preset.value}>
               {t(preset.key)}

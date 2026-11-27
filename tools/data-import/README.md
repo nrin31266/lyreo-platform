@@ -6,20 +6,22 @@ importers verify and install the pinned content packages. See the
 
 ## First clone
 
-Run `make setup` to prepare the application and seed development reference data. Then choose
-the content to install:
+Run `make setup` to prepare the application, import all frozen datasets (`lexicon`, `grammar-toeic`,
+`vocabulary`) when R2 credentials are configured, and run `make seed` (pass `SKIP_DATA=1 make setup`
+to skip dataset import). Or install individual domains later:
 
 ```bash
 make setup-data DATASET=lexicon
 make setup-data DATASET=grammar-toeic
-make setup-data
+make setup-data DATASET=vocabulary
+make setup-data   # installs all three + runs make seed
 ```
 
-Each command checks the target database, verifies or fetches the selected package from the pins
-in [`.env.example`](.env.example), then installs it once. Grammar/TOEIC also checks
-media storage alignment with Core. Keep the target credentials and any local archive overrides
-in the ignored importer env. Reruns preserve existing rows and reject a different package for an
-installed domain. Use the CLI reports and catalog quality checks to inspect issues.
+Each command checks the target database, verifies or fetches the frozen package against
+[`release-lock.json`](release-lock.json) and [`.env.example`](.env.example), then installs it once.
+Google Drive release links are locked read-only; unpinned Drive file IDs or checksums are rejected
+at fetch time and by `make validate`. Reruns preserve existing rows and reject a different package for
+an installed domain. Use the CLI reports and catalog quality checks to inspect issues.
 
 ### Drive access
 

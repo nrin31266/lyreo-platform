@@ -1,6 +1,8 @@
 package com.lyreo.analytics.infrastructure;
 
 import com.lyreo.analytics.application.AnalyticsService;
+import com.lyreo.analytics.application.JobHealthSource;
+import com.lyreo.platform.jobs.application.BackgroundJobService;
 import com.lyreo.analytics.application.port.AnalyticsProjectionRepository;
 import com.lyreo.analytics.infrastructure.persistence.JdbcAnalyticsProjectionRepository;
 import com.lyreo.platform.config.application.ConsumerReceiptStore;
@@ -26,6 +28,7 @@ public class AnalyticsConfiguration {
         AnalyticsProjectionRepository repository,
         ObjectProvider<ConsumerReceiptStore> receiptStoreProvider,
         ObjectProvider<Clock> clockProvider,
+        ObjectProvider<BackgroundJobService> jobsProvider,
         NamedParameterJdbcTemplate jdbc
     ) {
         ConsumerReceiptStore receiptStore = receiptStoreProvider.getIfAvailable(() ->
@@ -43,7 +46,11 @@ public class AnalyticsConfiguration {
         return new AnalyticsService(
             repository,
             receiptStore,
-            clockProvider.getIfAvailable(Clock::systemUTC)
+            clockProvider.getIfAvailable(Clock::systemUTC),
+            jobsProvider.getIfAvailable() == null ? null : since -> {
+                var counts = jobsProvider.getObject().healthCounts(since);
+                return new JobHealthSource.Counts(counts.active(), counts.failedSince(), counts.succeededSince());
+            }
         );
     }
 }

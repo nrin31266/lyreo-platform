@@ -15,7 +15,7 @@ import com.lyreo.assessment.infrastructure.persistence.JdbcQuestionSource;
 import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.entitlement.application.internal.DefaultEntitlementService;
 import com.lyreo.entitlement.infrastructure.persistence.JdbcFeatureRepository;
-import com.lyreo.entitlement.infrastructure.persistence.JdbcUserEntitlementGrantRepository;
+import com.lyreo.entitlement.infrastructure.persistence.JdbcLearnerPlanRepository;
 import com.lyreo.contracts.toeic.ToeicAttemptCompletedEvent;
 import com.lyreo.gamification.application.MissionEventListener;
 import com.lyreo.gamification.application.MissionProgressService;
@@ -80,6 +80,9 @@ class FlywayMigrationIT {
     @Autowired
     private PlatformTransactionManager transactions;
 
+    @Autowired
+    private MissionProgressService missionProgressService;
+
     @Test
     void removingProviderErasesCredentialAndDisablesOnlyItsRoutes() {
         var repository = new com.lyreo.ai.infrastructure.persistence.JdbcAiAdminRepository(
@@ -106,7 +109,7 @@ class FlywayMigrationIT {
     void verifiesConsolidatedBaselineMigrationsSucceeded() {
         MigrationInfo[] applied = flyway.info().applied();
 
-        assertThat(applied).hasSize(11).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
+        assertThat(applied).hasSize(18).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
@@ -123,7 +126,14 @@ class FlywayMigrationIT {
         assertThat(applied[9].getDescription()).isEqualTo("learner platform core");
         assertThat(applied[10].getVersion().getVersion()).isEqualTo("011");
         assertThat(applied[10].getDescription()).isEqualTo("platform experience upgrade");
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("011");
+        assertThat(applied[11].getDescription()).isEqualTo("learner membership plan");
+        assertThat(applied[12].getDescription()).isEqualTo("learner toeic target");
+        assertThat(applied[13].getDescription()).isEqualTo("learner account access");
+        assertThat(applied[14].getDescription()).isEqualTo("targeted notifications and admin activity");
+        assertThat(applied[15].getDescription()).isEqualTo("notification recipient directory");
+        assertThat(applied[16].getDescription()).isEqualTo("notification publication safety");
+        assertThat(applied[17].getDescription()).isEqualTo("learner notification read and policy audit");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("018");
     }
 
     @Test
@@ -149,7 +159,10 @@ class FlywayMigrationIT {
             "dataset_active_release",
             "entitlement_feature",
             "user_entitlement_grant",
-            "module_runtime_config"
+            "learner_plus_period",
+            "module_runtime_config",
+            "learner_notification_read",
+            "reward_policy_audit"
         );
 
         // AI & Lesson
@@ -522,59 +535,44 @@ class FlywayMigrationIT {
     }
 
     @Test
-    void evaluatesEntitlementExpiryAndRevocationAgainstPostgres() {
+    void evaluatesMembershipExpiryAndDowngradeAgainstPostgres() {
         UUID learner = UUID.randomUUID();
-        UUID grant = UUID.randomUUID();
+        UUID period = UUID.randomUUID();
         Instant now = Instant.parse("2026-09-27T00:00:00Z");
         jdbcTemplate.update("INSERT INTO app_user(id,keycloak_subject) VALUES(?,?)",
-            learner, "grant-" + learner);
+            learner, "membership-" + learner);
         jdbcTemplate.update("""
-            INSERT INTO entitlement_feature(feature_key,display_name)
-            VALUES('grammar.advanced','Advanced grammar')
-            ON CONFLICT (feature_key) DO NOTHING
-            """);
-        jdbcTemplate.update("""
-            INSERT INTO user_entitlement_grant(
-                id,user_id,feature_key,status,valid_from,valid_until,source_type,created_by
-            ) VALUES(?,?,'grammar.advanced','ACTIVE',?,?, 'MANUAL','test')
-            """, grant, learner, java.sql.Timestamp.from(now.minusSeconds(60)),
+            INSERT INTO learner_plus_period(id, learner_id, starts_at, ends_at)
+            VALUES(?, ?, ?, ?)
+            """, period, learner, java.sql.Timestamp.from(now.minusSeconds(60)),
             java.sql.Timestamp.from(now.plusSeconds(60)));
         var named = new NamedParameterJdbcTemplate(jdbcTemplate.getDataSource());
         var service = new DefaultEntitlementService(
-            new JdbcFeatureRepository(named), new JdbcUserEntitlementGrantRepository(named),
+            new JdbcFeatureRepository(named), new JdbcLearnerPlanRepository(named),
             Clock.fixed(now, ZoneOffset.UTC));
         FeatureKey key = FeatureKey.of("grammar.advanced");
         assertThat(service.hasFeature(learner, key)).isTrue();
-        jdbcTemplate.update("""
-            UPDATE user_entitlement_grant
-               SET status='REVOKED',revoked_at=now(),revoked_by='test'
-             WHERE id=?
-            """, grant);
-        assertThat(service.hasFeature(learner, key)).isFalse();
-        jdbcTemplate.update("""
-            INSERT INTO user_entitlement_grant(
-                id,user_id,feature_key,status,valid_from,valid_until,source_type,created_by
-            ) VALUES(?,?,'grammar.advanced','ACTIVE',?,?, 'MANUAL','test')
-            """, UUID.randomUUID(), learner, java.sql.Timestamp.from(now.minusSeconds(120)),
-            java.sql.Timestamp.from(now.minusSeconds(60)));
+        jdbcTemplate.update("UPDATE learner_plus_period SET ends_at = ? WHERE id = ?",
+            java.sql.Timestamp.from(now), period);
         assertThat(service.hasFeature(learner, key)).isFalse();
         assertThatThrownBy(() -> jdbcTemplate.update("""
-            INSERT INTO user_entitlement_grant(
-                id,user_id,feature_key,status,valid_from,valid_until,source_type,created_by
-            ) VALUES(?,?,'grammar.advanced','ACTIVE',?,?, 'MANUAL','test')
-            """, UUID.randomUUID(), learner, java.sql.Timestamp.from(now.plusSeconds(60)),
+            INSERT INTO learner_plus_period(learner_id, starts_at, ends_at)
+            VALUES(?, ?, ?)
+            """, learner, java.sql.Timestamp.from(now.plusSeconds(60)),
             java.sql.Timestamp.from(now.minusSeconds(60)))).isInstanceOf(Exception.class);
     }
 
     @Test
     void toeicDrillMissionWritesDiamondRewardOnlyOnce() {
         UUID learner = UUID.randomUUID();
+        UUID missionId = UUID.fromString("10000000-0000-0000-0000-000000000003");
         jdbcTemplate.update("INSERT INTO app_user(id,keycloak_subject) VALUES(?,?)",
             learner, "mission-" + learner);
         try {
             var named = new NamedParameterJdbcTemplate(jdbcTemplate.getDataSource());
-            var listener = new MissionEventListener(new MissionProgressService(
-                new JdbcMissionProgressRepository(named), new JdbcDiamondLedger(named)));
+            var service = new MissionProgressService(
+                new JdbcMissionProgressRepository(named), new JdbcDiamondLedger(named));
+            var listener = new MissionEventListener(service);
             var event = new ToeicAttemptCompletedEvent(
                 learner, UUID.randomUUID(), UUID.randomUUID(), "DRILL",
                 1, 1, 1, 1, null, null, Instant.now());
@@ -583,16 +581,24 @@ class FlywayMigrationIT {
             listener.toeic(event);
 
             assertThat(jdbcTemplate.queryForObject("""
+                SELECT progress FROM mission_progress
+                 WHERE learner_id = ? AND mission_id = '10000000-0000-0000-0000-000000000003'
+                """, Integer.class, learner)).isEqualTo(1);
+            assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM diamond_transaction
+                 WHERE learner_id = ? AND transaction_type = 'MISSION_REWARD'
+                """, Integer.class, learner)).isZero();
+
+            service.claim(learner, missionId);
+            assertThat(jdbcTemplate.queryForObject("""
                 SELECT count(*) FROM diamond_transaction
                  WHERE learner_id = ? AND transaction_type = 'MISSION_REWARD'
                 """, Integer.class, learner)).isEqualTo(1);
             assertThat(jdbcTemplate.queryForObject(
                 "SELECT cached_balance FROM diamond_wallet WHERE learner_id = ?",
                 Integer.class, learner)).isEqualTo(4);
-            assertThat(jdbcTemplate.queryForObject("""
-                SELECT progress FROM mission_progress
-                 WHERE learner_id = ? AND mission_id = '10000000-0000-0000-0000-000000000003'
-                """, Integer.class, learner)).isEqualTo(1);
+            assertThatThrownBy(() -> service.claim(learner, missionId))
+                .isInstanceOf(com.lyreo.contracts.errors.StateConflictException.class);
         } finally {
             jdbcTemplate.update("DELETE FROM app_user WHERE id = ?", learner);
         }
@@ -602,6 +608,7 @@ class FlywayMigrationIT {
     void toeicDrillMissionPublicationCompletesAndDoesNotDuplicateReward() throws InterruptedException {
         UUID learner = UUID.randomUUID();
         UUID attempt = UUID.randomUUID();
+        UUID missionId = UUID.fromString("10000000-0000-0000-0000-000000000003");
         jdbcTemplate.update("INSERT INTO app_user(id,keycloak_subject) VALUES(?,?)",
             learner, "mission-publication-" + learner);
         try {
@@ -634,11 +641,22 @@ class FlywayMigrationIT {
             }
             assertThat(completedPublications).isEqualTo(2);
             assertThat(jdbcTemplate.queryForObject("""
+                SELECT progress FROM mission_progress
+                 WHERE learner_id = ? AND mission_id = '10000000-0000-0000-0000-000000000003'
+                """, Integer.class, learner)).isEqualTo(1);
+            assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM diamond_transaction WHERE learner_id = ?
+                """, Integer.class, learner)).isZero();
+
+            missionProgressService.claim(learner, missionId);
+            assertThat(jdbcTemplate.queryForObject("""
                 SELECT count(*) FROM diamond_transaction WHERE learner_id = ?
                 """, Integer.class, learner)).isEqualTo(1);
             assertThat(jdbcTemplate.queryForObject(
                 "SELECT cached_balance FROM diamond_wallet WHERE learner_id = ?",
                 Integer.class, learner)).isEqualTo(4);
+            assertThatThrownBy(() -> missionProgressService.claim(learner, missionId))
+                .isInstanceOf(com.lyreo.contracts.errors.StateConflictException.class);
         } finally {
             jdbcTemplate.update("DELETE FROM event_publication WHERE serialized_event LIKE ?",
                 "%" + attempt + "%");

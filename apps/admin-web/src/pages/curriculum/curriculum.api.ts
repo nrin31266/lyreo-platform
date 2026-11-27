@@ -25,6 +25,7 @@ export const curriculumUnlockRules: CurriculumUnlockRule[] = ['NONE', 'PREVIOUS_
 export type ItemSliceConfig = {
   entryIds?: string[];
   sentenceIds?: string[];
+  subtopicIds?: string[];
   activityType?: 'SHADOWING' | 'DICTATION';
   parts?: number[];
   questionCount?: number;
@@ -40,6 +41,7 @@ export type AdminCurriculumItem = {
   required: boolean;
   unlockRule: CurriculumUnlockRule;
   config?: ItemSliceConfig;
+  contentTitle?: string | null;
 };
 
 export type AdminCurriculumSection = {
@@ -84,7 +86,7 @@ export type SaveCurriculumSectionInput = {
 };
 
 export type SaveCurriculumPathInput = {
-  code: string;
+  code?: string;
   name: string;
   level: string | null;
   description: string | null;
@@ -95,30 +97,6 @@ export type SaveCurriculumPathInput = {
   sections: SaveCurriculumSectionInput[];
 };
 
-export type CurriculumItemDiagnosticCheck = {
-  itemId: string;
-  sectionPosition: number;
-  itemPosition: number;
-  contentType: CurriculumContentType;
-  contentReferenceId: string;
-  title: string | null;
-  exists: boolean;
-  accessMode: string;
-  requiredFeatureKey: string | null;
-  sliceValid: boolean;
-  sliceCount: number;
-  message: string;
-};
-
-export type CurriculumPathDiagnostic = {
-  pathId: string;
-  totalItems: number;
-  validItems: number;
-  missingItems: number;
-  lockedForFreeUsers: number;
-  checks: CurriculumItemDiagnosticCheck[];
-};
-
 const base = '/api/v1/admin/curriculum/paths';
 
 export function fetchAdminCurriculumPaths(signal?: AbortSignal) {
@@ -127,10 +105,6 @@ export function fetchAdminCurriculumPaths(signal?: AbortSignal) {
 
 export function fetchAdminCurriculumPath(pathId: string, signal?: AbortSignal) {
   return api<AdminCurriculumPath>(`${base}/${encodeURIComponent(pathId)}`, { signal });
-}
-
-export function fetchCurriculumPathDiagnostics(pathId: string, signal?: AbortSignal) {
-  return api<CurriculumPathDiagnostic>(`${base}/${encodeURIComponent(pathId)}/diagnostics`, { signal });
 }
 
 export function createAdminCurriculumPath(body: SaveCurriculumPathInput) {

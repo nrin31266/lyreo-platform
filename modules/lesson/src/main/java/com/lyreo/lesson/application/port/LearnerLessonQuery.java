@@ -35,6 +35,10 @@ public interface LearnerLessonQuery {
         return Optional.empty();
     }
 
+    default List<CategoryFilterItem> listVisibleCategories() {
+        return List.of();
+    }
+
     AttemptPage listAttempts(
         UUID learnerId,
         UUID lessonId,
@@ -46,6 +50,8 @@ public interface LearnerLessonQuery {
     );
 
     record CategorySummary(UUID id, String name, Map<String, String> translations) {}
+
+    record CategoryFilterItem(UUID id, String name, Map<String, String> translations, long lessonCount) {}
 
     record ProgressSummary(
         String status,
@@ -110,7 +116,12 @@ public interface LearnerLessonQuery {
         }
     }
 
-    record CatalogPage(List<CatalogItem> items, long total, int page, int size) {}
+    record CatalogPage(List<CatalogItem> items, long total, int page, int size) {
+        @com.fasterxml.jackson.annotation.JsonProperty("hasMore")
+        public boolean hasMore() {
+            return (long) (page + 1) * size < total;
+        }
+    }
 
     record ActivityProgressItem(
         UUID id,
@@ -249,5 +260,10 @@ public interface LearnerLessonQuery {
         Instant createdAt
     ) {}
 
-    record AttemptPage(List<AttemptItem> items, long total, int page, int size) {}
+    record AttemptPage(List<AttemptItem> items, long total, int page, int size) {
+        @com.fasterxml.jackson.annotation.JsonProperty("hasMore")
+        public boolean hasMore() {
+            return (long) (page + 1) * size < total;
+        }
+    }
 }

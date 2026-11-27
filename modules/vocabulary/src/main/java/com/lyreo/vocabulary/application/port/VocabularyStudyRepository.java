@@ -40,6 +40,18 @@ public interface VocabularyStudyRepository {
 
     List<SessionRow> findSessions(UUID learnerId, UUID unitId, String status);
 
+    default List<SessionRow> findSessionsPage(UUID learnerId, UUID unitId, String status, int offset, int limit) {
+        List<SessionRow> all = findSessions(learnerId, unitId, status);
+        if (offset >= all.size()) {
+            return List.of();
+        }
+        return all.subList(offset, Math.min(all.size(), offset + limit));
+    }
+
+    default long countSessions(UUID learnerId, UUID unitId, String status) {
+        return findSessions(learnerId, unitId, status).size();
+    }
+
     int updateAnswers(UUID id, long expectedRevision, String answersJson);
 
     int markSubmitted(UUID id, long expectedRevision, String resultJson, Instant submittedAt);

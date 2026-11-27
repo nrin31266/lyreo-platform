@@ -1,7 +1,7 @@
 export type CatalogPage<T> = { items: T[]; total: number; page: number; size: number };
 export type Document<T> = { id: string; revision: number; hasUnpublishedChanges: boolean; status: string; publicationId: string | null; draft: T; updatedAt: string | null; updatedBy: string | null };
 export type Publication<T> = { id: string; revision: number; content: T; reason: string; publishedAt: string; publishedBy: string };
-export type Summary = { qualityStatus?: string; parentId?: string | null; requiresContext?: boolean; partOfSpeech?: string; senseCount?: number; definition?: string; translationVi?: string; difficultyLevel?: number | null; year?: number | null; id: string; title: string; titleEn?: string | null; status: string; type?: string; questionCount?: number; accessMode?: string; cursor?: string };
+export type Summary = { qualityStatus?: string; parentId?: string | null; requiresContext?: boolean; toeicPart?: number | null; partOfSpeech?: string; senseCount?: number; definition?: string; translationVi?: string; difficultyLevel?: number | null; year?: number | null; id: string; title: string; titleEn?: string | null; status: string; type?: string; questionCount?: number; accessMode?: string; cursor?: string };
 export type Media = { assetId: string; role: "audio" | "image" };
 export type Question = { combinedTranslationVi?: string | null; title: string; kind: string; options: { key: string; text: string }[]; correctOption: string | null; difficultyLevel: number | null; explanationVi: string | null; translationVi: string | null; answerTranslationVi: string | null; vocabularyNote: string | null; transcriptEn: string | null; media: Media[] };
 export type QuestionRef = { itemId: string; publicationId: string | null };

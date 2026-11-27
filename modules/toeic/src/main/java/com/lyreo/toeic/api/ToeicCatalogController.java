@@ -4,6 +4,13 @@ import com.lyreo.assessment.api.AssessmentSessions;
 import com.lyreo.identity.application.AppUserProvisioningService;
 import com.lyreo.platform.content.CatalogPage;
 import com.lyreo.toeic.application.PublishedToeicTests;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import java.net.URI;
 import java.util.*;
 import org.springframework.http.ResponseEntity;
@@ -16,19 +23,23 @@ import org.springframework.web.bind.annotation.*;
 public class ToeicCatalogController {
     private final PublishedToeicTests tests;private final AppUserProvisioningService users;
     public ToeicCatalogController(PublishedToeicTests tests,AppUserProvisioningService users) {this.tests=tests;this.users=users;}
-    public record Start(String mode,List<UUID> placementIds,List<Integer> parts) {
+    public record Start(
+        @NotBlank @Pattern(regexp = "FULL_TEST|DRILL") String mode,
+        @Size(max = 200) List<@NotNull UUID> placementIds,
+        @Size(max = 7) List<@NotNull @Min(1) @Max(7) Integer> parts
+    ) {
         public Start(String mode,List<UUID> placementIds) {this(mode,placementIds,null);}
     }
     private UUID learner(Jwt jwt) {return users.provision(jwt.getSubject(),jwt.getClaimAsString("email")).id();}
-    @GetMapping public List<PublishedToeicTests.Catalog> list(@AuthenticationPrincipal Jwt jwt,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {return tests.list(learner(jwt),page,size);}
-    @GetMapping("/page") public CatalogPage<PublishedToeicTests.Catalog> page(@AuthenticationPrincipal Jwt jwt,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {return tests.page(learner(jwt),page,size);}
+    @GetMapping public List<PublishedToeicTests.Catalog> list(@AuthenticationPrincipal Jwt jwt,@RequestParam(defaultValue="0") @Min(0) @Max(100000) int page,@RequestParam(defaultValue="20") @Min(1) @Max(100) int size) {return tests.list(learner(jwt),page,size);}
+    @GetMapping("/page") public CatalogPage<PublishedToeicTests.Catalog> page(@AuthenticationPrincipal Jwt jwt,@RequestParam(defaultValue="0") @Min(0) @Max(100000) int page,@RequestParam(defaultValue="20") @Min(1) @Max(100) int size) {return tests.page(learner(jwt),page,size);}
     @GetMapping("/{id}") public PublishedToeicTests.Catalog detail(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id) {return tests.detail(learner(jwt),id);}
     @PostMapping("/{id}/sessions")
     public ResponseEntity<AssessmentSessions.View> start(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable UUID id,
         @RequestHeader(value="Idempotency-Key",required=false) String idempotencyKey,
-        @RequestBody Start input
+        @Valid @RequestBody Start input
     ) {
         boolean hasParts = input.parts() != null;
         boolean hasIdempotency = idempotencyKey != null && !idempotencyKey.isBlank();

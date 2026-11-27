@@ -4,7 +4,6 @@ import com.lyreo.curriculum.application.CurriculumAdminService;
 import com.lyreo.curriculum.domain.CurriculumItem;
 import com.lyreo.curriculum.domain.CurriculumPath;
 import com.lyreo.curriculum.domain.CurriculumPathDetail;
-import com.lyreo.curriculum.domain.CurriculumPathDiagnostic;
 import com.lyreo.curriculum.domain.CurriculumSection;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -44,11 +43,6 @@ public class AdminCurriculumController {
     @GetMapping("/{id}")
     public CurriculumPathDetail getPath(@PathVariable UUID id) {
         return adminService.getPath(id);
-    }
-
-    @GetMapping("/{id}/diagnostics")
-    public CurriculumPathDiagnostic diagnosePath(@PathVariable UUID id) {
-        return adminService.diagnosePath(id);
     }
 
     @PostMapping
@@ -159,7 +153,7 @@ public class AdminCurriculumController {
     }
 
     public record CreatePathRequest(
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         String level,
         String description,

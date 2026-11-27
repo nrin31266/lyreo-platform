@@ -1,5 +1,8 @@
 .jobs-page { display: grid; gap: 20px; min-width: 0; }
-.jobs-toolbar, .jobs-filters, .jobs-lookup, .jobs-sync, .jobs-pagination, .jobs-pagination > div, .jobs-detail-actions, .jobs-detail-heading { display: flex; align-items: center; gap: 10px; }
+.jobs-header-actions, .jobs-quick-pills, .jobs-row-actions, .jobs-toolbar, .jobs-filters, .jobs-lookup, .jobs-sync, .jobs-pagination, .jobs-pagination > div, .jobs-detail-actions, .jobs-detail-heading { display: flex; align-items: center; gap: 10px; }
+.jobs-header-actions { flex-wrap: wrap; }
+.jobs-quick-pills { gap: 4px; padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--muted); }
+.jobs-row-actions { gap: 6px; }
 .jobs-toolbar { justify-content: space-between; flex-wrap: wrap; padding-block: 12px; border-block: 1px solid var(--border); }
 .jobs-filters { flex-wrap: wrap; }
 .jobs-lookup { flex: 1 1 350px; max-width: 490px; }
@@ -8,12 +11,12 @@
 .jobs-sync > span:nth-of-type(2) { margin-left: auto; }
 .jobs-connection { width: 7px; height: 7px; background: var(--warning); border-radius: 50%; }
 .jobs-connection[data-connected='true'] { background: var(--primary); }
-.jobs-table { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.jobs-table { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-xl); overflow: hidden; }
 .jobs-table th { height: 42px; background: var(--muted); font-size: 12px; }
 .jobs-table td { vertical-align: middle; padding-block: 14px; }
 .jobs-task { display: grid; gap: 6px; text-align: start; max-width: 240px; }
 .jobs-task strong { font-size: 14px; font-weight: 500; }
-.jobs-task span { color: var(--muted-foreground); font-size: 11px; font-variant-numeric: tabular-nums; }
+.jobs-task span { color: var(--muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; }
 .jobs-task:hover strong { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
 .jobs-task:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-radius: 2px; }
 .jobs-progress { display: grid; gap: 6px; min-width: 130px; max-width: 250px; font-size: 12px; white-space: normal; overflow-wrap: anywhere; }

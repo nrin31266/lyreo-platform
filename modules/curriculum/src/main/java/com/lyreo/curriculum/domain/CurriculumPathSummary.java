@@ -51,4 +51,9 @@ public record CurriculumPathSummary(
             createdAt, updatedAt
         );
     }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("coverUrl")
+    public String coverUrl() {
+        return coverAssetId != null ? "/api/v1/curriculum/paths/" + id + "/cover" : null;
+    }
 }

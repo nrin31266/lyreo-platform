@@ -22,17 +22,14 @@ FROM (VALUES
 WHERE EXISTS (SELECT 1 FROM app_user u WHERE u.id = v.id)
 ON CONFLICT (learner_id) DO NOTHING;
 
--- 2. Entitlement grants: Minh Anh active PLUS; Gia Huy expired toeic.full-access only; New Learner none
-INSERT INTO user_entitlement_grant (
-    id, user_id, feature_key, status, valid_from, valid_until, source_type, source_reference, created_by
-) VALUES
-    ('50000000-0000-0000-0000-000000000011', '30000000-0000-0000-0000-000000000001', 'vocabulary.plus-packs', 'ACTIVE', now() - interval '7 days', now() + interval '365 days', 'DEV_SEED', 'demo-plus', 'seed-demo'),
-    ('50000000-0000-0000-0000-000000000012', '30000000-0000-0000-0000-000000000001', 'vocabulary.saved-cards', 'ACTIVE', now() - interval '7 days', now() + interval '365 days', 'DEV_SEED', 'demo-plus', 'seed-demo'),
-    ('50000000-0000-0000-0000-000000000013', '30000000-0000-0000-0000-000000000001', 'speech.shadowing', 'ACTIVE', now() - interval '7 days', now() + interval '365 days', 'DEV_SEED', 'demo-plus', 'seed-demo'),
-    ('50000000-0000-0000-0000-000000000014', '30000000-0000-0000-0000-000000000001', 'toeic.full-access', 'ACTIVE', now() - interval '7 days', now() + interval '365 days', 'DEV_SEED', 'demo-plus', 'seed-demo'),
-    ('50000000-0000-0000-0000-000000000015', '30000000-0000-0000-0000-000000000001', 'grammar.advanced', 'ACTIVE', now() - interval '7 days', now() + interval '365 days', 'DEV_SEED', 'demo-plus', 'seed-demo'),
-    ('50000000-0000-0000-0000-000000000016', '30000000-0000-0000-0000-000000000001', 'chat.tutor', 'ACTIVE', now() - interval '7 days', now() + interval '365 days', 'DEV_SEED', 'demo-plus', 'seed-demo'),
-    ('50000000-0000-0000-0000-000000000021', '30000000-0000-0000-0000-000000000002', 'toeic.full-access', 'ACTIVE', now() - interval '30 days', now() - interval '1 day', 'DEV_SEED', 'demo-expired', 'seed-demo')
+-- 2. Membership plans: Minh Anh has Plus, Gia Huy had a trial, the new learner is Free
+INSERT INTO learner_plus_period (id, learner_id, starts_at, ends_at, started_by, ended_by)
+SELECT v.id, v.learner_id, v.starts_at, v.ends_at, v.started_by, v.ended_by
+FROM (VALUES
+    ('50000000-0000-0000-0000-000000000011'::uuid, '30000000-0000-0000-0000-000000000001'::uuid, now() - interval '7 days', now() + interval '365 days', 'seed-demo', NULL),
+    ('50000000-0000-0000-0000-000000000021'::uuid, '30000000-0000-0000-0000-000000000002'::uuid, now() - interval '30 days', now() - interval '1 day', 'seed-demo', NULL)
+) AS v(id, learner_id, starts_at, ends_at, started_by, ended_by)
+WHERE NOT EXISTS (SELECT 1 FROM learner_plus_period p WHERE p.learner_id = v.learner_id)
 ON CONFLICT (id) DO NOTHING;
 
 -- 3. Deterministic content-addressed media blobs (matching scripts/seed-demo.sh files)
@@ -1003,16 +1000,14 @@ FROM (VALUES
 WHERE EXISTS (SELECT 1 FROM app_user u WHERE u.id = v.id)
 ON CONFLICT (learner_id) DO NOTHING;
 
-INSERT INTO user_entitlement_grant (
-    id, user_id, feature_key, status, valid_from, valid_until, source_type, source_reference, created_by, revoked_at, revoked_by, revocation_reason
-) VALUES
-    ('50000000-0000-0000-0000-000000000031', '30000000-0000-0000-0000-000000000004', 'vocabulary.plus-packs', 'ACTIVE', now() - interval '14 days', now() + interval '180 days', 'ADMIN_MANUAL', 'cohort-workplace-b2', 'seed-demo', NULL, NULL, NULL),
-    ('50000000-0000-0000-0000-000000000032', '30000000-0000-0000-0000-000000000004', 'speech.shadowing', 'ACTIVE', now() - interval '14 days', now() + interval '180 days', 'ADMIN_MANUAL', 'cohort-workplace-b2', 'seed-demo', NULL, NULL, NULL),
-    ('50000000-0000-0000-0000-000000000033', '30000000-0000-0000-0000-000000000004', 'chat.tutor', 'ACTIVE', now() - interval '14 days', now() + interval '180 days', 'ADMIN_MANUAL', 'cohort-workplace-b2', 'seed-demo', NULL, NULL, NULL),
-    ('50000000-0000-0000-0000-000000000034', '30000000-0000-0000-0000-000000000006', 'toeic.full-access', 'ACTIVE', now() - interval '20 days', now() + interval '365 days', 'ADMIN_MANUAL', 'toeic-scholar', 'seed-demo', NULL, NULL, NULL),
-    ('50000000-0000-0000-0000-000000000035', '30000000-0000-0000-0000-000000000006', 'grammar.advanced', 'ACTIVE', now() - interval '20 days', now() + interval '365 days', 'ADMIN_MANUAL', 'toeic-scholar', 'seed-demo', NULL, NULL, NULL),
-    ('50000000-0000-0000-0000-000000000036', '30000000-0000-0000-0000-000000000006', 'vocabulary.plus-packs', 'ACTIVE', now() - interval '20 days', now() + interval '365 days', 'ADMIN_MANUAL', 'toeic-scholar', 'seed-demo', NULL, NULL, NULL),
-    ('50000000-0000-0000-0000-000000000037', '30000000-0000-0000-0000-000000000007', 'speech.shadowing', 'REVOKED', now() - interval '10 days', now() + interval '20 days', 'ADMIN_MANUAL', 'trial-pass', 'seed-demo', now() - interval '6 hours', 'seed-demo', 'Hết thời gian trải nghiệm thử')
+INSERT INTO learner_plus_period (id, learner_id, starts_at, ends_at, started_by, ended_by)
+SELECT v.id, v.learner_id, v.starts_at, v.ends_at, v.started_by, v.ended_by
+FROM (VALUES
+    ('50000000-0000-0000-0000-000000000031'::uuid, '30000000-0000-0000-0000-000000000004'::uuid, now() - interval '14 days', now() + interval '180 days', 'seed-demo', NULL),
+    ('50000000-0000-0000-0000-000000000034'::uuid, '30000000-0000-0000-0000-000000000006'::uuid, now() - interval '20 days', now() + interval '365 days', 'seed-demo', NULL),
+    ('50000000-0000-0000-0000-000000000037'::uuid, '30000000-0000-0000-0000-000000000007'::uuid, now() - interval '10 days', now() - interval '6 hours', 'seed-demo', 'seed-demo')
+) AS v(id, learner_id, starts_at, ends_at, started_by, ended_by)
+WHERE NOT EXISTS (SELECT 1 FROM learner_plus_period p WHERE p.learner_id = v.learner_id)
 ON CONFLICT (id) DO NOTHING;
 
 -- 11. Three additional PUBLISHED audio lessons with spoken WAVs & calibrated timings

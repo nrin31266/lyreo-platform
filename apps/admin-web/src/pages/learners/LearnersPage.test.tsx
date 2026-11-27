@@ -1,19 +1,22 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { i18n } from '@/i18n';
 import { ApiError } from '@/lib/api';
 import { LearnerDetailPage, LearnersPage } from './LearnersPage';
 import {
   adjustLearnerDiamonds,
-  createLearnerGrant,
   fetchLearner,
   fetchLearnerGamification,
-  fetchLearnerGrants,
+  fetchLearnerAccount,
+  resetLearnerPassword,
+  setLearnerAccountLock,
+  fetchLearnerPlan,
   fetchLearners,
-  revokeLearnerGrant,
+  updateLearnerPlan,
   updateLearnerAppearance,
   type LearnerEntry,
 } from './learners.api';
@@ -37,10 +40,12 @@ vi.mock('./learners.api', async importOriginal => ({
   updateLearnerAppearance: vi.fn(),
   fetchLearnerAvatar: vi.fn(),
   uploadLearnerAvatar: vi.fn(),
-  fetchLearnerGrants: vi.fn(),
-  createLearnerGrant: vi.fn(),
-  revokeLearnerGrant: vi.fn(),
+  fetchLearnerPlan: vi.fn(),
+  updateLearnerPlan: vi.fn(),
   fetchLearnerGamification: vi.fn(),
+  fetchLearnerAccount: vi.fn(),
+  resetLearnerPassword: vi.fn(),
+  setLearnerAccountLock: vi.fn(),
   adjustLearnerDiamonds: vi.fn(),
 }));
 
@@ -57,6 +62,7 @@ const ada: LearnerEntry = {
   focusArea: 'LISTENING',
   avatarPreset: null,
   avatarUploadId: null,
+  toeicTargetScore: null,
 };
 const pending: LearnerEntry = {
   ...ada,
@@ -78,7 +84,8 @@ beforeEach(async () => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.mocked(fetchLearners).mockResolvedValue({ items: [ada], total: 41, page: 0, size: 20 });
   vi.mocked(fetchLearner).mockResolvedValue(ada);
-  vi.mocked(fetchLearnerGrants).mockResolvedValue([]);
+  vi.mocked(fetchLearnerAccount).mockResolvedValue({ management: 'UNMANAGED', locked: false, syncPending: false });
+  vi.mocked(fetchLearnerPlan).mockResolvedValue({ tier: 'FREE', validUntil: null, history: [] });
   vi.mocked(fetchLearnerAnalytics).mockResolvedValue({
     hasHistory: false,
     today: { fromDate: '2026-11-26', toDate: '2026-11-26', activeDays: 0, studySeconds: 0, lessonCount: 0, vocabularyReviewCount: 0, grammarAnswerCount: 0, toeicQuestionCount: 0 },
@@ -96,7 +103,10 @@ beforeEach(async () => {
       { date: '2026-11-26', studySeconds: 900, lessonCount: 2, vocabularyReviewCount: 15, grammarAnswerCount: 10, toeicQuestionCount: 5 },
     ],
     skills: [{ skillCode: 'LISTENING', score: 82.5, sampleCount: 10, updatedAt: '2026-11-26T00:00:00Z' }],
-    weaknesses: [{ weaknessType: 'GRAMMAR_TOPIC', weaknessKey: 'tenses', label: 'Verb Tenses & Aspect', severity: 64, sampleCount: 12, updatedAt: '2026-11-26T00:00:00Z' }],
+    weaknesses: [
+      { weaknessType: 'GRAMMAR_TOPIC', weaknessKey: 'tenses', label: 'Verb Tenses & Aspect', severity: 64, sampleCount: 12, updatedAt: '2026-11-26T00:00:00Z' },
+      { weaknessType: 'TOEIC_PART', weaknessKey: '5', label: null, severity: 52, sampleCount: 4, updatedAt: '2026-11-26T00:00:00Z' },
+    ],
     enrolledPaths: [{ pathId: 'p-1', pathName: 'Core A2–B1 Track', level: 'A2', status: 'IN_PROGRESS', completedItems: 3, totalItems: 8, startedAt: '2026-11-10T00:00:00Z' }],
     unlockedAchievements: [{ achievementId: 'a-1', code: 'STREAK_7', title: '7-Day Streak', badgeTier: 'BRONZE', badgeAssetId: null, unlockedAt: '2026-11-25T00:00:00Z' }],
     breakdown: { lessonsCompleted: 5, lessonsInProgress: 2, vocabCardsTotal: 120, vocabCardsMastered: 48, grammarAttempts: 30, grammarAccuracyPct: 83, toeicAttempts: 3, bestToeicScore: 760 },
@@ -124,12 +134,14 @@ function show(url = '/learners') {
   return render(
     <QueryClientProvider client={client}>
       <I18nextProvider i18n={i18n}>
-        <MemoryRouter initialEntries={[url]}>
-          <Routes>
-            <Route path="/learners" element={<LearnersPage />} />
-            <Route path="/learners/:learnerId" element={<LearnerDetailPage />} />
-          </Routes>
-        </MemoryRouter>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={[url]}>
+            <Routes>
+              <Route path="/learners" element={<LearnersPage />} />
+              <Route path="/learners/:learnerId" element={<LearnerDetailPage />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
       </I18nextProvider>
     </QueryClientProvider>,
   );
@@ -247,30 +259,11 @@ it('uses initials when a saved avatar is absent from the catalog', async () => {
 });
 
 it('upgrades a learner to Plus, downgrades back to Free, and adjusts diamonds', async () => {
-  const activeGrant = {
-    id: 'grant-1',
-    userId: ada.learnerId,
-    featureKey: 'vocabulary.plus-packs',
-    status: 'ACTIVE',
-    validFrom: '2026-11-25T00:00:00Z',
-    validUntil: null,
-    sourceType: 'ADMIN_MANUAL',
-    sourceReference: 'VIP QA',
-    createdBy: 'admin',
-    createdAt: '2026-11-25T00:00:00Z',
-    revokedAt: null,
-    revokedBy: null,
-    revocationReason: null,
-  };
-  vi.mocked(fetchLearnerGrants).mockResolvedValueOnce([]).mockResolvedValue([activeGrant]);
-  vi.mocked(createLearnerGrant).mockResolvedValue(activeGrant);
-  vi.mocked(revokeLearnerGrant).mockResolvedValue({
-    ...activeGrant,
-    status: 'REVOKED',
-    revokedAt: '2026-11-25T01:00:00Z',
-    revokedBy: 'admin',
-    revocationReason: 'Expired trial',
-  });
+  const plusChange = { tier: 'PLUS' as const, changedAt: '2026-11-25T00:00:00Z' };
+  const freeChange = { tier: 'FREE' as const, changedAt: '2026-11-25T01:00:00Z' };
+  vi.mocked(updateLearnerPlan)
+    .mockResolvedValueOnce({ tier: 'PLUS', validUntil: null, history: [plusChange] })
+    .mockResolvedValueOnce({ tier: 'FREE', validUntil: null, history: [freeChange, plusChange] });
   const adjustedSummary = {
     learnerId: ada.learnerId,
     xp: 120,
@@ -313,23 +306,19 @@ it('upgrades a learner to Plus, downgrades back to Free, and adjusts diamonds', 
   fireEvent.click(planTab);
   expect(await screen.findByText('Membership Plan')).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole('button', { name: 'Upgrade to Plus' }));
-  fireEvent.change(screen.getByLabelText('Reference note (optional)'), { target: { value: 'VIP QA' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
   fireEvent.click(screen.getByRole('button', { name: 'Confirm Plus upgrade' }));
-  await waitFor(() =>
-    expect(createLearnerGrant).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: ada.learnerId,
-        sourceType: 'ADMIN_MANUAL',
-        sourceReference: 'VIP QA',
-      }),
-    ),
-  );
+  await waitFor(() => expect(updateLearnerPlan).toHaveBeenNthCalledWith(1, ada.learnerId, 'PLUS', undefined));
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Remove Plus (to Free)' }));
-  fireEvent.change(screen.getByLabelText('Reason (optional)'), { target: { value: 'Expired trial' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Confirm remove Plus' }));
-  await waitFor(() => expect(revokeLearnerGrant).toHaveBeenCalledWith('grant-1', 'Expired trial'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Switch to Free' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm switch to Free' }));
+  await waitFor(() => expect(updateLearnerPlan).toHaveBeenNthCalledWith(2, ada.learnerId, 'FREE', undefined));
+  await screen.findByRole('button', { name: 'Upgrade to Plus' });
+  expect(updateLearnerPlan).toHaveBeenCalledTimes(2);
+  const history = screen.getByText('Plan history');
+  fireEvent.click(history);
+  expect(within(history.closest('details')!).getAllByRole('listitem').map((row) => row.querySelector('span span')?.textContent))
+    .toEqual(['Free', 'Lyreo Plus']);
 
   const rewardsTab = screen.getByRole('tab', { name: 'XP & Diamonds' });
   fireEvent.mouseDown(rewardsTab);
@@ -352,8 +341,60 @@ it('upgrades a learner to Plus, downgrades back to Free, and adjusts diamonds', 
 
 it('displays rich study profile with daily series, enrolled paths, unlocked badges, and resolved weakness labels', async () => {
   show(`/learners/${ada.learnerId}`);
+  const study = await screen.findByRole('tab', { name: 'Study & skills' });
+  expect(screen.queryByText('Core A2–B1 Track')).not.toBeInTheDocument();
+  fireEvent.mouseDown(study);
   expect(await screen.findByText('Core A2–B1 Track')).toBeInTheDocument();
   expect(screen.getByText('7-Day Streak')).toBeInTheDocument();
   expect(screen.getByText(/Verb Tenses & Aspect/)).toBeInTheDocument();
-  expect(screen.getByText('760')).toBeInTheDocument();
+  expect(screen.getByText('Highest scaled score 760')).toBeInTheDocument();
+  expect(screen.getByText('TOEIC Part 5')).toBeInTheDocument();
+  expect(screen.getByText(/Incomplete sentences/)).toBeInTheDocument();
+  const help = screen.getByRole('button', { name: /calculation for .*weakness/i });
+  act(() => help.focus());
+  expect(await screen.findByRole('tooltip')).toHaveTextContent(/mean error/i);
+});
+
+
+it('shows the TOEIC target and compact streak in the profile and unmeasured skills in their own tab', async () => {
+  const example = await fetchLearnerStudyProfile(ada.learnerId);
+  vi.mocked(fetchLearnerStudyProfile).mockResolvedValue({ ...example, hasHistory: false, skills: [] });
+  vi.mocked(fetchLearner).mockResolvedValue({ ...ada, toeicTargetScore: 750 });
+  show(`/learners/${ada.learnerId}`);
+  expect(await screen.findByText('750 points')).toBeInTheDocument();
+  expect(await screen.findByText('3 current days · 5 best')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Edit TOEIC target' })).not.toBeInTheDocument();
+  expect(screen.queryByText('No score yet')).not.toBeInTheDocument();
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'Study & skills' }));
+  expect(await screen.findAllByText('No score yet')).toHaveLength(6);
+});
+
+it('lets Admin choose password rotation and locks then unlocks a learner', async () => {
+  vi.mocked(fetchLearnerAccount).mockResolvedValue({ management: 'AVAILABLE', locked: false, syncPending: false });
+  vi.mocked(resetLearnerPassword).mockResolvedValue(undefined);
+  vi.mocked(setLearnerAccountLock)
+    .mockResolvedValueOnce({ management: 'AVAILABLE', locked: true, syncPending: false })
+    .mockResolvedValueOnce({ management: 'AVAILABLE', locked: false, syncPending: false });
+  show(`/learners/${ada.learnerId}`);
+  fireEvent.click(await screen.findByRole('button', { name: 'Reset password' }));
+  let dialog = screen.getByRole('dialog');
+  const temporary = within(dialog).getByRole('checkbox');
+  expect(temporary).not.toBeChecked();
+  fireEvent.click(temporary);
+  fireEvent.change(within(dialog).getByLabelText('New password'), { target: { value: 'Fixture-Password!87' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Reset password' }));
+  expect(await screen.findByText('Password reset.')).toBeInTheDocument();
+  expect(resetLearnerPassword).toHaveBeenCalledWith(ada.learnerId, 'Fixture-Password!87', true);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Lock account' }));
+  dialog = screen.getByRole('dialog');
+  expect(within(dialog).getByRole('textbox')).not.toBeRequired();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Lock account' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Unlock account' }));
+  dialog = screen.getByRole('dialog');
+  fireEvent.change(within(dialog).getByLabelText('Reason (optional)'), { target: { value: 'QA recovery' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Unlock account' }));
+  expect(await screen.findByText('Account unlocked.')).toBeInTheDocument();
+  expect(setLearnerAccountLock).toHaveBeenNthCalledWith(1, ada.learnerId, true, undefined);
+  expect(setLearnerAccountLock).toHaveBeenNthCalledWith(2, ada.learnerId, false, 'QA recovery');
 });

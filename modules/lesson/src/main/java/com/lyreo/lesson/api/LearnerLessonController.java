@@ -4,6 +4,10 @@ import com.lyreo.identity.application.AppUserProvisioningService;
 import com.lyreo.lesson.application.port.LearnerLessonQuery;
 import com.lyreo.lesson.application.practice.LearnerLessonService;
 import com.lyreo.lesson.application.practice.LessonPracticeService;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
@@ -45,12 +49,17 @@ public class LearnerLessonController {
         @RequestParam(required = false) String cefr,
         @RequestParam(required = false) String sourceType,
         @RequestParam(required = false) String activity,
-        @RequestParam(defaultValue = "") String q,
-        @RequestParam(defaultValue = "0") int page,
-        @RequestParam(defaultValue = "20") int size
+        @RequestParam(defaultValue = "") @Size(max = 200) String q,
+        @RequestParam(defaultValue = "0") @Min(0) @Max(100000) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
     ) {
         UUID learnerId = provision(jwt);
         return lessons.listCatalog(learnerId, categoryId, cefr, sourceType, activity, q, page, size);
+    }
+
+    @GetMapping("/categories")
+    public List<LearnerLessonQuery.CategoryFilterItem> categories() {
+        return lessons.listCategories();
     }
 
     @GetMapping("/{lessonId}")
@@ -97,8 +106,8 @@ public class LearnerLessonController {
         @RequestParam(required = false) UUID activityId,
         @RequestParam(required = false) String activityType,
         @RequestParam(required = false) UUID sentenceId,
-        @RequestParam(defaultValue = "0") int page,
-        @RequestParam(defaultValue = "20") int size
+        @RequestParam(defaultValue = "0") @Min(0) @Max(100000) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
     ) {
         UUID learnerId = provision(jwt);
         return lessons.listAttempts(learnerId, lessonId, activityId, activityType, sentenceId, page, size);

@@ -132,12 +132,40 @@ public class JdbcVocabularyRepository implements VocabularyRepository {
 
     @Override
     public List<VocabularyCard> due(UUID learnerId, Instant now, int limit) {
+        return duePage(learnerId, now, 0, limit);
+    }
+
+    @Override
+    public List<VocabularyCard> duePage(UUID learnerId, Instant now, int offset, int limit) {
         return jdbc.query("""
             SELECT * FROM vocabulary_card
              WHERE learner_id=:learner AND suspended_at IS NULL AND next_review_at <= :now
              ORDER BY next_review_at
-             LIMIT :limit
-            """, new MapSqlParameterSource().addValue("learner", learnerId).addValue("now", Timestamp.from(now)).addValue("limit", limit), this::map);
+             LIMIT :limit OFFSET :offset
+            """, new MapSqlParameterSource()
+            .addValue("learner", learnerId)
+            .addValue("now", Timestamp.from(now))
+            .addValue("limit", limit)
+            .addValue("offset", offset), this::map);
+    }
+
+    @Override
+    public long countDue(UUID learnerId, Instant now) {
+        Long count = jdbc.queryForObject("""
+            SELECT count(*) FROM vocabulary_card
+             WHERE learner_id=:learner AND suspended_at IS NULL AND next_review_at <= :now
+            """, new MapSqlParameterSource()
+            .addValue("learner", learnerId)
+            .addValue("now", Timestamp.from(now)), Long.class);
+        return count == null ? 0L : count;
+    }
+
+    @Override
+    public boolean deleteCard(UUID learnerId, UUID cardId) {
+        return jdbc.update(
+            "DELETE FROM vocabulary_card WHERE id = :id AND learner_id = :learner",
+            Map.of("id", cardId, "learner", learnerId)
+        ) > 0;
     }
 
     @Override

@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fetch_utils import archive_root as util_archive_root, safe_extract_archive, stage_verified_archive
+from release_lock import assert_drive_url_locked
 from validate_lexicon_release import validate  # noqa: E402
 
 
@@ -100,6 +101,7 @@ def run(config: Config, check: bool = False, force: bool = False) -> None:
     with tempfile.TemporaryDirectory(prefix="lexicon_run.", dir=config.workspace) as temp:
         work = Path(temp)
         archive = work / "release.tar.gz"
+        assert_drive_url_locked("lexicon", config.url, config.archive_sha256)
         stage_verified_archive(target, config.url, config.archive_sha256, archive)
         extracted = extract(archive, work / "extracted", config.version)
         verify_release(config, extracted, archive)

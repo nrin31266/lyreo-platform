@@ -2,6 +2,7 @@ package com.lyreo.assessment.api;
 
 import com.lyreo.assessment.application.port.SessionRepository;
 import com.lyreo.assessment.domain.QuestionContent;
+import com.lyreo.assessment.domain.ToeicScoreConverter;
 import com.lyreo.contracts.errors.*;
 import com.lyreo.contracts.grammar.GrammarQuestionAnsweredEvent;
 import com.lyreo.contracts.grammar.GrammarSessionCompletedEvent;
@@ -63,11 +64,32 @@ public class AssessmentSessions {
     @NamedInterface(value="api",propagate=false)
     public record Feedback(UUID id,UUID itemId,int part,int number,String answer,String correctAnswer,boolean correct,String explanationVi,String translationVi,UUID groupId,QuestionContent content,Integer gapNumber) {}
     @NamedInterface(value="api",propagate=false)
-    public record Result(int listeningCorrect,int listeningTotal,int readingCorrect,int readingTotal,int correct,int total,Integer listeningScaledScore,Integer readingScaledScore,List<Feedback> questions,List<Group> groups) {}
+    public record Result(int listeningCorrect,int listeningTotal,int readingCorrect,int readingTotal,int correct,int total,Integer listeningScaledScore,Integer readingScaledScore,List<Feedback> questions,List<Group> groups) {
+        @com.fasterxml.jackson.annotation.JsonProperty("accuracyPercent")
+        public int accuracyPercent() {
+            return total <= 0 ? 0 : (int) Math.round((correct * 100.0) / total);
+        }
+
+        @com.fasterxml.jackson.annotation.JsonProperty("totalScaledScore")
+        public Integer totalScaledScore() {
+            return (listeningScaledScore != null && readingScaledScore != null)
+                ? listeningScaledScore + readingScaledScore
+                : null;
+        }
+    }
+    @NamedInterface(value="api",propagate=false)
+    public record ScoreSummary(int listeningCorrect,int listeningTotal,int readingCorrect,int readingTotal,int correct,int total,int accuracyPercent,Integer listeningScaledScore,Integer readingScaledScore,Integer totalScaledScore) {
+        public static ScoreSummary from(Result r) {
+            if (r == null) return null;
+            return new ScoreSummary(r.listeningCorrect(),r.listeningTotal(),r.readingCorrect(),r.readingTotal(),r.correct(),r.total(),r.accuracyPercent(),r.listeningScaledScore(),r.readingScaledScore(),r.totalScaledScore());
+        }
+    }
     @NamedInterface(value="api",propagate=false)
     public record View(UUID id,String domain,UUID catalogId,String mode,long revision,String status,Instant createdAt,Instant expiresAt,String title,List<QuestionView> questions,List<GroupView> groups,Map<UUID,String> answers,Result result) {}
     @NamedInterface(value="api",propagate=false)
-    public record History(UUID id,UUID catalogId,String title,String mode,String status,Instant createdAt,Instant submittedAt,Result result) {}
+    public record History(UUID id,UUID catalogId,String title,String mode,String status,Instant createdAt,Instant submittedAt,ScoreSummary result) {}
+    @NamedInterface(value="api",propagate=false)
+    public record HistoryPage(List<History> items,long total,int page,int size,boolean hasMore) {}
 
     public View startWithIdempotency(UUID learnerId,String domain,UUID catalogId,String mode,Snapshot snapshot,String idempotencyKey) {
         String fingerprint = domain + ":" + catalogId + ":" + mode + ":" + json.writeValueAsString(snapshot);
@@ -142,7 +164,13 @@ public class AssessmentSessions {
             if(item.part()>=5) {readingTotal++;if(correct) reading++;}
             feedback.add(new Feedback(item.id(),item.itemId(),item.part(),item.number(),answer,item.content().correctOption(),correct,item.content().explanationVi(),item.content().translationVi(),item.groupId(),item.content(),item.gapNumber()));
         }
-        var result=new Result(listening,listeningTotal,reading,readingTotal,correctTotal,feedback.size(),null,null,feedback,snapshot.groups());
+        Integer listeningScaled = null;
+        Integer readingScaled = null;
+        if("toeic".equals(row.domain()) && "FULL_TEST".equalsIgnoreCase(row.mode()) && listeningTotal == 100 && readingTotal == 100) {
+            listeningScaled = ToeicScoreConverter.listeningScaled(listening);
+            readingScaled = ToeicScoreConverter.readingScaled(reading);
+        }
+        var result=new Result(listening,listeningTotal,reading,readingTotal,correctTotal,feedback.size(),listeningScaled,readingScaled,feedback,snapshot.groups());
         repository.submit(id,json.writeValueAsString(result));
         Instant now=Instant.now();
         if("toeic".equals(row.domain())) {
@@ -159,7 +187,7 @@ public class AssessmentSessions {
                 .toList();
             events.publishEvent(new ToeicAttemptCompletedEvent(
                 learnerId, id, row.catalogId(), row.mode(), listening, listeningTotal,
-                reading, readingTotal, null, null, now, parts
+                reading, readingTotal, listeningScaled, readingScaled, now, parts
             ));
         } else if("grammar".equals(row.domain())) {
             for(int index=0;index<snapshot.items().size();index++) {
@@ -177,12 +205,30 @@ public class AssessmentSessions {
     }
 
     public List<History> history(UUID learnerId,String domain,String status,UUID catalogId,int page,int size) {
+        String normalizedStatus = validateHistoryQuery(domain, status, page, size);
+        return repository.history(learnerId,domain,normalizedStatus,catalogId,page,size).stream()
+            .map(row->new History(row.id(),row.catalogId(),snapshot(row).title(),row.mode(),status(row),row.createdAt(),row.submittedAt(),ScoreSummary.from(result(row))))
+            .toList();
+    }
+
+    public HistoryPage historyPage(UUID learnerId,String domain,String status,UUID catalogId,int page,int size) {
+        String normalizedStatus = validateHistoryQuery(domain, status, page, size);
+        long total = repository.countHistory(learnerId,domain,normalizedStatus,catalogId);
+        List<History> items = total == 0
+            ? List.of()
+            : repository.history(learnerId,domain,normalizedStatus,catalogId,page,size).stream()
+                .map(row->new History(row.id(),row.catalogId(),snapshot(row).title(),row.mode(),status(row),row.createdAt(),row.submittedAt(),ScoreSummary.from(result(row))))
+                .toList();
+        return new HistoryPage(items, total, page, size, (long)(page + 1) * size < total);
+    }
+
+    private String validateHistoryQuery(String domain, String status, int page, int size) {
         if(domain==null || !Set.of("grammar","toeic").contains(domain) || page<0 || page>100000 || size<1 || size>100) throw new RequestValidationException("Invalid history page");
         String normalizedStatus = (status == null || status.isBlank()) ? null : status.trim().toUpperCase(Locale.ROOT);
         if(normalizedStatus != null && !Set.of("OPEN","SUBMITTED","EXPIRED").contains(normalizedStatus)) {
             throw new RequestValidationException("Invalid session status filter");
         }
-        return repository.history(learnerId,domain,normalizedStatus,catalogId,page,size).stream().map(row->new History(row.id(),row.catalogId(),snapshot(row).title(),row.mode(),status(row),row.createdAt(),row.submittedAt(),result(row))).toList();
+        return normalizedStatus;
     }
 
     public AssetStore.Asset media(UUID learnerId,UUID sessionId,UUID assetId) {

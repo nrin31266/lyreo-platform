@@ -29,6 +29,14 @@ type ApiErrorOptions = {
   detail?: string;
   fieldErrors?: ApiFieldError[];
   correlationId?: string;
+  featureKey?: string;
+  limitType?: string;
+  limit?: number;
+  remaining?: number;
+  resetAt?: string;
+  currentRevision?: number;
+  expiredAt?: string;
+  retryAfterSeconds?: number;
   cause?: unknown;
 };
 
@@ -42,6 +50,14 @@ export class ApiError extends Error {
   readonly detail?: string;
   readonly fieldErrors?: ApiFieldError[];
   readonly correlationId?: string;
+  readonly featureKey?: string;
+  readonly limitType?: string;
+  readonly limit?: number;
+  readonly remaining?: number;
+  readonly resetAt?: string;
+  readonly currentRevision?: number;
+  readonly expiredAt?: string;
+  readonly retryAfterSeconds?: number;
   override readonly cause?: unknown;
 
   constructor(options: ApiErrorOptions) {
@@ -56,6 +72,14 @@ export class ApiError extends Error {
     this.detail = options.detail;
     this.fieldErrors = options.fieldErrors;
     this.correlationId = options.correlationId;
+    this.featureKey = options.featureKey;
+    this.limitType = options.limitType;
+    this.limit = options.limit;
+    this.remaining = options.remaining;
+    this.resetAt = options.resetAt;
+    this.currentRevision = options.currentRevision;
+    this.expiredAt = options.expiredAt;
+    this.retryAfterSeconds = options.retryAfterSeconds;
     this.cause = options.cause;
   }
 }
@@ -75,6 +99,14 @@ export async function apiErrorFromResponse(response: Response): Promise<ApiError
     correlationId:
       response.headers.get('X-Correlation-Id')
       ?? stringProperty(body, 'correlationId'),
+    featureKey: stringProperty(body, 'featureKey'),
+    limitType: stringProperty(body, 'limitType'),
+    limit: numberProperty(body, 'limit'),
+    remaining: numberProperty(body, 'remaining'),
+    resetAt: stringProperty(body, 'resetAt'),
+    currentRevision: numberProperty(body, 'currentRevision'),
+    expiredAt: stringProperty(body, 'expiredAt'),
+    retryAfterSeconds: parseRetryAfter(response.headers.get('Retry-After')),
   });
 }
 
@@ -132,6 +164,17 @@ function fieldErrorsFrom(body: Record<string, unknown> | null): ApiFieldError[] 
 function stringProperty(record: Record<string, unknown> | null, key: string): string | undefined {
   const value = record?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function numberProperty(record: Record<string, unknown> | null, key: string): number | undefined {
+  const value = record?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function parseRetryAfter(raw: string | null): number | undefined {
+  if (!raw) return undefined;
+  const parsed = Number(raw.trim());
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

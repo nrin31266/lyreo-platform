@@ -1,5 +1,6 @@
 package com.lyreo.entitlement.api;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.modulith.NamedInterface;
@@ -8,10 +9,23 @@ import org.springframework.modulith.NamedInterface;
 @NamedInterface(value = "api", propagate = false)
 public interface EntitlementService {
 
-    /** Returns whether the user currently has an active grant for the feature. */
+    /** Returns whether the learner has an active Plus membership. */
+    default boolean isPlus(UUID userId) {
+        return false;
+    }
+
+    /** Returns the learner's current membership tier and Plus expiry timestamp when active. */
+    default PlanSummary currentPlan(UUID userId) {
+        return new PlanSummary(isPlus(userId) ? "PLUS" : "FREE", null);
+    }
+
+    @NamedInterface(value = "api", propagate = false)
+    record PlanSummary(String tier, Instant validUntil) {}
+
+    /** Returns whether the feature is active and the learner has Plus. */
     boolean hasFeature(UUID userId, FeatureKey featureKey);
 
-    /** Throws an access-denied exception when the user has no current grant. */
+    /** Throws an access-denied exception when Plus access to the feature is unavailable. */
     void requireFeature(UUID userId, FeatureKey featureKey);
 
     /** Evaluates current access, tier, quota, and lock reason without throwing. */

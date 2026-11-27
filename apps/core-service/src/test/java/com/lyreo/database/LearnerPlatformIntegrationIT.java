@@ -185,6 +185,26 @@ class LearnerPlatformIntegrationIT {
     }
 
     @Test
+    void studyBreakdownUsesSubmittedSessionsAndDoesNotTreatDrillAccuracyAsAScaledScore() throws Exception {
+        UUID learner = UUID.randomUUID();
+        jdbc.update("INSERT INTO app_user(id, keycloak_subject) VALUES (?, ?)", learner, "practice-" + learner);
+        jdbc.update("""
+            INSERT INTO assessment_session(id, learner_id, domain, mode, snapshot, result, submitted_at)
+            VALUES
+                (gen_random_uuid(), ?, 'grammar', 'TOPIC', '{}', '{"correct":3,"total":4}', now()),
+                (gen_random_uuid(), ?, 'grammar', 'TOPIC', '{}', NULL, NULL),
+                (gen_random_uuid(), ?, 'toeic', 'DRILL', '{}', '{"correct":8,"total":10}', now())
+            """, learner, learner, learner);
+
+        mvc.perform(get("/api/v1/admin/analytics/learners/" + learner + "/study-profile").with(ADMIN))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.breakdown.grammarAttempts").value(4))
+            .andExpect(jsonPath("$.breakdown.grammarAccuracyPct").value(75))
+            .andExpect(jsonPath("$.breakdown.toeicAttempts").value(1))
+            .andExpect(jsonPath("$.breakdown.bestToeicScore").value(nullValue()));
+    }
+
+    @Test
     void publishesAnnouncementsOnlyForTheCurrentAudienceAndTimeWindow() throws Exception {
         String all = createAnnouncement("For everyone", "ALL", "PUBLISHED", null, null);
         createAnnouncement("For Free", "FREE", "PUBLISHED", null, null);
@@ -200,15 +220,32 @@ class LearnerPlatformIntegrationIT {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.publishedAt").value(published.path("publishedAt").asText()));
 
+        MvcResult feedBefore = mvc.perform(get("/api/v1/notifications").with(FREE_LEARNER))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[*].title").value(hasItems("Updated for everyone", "For Free")))
+            .andExpect(jsonPath("$.items[?(@.title=='For Plus' || @.title=='Draft only' || @.title=='Scheduled' || @.title=='Expired')]").isEmpty())
+            .andExpect(jsonPath("$.items[*].createdBy").isEmpty())
+            .andReturn();
+        int initialUnread = json.readTree(feedBefore.getResponse().getContentAsString()).path("unreadCount").asInt();
+        assertThat(initialUnread).isGreaterThanOrEqualTo(2);
+
+        String notifId = published.path("id").asText();
+        mvc.perform(post("/api/v1/notifications/{id}/read", notifId).with(FREE_LEARNER))
+            .andExpect(status().isNoContent());
+        mvc.perform(get("/api/v1/notifications").param("unreadOnly", "true").with(FREE_LEARNER))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.unreadCount").value(initialUnread - 1))
+            .andExpect(jsonPath("$.items[*].title").value(not(hasItems("Updated for everyone"))));
+        mvc.perform(post("/api/v1/notifications/read-all").with(FREE_LEARNER))
+            .andExpect(status().isNoContent());
         mvc.perform(get("/api/v1/notifications").with(FREE_LEARNER))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[*].title").value(hasItems("Updated for everyone", "For Free")))
-            .andExpect(jsonPath("$[?(@.title=='For Plus' || @.title=='Draft only' || @.title=='Scheduled' || @.title=='Expired')]").isEmpty())
-            .andExpect(jsonPath("$[*].createdBy").isEmpty());
+            .andExpect(jsonPath("$.unreadCount").value(0));
+
         mvc.perform(get("/api/v1/notifications").with(PLUS_LEARNER))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[*].title").value(hasItems("Updated for everyone", "For Plus")))
-            .andExpect(jsonPath("$[*].title").value(not(hasItems("For Free"))));
+            .andExpect(jsonPath("$.items[*].title").value(hasItems("Updated for everyone", "For Plus")))
+            .andExpect(jsonPath("$.items[*].title").value(not(hasItems("For Free"))));
         mvc.perform(get("/api/v1/notifications").with(ADMIN)).andExpect(status().isForbidden());
     }
 
@@ -223,6 +260,99 @@ class LearnerPlatformIntegrationIT {
         return mvc.perform(post("/api/v1/admin/notifications").with(ADMIN)
                 .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)))
             .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+    }
+
+    @Test
+    void requiresAnExplicitAudienceForPublicationAndLocksLegacyRecipients() throws Exception {
+        String url = "/api/v1/admin/notifications";
+        String content = "{\"title\":\"Review draft\",\"body\":\"Review feedback\"}";
+        var draft = mvc.perform(post(url).with(ADMIN).contentType(MediaType.APPLICATION_JSON).content(content))
+            .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("DRAFT"))
+            .andReturn();
+        var draftId = json.readTree(draft.getResponse().getContentAsString()).path("id").asText();
+        String publication = "{\"title\":\"Review draft\",\"body\":\"Review feedback\",\"status\":\"PUBLISHED\"}";
+        mvc.perform(post(url).with(ADMIN).contentType(MediaType.APPLICATION_JSON).content(publication))
+            .andExpect(status().isBadRequest());
+        mvc.perform(put(url + "/{id}", draftId).with(ADMIN).contentType(MediaType.APPLICATION_JSON).content(publication))
+            .andExpect(status().isBadRequest());
+
+        UUID legacyId = UUID.randomUUID();
+        jdbc.update("""
+            INSERT INTO learner_notification(id,title,body,target_audience,status,created_by)
+            VALUES (?,'Legacy private','Feedback','FREE','PUBLISHED','fixture')
+            """, legacyId);
+        mvc.perform(put(url + "/{id}", legacyId).with(ADMIN).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Legacy private\",\"body\":\"Feedback\",\"targetAudience\":\"ALL\"}"))
+            .andExpect(status().isConflict());
+        mvc.perform(put(url + "/{id}", legacyId).with(ADMIN).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Legacy revised\",\"body\":\"Feedback\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PUBLISHED"))
+            .andExpect(jsonPath("$.publishedAt").isNotEmpty());
+    }
+
+    @Test
+    void recordsScheduledPublicationWithItsExpectedTime() throws Exception {
+        String planned = "2100-11-27T18:00:00Z";
+        createAnnouncement("Review scheduled notification", "ALL", "PUBLISHED", planned, null);
+        mvc.perform(get("/api/v1/admin/notifications/activity").param("category", "NOTIFICATION").with(ADMIN))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[?(@.detail=='Review scheduled notification')].action").value(hasItems("NOTIFICATION_SCHEDULED")))
+            .andExpect(jsonPath("$.items[?(@.detail=='Review scheduled notification')].scheduledFor").value(hasItems(planned)));
+    }
+
+    @Test
+    void deliversSelectedNotificationsPrivatelyAndLogsOnlyAdminActivity() throws Exception {
+        UUID free = jdbc.queryForObject("SELECT id FROM app_user WHERE keycloak_subject = 'offline-demo-gia-huy'", UUID.class);
+        UUID plus = jdbc.queryForObject("SELECT id FROM app_user WHERE keycloak_subject = 'offline-demo-minh-anh'", UUID.class);
+        String message = "Private review reminder";
+        var adminUrl = "/api/v1/admin/notifications";
+        String draft = json.writeValueAsString(Map.of("title", message, "body", "Review your recent practice",
+            "category", "STUDY_REMINDER", "targetAudience", "SELECTED", "recipientIds", List.of(free), "status", "DRAFT"));
+        String id = json.readTree(mvc.perform(post(adminUrl).with(ADMIN).contentType(MediaType.APPLICATION_JSON).content(draft))
+            .andExpect(status().isCreated()).andExpect(jsonPath("$.recipientIds[0]").value(free.toString()))
+            .andReturn().getResponse().getContentAsString()).path("id").asText();
+
+        mvc.perform(get("/api/v1/notifications").with(FREE_LEARNER)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[*].title").value(not(hasItems(message))));
+        mvc.perform(put(adminUrl + "/{id}", id).with(ADMIN).contentType(MediaType.APPLICATION_JSON)
+                .content(draft.replace("DRAFT", "PUBLISHED")))
+            .andExpect(status().isOk());
+        mvc.perform(get("/api/v1/notifications").with(FREE_LEARNER)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[*].title").value(hasItems(message)))
+            .andExpect(jsonPath("$.items[*].recipientIds").isEmpty());
+        mvc.perform(get("/api/v1/notifications").with(PLUS_LEARNER)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[*].title").value(not(hasItems(message))));
+
+        String group = "Review group reminder";
+        mvc.perform(post(adminUrl).with(ADMIN).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(
+                Map.of("title", group, "body", "Review your recent practice", "category", "STUDY_REMINDER",
+                    "targetAudience", "SELECTED", "recipientIds", List.of(free, plus), "status", "PUBLISHED"))))
+            .andExpect(status().isCreated());
+        mvc.perform(get("/api/v1/notifications").with(FREE_LEARNER)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[*].title").value(hasItems(group)));
+        mvc.perform(get("/api/v1/notifications").with(PLUS_LEARNER)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[*].title").value(hasItems(group)));
+        mvc.perform(get("/api/v1/notifications").with(NEW_LEARNER)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[?(@.title=='Private review reminder' || @.title=='Review group reminder')]").isEmpty());
+
+        mvc.perform(put(adminUrl + "/{id}", id).with(ADMIN).contentType(MediaType.APPLICATION_JSON)
+                .content(draft.replace("DRAFT", "PUBLISHED").replace(free.toString(), plus.toString())))
+            .andExpect(status().isConflict());
+        mvc.perform(post(adminUrl).with(ADMIN).contentType(MediaType.APPLICATION_JSON)
+                .content(draft.replace(free.toString(), UUID.randomUUID().toString())))
+            .andExpect(status().isBadRequest());
+        mvc.perform(post(adminUrl).with(ADMIN).contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"title":"Broad reminder","body":"Practice","category":"STUDY_REMINDER","status":"PUBLISHED","targetAudience":"ALL"}
+                    """))
+            .andExpect(status().isBadRequest());
+        mvc.perform(delete(adminUrl + "/{id}", id).with(ADMIN)).andExpect(status().isNoContent());
+        mvc.perform(get(adminUrl + "/activity").param("category", "NOTIFICATION").with(ADMIN))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.items[*].action")
+                .value(hasItems("NOTIFICATION_CREATED", "NOTIFICATION_PUBLISHED", "NOTIFICATION_DELETED")));
+        mvc.perform(get(adminUrl + "/activity").param("category", "MEMBERSHIP").with(ADMIN))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.items[*].action").value(hasItems("PLUS_STARTED")));
+        mvc.perform(get(adminUrl + "/activity").with(FREE_LEARNER)).andExpect(status().isForbidden());
     }
 
     @Test
@@ -270,27 +400,37 @@ class LearnerPlatformIntegrationIT {
                 .with(PLUS_LEARNER))
             .andExpect(status().isOk());
 
-        // Admin grants freeLearner temporary access and revokes it with reason
         UUID freeLearnerId = UUID.fromString("30000000-0000-0000-0000-000000000002");
-        MvcResult grantedRes = mvc.perform(post("/api/v1/admin/entitlements/grants").with(ADMIN)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                    {"userId":"30000000-0000-0000-0000-000000000002","featureKey":"vocabulary.plus-packs","sourceType":"ADMIN_MANUAL","sourceReference":"QA check"}
+        String planUrl = "/api/v1/admin/entitlements/learners/" + freeLearnerId + "/plan";
+        mvc.perform(get(planUrl).with(FREE_LEARNER)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/admin/entitlements/learners/" + UUID.randomUUID() + "/plan").with(ADMIN))
+            .andExpect(status().isNotFound());
+        mvc.perform(put(planUrl).with(ADMIN)
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                    {"tier":"PLUS","durationDays":3}
                     """))
-            .andExpect(status().isCreated())
-            .andReturn();
-        String grantId = json.readTree(grantedRes.getResponse().getContentAsString()).path("id").asText();
+            .andExpect(status().isBadRequest());
+        mvc.perform(put(planUrl).with(ADMIN)
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                    {"tier":"PLUS","durationDays":30}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tier").value("PLUS"))
+            .andExpect(jsonPath("$.history[0].tier").value("PLUS"))
+            .andExpect(jsonPath("$.history.length()").value(3));
 
         mvc.perform(get("/api/v1/vocabulary/packs/" + plusPackId + "/units").with(FREE_LEARNER))
             .andExpect(status().isOk());
 
-        mvc.perform(post("/api/v1/admin/entitlements/grants/" + grantId + "/revoke").with(ADMIN)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                    {"reason":"Revoke after QA check"}
+        mvc.perform(put(planUrl).with(ADMIN)
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                    {"tier":"FREE"}
                     """))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("REVOKED"));
+            .andExpect(jsonPath("$.tier").value("FREE"))
+            .andExpect(jsonPath("$.history[0].tier").value("FREE"))
+            .andExpect(jsonPath("$.history[1].tier").value("PLUS"))
+            .andExpect(jsonPath("$.history.length()").value(4));
 
         mvc.perform(get("/api/v1/vocabulary/packs/" + plusPackId + "/units").with(FREE_LEARNER))
             .andExpect(status().isForbidden());
@@ -485,7 +625,7 @@ class LearnerPlatformIntegrationIT {
         mvc.perform(get("/api/v1/assessment-sessions").param("domain", "toeic").param("status", "OPEN")
                 .with(PLUS_LEARNER))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[?(@.id=='" + toeicSessionId + "')]").isNotEmpty());
+            .andExpect(jsonPath("$.items[?(@.id=='" + toeicSessionId + "')]").isNotEmpty());
 
         mvc.perform(post("/api/v1/assessment-sessions/" + toeicSessionId + "/submit").with(PLUS_LEARNER)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -542,6 +682,22 @@ class LearnerPlatformIntegrationIT {
         mvc.perform(get("/api/v1/admin/gamification/reward-policy").with(ADMIN))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.ruleVersion").isNotEmpty());
+        mvc.perform(put("/api/v1/admin/gamification/reward-policy").with(ADMIN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"directLessonActivityDiamondsEnabled":true,"xpPerLevel":120,"xpGrowthPerLevel":20,"maxLevel":99,"xpLevelMultiplier":1.03,"milestoneInterval":5,"milestoneDiamondBase":15,"milestoneDiamondGrowth":10}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.xpPerLevel").value(120))
+            .andExpect(jsonPath("$.ruleVersion").isNotEmpty());
+        mvc.perform(get("/api/v1/admin/notifications/activity").param("category", "REWARD").with(ADMIN))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[*].action").value(hasItems("REWARD_POLICY_UPDATED")));
+
+        // ADMIN cannot access learner-only routes, while /api/v1/lexicon/** allows both ADMIN and LEARNER
+        mvc.perform(get("/api/v1/lessons").with(ADMIN)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/gamification/summary").with(ADMIN)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/lexicon/search").param("q", "work").with(ADMIN)).andExpect(status().isOk());
         mvc.perform(get("/api/v1/admin/entitlements/features").with(ADMIN))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.length()").value(8));
@@ -554,6 +710,16 @@ class LearnerPlatformIntegrationIT {
         mvc.perform(get("/api/v1/admin/analytics/summary").with(ADMIN))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.activeLearners7d").isNumber());
+        mvc.perform(get("/api/v1/admin/analytics/dashboard").param("days", "14").with(ADMIN))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.period.days").value(14))
+            .andExpect(jsonPath("$.dailySeries.length()").value(14))
+            .andExpect(jsonPath("$.kpis.totalLearners").isNumber())
+            .andExpect(jsonPath("$.kpis.activePlusLearners").isNumber())
+            .andExpect(jsonPath("$.contentInventory.curriculumPathsPublished").isNumber())
+            .andExpect(jsonPath("$.topCurriculumPaths").isArray());
+        mvc.perform(get("/api/v1/admin/analytics/dashboard").with(FREE_LEARNER))
+            .andExpect(status().isForbidden());
         mvc.perform(get("/api/v1/admin/chat/summary").with(ADMIN))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.totalConversations").isNumber());

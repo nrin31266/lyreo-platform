@@ -75,7 +75,11 @@ public class JdbcVocabularyStudyRepository implements VocabularyStudyRepository 
         return jdbc.query("""
             SELECT p.id, p.title_en, p.title_vi,
                    0::bigint AS unit_count, 0::bigint AS entry_count, 0::bigint AS completed_entries,
-                   p.access_mode, p.required_feature_key, NULL::uuid AS cover_image_id
+                   p.access_mode, p.required_feature_key,
+                   (SELECT e2.image_id FROM vocabulary_unit_entry e2
+                    JOIN vocabulary_unit u2 ON u2.id = e2.unit_id
+                    WHERE u2.pack_id = p.id AND NOT u2.hidden AND NOT e2.hidden AND e2.image_id IS NOT NULL
+                    ORDER BY u2.position, e2.position LIMIT 1) AS cover_image_id
             FROM vocabulary_pack p
             WHERE p.id = :packId AND NOT p.hidden
             """, Map.of("packId", packId), (rs, n) -> new PackRow(
@@ -256,10 +260,17 @@ public class JdbcVocabularyStudyRepository implements VocabularyStudyRepository 
 
     @Override
     public List<SessionRow> findSessions(UUID learnerId, UUID unitId, String status) {
+        return findSessionsPage(learnerId, unitId, status, 0, 100);
+    }
+
+    @Override
+    public List<SessionRow> findSessionsPage(UUID learnerId, UUID unitId, String status, int offset, int limit) {
         var params = new MapSqlParameterSource()
             .addValue("learnerId", learnerId)
             .addValue("unitId", unitId)
-            .addValue("status", status);
+            .addValue("status", status)
+            .addValue("offset", offset)
+            .addValue("limit", limit);
         return jdbc.query("""
             SELECT id, learner_id, pack_id, unit_id, mode,
                    snapshot::text AS snapshot_json, answers::text AS answers_json, result::text AS result_json,
@@ -272,8 +283,27 @@ public class JdbcVocabularyStudyRepository implements VocabularyStudyRepository 
                    OR (:status = 'OPEN' AND submitted_at IS NULL AND expires_at > now())
                    OR (:status = 'EXPIRED' AND submitted_at IS NULL AND expires_at <= now()))
             ORDER BY created_at DESC
-            LIMIT 100
+            LIMIT :limit OFFSET :offset
             """, params, (rs, n) -> mapSession(rs));
+    }
+
+    @Override
+    public long countSessions(UUID learnerId, UUID unitId, String status) {
+        var params = new MapSqlParameterSource()
+            .addValue("learnerId", learnerId)
+            .addValue("unitId", unitId)
+            .addValue("status", status);
+        Long total = jdbc.queryForObject("""
+            SELECT count(*)
+            FROM vocabulary_study_session
+            WHERE learner_id = :learnerId
+              AND (CAST(:unitId AS uuid) IS NULL OR unit_id = :unitId)
+              AND (CAST(:status AS text) IS NULL
+                   OR (:status = 'SUBMITTED' AND submitted_at IS NOT NULL)
+                   OR (:status = 'OPEN' AND submitted_at IS NULL AND expires_at > now())
+                   OR (:status = 'EXPIRED' AND submitted_at IS NULL AND expires_at <= now()))
+            """, params, Long.class);
+        return total == null ? 0L : total;
     }
 
     @Override

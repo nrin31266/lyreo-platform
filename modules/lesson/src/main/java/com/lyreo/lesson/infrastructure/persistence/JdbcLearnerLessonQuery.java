@@ -1005,4 +1005,35 @@ public final class JdbcLearnerLessonQuery implements LearnerLessonQuery {
     ) {}
 
     private record PronunciationRow(String ipa, String accent, String model) {}
+
+    @Override
+    public List<CategoryFilterItem> listVisibleCategories() {
+        return jdbc.query("""
+            SELECT c.id, c.name, c.translations::text AS translations_json, count(DISTINCT l.id)::bigint AS lesson_count
+            FROM lesson_category c
+            JOIN lesson_category_membership cm ON cm.category_id = c.id
+            JOIN lesson l ON l.id = cm.lesson_id
+            JOIN lesson_availability v ON v.lesson_id = l.id AND v.available = TRUE
+            JOIN lesson_metadata m ON m.lesson_id = l.id AND m.deleted_at IS NULL
+            GROUP BY c.id, c.name, c.translations
+            ORDER BY c.name ASC
+            """, Map.of(), (rs, n) -> new CategoryFilterItem(
+            rs.getObject("id", UUID.class),
+            rs.getString("name"),
+            parseStringMap(rs.getString("translations_json")),
+            rs.getLong("lesson_count")
+        ));
+    }
+
+    private Map<String, String> parseStringMap(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            Map<String, String> parsed = mapper.readValue(json, STRING_MAP);
+            return parsed == null ? Map.of() : parsed;
+        } catch (Exception ignored) {
+            return Map.of();
+        }
+    }
 }

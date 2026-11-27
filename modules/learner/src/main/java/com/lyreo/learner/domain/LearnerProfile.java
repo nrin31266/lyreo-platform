@@ -13,8 +13,27 @@ public record LearnerProfile(
     LearnerPreferences preferences,
     Instant onboardingCompletedAt,
     String avatarPreset,
-    UUID avatarUploadId
+    UUID avatarUploadId,
+    Integer toeicTargetScore
 ) {
+    public LearnerProfile(
+        UUID learnerId,
+        String displayName,
+        String currentLevel,
+        String goal,
+        Integer dailyMinutes,
+        String focusArea,
+        LearnerPreferences preferences,
+        Instant onboardingCompletedAt,
+        String avatarPreset,
+        UUID avatarUploadId
+    ) {
+        this(
+            learnerId, displayName, currentLevel, goal, dailyMinutes, focusArea,
+            preferences, onboardingCompletedAt, avatarPreset, avatarUploadId, null
+        );
+    }
+
     public enum Goal { CONVERSATION, WORK, TOEIC, UNDECIDED }
     public enum Level { A1, A2, B1, B2, C1, C2, UNKNOWN }
     public enum FocusArea { LISTENING, SPEAKING, VOCABULARY, GRAMMAR }
@@ -44,8 +63,17 @@ public record LearnerProfile(
     public record Patch(
         Appearance appearance,
         Goal goal, Level currentLevel, Integer dailyMinutes,
-        boolean changeFocusArea, FocusArea focusArea
-    ) {}
+        boolean changeFocusArea, FocusArea focusArea,
+        boolean changeToeicTargetScore, Integer toeicTargetScore
+    ) {
+        public Patch(
+            Appearance appearance,
+            Goal goal, Level currentLevel, Integer dailyMinutes,
+            boolean changeFocusArea, FocusArea focusArea
+        ) {
+            this(appearance, goal, currentLevel, dailyMinutes, changeFocusArea, focusArea, false, null);
+        }
+    }
 
     public record Appearance(boolean changeName, String name, boolean changeAvatar, String avatarPreset) {}
 }

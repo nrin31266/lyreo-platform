@@ -36,6 +36,11 @@
     </dependency>
     <dependency>
       <groupId>com.lyreo</groupId>
+      <artifactId>lyreo-platform-config</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.lyreo</groupId>
       <artifactId>lyreo-platform-content</artifactId>
       <version>${project.version}</version>
     </dependency>
@@ -107,12 +112,6 @@
     <dependency>
       <groupId>com.lyreo</groupId>
       <artifactId>lyreo-module-analytics</artifactId>
-      <version>${project.version}</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.lyreo</groupId>
-      <artifactId>lyreo-platform-config</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>

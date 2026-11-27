@@ -63,6 +63,60 @@ public final class JdbcMissionProgressRepository implements MissionProgressRepos
     }
 
     @Override
+    public Optional<MissionRewardTarget> findActiveRewardTargetById(UUID missionId) {
+        return jdbc.query(
+            """
+            SELECT id, code, title, target, recurrence, diamond_reward, xp_reward, rule_version
+              FROM mission_definition
+             WHERE enabled = true AND id = :id
+            """,
+            Map.of("id", missionId),
+            (rs, rowNumber) -> new MissionRewardTarget(
+                rs.getObject("id", UUID.class),
+                rs.getString("code"),
+                rs.getString("title"),
+                rs.getInt("target"),
+                rs.getString("recurrence"),
+                rs.getInt("diamond_reward"),
+                rs.getInt("xp_reward"),
+                rs.getString("rule_version")
+            )
+        ).stream().findFirst();
+    }
+
+    @Override
+    public Optional<MissionProgressStatus> findMissionProgressStatus(
+        UUID learnerId,
+        UUID missionId,
+        String periodKey
+    ) {
+        return jdbc.query(
+            """
+            SELECT progress, completed_at, claimed_at, reward_snapshot_json::text AS snapshot_json
+              FROM mission_progress
+             WHERE learner_id = :learnerId
+               AND mission_id = :missionId
+               AND period_key = :periodKey
+            """,
+            Map.of(
+                "learnerId", learnerId,
+                "missionId", missionId,
+                "periodKey", periodKey
+            ),
+            (rs, rowNumber) -> {
+                Timestamp completed = rs.getTimestamp("completed_at");
+                Timestamp claimed = rs.getTimestamp("claimed_at");
+                return new MissionProgressStatus(
+                    rs.getInt("progress"),
+                    completed == null ? null : completed.toInstant(),
+                    claimed == null ? null : claimed.toInstant(),
+                    rs.getString("snapshot_json")
+                );
+            }
+        ).stream().findFirst();
+    }
+
+    @Override
     public void increment(UUID learnerId, UUID missionId, String periodKey, int target, int amount) {
         jdbc.update(
             """

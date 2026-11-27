@@ -10,7 +10,9 @@ import com.lyreo.lesson.domain.authoring.AuthoringSentence;
 import com.lyreo.lesson.domain.practice.DictationMaskingPolicy;
 import com.lyreo.platform.storage.ObjectStoragePort;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** Application service for learner lesson catalog, detail, hint-masked activities, audio, and attempts. */
@@ -67,16 +69,24 @@ public class LearnerLessonService {
         if (entitlements == null || result.items().isEmpty()) {
             return result;
         }
+        Map<String, Boolean> grantedCache = new HashMap<>();
         var items = result.items().stream()
             .map(item -> {
                 if ("FEATURE".equals(item.accessMode()) && item.requiredFeatureKey() != null) {
-                    boolean granted = entitlements.hasFeature(learnerId, FeatureKey.of(item.requiredFeatureKey()));
+                    boolean granted = grantedCache.computeIfAbsent(
+                        item.requiredFeatureKey(),
+                        key -> entitlements.hasFeature(learnerId, FeatureKey.of(key))
+                    );
                     return item.withLocked(!granted);
                 }
                 return item;
             })
             .toList();
         return new LearnerLessonQuery.CatalogPage(items, result.total(), result.page(), result.size());
+    }
+
+    public List<LearnerLessonQuery.CategoryFilterItem> listCategories() {
+        return query.listVisibleCategories();
     }
 
     public LearnerLessonQuery.LessonDetail getLessonDetail(UUID learnerId, UUID lessonId) {

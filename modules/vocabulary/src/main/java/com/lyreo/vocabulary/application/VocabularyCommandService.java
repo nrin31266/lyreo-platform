@@ -202,6 +202,27 @@ public class VocabularyCommandService {
         return repository.due(learnerId, Instant.now(), Math.min(Math.max(limit, 1), 100));
     }
 
+    public DuePage duePage(UUID learnerId, int page, int size) {
+        if (page < 0 || page > 100000 || size < 1 || size > 100) {
+            throw new RequestValidationException("page must be between 0 and 100000 and size between 1 and 100");
+        }
+        Instant now = Instant.now();
+        long total = repository.countDue(learnerId, now);
+        List<VocabularyCard> items = total == 0
+            ? List.of()
+            : repository.duePage(learnerId, now, page * size, size);
+        return new DuePage(items, total, page, size, (long) (page + 1) * size < total);
+    }
+
+    @Transactional
+    public void deleteCard(UUID learnerId, UUID cardId) {
+        if (!repository.deleteCard(learnerId, cardId)) {
+            throw new ResourceNotFoundException("Vocabulary card not found: " + cardId);
+        }
+    }
+
+    public record DuePage(List<VocabularyCard> items, long total, int page, int size, boolean hasMore) {}
+
     @Transactional
     public SpacedRepetitionScheduler.ScheduleResult review(
         UUID learnerId,

@@ -126,14 +126,22 @@ public class GamificationQueryService {
             throw new RequestValidationException("Invalid ledger page or size");
         }
         int balance = diamondLedger.balance(learnerId);
+        long total = diamondLedger.countByLearner(learnerId);
         List<DiamondTransaction> items = diamondLedger.listByLearner(learnerId, page, size);
-        return new LedgerPage(balance, page, size, items);
+        boolean hasMore = (long) (page + 1) * size < total;
+        return new LedgerPage(balance, page, size, total, hasMore, items);
     }
 
     public record LedgerPage(
         int balance,
         int page,
         int size,
+        long total,
+        boolean hasMore,
         List<DiamondTransaction> transactions
-    ) {}
+    ) {
+        public LedgerPage(int balance, int page, int size, List<DiamondTransaction> transactions) {
+            this(balance, page, size, transactions != null ? transactions.size() : 0L, false, transactions);
+        }
+    }
 }

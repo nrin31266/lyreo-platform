@@ -27,6 +27,7 @@ from release_media import (
     backup_media, media_configuration, media_object_key, remote_object_valid, restore_media, verify_or_upload_media,
 )
 from scripts.fetch_utils import download_archive, safe_extract_archive
+from scripts.release_lock import assert_drive_url_locked
 
 ARCHIVE_NAME = f"vocabulary-catalog-{VERSION}.tar.gz"
 ARCHIVE_SHA256 = "2fd037e2824c2663edcff72ff1ba48b958acb1d9953aa8e6935511a8551f2c51"
@@ -72,7 +73,9 @@ def prepare(target: Path = DEFAULT_RELEASE) -> ReleasePackage:
             archive = LOCAL_ARCHIVE
         else:
             archive = work / ARCHIVE_NAME
-            download_archive(url or DEFAULT_RELEASE_URL, archive)
+            resolved_url = url or DEFAULT_RELEASE_URL
+            assert_drive_url_locked("vocabulary", resolved_url, ARCHIVE_SHA256)
+            download_archive(resolved_url, archive)
         if sha256_file(archive) != ARCHIVE_SHA256:
             raise ValueError("Vocabulary catalog archive failed SHA-256 verification")
         staged = safe_extract_archive(archive, work / "extracted", {f"vocabulary-{VERSION}"})

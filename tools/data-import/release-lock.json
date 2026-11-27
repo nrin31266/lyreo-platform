@@ -1,0 +1,69 @@
+{
+  "format": "lyreo.release-lock.v1",
+  "frozen": true,
+  "policy": "read-only",
+  "drive_folder_id": "1XrAmgAaSDtar8UAeKT9URq3KbRGN2UH4",
+  "releases": {
+    "lexicon": {
+      "version": "2.0.1",
+      "schema_version": "2.0.0",
+      "default_url": "https://drive.google.com/file/d/1FcdLfF5cqmwl3U_et_jK-pHOcWW-cMCW/view",
+      "default_sha256": "ef183fa9cedc4bc2bd8f80b884116825f7735d3c7528acb30ceb9272a736972a",
+      "allowed_drive_files": {
+        "1FcdLfF5cqmwl3U_et_jK-pHOcWW-cMCW": {
+          "filename": "lexicon-2.0.1.tar.gz",
+          "artifact_type": "full-release",
+          "size_bytes": 676212949,
+          "sha256": "ef183fa9cedc4bc2bd8f80b884116825f7735d3c7528acb30ceb9272a736972a"
+        }
+      }
+    },
+    "grammar-toeic": {
+      "version": "2.0.12",
+      "schema_version": "1.0.0",
+      "default_url": "https://drive.google.com/file/d/1ZbgXuQA33zsaNC9SBFMraTdtiCMtiyVd/view",
+      "default_sha256": "10b090b40e1b69fff690f99e79f5e09711c3eb0c7bd422031676c98c1b7226ba",
+      "allowed_drive_files": {
+        "1ZbgXuQA33zsaNC9SBFMraTdtiCMtiyVd": {
+          "filename": "grammar-toeic-2.0.12.tar.gz",
+          "artifact_type": "full-release",
+          "size_bytes": 2666077817,
+          "sha256": "10b090b40e1b69fff690f99e79f5e09711c3eb0c7bd422031676c98c1b7226ba"
+        },
+        "1rNd1Xv8v70CBGC81evSu8HwXq6M6NIJx": {
+          "filename": "grammar-toeic-catalog-2.0.12.tar.gz",
+          "artifact_type": "catalog-only",
+          "size_bytes": 11184629,
+          "sha256": "48ad50623e8565758084a0a3a8dfd3e046a255cde1936af404e4a4624d9c43a9"
+        },
+        "1Z-d1rdfJkH6EUSm-QPeKU7bVlHU4ivse": {
+          "filename": "grammar-toeic-media-2.0.12.tar.gz",
+          "artifact_type": "media-backup",
+          "size_bytes": 2648906680,
+          "sha256": "df07a2650ad33f5d53ba504020f5abea61bb284f88c735614ad2b6bdc40bcf50"
+        }
+      }
+    },
+    "vocabulary": {
+      "version": "1.3.0",
+      "schema_version": "1.3.0",
+      "default_url": "https://drive.google.com/file/d/1PzxSDGzxihgs1gNW6FwvOuKI59bl2r0P/view",
+      "default_sha256": "2fd037e2824c2663edcff72ff1ba48b958acb1d9953aa8e6935511a8551f2c51",
+      "manifest_sha256": "dff95c8c129587636a8d445b03dbd0e64a2ff4c7215ed634ffecb6e9094264df",
+      "allowed_drive_files": {
+        "1PzxSDGzxihgs1gNW6FwvOuKI59bl2r0P": {
+          "filename": "vocabulary-catalog-1.3.0.tar.gz",
+          "artifact_type": "catalog-only",
+          "size_bytes": 7561381,
+          "sha256": "2fd037e2824c2663edcff72ff1ba48b958acb1d9953aa8e6935511a8551f2c51"
+        },
+        "17O60vxpGbVgSPsVeA2mJcUgS98DwI3bd": {
+          "filename": "vocabulary-media-1.3.0.tar.gz",
+          "artifact_type": "media-backup",
+          "size_bytes": 566224531,
+          "sha256": "b59a02b92b4d0543abcf2b25f16e53f66059820cb55074200853cd62f6cb2464"
+        }
+      }
+    }
+  }
+}

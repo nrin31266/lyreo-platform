@@ -32,7 +32,7 @@ class LessonResetIT {
                 sql.execute(seed);assertThat(count(sql,"lesson_category")).isEqualTo(24);
                 var sampleLessons=new ResourceDatabasePopulator(new FileSystemResource("../../infra/postgres/seed/lessons.sql"));
                 sampleLessons.populate(connection);
-                assertThat(count(sql,"lesson")).isEqualTo(11);
+                assertThat(count(sql,"lesson")).isEqualTo(19);
                 assertSampleLessonProjections(sql);
                 var seedCounts = new HashMap<String, Long>();
                 for (String table : List.of("lesson_authoring", "lesson_sentence", "lesson_word_timestamp", "lesson_annotation",
@@ -40,7 +40,7 @@ class LessonResetIT {
                     seedCounts.put(table, count(sql, table));
                 sql.execute("UPDATE lesson_metadata SET title='Edited sample title' WHERE lesson_id='246d7560-e4a3-4807-a022-190220c7a00d'");
                 sampleLessons.populate(connection);
-                assertThat(count(sql,"lesson")).isEqualTo(11);
+                assertThat(count(sql,"lesson")).isEqualTo(19);
                 for (var row : seedCounts.entrySet()) assertThat(count(sql, row.getKey())).as(row.getKey()).isEqualTo(row.getValue());
                 assertThat(scalar(sql,"SELECT title FROM lesson_metadata WHERE lesson_id='246d7560-e4a3-4807-a022-190220c7a00d'"))
                     .isEqualTo("Edited sample title");
@@ -122,7 +122,7 @@ class LessonResetIT {
                     """);
                 String reset=Files.readString(Path.of("../../infra/postgres/reset-lessons.sql"));
                 assertThatThrownBy(()->sql.execute(reset)).hasMessageContaining("active lesson jobs");sql.execute("ROLLBACK");
-                assertThat(count(sql,"lesson")).isEqualTo(11);
+                assertThat(count(sql,"lesson")).isEqualTo(19);
                 assertThat(count(sql,"lesson_job_diagnostic")).isEqualTo(1);
                 sql.execute("UPDATE background_job SET status='CANCELLED' WHERE job_type='LESSON_AUTHORING'");
                 sql.execute("UPDATE vocabulary_card SET source_context_id='10000000-0000-0000-0000-000000000001',source_context_type='LESSON'");
@@ -143,8 +143,8 @@ class LessonResetIT {
 
     private static void assertSampleLessonProjections(Statement sql) throws SQLException {
         assertThat(scalar(sql,"SELECT count(*) FROM lesson WHERE source_type='YOUTUBE' AND status='PUBLISHED'")).isEqualTo("9");
-        assertThat(scalar(sql,"SELECT count(*) FROM lesson WHERE source_type='TEXT' AND status='PUBLISHED'")).isEqualTo("1");
-        assertThat(count(sql,"lesson_authoring")).isEqualTo(10);
+        assertThat(scalar(sql,"SELECT count(*) FROM lesson WHERE source_type='TEXT' AND status='PUBLISHED'")).isEqualTo("9");
+        assertThat(count(sql,"lesson_authoring")).isEqualTo(18);
         assertThat(count(sql,"lesson_authoring_job")).isZero();
         assertThat(scalar(sql,"""
             SELECT count(*) FROM lesson_authoring a

@@ -43,7 +43,7 @@ Identify its owner, secret status, persistence needs, override authority, and au
 
 ### Development AI defaults
 
-`make setup` and `make seed-dev` add the following routes for new local providers:
+`make setup` and `make seed` add the following routes for new local providers:
 
 | Capability | Provider | Model | Priority |
 |---|---|---|---|
@@ -57,7 +57,7 @@ priority order 1–3. To use an
 external provider, enter its key and enable the connection in **Admin → AI settings → Providers**.
 Gemini and Groq still require the Core free-tier eligibility configuration.
 
-Routes survive restarts and lesson-only resets. After a full database recreation, run `make seed-dev`
+Routes survive restarts and lesson-only resets. After a full database recreation, run `make seed`
 and enter the external keys again. Rerunning leaves existing providers and their routes alone.
 Run `make ai-local` for WhisperX and Kokoro execution. The optional mock bootstrap is for tests against
 `AI_RUNTIME_MODE=mock` before external keys are configured.
@@ -73,7 +73,7 @@ AI uses the configured free-eligible GENERAL_LLM route. Accent selection does no
 
 Use an Azure Speech F0 resource and append `AZURE_SPEECH` to Core's
 `AI_CONFIRMED_FREE_PROVIDERS`. In **Admin → AI settings → Providers**, save and enable
-`AZURE_SPEECH` with its key. Enable the route created by `make seed-dev`, or add a
+`AZURE_SPEECH` with its key. Enable the route created by `make seed`, or add a
 `PRONUNCIATION_ASSESSMENT` route with model `pronunciation-assessment`, priority 0 and fallback
 disabled. Core encrypts and forwards the key.
 FastAPI uses the resource region, `en-US`, and disabled Prosody. Run a single FastAPI replica

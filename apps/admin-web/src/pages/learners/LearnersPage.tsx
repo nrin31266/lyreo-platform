@@ -29,9 +29,11 @@ import { LearnerAvatarDialog, LearnerNameEditor } from './LearnerAppearanceEdito
 import { LearnerAvatar } from './LearnerAvatar';
 import { LearnerAccessAndRewards } from './LearnerAccessAndRewards';
 import { LearnerStudyProgress } from './LearnerStudyProgress';
+import { LearnerStudyGoals } from './LearnerStudyGoals';
+import { LearnerAccountPanel } from './LearnerAccountPanel';
 import { fetchLearner, fetchLearners, type OnboardingStatus } from './learners.api';
 
-type InspectorTab = 'overview' | 'plan' | 'rewards';
+type InspectorTab = 'overview' | 'study' | 'plan' | 'rewards';
 
 function OnboardingBadge({ status }: { status: OnboardingStatus }) {
   const { t } = useTranslation('admin');
@@ -79,9 +81,9 @@ function LearnerInspectorPanel({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-w-0 flex-col gap-3 lg:h-full lg:min-h-0">
       {backSearch !== undefined && (
-        <Button variant="ghost" size="sm" className="-ml-2" asChild>
+        <Button variant="ghost" size="sm" className="-ml-2 shrink-0 self-start" asChild>
           <Link to={{ pathname: '/learners', search: backSearch }}>
             <RiArrowLeftLine data-icon="inline-start" aria-hidden="true" />
             {t('learnerProfiles.back')}
@@ -106,9 +108,9 @@ function LearnerInspectorPanel({
       )}
 
       {entry && (
-        <Card className="min-w-0">
-          <CardContent className="grid gap-5 pt-5">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+        <Card key={entry.learnerId} size="sm" className="min-w-0 rounded-xl border shadow-none ring-0 lg:min-h-0 lg:flex-1 lg:pb-0">
+          <CardContent className="flex flex-col gap-3 lg:min-h-0 lg:flex-1">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
               <div className="flex min-w-0 flex-wrap items-center gap-3">
                 <Fragment key={entry.learnerId}>
                   <LearnerAvatarDialog entry={entry} />
@@ -124,13 +126,18 @@ function LearnerInspectorPanel({
             </div>
 
             <Tabs
+              className="min-w-0 lg:min-h-0 lg:flex-1"
               value={inspectorTab}
               onValueChange={(value) => setInspectorTab(value as InspectorTab)}
             >
-              <TabsList className="w-full justify-start overflow-x-auto">
+              <TabsList className="w-full shrink-0 justify-start overflow-x-auto">
                 <TabsTrigger value="overview" className="gap-1.5">
-                  <RiLineChartLine className="size-4" aria-hidden="true" />
+                  <RiUser3Line className="size-4" aria-hidden="true" />
                   {t('learnerProfiles.inspectorTabs.overview')}
+                </TabsTrigger>
+                <TabsTrigger value="study" className="gap-1.5">
+                  <RiLineChartLine className="size-4" aria-hidden="true" />
+                  {t('learnerProfiles.inspectorTabs.study')}
                 </TabsTrigger>
                 <TabsTrigger value="plan" className="gap-1.5">
                   <RiVipCrownLine className="size-4" aria-hidden="true" />
@@ -142,11 +149,11 @@ function LearnerInspectorPanel({
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="overview" className="mt-4 space-y-4">
-                <dl className="grid gap-x-6 gap-y-4 rounded-xl border bg-muted/20 p-4 sm:grid-cols-2">
+              <TabsContent value="overview" className="space-y-3 py-1 lg:min-h-0 lg:overflow-y-auto lg:pr-1 lg:pb-4">
+                <LearnerStudyGoals learner={entry} />
+                <dl className="grid gap-x-4 gap-y-2 rounded-lg border p-3 sm:grid-cols-2 xl:grid-cols-3">
                   {(
                     [
-                      ['email', entry.email || missing],
                       ['firstSeen', date.format(new Date(entry.firstSeenAt))],
                       [
                         'completedAt',
@@ -177,14 +184,18 @@ function LearnerInspectorPanel({
                     </div>
                   ))}
                 </dl>
+                <LearnerAccountPanel learnerId={entry.learnerId} learnerName={entry.displayName || entry.email || missing} />
+              </TabsContent>
+
+              <TabsContent value="study" className="py-1 lg:min-h-0 lg:overflow-y-auto lg:pr-1 lg:pb-4">
                 <LearnerStudyProgress learnerId={entry.learnerId} />
               </TabsContent>
 
-              <TabsContent value="plan" className="mt-4">
+              <TabsContent value="plan" className="py-1 lg:min-h-0 lg:overflow-y-auto lg:pr-1 lg:pb-4">
                 <LearnerAccessAndRewards learnerId={entry.learnerId} section="plan" />
               </TabsContent>
 
-              <TabsContent value="rewards" className="mt-4">
+              <TabsContent value="rewards" className="py-1 lg:min-h-0 lg:overflow-y-auto lg:pr-1 lg:pb-4">
                 <LearnerAccessAndRewards learnerId={entry.learnerId} section="rewards" />
               </TabsContent>
             </Tabs>
@@ -242,8 +253,8 @@ export function LearnersPage({ initialSelectedId }: { initialSelectedId?: string
   }
 
   return (
-    <section className="grid gap-5">
-      <header className="space-y-1">
+    <section className="flex w-full flex-col gap-4 lg:h-full lg:min-h-[24rem]">
+      <header className="shrink-0">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight">{t('navigation.profiles')}</h1>
@@ -258,8 +269,8 @@ export function LearnersPage({ initialSelectedId }: { initialSelectedId?: string
         </div>
       </header>
 
-      <div className="grid items-start gap-5 lg:grid-cols-12">
-        <div className="grid gap-3 lg:col-span-5">
+      <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(20rem,2fr)_minmax(0,3fr)]">
+        <div className="flex min-w-0 flex-col gap-3 lg:min-h-0">
           <div className="flex flex-wrap items-center gap-2">
             <InputGroup className="min-w-0 flex-1">
               <InputGroupInput
@@ -300,61 +311,68 @@ export function LearnersPage({ initialSelectedId }: { initialSelectedId?: string
           {learners.isPending && <CatalogSkeleton />}
 
           {learners.data && (
-            <div className="overflow-hidden rounded-xl border bg-background">
+            <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border bg-background">
               {learners.data.items.length ? (
-                <Table aria-label={t('navigation.profiles')} aria-busy={learners.isFetching}>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t('learnerProfiles.name')}</TableHead>
-                      <TableHead>{t('learnerProfiles.onboarding')}</TableHead>
-                      <TableHead className="text-right">{t('learnerProfiles.firstSeen')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {learners.data.items.map((entry) => {
-                      const isSelected = activeLearnerId === entry.learnerId;
-                      return (
-                        <TableRow
-                          key={entry.learnerId}
-                          data-state={isSelected ? 'selected' : undefined}
-                          className={cn(
-                            'cursor-pointer transition-colors',
-                            isSelected && 'bg-muted/70',
-                          )}
-                          onClick={() => selectLearner(entry.learnerId)}
-                        >
-                          <TableCell>
-                            <div className="flex items-center gap-2.5">
-                              <LearnerAvatar entry={entry} />
-                              <div className="min-w-0 max-w-52">
-                                <button
-                                  type="button"
-                                  aria-pressed={isSelected}
-                                  className="block w-full truncate text-left font-medium hover:underline focus-visible:outline-none focus-visible:underline"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    selectLearner(entry.learnerId);
-                                  }}
-                                >
-                                  {entry.displayName || t('learnerProfiles.openProfile')}
-                                </button>
-                                <p className="truncate text-xs text-muted-foreground">
-                                  {entry.email || missing}
-                                </p>
+                <div
+                  role="region"
+                  tabIndex={0}
+                  aria-label={t('navigation.profiles')}
+                  className="focus-visible:outline-inset focus-visible:outline-ring lg:min-h-0 lg:overflow-auto lg:[&>[data-slot=table-container]]:overflow-visible"
+                >
+                  <Table aria-label={t('navigation.profiles')} aria-busy={learners.isFetching}>
+                    <TableHeader className="lg:sticky lg:top-0 lg:z-10 lg:bg-background lg:shadow-[0_1px_0_var(--border)]">
+                      <TableRow>
+                        <TableHead>{t('learnerProfiles.name')}</TableHead>
+                        <TableHead>{t('learnerProfiles.onboarding')}</TableHead>
+                        <TableHead className="text-right">{t('learnerProfiles.firstSeen')}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {learners.data.items.map((entry) => {
+                        const isSelected = activeLearnerId === entry.learnerId;
+                        return (
+                          <TableRow
+                            key={entry.learnerId}
+                            data-state={isSelected ? 'selected' : undefined}
+                            className={cn(
+                              'cursor-pointer transition-colors',
+                              isSelected && 'bg-muted/70',
+                            )}
+                            onClick={() => selectLearner(entry.learnerId)}
+                          >
+                            <TableCell>
+                              <div className="flex items-center gap-2.5">
+                                <LearnerAvatar entry={entry} />
+                                <div className="min-w-0 max-w-52">
+                                  <button
+                                    type="button"
+                                    aria-pressed={isSelected}
+                                    className="block w-full truncate text-left font-medium hover:underline focus-visible:outline-none focus-visible:underline"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      selectLearner(entry.learnerId);
+                                    }}
+                                  >
+                                    {entry.displayName || t('learnerProfiles.openProfile')}
+                                  </button>
+                                  <p className="truncate text-xs text-muted-foreground">
+                                    {entry.email || missing}
+                                  </p>
+                                </div>
                               </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <OnboardingBadge status={entry.onboardingStatus} />
-                          </TableCell>
-                          <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
-                            {date.format(new Date(entry.firstSeenAt))}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+                            </TableCell>
+                            <TableCell>
+                              <OnboardingBadge status={entry.onboardingStatus} />
+                            </TableCell>
+                            <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
+                              {date.format(new Date(entry.firstSeenAt))}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               ) : (
                 <div className="p-4">
                   <Empty>
@@ -374,7 +392,7 @@ export function LearnersPage({ initialSelectedId }: { initialSelectedId?: string
               )}
 
               {(page > 0 || learners.data.total > learners.data.size) && (
-                <div className="border-t bg-muted/15 px-3 py-2">
+                <div className="shrink-0 border-t bg-muted/15 px-3 py-2">
                   <AdminPagination
                     page={page}
                     pageCount={Math.ceil(learners.data.total / learners.data.size)}
@@ -394,7 +412,7 @@ export function LearnersPage({ initialSelectedId }: { initialSelectedId?: string
           )}
         </div>
 
-        <div className="lg:sticky lg:top-4 lg:col-span-7">
+        <div className="min-w-0 lg:min-h-0">
           <LearnerInspectorPanel
             learnerId={activeLearnerId}
             backSearch={initialSelectedId ? search : undefined}

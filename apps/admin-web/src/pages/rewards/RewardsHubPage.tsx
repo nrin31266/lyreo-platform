@@ -333,7 +333,7 @@ export function RewardsHubPage() {
             {policyQuery.isPending ? (
               <Skeleton className="h-7 w-28" />
             ) : policyQuery.data ? (
-              `${policyQuery.data.ruleVersion} · ${policyQuery.data.xpPerLevel}+${policyQuery.data.xpGrowthPerLevel ?? 15} XP · ×${(policyQuery.data.xpLevelMultiplier ?? 1.02).toFixed(2)} · Lv.${policyQuery.data.maxLevel ?? 99}`
+              `${policyQuery.data.xpPerLevel}+${policyQuery.data.xpGrowthPerLevel ?? 15} XP · ×${(policyQuery.data.xpLevelMultiplier ?? 1.02).toFixed(2)} · Lv.${policyQuery.data.maxLevel ?? 99}`
             ) : (
               '—'
             )}

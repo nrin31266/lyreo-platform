@@ -13,6 +13,18 @@ public interface ChatRepository {
 
     List<ChatConversation> listOwnedConversations(UUID learnerId, int page, int size);
 
+    default long countOwnedConversations(UUID learnerId) {
+        return 0L;
+    }
+
+    default Optional<ChatConversation> renameOwnedConversation(UUID conversationId, UUID learnerId, String title) {
+        return Optional.empty();
+    }
+
+    default boolean deleteOwnedConversation(UUID conversationId, UUID learnerId) {
+        return false;
+    }
+
     List<ChatMessage> listMessages(UUID conversationId);
 
     ChatTurnPersistenceResult persistTurn(

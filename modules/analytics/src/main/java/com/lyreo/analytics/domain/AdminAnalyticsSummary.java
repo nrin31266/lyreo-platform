@@ -32,6 +32,15 @@ public record AdminAnalyticsSummary(
         int affectedLearners,
         BigDecimal averageSeverity,
         int totalSamples,
-        Instant lastUpdatedAt
-    ) {}
+        Instant lastUpdatedAt,
+        String label,
+        String labelEn
+    ) {
+        public WeaknessHotspot(
+            String weaknessType, String weaknessKey, int affectedLearners,
+            BigDecimal averageSeverity, int totalSamples, Instant lastUpdatedAt
+        ) {
+            this(weaknessType, weaknessKey, affectedLearners, averageSeverity, totalSamples, lastUpdatedAt, null, null);
+        }
+    }
 }

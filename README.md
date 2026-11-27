@@ -24,18 +24,20 @@ Use the versions in `.java-version`, `.nvmrc`, and `package.json#packageManager`
 
 ```bash
 make init-env
-# Configure release URLs and the team's R2 credentials in the ignored local env files.
-# Set STORAGE_MODE=r2 in both apps/core-service/.env and tools/data-import/.env.
+# Set STORAGE_MODE=r2 and the team's R2 credentials in apps/core-service/.env and tools/data-import/.env
+# when importing the full frozen Drive datasets (lexicon, grammar-toeic, vocabulary) automatically.
 make setup
 ```
 
 Setup creates local environment files, syncs dependencies, starts PostgreSQL and Keycloak, and
-runs the development bootstrap and Flyway migrations. Content installation is optional:
+runs `make setup-data` (imports all frozen datasets + `make seed`) when R2 is configured, or
+`make seed` alone (`SKIP_DATA=1 make setup` skips dataset import explicitly):
 
 ```bash
 make setup-data DATASET=lexicon        # Dictionary
 make setup-data DATASET=grammar-toeic  # Grammar and TOEIC L&R
-make setup-data                       # Both packages
+make setup-data DATASET=vocabulary     # Curated Vocabulary packs
+make setup-data                        # Import all three frozen releases + run make seed
 ```
 
 The second and third commands verify or reuse the shared R2 media if both environments select R2.
@@ -71,9 +73,8 @@ See [Core development](apps/core-service/README.md#local-run-and-verification) f
 | `make dev-infra` | Start local PostgreSQL and Keycloak after initial `make setup` |
 | `make db-shell`, `make db-reset` | Inspect DB or preview lesson-only reset; [scope and confirmation](docs/DEVELOPMENT.md) |
 | `make db-recreate`, `make down-v` | Guarded destructive DB/volume operations; see the same guide |
-| `make migrate`, `make seed-dev` | Apply schema and add reference categories without overwriting edits |
-| `make seed-lessons` | Add five real example lessons when the shared lesson audio is available |
-| `make setup-data`, `make data-storage-check` | Import both releases or check media storage alignment |
+| `make migrate`, `make seed` | Apply schema and seed reference data, learners, lessons, curriculum paths, and demo media |
+| `make setup-data`, `make data-storage-check` | Import frozen datasets (+ `make seed` for `all`) or check media storage alignment |
 | `make data-check`, `make data-fetch` | Verify or acquire the clean Grammar/TOEIC release |
 | `make setup-media` | Install the Core YouTube downloader; FFmpeg/ffprobe required on the host |
 | `make validate`, `make check` | Offline guards or full verification |

@@ -160,6 +160,7 @@ public final class VocabularyStudyModels {
         UUID id,
         UUID packId,
         UUID unitId,
+        String unitTitle,
         PracticeMode mode,
         String status,
         long revision,
@@ -169,5 +170,23 @@ public final class VocabularyStudyModels {
         Instant createdAt,
         Instant expiresAt,
         Instant submittedAt
-    ) {}
+    ) {
+        public SessionSummary(
+            UUID id,
+            UUID packId,
+            UUID unitId,
+            PracticeMode mode,
+            String status,
+            long revision,
+            int questionCount,
+            Integer correctCount,
+            Integer totalCount,
+            Instant createdAt,
+            Instant expiresAt,
+            Instant submittedAt
+        ) {
+            this(id, packId, unitId, null, mode, status, revision, questionCount,
+                correctCount, totalCount, createdAt, expiresAt, submittedAt);
+        }
+    }
 }

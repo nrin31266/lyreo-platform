@@ -37,7 +37,7 @@ final class LexiconDetailMapper {
                 s.translationStatus().name(), strings(s.rawGlossesJson(), "sense.rawGlosses"),
                 examples(s.examplesJson()), strings(s.tagsJson(), "sense.tags"),
                 s.matchedQualifier(),s.definitions(),s.sourceContext() != null && s.sourceContext().get("source") instanceof String source ? Map.of("source", source) : Map.of())).toList(),
-            entry.pronunciations().stream().map(this::pronunciation).toList(),
+            entry.pronunciations().stream().map(p -> pronunciation(entry.id(), p)).toList(),
             entry.translations().stream().map(t -> new LexiconController.TranslationResponse(
                 t.id(), t.itemId(), t.senseId(), t.wordVi(), t.source(), t.sourceScope(),
                 t.sourceSenseQualifier(), t.linkStatus(), t.unlinkedReason(),
@@ -45,12 +45,15 @@ final class LexiconDetailMapper {
             PronunciationGroups.from(entry.canonicalForm(), entry.pronunciations(), parts).stream()
                 .map(v -> new LexiconController.PronunciationVariantResponse(v.id(), v.form(), v.notation(),
                     v.notationSystem(), v.usage(), v.scopeStatus(), v.partOfSpeech(), v.regions(),
-                    v.recordings().stream().map(this::pronunciation).toList())).toList());
+                    v.recordings().stream().map(p -> pronunciation(entry.id(), p)).toList())).toList());
     }
 
-    private LexiconController.PronunciationResponse pronunciation(LexiconEntry.Pronunciation p) {
+    private LexiconController.PronunciationResponse pronunciation(java.util.UUID entryId, LexiconEntry.Pronunciation p) {
+        String endpoint = p.assetId() != null
+            ? "/api/v1/lexicon/" + entryId + "/pronunciations/" + p.id() + "/audio"
+            : null;
         return new LexiconController.PronunciationResponse(p.id(), p.itemId(), p.accent(), p.ipa(), p.audioFile(),
-            p.audioUrl(), p.sourceUrl(), strings(p.tagsJson(), "pronunciation.tags"), p.assetId(),
+            p.audioUrl(), p.sourceUrl(), strings(p.tagsJson(), "pronunciation.tags"), p.assetId(), endpoint,
             p.pronunciationContext(), PronunciationGroups.regions(p));
     }
 

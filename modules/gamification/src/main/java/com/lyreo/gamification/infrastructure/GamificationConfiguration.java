@@ -148,7 +148,8 @@ public class GamificationConfiguration {
         RewardPolicyConfigRepository policyConfig,
         NamedParameterJdbcTemplate jdbc,
         MissionProgressRepository missionRepository,
-        AchievementRepository achievementRepository
+        AchievementRepository achievementRepository,
+        ObjectProvider<ObjectMapper> mapperProvider
     ) {
         return new GamificationAdminService(
             diamondLedger,
@@ -162,7 +163,9 @@ public class GamificationConfiguration {
                 return count != null && count > 0;
             },
             missionRepository,
-            achievementRepository
+            achievementRepository,
+            jdbc,
+            mapperProvider.getIfAvailable(ObjectMapper::new)
         );
     }
 

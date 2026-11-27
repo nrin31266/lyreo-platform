@@ -83,6 +83,7 @@ services:
       # JWT issuer stays PUBLIC, but signing keys are fetched over the internal network.
       KEYCLOAK_ISSUER_URI: ${KEYCLOAK_PUBLIC_URL:-http://localhost/auth}/realms/lyreo
       KEYCLOAK_JWK_SET_URI: http://keycloak:8080/auth/realms/lyreo/protocol/openid-connect/certs
+      KEYCLOAK_ADMIN_REALM_URL: http://keycloak:8080/auth/realms/lyreo
       SPRING_PROFILES_ACTIVE: prod
     depends_on:
       postgres:

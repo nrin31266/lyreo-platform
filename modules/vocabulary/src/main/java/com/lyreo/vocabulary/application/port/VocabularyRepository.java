@@ -12,6 +12,18 @@ public interface VocabularyRepository {
     List<VocabularyCard> due(UUID learnerId, Instant now, int limit);
     void applyReview(UUID cardId, SpacedRepetitionScheduler.Rating rating, SpacedRepetitionScheduler.ScheduleResult result, Instant reviewedAt);
 
+    default List<VocabularyCard> duePage(UUID learnerId, Instant now, int offset, int limit) {
+        return due(learnerId, now, limit);
+    }
+
+    default long countDue(UUID learnerId, Instant now) {
+        return 0L;
+    }
+
+    default boolean deleteCard(UUID learnerId, UUID cardId) {
+        return false;
+    }
+
     default void lockLearnerSaveGate(UUID learnerId) {}
 
     default Optional<VocabularyCard> findCardByDedupKey(UUID learnerId, String dedupKey) {

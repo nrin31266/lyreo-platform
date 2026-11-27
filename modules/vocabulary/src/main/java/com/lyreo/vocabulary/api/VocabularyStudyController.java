@@ -10,11 +10,15 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.core.io.Resource;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -50,6 +54,29 @@ public class VocabularyStudyController {
     @GetMapping("/packs")
     public List<VocabularyStudyService.PackSummary> packs(@AuthenticationPrincipal Jwt jwt) {
         return study.listPacks(learnerId(jwt));
+    }
+
+    @GetMapping("/packs/{packId}/cover")
+    public ResponseEntity<byte[]> packCover(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable UUID packId,
+        @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch
+    ) {
+        AssetStore.Asset meta = study.authorizedPackCover(learnerId(jwt), packId);
+        String etag = "\"" + meta.id() + "-" + meta.sizeBytes() + "\"";
+        if (etag.equals(ifNoneMatch != null ? ifNoneMatch.strip() : null)) {
+            return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
+                .cacheControl(CacheControl.noCache().mustRevalidate())
+                .eTag(etag)
+                .build();
+        }
+        byte[] bytes = assets.bytes(meta.id());
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType(meta.mimeType()))
+            .cacheControl(CacheControl.noCache().mustRevalidate())
+            .eTag(etag)
+            .header("X-Content-Type-Options", "nosniff")
+            .body(bytes);
     }
 
     @GetMapping("/packs/{packId}/units")
@@ -99,12 +126,14 @@ public class VocabularyStudyController {
     }
 
     @GetMapping("/sessions")
-    public List<SessionSummary> listSessions(
+    public VocabularyStudyService.SessionPage listSessions(
         @AuthenticationPrincipal Jwt jwt,
         @RequestParam(required = false) UUID unitId,
-        @RequestParam(required = false) String status
+        @RequestParam(required = false) String status,
+        @RequestParam(defaultValue = "0") @Min(0) @Max(100000) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
     ) {
-        return study.listSessions(learnerId(jwt), unitId, status);
+        return study.listSessionsPage(learnerId(jwt), unitId, status, page, size);
     }
 
     @GetMapping("/sessions/{id}")
@@ -146,13 +175,16 @@ public class VocabularyStudyController {
 
     public record SaveAnswersRequest(
         @NotNull(message = "revision is required")
+        @Min(0)
         Long revision,
         @NotNull(message = "answers is required")
-        Map<UUID, String> answers
+        @Size(max = 100)
+        Map<UUID, @Size(max = 500) String> answers
     ) {}
 
     public record SubmitSessionRequest(
         @NotNull(message = "revision is required")
+        @Min(0)
         Long revision
     ) {}
 }
