@@ -10,7 +10,7 @@ help:
 	  'Lyreo common commands:' \
 	  '' \
 	  'Setup' \
-	  '  make setup                       First-clone setup: env + deps + infra + Keycloak + frozen datasets (when R2 configured) + seed (SKIP_DATA=1 skips dataset import)' \
+	  '  make setup                       First-clone setup: env + deps + infra + Keycloak + frozen datasets (R2 mode) + seed (SKIP_DATA=1 skips dataset import)' \
 	  '  make init-env                    Copy/synchronize local .env files' \
 	  '  make doctor                      Inspect local toolchain/env/data readiness' \
 	  '  make setup-media                 Install the Core YouTube metadata/audio downloader' \
@@ -127,6 +127,7 @@ DB_SETUP = set -a; . ./apps/core-service/.env && set +a && ./mvnw -B -pl apps/co
 
 setup:
 	$(MAKE) init-env
+	$(MAKE) data-storage-check
 	$(MAKE) doctor
 	$(MAKE) deps
 	$(MAKE) dev-infra
@@ -138,8 +139,7 @@ setup:
 	else \
 	  $(MAKE) seed && \
 	  printf '%s\n' \
-	    'R2 credentials are not configured yet; skipped full dataset import (lexicon/grammar-toeic/vocabulary).' \
-	    'Set STORAGE_MODE=r2 and R2_* in apps/core-service/.env and tools/data-import/.env, then run: make setup-data'; \
+	    'Local storage selected; installed demo data. For full datasets, configure R2 in both .env files and run make setup-data.'; \
 	fi
 	@printf '%s\n' \
 	  'Lyreo local dependencies are ready.' \

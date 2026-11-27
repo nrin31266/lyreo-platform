@@ -24,9 +24,9 @@ Learner preferences are persistent, cross-device study choices within the Admin 
 
 ## Storage and jobs
 
-Development defaults to local filesystem storage. Full Grammar/TOEIC import integration uses
-each developer's local PostgreSQL database and the team's shared `lyreo-dev` Cloudflare R2
-bucket; production also uses R2. Each developer keeps R2 credentials in ignored local env files.
+New development env files select the team's shared `lyreo-dev` Cloudflare R2 bucket. Full dataset
+imports use each developer's local PostgreSQL database. Production also uses R2. Each developer
+keeps R2 credentials in ignored local env files.
 Core and the importer must select the same storage mode and target. Local importer storage is
 available for isolated development/tests; selecting it does not migrate existing R2 objects.
 `make data-storage-check` verifies configuration alignment without reading or writing cloud data.

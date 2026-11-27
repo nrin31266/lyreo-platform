@@ -24,14 +24,16 @@ Use the versions in `.java-version`, `.nvmrc`, and `package.json#packageManager`
 
 ```bash
 make init-env
-# Set STORAGE_MODE=r2 and the team's R2 credentials in apps/core-service/.env and tools/data-import/.env
-# when importing the full frozen Drive datasets (lexicon, grammar-toeic, vocabulary) automatically.
+# Add the team's R2 endpoint and credentials to apps/core-service/.env and tools/data-import/.env.
 make setup
 ```
 
-Setup creates local environment files, syncs dependencies, starts PostgreSQL and Keycloak, and
-runs `make setup-data` (imports all frozen datasets + `make seed`) when R2 is configured, or
-`make seed` alone (`SKIP_DATA=1 make setup` skips dataset import explicitly):
+New environment files select the shared R2 bucket. Setup checks the storage settings, syncs dependencies,
+starts PostgreSQL and Keycloak, imports all frozen datasets and seeds demo data. For isolated development
+without R2 credentials, set `STORAGE_MODE=local` in both files before running `make setup` to seed demo
+data with filesystem storage. `SKIP_DATA=1 make setup` skips the dataset import in R2 mode.
+
+To install datasets separately:
 
 ```bash
 make setup-data DATASET=lexicon        # Dictionary
@@ -63,7 +65,9 @@ Local login details: [Development accounts](docs/ACCOUNT.md).
 business modules. It follows your editor's save behavior; it does not change autosave settings.
 See [Core development](apps/core-service/README.md#local-run-and-verification) for setup and reload details.
 
-`make mobile` starts Metro; install the Expo development build first using the [Mobile guide](apps/mobile/README.md). Mock AI and local storage are the normal development defaults.
+`make mobile` starts Metro. Install the Expo development build first using the [Mobile guide](apps/mobile/README.md).
+With R2 configured, sample lessons and their audio are ready to use after setup. Use `make ai-local`
+for tasks that need local models to generate audio or transcripts.
 
 ## Common commands
 

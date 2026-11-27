@@ -115,7 +115,7 @@ if ! grep -q '^STORAGE_MODE=' "$DATA_ENV"; then
   if [[ -n "$(get_env "$DATA_ENV" R2_ENDPOINT)" && -n "$(get_env "$DATA_ENV" R2_ACCESS_KEY_ID)" && -n "$(get_env "$DATA_ENV" R2_SECRET_ACCESS_KEY)" ]]; then
     set_env "$DATA_ENV" STORAGE_MODE r2
   else
-    set_env "$DATA_ENV" STORAGE_MODE "$(get_env "$DATA_ENV.example" STORAGE_MODE)"
+    set_env "$DATA_ENV" STORAGE_MODE local
   fi
 fi
 
@@ -142,7 +142,7 @@ set_env "$CORE_ENV" DEV_BOOTSTRAP_TOKEN "$BOOTSTRAP_TOKEN"
 set_env "$KC_ENV" DEV_BOOTSTRAP_TOKEN "$BOOTSTRAP_TOKEN"
 
 echo 'Local environment files synchronized.'
-echo 'Local object storage is the default; R2_* values are only needed for R2 integration flows.'
+echo 'For R2 storage, add the team credentials to apps/core-service/.env and tools/data-import/.env.'
 
 if [[ -f "$DATA_ENV" ]]; then
   DATA_URL=$(get_env "$DATA_ENV" GRAMMAR_TOEIC_RELEASE_URL)
