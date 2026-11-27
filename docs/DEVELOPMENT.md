@@ -85,6 +85,10 @@ overwriting its worktree or posting safeguards. Do not replace it through a gene
 
 ## CodeGraph pilot
 
+MCP clients that read `.mcp.json` (Claude Code, Antigravity, Cursor): `cp .mcp.example.json .mcp.json`.
+The example lists only project tools (CodeGraph, shadcn); put personal servers and tokens in your own
+user-level config, never in this file.
+
 CodeGraph 1.6.2 is an optional, project-scoped navigation tool, not a runtime dependency or a
 verification gate. [Project Codex config](../.codex/config.toml) runs its MCP server through pnpm,
 exposes only `codegraph_explore`, and sets `DO_NOT_TRACK=1` for that process. Reload Codex to load

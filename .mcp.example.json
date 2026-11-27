@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "codegraph": {
+      "command": "pnpm",
+      "args": ["dlx", "@colbymchenry/codegraph@1.6.2", "serve", "--mcp"],
+      "env": { "DO_NOT_TRACK": "1" }
+    },
+    "shadcn": {
+      "command": "pnpm",
+      "args": ["dlx", "shadcn@latest", "mcp"]
+    }
+  }
+}
