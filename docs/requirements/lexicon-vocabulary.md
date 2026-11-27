@@ -101,10 +101,13 @@ với câu cũ. Khi biên tập có thể cập nhật bản dịch đi cùng c�
 ### Thứ tự triển khai Vocabulary
 
 1. Nạp danh mục đã làm sạch một lần, quản lý và kiểm tra nội dung trong Admin.
-2. Cấp API Learner duyệt bộ/unit và học thẻ. Dùng từ, nghĩa Việt, audio và ví dụ
-   để tạo bài chọn nghĩa, chọn từ, sắp xếp chữ, nghe–viết và điền theo ngữ cảnh.
-   Chỉ tạo điền từ từ ví dụ khớp được đáp án; lựa chọn nhiễu sinh từ nhóm học đủ
-   từ phù hợp. Tiến độ đi theo mục học và unit. Lượt chơi giải trí không đổi lịch ôn.
+2. Cấp API Learner duyệt bộ/unit và học thẻ (flashcard SRS theo phạm vi mới + cần ôn,
+   toàn bộ unit hoặc cả bộ). Dùng từ, nghĩa Việt, audio và ví dụ để tạo bài chọn nghĩa,
+   chọn từ, sắp xếp chữ, điền khuyết, nghe–viết, điền theo ngữ cảnh, đoán từ theo nghĩa
+   (có gợi ý/kiểm tra từng câu phía server) và phiên luyện tập kết hợp nhiều dạng theo
+   unit hoặc cả bộ. Chỉ tạo điền từ từ ví dụ khớp được đáp án; lựa chọn nhiễu sinh từ
+   nhóm học đủ từ phù hợp. Tiến độ đi theo mục học và unit. Lượt luyện tập và đoán từ
+   không đổi lịch ôn SRS; chỉ lượt đánh giá trong luồng Học thẻ cập nhật lịch SRS.
 3. Cho phép lưu từ từ bộ học, Lesson và Lexicon. Lưu nghĩa/ngữ cảnh đã chọn cùng
    nguồn tham chiếu. ID Lexicon là thông tin bổ sung khi xác minh được. Chuyển đổi
    sổ SRS cũ có giữ lịch sử, sau đó chốt hợp đồng Learner trước bàn giao frontend.

@@ -3,8 +3,13 @@ package com.lyreo.vocabulary.api;
 import com.lyreo.identity.application.AppUserProvisioningService;
 import com.lyreo.platform.content.AssetStore;
 import com.lyreo.vocabulary.application.VocabularyStudyService;
+import com.lyreo.vocabulary.application.port.SpacedRepetitionScheduler;
 import com.lyreo.vocabulary.domain.PracticeMode;
-import com.lyreo.vocabulary.domain.VocabularyStudyModels.SessionSummary;
+import com.lyreo.vocabulary.domain.VocabularyStudyModels.CheckQuestionResponse;
+import com.lyreo.vocabulary.domain.VocabularyStudyModels.FlashcardDeckResponse;
+import com.lyreo.vocabulary.domain.VocabularyStudyModels.FlashcardReviewResponse;
+import com.lyreo.vocabulary.domain.VocabularyStudyModels.FlashcardScope;
+import com.lyreo.vocabulary.domain.VocabularyStudyModels.HintResponse;
 import com.lyreo.vocabulary.domain.VocabularyStudyModels.SessionView;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -32,7 +37,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Learner HTTP endpoints for vocabulary study catalog, authorized media, and 6-mode practice sessions. */
+/**
+ * Learner HTTP endpoints for vocabulary study catalog, authorized media,
+ * flashcard SRS study, and multi-mode / guess-the-word practice sessions.
+ */
 @RestController
 @RequestMapping("/api/v1/vocabulary")
 public class VocabularyStudyController {
@@ -107,6 +115,33 @@ public class VocabularyStudyController {
         return VocabularyMediaStreamer.stream(asset, bytes, rangeHeader);
     }
 
+    @GetMapping("/flashcards")
+    public FlashcardDeckResponse flashcards(
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestParam(required = false) UUID unitId,
+        @RequestParam(required = false) UUID packId,
+        @RequestParam(defaultValue = "DUE_AND_NEW") FlashcardScope scope,
+        @RequestParam(defaultValue = "30") @Min(1) @Max(200) int limit
+    ) {
+        return study.getFlashcardDeck(learnerId(jwt), unitId, packId, scope, limit);
+    }
+
+    @PostMapping("/entries/{entryId}/flashcard-review")
+    public FlashcardReviewResponse reviewFlashcard(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable UUID entryId,
+        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+        @Valid @RequestBody FlashcardReviewRequest request
+    ) {
+        return study.reviewFlashcard(
+            learnerId(jwt),
+            entryId,
+            request.rating(),
+            request.expectedReviewCount(),
+            idempotencyKey
+        );
+    }
+
     @PostMapping("/units/{unitId}/sessions")
     public ResponseEntity<SessionView> startSession(
         @AuthenticationPrincipal Jwt jwt,
@@ -118,6 +153,26 @@ public class VocabularyStudyController {
             learnerId(jwt),
             unitId,
             request.mode(),
+            request.modes(),
+            request.limit(),
+            idempotencyKey
+        );
+        return ResponseEntity.created(URI.create("/api/v1/vocabulary/sessions/" + session.id()))
+            .body(session);
+    }
+
+    @PostMapping("/packs/{packId}/sessions")
+    public ResponseEntity<SessionView> startPackSession(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable UUID packId,
+        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+        @Valid @RequestBody StartSessionRequest request
+    ) {
+        SessionView session = study.startPackSession(
+            learnerId(jwt),
+            packId,
+            request.mode(),
+            request.modes(),
             request.limit(),
             idempotencyKey
         );
@@ -128,12 +183,13 @@ public class VocabularyStudyController {
     @GetMapping("/sessions")
     public VocabularyStudyService.SessionPage listSessions(
         @AuthenticationPrincipal Jwt jwt,
+        @RequestParam(required = false) UUID packId,
         @RequestParam(required = false) UUID unitId,
         @RequestParam(required = false) String status,
         @RequestParam(defaultValue = "0") @Min(0) @Max(100000) int page,
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
     ) {
-        return study.listSessionsPage(learnerId(jwt), unitId, status, page, size);
+        return study.listSessionsPage(learnerId(jwt), packId, unitId, status, page, size);
     }
 
     @GetMapping("/sessions/{id}")
@@ -142,6 +198,32 @@ public class VocabularyStudyController {
         @PathVariable UUID id
     ) {
         return study.getSession(learnerId(jwt), id);
+    }
+
+    @PostMapping("/sessions/{id}/questions/{questionId}/hint")
+    public HintResponse requestHint(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable UUID id,
+        @PathVariable UUID questionId
+    ) {
+        return study.requestHint(learnerId(jwt), id, questionId);
+    }
+
+    @PostMapping("/sessions/{id}/questions/{questionId}/check")
+    public CheckQuestionResponse checkQuestion(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable UUID id,
+        @PathVariable UUID questionId,
+        @Valid @RequestBody CheckQuestionRequest request
+    ) {
+        return study.checkQuestion(
+            learnerId(jwt),
+            id,
+            questionId,
+            request.revision(),
+            request.answer(),
+            Boolean.TRUE.equals(request.giveUp())
+        );
     }
 
     @PutMapping("/sessions/{id}/answers")
@@ -167,10 +249,36 @@ public class VocabularyStudyController {
         return users.provision(jwt.getSubject(), jwt.getClaimAsString("email")).id();
     }
 
+    public record FlashcardReviewRequest(
+        @NotNull(message = "rating is required")
+        SpacedRepetitionScheduler.Rating rating,
+        @Min(0)
+        Integer expectedReviewCount
+    ) {
+        public FlashcardReviewRequest(SpacedRepetitionScheduler.Rating rating) {
+            this(rating, null);
+        }
+    }
+
     public record StartSessionRequest(
-        @NotNull(message = "mode is required")
         PracticeMode mode,
-        @Min(1) @Max(50) Integer limit
+        @Size(max = 10)
+        List<PracticeMode> modes,
+        @Min(1) @Max(100)
+        Integer limit
+    ) {
+        public StartSessionRequest(PracticeMode mode, Integer limit) {
+            this(mode, null, limit);
+        }
+    }
+
+    public record CheckQuestionRequest(
+        @NotNull(message = "revision is required")
+        @Min(0)
+        Long revision,
+        @Size(max = 500)
+        String answer,
+        Boolean giveUp
     ) {}
 
     public record SaveAnswersRequest(

@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.lyreo.contracts.errors.IdempotencyConflictException;
+import com.lyreo.contracts.errors.RequestValidationException;
 import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.errors.SessionExpiredException;
 import com.lyreo.contracts.errors.StaleRevisionException;
+import com.lyreo.contracts.errors.StateConflictException;
 import com.lyreo.contracts.vocabulary.VocabularyReviewCompletedEvent;
 import com.lyreo.contracts.vocabulary.VocabularyUnitCompletedEvent;
 import com.lyreo.entitlement.api.FeatureEntitlementRequiredException;
@@ -14,10 +16,9 @@ import com.lyreo.platform.content.AssetStore;
 import com.lyreo.platform.content.DocumentStore;
 import com.lyreo.platform.storage.ObjectStoragePort;
 import com.lyreo.vocabulary.application.VocabularyStudyService;
+import com.lyreo.vocabulary.application.port.SpacedRepetitionScheduler;
 import com.lyreo.vocabulary.domain.PracticeMode;
-import com.lyreo.vocabulary.domain.VocabularyStudyModels.QuestionOption;
-import com.lyreo.vocabulary.domain.VocabularyStudyModels.QuestionView;
-import com.lyreo.vocabulary.domain.VocabularyStudyModels.SessionView;
+import com.lyreo.vocabulary.domain.VocabularyStudyModels.*;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -307,6 +308,141 @@ class VocabularyStudyIT {
         SessionView mcqSaved = studyService.saveAnswers(learnerA, mcq.id(), 1L, mcqAnswers);
         SessionView mcqSubmitted = studyService.submitSession(learnerA, mcq.id(), mcqSaved.revision(), "submit-mcq");
         assertThat(mcqSubmitted.status()).isEqualTo("SUBMITTED");
+
+        // 5. Flashcard mode (DUE_AND_NEW vs ALL, SRS review, idempotency, stale reviewCount, vocabulary_card untouched)
+        FlashcardDeckResponse learnerBBlocked = null;
+        assertThatThrownBy(() -> studyService.getFlashcardDeck(learnerB, unitPlus, null, FlashcardScope.DUE_AND_NEW, 30))
+            .isInstanceOf(FeatureEntitlementRequiredException.class);
+        assertThat(learnerBBlocked).isNull();
+
+        FlashcardDeckResponse unitDeckBefore = studyService.getFlashcardDeck(
+            learnerA, unitVisible, null, FlashcardScope.DUE_AND_NEW, 30
+        );
+        assertThat(unitDeckBefore.items()).hasSize(4);
+        assertThat(unitDeckBefore.counts().dueAndNewUnit()).isEqualTo(4);
+        assertThat(unitDeckBefore.counts().allUnit()).isEqualTo(4);
+        assertThat(unitDeckBefore.counts().allPack()).isEqualTo(4);
+        assertThat(unitDeckBefore.items().getFirst().srsState()).isEqualTo("NEW");
+        assertThat(unitDeckBefore.items().getFirst().intervalPreviews().keySet())
+            .containsExactlyInAnyOrder(SpacedRepetitionScheduler.Rating.values());
+
+        FlashcardReviewResponse flashReviewed = studyService.reviewFlashcard(
+            learnerA, entryAchieve, SpacedRepetitionScheduler.Rating.GOOD, 0, "flash-rev-1"
+        );
+        assertThat(flashReviewed.reviewCount()).isEqualTo(1);
+        assertThat(flashReviewed.srsState()).isEqualTo("LEARNING");
+        assertThat(reviewEvents).hasSize(1);
+        assertThat(reviewEvents.getFirst().cardId()).isEqualTo(entryAchieve);
+
+        // Idempotent retry produces no duplicate event
+        FlashcardReviewResponse flashRetry = studyService.reviewFlashcard(
+            learnerA, entryAchieve, SpacedRepetitionScheduler.Rating.GOOD, 0, "flash-rev-1"
+        );
+        assertThat(flashRetry.reviewCount()).isEqualTo(1);
+        assertThat(reviewEvents).hasSize(1);
+
+        // Stale expectedReviewCount rejected with 409
+        assertThatThrownBy(() -> studyService.reviewFlashcard(
+            learnerA, entryAchieve, SpacedRepetitionScheduler.Rating.EASY, 0, "flash-rev-stale"
+        )).isInstanceOf(StaleRevisionException.class);
+
+        // entryAchieve drops out of DUE_AND_NEW deck, but remains in ALL deck
+        FlashcardDeckResponse unitDeckAfter = studyService.getFlashcardDeck(
+            learnerA, unitVisible, null, FlashcardScope.DUE_AND_NEW, 30
+        );
+        assertThat(unitDeckAfter.items()).extracting(FlashcardItem::entryId).doesNotContain(entryAchieve);
+        assertThat(unitDeckAfter.counts().dueAndNewUnit()).isEqualTo(3);
+
+        FlashcardDeckResponse unitDeckAll = studyService.getFlashcardDeck(
+            learnerA, unitVisible, null, FlashcardScope.ALL, 30
+        );
+        assertThat(unitDeckAll.items()).hasSize(4);
+        assertThat(unitDeckAll.items().getFirst().srsState()).isEqualTo("LEARNING");
+
+        // Personal vocabulary_card table remains untouched!
+        assertThat(jdbc.queryForObject("SELECT review_count FROM vocabulary_card WHERE id = ?", Integer.class, cardId))
+            .isZero();
+
+        // 6. GUESS_WORD: hints, per-question check, lock against overwrite, giveUp, SRS untouched
+        int reviewEventsBeforeGuess = reviewEvents.size();
+        SessionView guessSession = studyService.startSession(learnerA, unitVisible, PracticeMode.GUESS_WORD, 4, "guess-start");
+        QuestionView pepperQ = guessSession.questions().stream()
+            .filter(q -> q.entryId().equals(entryPepper))
+            .findFirst()
+            .orElseThrow();
+        assertThat(pepperQ.maskedTerm()).isEqualTo("******");
+        assertThat(pepperQ.maxHints()).isEqualTo(5);
+
+        HintResponse h1 = studyService.requestHint(learnerA, guessSession.id(), pepperQ.id());
+        assertThat(h1.maskedTerm()).isEqualTo("p*****");
+        assertThat(h1.hintsUsed()).isEqualTo(1);
+        assertThat(h1.hintsRemaining()).isEqualTo(4);
+
+        CheckQuestionResponse pepperChecked = studyService.checkQuestion(
+            learnerA, guessSession.id(), pepperQ.id(), guessSession.revision(), "pepper", false
+        );
+        assertThat(pepperChecked.correct()).isTrue();
+        assertThat(pepperChecked.hintsUsed()).isEqualTo(1);
+
+        // Checked question cannot accept more hints or be overwritten via saveAnswers
+        assertThatThrownBy(() -> studyService.requestHint(learnerA, guessSession.id(), pepperQ.id()))
+            .isInstanceOf(StateConflictException.class);
+        assertThatThrownBy(() -> studyService.saveAnswers(
+            learnerA, guessSession.id(), pepperChecked.revision(), Map.of(pepperQ.id(), "changed")
+        )).isInstanceOf(StateConflictException.class);
+
+        // Give up on another question
+        QuestionView appleQ = guessSession.questions().stream()
+            .filter(q -> q.entryId().equals(entryApple))
+            .findFirst()
+            .orElseThrow();
+        CheckQuestionResponse appleGaveUp = studyService.checkQuestion(
+            learnerA, guessSession.id(), appleQ.id(), pepperChecked.revision(), null, true
+        );
+        assertThat(appleGaveUp.correct()).isFalse();
+        assertThat(appleGaveUp.gaveUp()).isTrue();
+        assertThat(appleGaveUp.correctAnswer()).isEqualTo("apple");
+
+        // Hint exhausted check on remaining question ("run" has maxHints=2)
+        QuestionView runQ = guessSession.questions().stream()
+            .filter(q -> q.entryId().equals(entryRun))
+            .findFirst()
+            .orElseThrow();
+        studyService.requestHint(learnerA, guessSession.id(), runQ.id());
+        studyService.requestHint(learnerA, guessSession.id(), runQ.id());
+        assertThatThrownBy(() -> studyService.requestHint(learnerA, guessSession.id(), runQ.id()))
+            .isInstanceOf(RequestValidationException.class);
+
+        SessionView guessSubmitted = studyService.submitSession(
+            learnerA, guessSession.id(), appleGaveUp.revision(), "guess-submit"
+        );
+        assertThat(guessSubmitted.status()).isEqualTo("SUBMITTED");
+        QuestionFeedback appleFeedback = guessSubmitted.result().questions().stream()
+            .filter(f -> f.questionId().equals(appleQ.id()))
+            .findFirst()
+            .orElseThrow();
+        assertThat(appleFeedback.gaveUp()).isTrue();
+        assertThat(appleFeedback.correct()).isFalse();
+        assertThat(reviewEvents).hasSize(reviewEventsBeforeGuess);
+
+        // 7. Pack-wide multi-mode session ("Cả bộ" + chọn nhiều dạng bài)
+        int unitEventsBeforePack = unitEvents.size();
+        SessionView packSession = studyService.startPackSession(
+            learnerA,
+            publicPack,
+            PracticeMode.MIXED,
+            List.of(PracticeMode.CHOOSE_MEANING, PracticeMode.CHOOSE_WORD, PracticeMode.GUESS_WORD),
+            10,
+            "pack-mixed-1"
+        );
+        assertThat(packSession.unitId()).isNull();
+        assertThat(packSession.mode()).isEqualTo(PracticeMode.MIXED);
+        assertThat(packSession.questions()).hasSize(4);
+
+        SessionView packSubmitted = studyService.submitSession(learnerA, packSession.id(), packSession.revision(), "pack-submit-1");
+        assertThat(packSubmitted.status()).isEqualTo("SUBMITTED");
+        assertThat(unitEvents).hasSize(unitEventsBeforePack + 1);
+        assertThat(unitEvents.getLast().unitId()).isNull();
     }
 
     private UUID insertAsset(String filename, String mimeType, byte[] bytes) throws Exception {

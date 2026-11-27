@@ -77,7 +77,7 @@ public class OpenApiConfiguration {
                 new Tag().name("Jobs").description("Background job tracking and cancellation"),
                 new Tag().name("AI Administration").description("AI provider and route routing management"),
                 new Tag().name("Lexicon").description("Global learner dictionary lookup"),
-                new Tag().name("Vocabulary").description("Learner vocabulary SRS and review"),
+                new Tag().name("Vocabulary").description("Curated vocabulary catalog, flashcard SRS study, guess-the-word and multi-mode practice, saved cards and collections"),
                 new Tag().name("Grammar").description("Grammar bank questions and practice"),
                 new Tag().name("TOEIC").description("TOEIC test attempts and submission"),
                 new Tag().name("Entitlement").description("Learner feature entitlements, quota snapshots and manual admin grants"),

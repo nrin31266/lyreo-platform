@@ -233,8 +233,8 @@ public final class JdbcAnalyticsProjectionRepository implements AnalyticsProject
             SELECT
                 lw.weakness_type,
                 lw.weakness_key,
-                COALESCE(gt.label, vp.title_vi || ' · ' || vu.title) AS label,
-                COALESCE(gt.label_en, vp.title_en || ' · ' || vu.title) AS label_en,
+                COALESCE(gt.label, vp.title_vi || ' · ' || vu.title, hw.identity_form, vue.term, vc.term) AS label,
+                COALESCE(gt.label_en, vp.title_en || ' · ' || vu.title, hw.identity_form, vue.term, vc.term) AS label_en,
                 lw.severity,
                 lw.sample_count,
                 lw.updated_at
@@ -248,6 +248,9 @@ public final class JdbcAnalyticsProjectionRepository implements AnalyticsProject
             ) gt ON lw.weakness_type = 'GRAMMAR_TOPIC'
             LEFT JOIN vocabulary_unit vu ON lw.weakness_type = 'VOCABULARY_UNIT' AND vu.id::text = lw.weakness_key
             LEFT JOIN vocabulary_pack vp ON vp.id = vu.pack_id
+            LEFT JOIN lexicon_headword hw ON lw.weakness_type = 'VOCABULARY' AND hw.id::text = lw.weakness_key
+            LEFT JOIN vocabulary_unit_entry vue ON lw.weakness_type = 'VOCABULARY' AND vue.id::text = lw.weakness_key
+            LEFT JOIN vocabulary_card vc ON lw.weakness_type = 'VOCABULARY' AND vc.id::text = lw.weakness_key
             WHERE lw.learner_id = :learnerId
               AND lw.severity > 0
             ORDER BY lw.severity DESC, lw.sample_count DESC, lw.weakness_type ASC, lw.weakness_key ASC
@@ -818,8 +821,8 @@ public final class JdbcAnalyticsProjectionRepository implements AnalyticsProject
             """
             SELECT
                 agg.*,
-                COALESCE(gt.label, vp.title_vi || ' · ' || vu.title, hw.identity_form) AS label,
-                COALESCE(gt.label_en, vp.title_en || ' · ' || vu.title, hw.identity_form) AS label_en
+                COALESCE(gt.label, vp.title_vi || ' · ' || vu.title, hw.identity_form, vue.term, vc.term) AS label,
+                COALESCE(gt.label_en, vp.title_en || ' · ' || vu.title, hw.identity_form, vue.term, vc.term) AS label_en
             FROM (
                 SELECT
                     weakness_type,
@@ -844,6 +847,8 @@ public final class JdbcAnalyticsProjectionRepository implements AnalyticsProject
             LEFT JOIN vocabulary_unit vu ON agg.weakness_type = 'VOCABULARY_UNIT' AND vu.id::text = agg.weakness_key
             LEFT JOIN vocabulary_pack vp ON vp.id = vu.pack_id
             LEFT JOIN lexicon_headword hw ON agg.weakness_type = 'VOCABULARY' AND hw.id::text = agg.weakness_key
+            LEFT JOIN vocabulary_unit_entry vue ON agg.weakness_type = 'VOCABULARY' AND vue.id::text = agg.weakness_key
+            LEFT JOIN vocabulary_card vc ON agg.weakness_type = 'VOCABULARY' AND vc.id::text = agg.weakness_key
             ORDER BY agg.avg_severity DESC, agg.affected_learners DESC, agg.weakness_type ASC, agg.weakness_key ASC
             """,
             Map.of(),

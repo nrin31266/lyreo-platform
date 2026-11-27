@@ -5,12 +5,14 @@ import com.lyreo.contracts.errors.ResourceNotFoundException;
 import com.lyreo.contracts.errors.SessionExpiredException;
 import com.lyreo.contracts.errors.StaleRevisionException;
 import com.lyreo.contracts.errors.StateConflictException;
+import com.lyreo.contracts.vocabulary.VocabularyReviewCompletedEvent;
 import com.lyreo.contracts.vocabulary.VocabularyUnitCompletedEvent;
 import com.lyreo.entitlement.api.EntitlementService;
 import com.lyreo.entitlement.api.FeatureAccess;
 import com.lyreo.entitlement.api.FeatureKey;
 import com.lyreo.platform.config.application.OperationIdempotencyService;
 import com.lyreo.platform.content.AssetStore;
+import com.lyreo.vocabulary.application.port.SpacedRepetitionScheduler;
 import com.lyreo.vocabulary.application.port.VocabularyCatalog;
 import com.lyreo.vocabulary.application.port.VocabularyStudyRepository;
 import com.lyreo.vocabulary.application.port.VocabularyStudyRepository.*;
@@ -18,6 +20,7 @@ import com.lyreo.vocabulary.domain.PracticeMode;
 import com.lyreo.vocabulary.domain.VocabularyAnswerGrader;
 import com.lyreo.vocabulary.domain.VocabularyExerciseGenerator;
 import com.lyreo.vocabulary.domain.VocabularyStudyModels.*;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import org.springframework.context.ApplicationEventPublisher;
@@ -27,7 +30,7 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * Application service for learner vocabulary study catalog browsing, authorized media access,
- * and 6-mode practice sessions.
+ * flashcard SRS study, multi-mode/pack practice sessions, and GUESS_WORD hints/checks.
  */
 public class VocabularyStudyService {
     private static final long SESSION_TTL_SECONDS = 24L * 60L * 60L;
@@ -38,6 +41,7 @@ public class VocabularyStudyService {
     private final OperationIdempotencyService idempotency;
     private final ApplicationEventPublisher events;
     private final ObjectMapper json;
+    private final SpacedRepetitionScheduler scheduler;
     private final VocabularyExerciseGenerator generator;
     private final VocabularyAnswerGrader grader;
 
@@ -49,12 +53,25 @@ public class VocabularyStudyService {
         ApplicationEventPublisher events,
         ObjectMapper json
     ) {
+        this(repository, entitlements, assets, idempotency, events, json, null);
+    }
+
+    public VocabularyStudyService(
+        VocabularyStudyRepository repository,
+        EntitlementService entitlements,
+        AssetStore assets,
+        OperationIdempotencyService idempotency,
+        ApplicationEventPublisher events,
+        ObjectMapper json,
+        SpacedRepetitionScheduler scheduler
+    ) {
         this.repository = repository;
         this.entitlements = entitlements;
         this.assets = assets;
         this.idempotency = idempotency;
         this.events = events;
         this.json = json;
+        this.scheduler = scheduler;
         this.generator = new VocabularyExerciseGenerator();
         this.grader = new VocabularyAnswerGrader();
     }
@@ -155,6 +172,220 @@ public class VocabularyStudyService {
         );
     }
 
+    public FlashcardDeckResponse getFlashcardDeck(
+        UUID learnerId,
+        UUID unitId,
+        UUID packId,
+        FlashcardScope scope,
+        int limit
+    ) {
+        if (unitId == null && packId == null) {
+            throw new RequestValidationException("unitId or packId is required");
+        }
+        if (limit < 1 || limit > 200) {
+            throw new RequestValidationException("limit must be between 1 and 200");
+        }
+        FlashcardScope effectiveScope = scope != null ? scope : FlashcardScope.DUE_AND_NEW;
+
+        UUID resolvedPackId;
+        if (unitId != null) {
+            UnitWithPackRow unit = repository.findVisibleUnit(unitId)
+                .orElseThrow(() -> new ResourceNotFoundException("Vocabulary unit not found"));
+            requirePackEntitlement(learnerId, unit.packAccessMode(), unit.packRequiredFeatureKey());
+            if (packId != null && !packId.equals(unit.packId())) {
+                throw new RequestValidationException("unitId does not belong to the requested packId");
+            }
+            resolvedPackId = unit.packId();
+        } else {
+            PackRow pack = repository.findVisiblePack(packId)
+                .orElseThrow(() -> new ResourceNotFoundException("Vocabulary pack not found"));
+            requirePackEntitlement(learnerId, pack.accessMode(), pack.requiredFeatureKey());
+            resolvedPackId = pack.id();
+        }
+
+        Instant now = Instant.now();
+        List<FlashcardEntryRow> packEntries = repository.findFlashcardEntriesByPack(resolvedPackId, learnerId);
+
+        int dueAndNewPack = 0;
+        int allPack = packEntries.size();
+        Integer dueAndNewUnit = unitId != null ? 0 : null;
+        Integer allUnit = unitId != null ? 0 : null;
+        int dueCount = 0;
+        int newCount = 0;
+        int learningCount = 0;
+        int masteredCount = 0;
+
+        List<FlashcardEntryRow> dueRows = new ArrayList<>();
+        List<FlashcardEntryRow> newRows = new ArrayList<>();
+        List<FlashcardEntryRow> allScopeRows = new ArrayList<>();
+
+        for (FlashcardEntryRow row : packEntries) {
+            String state = classifySrsState(row.srsReviewCount(), row.srsNextReviewAt(), row.srsStability(), now);
+            boolean isDueOrNew = "DUE".equals(state) || "NEW".equals(state);
+            if (isDueOrNew) {
+                dueAndNewPack++;
+            }
+            boolean inScope = unitId == null || unitId.equals(row.unitId());
+            if (!inScope) {
+                continue;
+            }
+            if (unitId != null) {
+                allUnit = allUnit + 1;
+                if (isDueOrNew) {
+                    dueAndNewUnit = dueAndNewUnit + 1;
+                }
+            }
+            switch (state) {
+                case "DUE" -> {
+                    dueCount++;
+                    dueRows.add(row);
+                }
+                case "NEW" -> {
+                    newCount++;
+                    newRows.add(row);
+                }
+                case "MASTERED" -> masteredCount++;
+                default -> learningCount++;
+            }
+            allScopeRows.add(row);
+        }
+
+        List<FlashcardEntryRow> ordered;
+        if (effectiveScope == FlashcardScope.DUE_AND_NEW) {
+            dueRows.sort(Comparator.comparing(
+                FlashcardEntryRow::srsNextReviewAt,
+                Comparator.nullsFirst(Comparator.naturalOrder())
+            ).thenComparingInt(FlashcardEntryRow::unitPosition).thenComparingInt(FlashcardEntryRow::position));
+            ordered = new ArrayList<>(dueRows.size() + newRows.size());
+            ordered.addAll(dueRows);
+            ordered.addAll(newRows);
+        } else {
+            ordered = allScopeRows;
+        }
+
+        List<FlashcardItem> items = ordered.stream()
+            .limit(limit)
+            .map(row -> toFlashcardItem(row, now))
+            .toList();
+
+        return new FlashcardDeckResponse(
+            resolvedPackId,
+            unitId,
+            effectiveScope,
+            new FlashcardCounts(
+                dueAndNewUnit,
+                allUnit,
+                dueAndNewPack,
+                allPack,
+                dueCount,
+                newCount,
+                learningCount,
+                masteredCount
+            ),
+            items
+        );
+    }
+
+    @Transactional
+    public FlashcardReviewResponse reviewFlashcard(
+        UUID learnerId,
+        UUID entryId,
+        SpacedRepetitionScheduler.Rating rating,
+        Integer expectedReviewCount,
+        String idempotencyKey
+    ) {
+        if (rating == null) {
+            throw new RequestValidationException("rating is required");
+        }
+        if (expectedReviewCount != null && expectedReviewCount < 0) {
+            throw new RequestValidationException("expectedReviewCount must be >= 0");
+        }
+
+        String fingerprint = entryId + "|" + rating.name() + "|" + expectedReviewCount;
+        return executeIdempotent(
+            learnerId,
+            "vocabulary.flashcard.review",
+            idempotencyKey,
+            fingerprint,
+            FlashcardReviewResponse.class,
+            () -> {
+                FlashcardEntryRow entry = repository.findVisibleEntryForFlashcard(entryId, learnerId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Vocabulary entry not found"));
+                requirePackEntitlement(learnerId, entry.packAccessMode(), entry.packRequiredFeatureKey());
+
+                Instant now = Instant.now();
+                EntrySrsState locked = repository.lockOrCreateEntryProgressForSrs(
+                    learnerId,
+                    entry.entryId(),
+                    entry.unitId(),
+                    entry.packId(),
+                    now
+                );
+                if (expectedReviewCount != null && locked.reviewCount() != expectedReviewCount) {
+                    throw new StaleRevisionException(
+                        "Vocabulary entry flashcard review count changed; reload before reviewing.",
+                        (long) locked.reviewCount()
+                    );
+                }
+
+                if (scheduler == null) {
+                    throw new IllegalStateException("SpacedRepetitionScheduler is not configured");
+                }
+                var result = scheduler.schedule(
+                    locked.stability(),
+                    locked.difficulty(),
+                    locked.reviewCount(),
+                    locked.lapseCount(),
+                    rating,
+                    now
+                );
+                UUID reviewId = repository.applyEntryFlashcardReview(
+                    learnerId,
+                    entry.entryId(),
+                    entry.unitId(),
+                    entry.packId(),
+                    rating,
+                    result,
+                    now
+                );
+
+                events.publishEvent(new VocabularyReviewCompletedEvent(
+                    reviewId,
+                    learnerId,
+                    entry.entryId(),
+                    null,
+                    rating.name(),
+                    rating != SpacedRepetitionScheduler.Rating.AGAIN,
+                    now
+                ));
+
+                int newReviewCount = locked.reviewCount() + 1;
+                int newLapseCount = locked.lapseCount() + (rating == SpacedRepetitionScheduler.Rating.AGAIN ? 1 : 0);
+                String srsState = classifySrsState(newReviewCount, result.nextReviewAt(), result.stability(), now);
+                Map<SpacedRepetitionScheduler.Rating, IntervalPreview> previews = computeIntervalPreviews(
+                    result.stability(),
+                    result.difficulty(),
+                    newReviewCount,
+                    newLapseCount,
+                    now
+                );
+
+                return new FlashcardReviewResponse(
+                    entry.entryId(),
+                    entry.unitId(),
+                    entry.packId(),
+                    srsState,
+                    result.nextReviewAt(),
+                    result.stability(),
+                    result.difficulty(),
+                    newReviewCount,
+                    newLapseCount,
+                    previews
+                );
+            }
+        );
+    }
+
     public AssetStore.Asset authorizedPackCover(UUID learnerId, UUID packId) {
         PackRow pack = repository.findVisiblePack(packId)
             .orElseThrow(() -> new ResourceNotFoundException("Vocabulary pack not found"));
@@ -183,14 +414,24 @@ public class VocabularyStudyService {
         Integer limit,
         String idempotencyKey
     ) {
-        if (mode == null) {
-            throw new RequestValidationException("Practice mode is required");
-        }
-        if (limit != null && (limit < 1 || limit > 50)) {
-            throw new RequestValidationException("limit must be between 1 and 50");
+        return startSession(learnerId, unitId, mode, null, limit, idempotencyKey);
+    }
+
+    @Transactional
+    public SessionView startSession(
+        UUID learnerId,
+        UUID unitId,
+        PracticeMode mode,
+        List<PracticeMode> modes,
+        Integer limit,
+        String idempotencyKey
+    ) {
+        ModeSelection selection = resolveModeSelection(mode, modes);
+        if (limit != null && (limit < 1 || limit > 100)) {
+            throw new RequestValidationException("limit must be between 1 and 100");
         }
 
-        String fingerprint = unitId + "|" + mode.name() + "|" + limit;
+        String fingerprint = "UNIT|" + unitId + "|" + selection.fingerprint() + "|" + limit;
         return executeIdempotent(
             learnerId,
             "vocabulary.study.start",
@@ -208,9 +449,13 @@ public class VocabularyStudyService {
                 UUID sessionId = UUID.randomUUID();
                 long seed = sessionId.getMostSignificantBits() ^ sessionId.getLeastSignificantBits();
                 int requestedLimit = limit != null ? limit : Math.max(1, sources.size());
-                List<SnapshotQuestion> questions = generator.generateQuestions(sources, mode, requestedLimit, seed);
+                List<SnapshotQuestion> questions = selection.multiMode()
+                    ? generator.generateMixedQuestions(sources, selection.concreteModes(), requestedLimit, seed)
+                    : generator.generateQuestions(sources, selection.sessionMode(), requestedLimit, seed);
                 if (questions.isEmpty()) {
-                    throw new RequestValidationException("No eligible questions available for mode " + mode);
+                    throw new RequestValidationException(
+                        "No eligible questions available for mode " + selection.sessionMode()
+                    );
                 }
 
                 SessionSnapshot snapshot = new SessionSnapshot(
@@ -219,7 +464,7 @@ public class VocabularyStudyService {
                     unit.title(),
                     unit.level(),
                     unit.revision(),
-                    mode,
+                    selection.sessionMode(),
                     questions
                 );
                 Instant now = Instant.now();
@@ -229,7 +474,84 @@ public class VocabularyStudyService {
                     learnerId,
                     unit.packId(),
                     unit.id(),
-                    mode,
+                    selection.sessionMode(),
+                    json.writeValueAsString(snapshot),
+                    now,
+                    expiresAt
+                );
+                return repository.findSession(sessionId, learnerId, false)
+                    .map(this::toView)
+                    .orElseThrow();
+            }
+        );
+    }
+
+    @Transactional
+    public SessionView startPackSession(
+        UUID learnerId,
+        UUID packId,
+        PracticeMode mode,
+        List<PracticeMode> modes,
+        Integer limit,
+        String idempotencyKey
+    ) {
+        ModeSelection selection = resolveModeSelection(mode, modes);
+        if (limit != null && (limit < 1 || limit > 100)) {
+            throw new RequestValidationException("limit must be between 1 and 100");
+        }
+
+        String fingerprint = "PACK|" + packId + "|" + selection.fingerprint() + "|" + limit;
+        return executeIdempotent(
+            learnerId,
+            "vocabulary.study.start",
+            idempotencyKey,
+            fingerprint,
+            SessionView.class,
+            () -> {
+                PackRow pack = repository.findVisiblePack(packId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Vocabulary pack not found"));
+                requirePackEntitlement(learnerId, pack.accessMode(), pack.requiredFeatureKey());
+
+                List<EntryWithProgressRow> entryRows = repository.findVisibleEntriesByPack(packId, learnerId);
+                List<StudyEntrySource> sources = new ArrayList<>(
+                    entryRows.stream().map(VocabularyStudyService::toSource).toList()
+                );
+
+                UUID sessionId = UUID.randomUUID();
+                long seed = sessionId.getMostSignificantBits() ^ sessionId.getLeastSignificantBits();
+                int requestedLimit = limit != null ? limit : Math.min(30, Math.max(1, sources.size()));
+
+                List<SnapshotQuestion> questions;
+                if (selection.multiMode()) {
+                    questions = generator.generateMixedQuestions(sources, selection.concreteModes(), requestedLimit, seed);
+                } else {
+                    Collections.shuffle(sources, new Random(seed));
+                    questions = generator.generateQuestions(sources, selection.sessionMode(), requestedLimit, seed);
+                }
+                if (questions.isEmpty()) {
+                    throw new RequestValidationException(
+                        "No eligible questions available for mode " + selection.sessionMode()
+                    );
+                }
+
+                String packTitle = pack.titleVi() != null && !pack.titleVi().isBlank() ? pack.titleVi() : pack.titleEn();
+                SessionSnapshot snapshot = new SessionSnapshot(
+                    pack.id(),
+                    null,
+                    packTitle,
+                    null,
+                    0L,
+                    selection.sessionMode(),
+                    questions
+                );
+                Instant now = Instant.now();
+                Instant expiresAt = now.plusSeconds(SESSION_TTL_SECONDS);
+                repository.insertSession(
+                    sessionId,
+                    learnerId,
+                    pack.id(),
+                    null,
+                    selection.sessionMode(),
                     json.writeValueAsString(snapshot),
                     now,
                     expiresAt
@@ -242,10 +564,14 @@ public class VocabularyStudyService {
     }
 
     public List<SessionSummary> listSessions(UUID learnerId, UUID unitId, String status) {
-        return listSessionsPage(learnerId, unitId, status, 0, 100).items();
+        return listSessionsPage(learnerId, null, unitId, status, 0, 100).items();
     }
 
     public SessionPage listSessionsPage(UUID learnerId, UUID unitId, String status, int page, int size) {
+        return listSessionsPage(learnerId, null, unitId, status, page, size);
+    }
+
+    public SessionPage listSessionsPage(UUID learnerId, UUID packId, UUID unitId, String status, int page, int size) {
         if (page < 0 || page > 100000 || size < 1 || size > 100) {
             throw new RequestValidationException("page must be between 0 and 100000 and size between 1 and 100");
         }
@@ -253,10 +579,10 @@ public class VocabularyStudyService {
         if (normalizedStatus != null && !Set.of("OPEN", "SUBMITTED", "EXPIRED").contains(normalizedStatus)) {
             throw new RequestValidationException("status must be OPEN, SUBMITTED, or EXPIRED");
         }
-        long total = repository.countSessions(learnerId, unitId, normalizedStatus);
+        long total = repository.countSessions(learnerId, packId, unitId, normalizedStatus);
         List<SessionSummary> items = total == 0
             ? List.of()
-            : repository.findSessionsPage(learnerId, unitId, normalizedStatus, page * size, size).stream()
+            : repository.findSessionsPage(learnerId, packId, unitId, normalizedStatus, page * size, size).stream()
                 .map(row -> {
                     SessionSnapshot snapshot = readSnapshot(row);
                     SessionResult result = readResult(row);
@@ -287,6 +613,141 @@ public class VocabularyStudyService {
     }
 
     @Transactional
+    public HintResponse requestHint(UUID learnerId, UUID sessionId, UUID questionId) {
+        SessionRow row = repository.findSession(sessionId, learnerId, true)
+            .orElseThrow(() -> new ResourceNotFoundException("Vocabulary study session not found"));
+        requireOpen(row);
+
+        SessionSnapshot snapshot = readSnapshot(row);
+        SnapshotQuestion q = snapshot.questions().stream()
+            .filter(item -> item.id().equals(questionId))
+            .findFirst()
+            .orElseThrow(() -> new ResourceNotFoundException("Question not found in session"));
+
+        if (q.mode() != PracticeMode.GUESS_WORD) {
+            throw new RequestValidationException("Hints are only supported for GUESS_WORD questions");
+        }
+
+        Map<UUID, QuestionState> states = new LinkedHashMap<>(readQuestionStates(row));
+        QuestionState current = states.getOrDefault(questionId, QuestionState.EMPTY);
+        if (current.checked()) {
+            throw new StateConflictException("Question has already been checked");
+        }
+
+        int maxHints = q.maxHints() != null ? q.maxHints() : 0;
+        List<Integer> revealed = new ArrayList<>(
+            current.revealedPositions() != null ? current.revealedPositions() : List.of()
+        );
+        if (revealed.size() >= maxHints) {
+            throw new RequestValidationException("No hints remaining for this question");
+        }
+        OptionalInt nextPos = VocabularyExerciseGenerator.nextRevealPosition(q.baseTerm(), revealed);
+        if (nextPos.isEmpty()) {
+            throw new RequestValidationException("No hints remaining for this question");
+        }
+        revealed.add(nextPos.getAsInt());
+        Collections.sort(revealed);
+
+        List<Integer> immutableRevealed = List.copyOf(revealed);
+        states.put(questionId, new QuestionState(immutableRevealed, false, false));
+        repository.updateQuestionState(sessionId, json.writeValueAsString(states));
+
+        return new HintResponse(
+            questionId,
+            VocabularyExerciseGenerator.maskWithRevealed(q.baseTerm(), immutableRevealed),
+            immutableRevealed,
+            immutableRevealed.size(),
+            Math.max(0, maxHints - immutableRevealed.size())
+        );
+    }
+
+    @Transactional
+    public CheckQuestionResponse checkQuestion(
+        UUID learnerId,
+        UUID sessionId,
+        UUID questionId,
+        long revision,
+        String answer,
+        boolean giveUp
+    ) {
+        SessionRow row = repository.findSession(sessionId, learnerId, true)
+            .orElseThrow(() -> new ResourceNotFoundException("Vocabulary study session not found"));
+        requireOpenAndRevision(row, revision);
+
+        SessionSnapshot snapshot = readSnapshot(row);
+        SnapshotQuestion q = snapshot.questions().stream()
+            .filter(item -> item.id().equals(questionId))
+            .findFirst()
+            .orElseThrow(() -> new ResourceNotFoundException("Question not found in session"));
+
+        Map<UUID, String> answers = new LinkedHashMap<>(readAnswers(row));
+        Map<UUID, QuestionState> states = new LinkedHashMap<>(readQuestionStates(row));
+        QuestionState currentState = states.getOrDefault(questionId, QuestionState.EMPTY);
+        List<Integer> revealed = currentState.revealedPositions() != null
+            ? List.copyOf(currentState.revealedPositions())
+            : List.of();
+        int hintsUsed = revealed.size();
+
+        if (currentState.checked()) {
+            String storedAnswer = answers.get(questionId);
+            boolean correct = !currentState.gaveUp() && grader.isCorrect(q, storedAnswer);
+            return new CheckQuestionResponse(
+                row.revision(),
+                q.id(),
+                q.entryId(),
+                q.prompt(),
+                q.baseTerm(),
+                storedAnswer,
+                q.correctAnswer(),
+                correct,
+                hintsUsed,
+                currentState.gaveUp()
+            );
+        }
+
+        if (!giveUp && answer == null) {
+            throw new RequestValidationException("answer is required unless giveUp is true");
+        }
+        if (!giveUp && (q.mode() == PracticeMode.CHOOSE_MEANING || q.mode() == PracticeMode.CHOOSE_WORD)
+            && q.options() != null
+            && q.options().stream().noneMatch(o -> o.key().equals(answer))) {
+            throw new RequestValidationException("Answer must match a valid option key for question " + q.id());
+        }
+
+        String recordedAnswer = giveUp ? null : answer;
+        if (giveUp) {
+            answers.remove(questionId);
+        } else {
+            answers.put(questionId, answer);
+        }
+        boolean correct = !giveUp && grader.isCorrect(q, answer);
+        states.put(questionId, new QuestionState(revealed, true, giveUp));
+
+        int updated = repository.updateAnswersAndQuestionState(
+            sessionId,
+            revision,
+            json.writeValueAsString(answers),
+            json.writeValueAsString(states)
+        );
+        if (updated != 1) {
+            throw new StaleRevisionException("Session revision mismatch", row.revision());
+        }
+
+        return new CheckQuestionResponse(
+            revision + 1,
+            q.id(),
+            q.entryId(),
+            q.prompt(),
+            q.baseTerm(),
+            recordedAnswer,
+            q.correctAnswer(),
+            correct,
+            hintsUsed,
+            giveUp
+        );
+    }
+
+    @Transactional
     public SessionView saveAnswers(UUID learnerId, UUID sessionId, long revision, Map<UUID, String> answers) {
         SessionRow row = repository.findSession(sessionId, learnerId, true)
             .orElseThrow(() -> new ResourceNotFoundException("Vocabulary study session not found"));
@@ -295,7 +756,31 @@ public class VocabularyStudyService {
         SessionSnapshot snapshot = readSnapshot(row);
         validateAnswers(snapshot, answers);
 
-        int updated = repository.updateAnswers(sessionId, revision, json.writeValueAsString(answers));
+        Map<UUID, String> existingAnswers = readAnswers(row);
+        Map<UUID, QuestionState> states = readQuestionStates(row);
+        Map<UUID, String> mergedAnswers = new LinkedHashMap<>(answers);
+
+        for (SnapshotQuestion q : snapshot.questions()) {
+            QuestionState state = states.get(q.id());
+            if (state != null && state.checked()) {
+                if (state.gaveUp()) {
+                    if (answers.containsKey(q.id())) {
+                        throw new StateConflictException("Cannot answer a question after giving up: " + q.id());
+                    }
+                    mergedAnswers.remove(q.id());
+                } else {
+                    String lockedAnswer = existingAnswers.get(q.id());
+                    if (answers.containsKey(q.id()) && !Objects.equals(answers.get(q.id()), lockedAnswer)) {
+                        throw new StateConflictException("Cannot modify an already checked question: " + q.id());
+                    }
+                    if (lockedAnswer != null) {
+                        mergedAnswers.put(q.id(), lockedAnswer);
+                    }
+                }
+            }
+        }
+
+        int updated = repository.updateAnswers(sessionId, revision, json.writeValueAsString(mergedAnswers));
         if (updated != 1) {
             throw new StaleRevisionException("Session revision mismatch", row.revision());
         }
@@ -323,13 +808,17 @@ public class VocabularyStudyService {
 
                 SessionSnapshot snapshot = readSnapshot(row);
                 Map<UUID, String> answers = readAnswers(row);
+                Map<UUID, QuestionState> states = readQuestionStates(row);
                 List<QuestionFeedback> feedback = new ArrayList<>(snapshot.questions().size());
                 int correctCount = 0;
                 Instant now = Instant.now();
 
                 for (SnapshotQuestion q : snapshot.questions()) {
-                    String learnerAnswer = answers.get(q.id());
-                    boolean correct = grader.isCorrect(q, learnerAnswer);
+                    QuestionState state = states.getOrDefault(q.id(), QuestionState.EMPTY);
+                    int hintsUsed = state.revealedPositions() != null ? state.revealedPositions().size() : 0;
+                    boolean gaveUp = state.gaveUp();
+                    String learnerAnswer = gaveUp ? null : answers.get(q.id());
+                    boolean correct = !gaveUp && grader.isCorrect(q, learnerAnswer);
                     if (correct) {
                         correctCount++;
                     }
@@ -340,9 +829,14 @@ public class VocabularyStudyService {
                         q.baseTerm(),
                         learnerAnswer,
                         q.correctAnswer(),
-                        correct
+                        correct,
+                        hintsUsed,
+                        gaveUp
                     ));
-                    repository.upsertEntryProgress(learnerId, q.entryId(), row.unitId(), row.packId(), correct, now);
+                    UUID entryUnitId = q.unitId() != null ? q.unitId() : row.unitId();
+                    if (entryUnitId != null) {
+                        repository.upsertEntryProgress(learnerId, q.entryId(), entryUnitId, row.packId(), correct, now);
+                    }
                 }
 
                 int totalCount = snapshot.questions().size();
@@ -371,19 +865,129 @@ public class VocabularyStudyService {
         );
     }
 
+    private FlashcardItem toFlashcardItem(FlashcardEntryRow row, Instant now) {
+        String srsState = classifySrsState(row.srsReviewCount(), row.srsNextReviewAt(), row.srsStability(), now);
+        Map<SpacedRepetitionScheduler.Rating, IntervalPreview> previews = computeIntervalPreviews(
+            row.srsStability(),
+            row.srsDifficulty(),
+            row.srsReviewCount(),
+            row.srsLapseCount(),
+            now
+        );
+        return new FlashcardItem(
+            row.entryId(),
+            row.unitId(),
+            row.unitLevel(),
+            row.position(),
+            row.term(),
+            row.revision(),
+            row.content(),
+            row.imageId(),
+            row.ukAudioId(),
+            row.usAudioId(),
+            row.exampleAudioId(),
+            row.secondExampleAudioId(),
+            entryMediaUrl(row.entryId(), row.imageId()),
+            entryMediaUrl(row.entryId(), row.ukAudioId()),
+            entryMediaUrl(row.entryId(), row.usAudioId()),
+            entryMediaUrl(row.entryId(), row.exampleAudioId()),
+            entryMediaUrl(row.entryId(), row.secondExampleAudioId()),
+            srsState,
+            row.srsReviewCount(),
+            row.srsLapseCount(),
+            row.srsStability(),
+            row.srsDifficulty(),
+            row.srsNextReviewAt(),
+            previews
+        );
+    }
+
+    private Map<SpacedRepetitionScheduler.Rating, IntervalPreview> computeIntervalPreviews(
+        double stability,
+        double difficulty,
+        int reviewCount,
+        int lapseCount,
+        Instant now
+    ) {
+        if (scheduler == null) {
+            return Map.of();
+        }
+        Map<SpacedRepetitionScheduler.Rating, IntervalPreview> previews = new EnumMap<>(SpacedRepetitionScheduler.Rating.class);
+        for (SpacedRepetitionScheduler.Rating rating : SpacedRepetitionScheduler.Rating.values()) {
+            var res = scheduler.schedule(stability, difficulty, reviewCount, lapseCount, rating, now);
+            long days = Math.max(1L, Duration.between(now, res.nextReviewAt()).toDays());
+            previews.put(rating, new IntervalPreview(res.nextReviewAt(), days));
+        }
+        return previews;
+    }
+
+    private static String classifySrsState(
+        int reviewCount,
+        Instant nextReviewAt,
+        double stability,
+        Instant now
+    ) {
+        if (reviewCount == 0) {
+            return "NEW";
+        }
+        if (nextReviewAt == null || !nextReviewAt.isAfter(now)) {
+            return "DUE";
+        }
+        return stability >= 5.0 ? "MASTERED" : "LEARNING";
+    }
+
+    private static String entryMediaUrl(UUID entryId, UUID assetId) {
+        return assetId != null ? "/api/v1/vocabulary/entries/" + entryId + "/media/" + assetId : null;
+    }
+
+    private record ModeSelection(PracticeMode sessionMode, List<PracticeMode> concreteModes, boolean multiMode) {
+        String fingerprint() {
+            if (!multiMode) {
+                return sessionMode.name();
+            }
+            return sessionMode.name() + ":" + concreteModes.stream().map(Enum::name).reduce((a, b) -> a + "," + b).orElse("");
+        }
+    }
+
+    private static ModeSelection resolveModeSelection(PracticeMode mode, List<PracticeMode> modes) {
+        if (modes != null && !modes.isEmpty()) {
+            List<PracticeMode> concrete = modes.stream()
+                .filter(Objects::nonNull)
+                .filter(m -> m != PracticeMode.MIXED)
+                .distinct()
+                .toList();
+            if (concrete.isEmpty()) {
+                throw new RequestValidationException("modes must contain at least one concrete practice mode");
+            }
+            PracticeMode effectiveSessionMode = concrete.size() == 1 ? concrete.getFirst() : PracticeMode.MIXED;
+            return new ModeSelection(effectiveSessionMode, concrete, concrete.size() > 1);
+        }
+        if (mode == null) {
+            throw new RequestValidationException("Practice mode is required");
+        }
+        if (mode == PracticeMode.MIXED) {
+            return new ModeSelection(PracticeMode.MIXED, PracticeMode.STANDARD_PRACTICE_MODES, true);
+        }
+        return new ModeSelection(mode, List.of(mode), false);
+    }
+
     private void requirePackEntitlement(UUID learnerId, String accessMode, String featureKey) {
         if ("FEATURE".equals(accessMode) && featureKey != null) {
             entitlements.requireFeature(learnerId, FeatureKey.of(featureKey));
         }
     }
 
-    private void requireOpenAndRevision(SessionRow row, long expectedRevision) {
+    private void requireOpen(SessionRow row) {
         if (row.submittedAt() != null) {
             throw new StateConflictException("Session is already submitted");
         }
         if (!row.expiresAt().isAfter(Instant.now())) {
             throw new SessionExpiredException("Session expired", row.expiresAt());
         }
+    }
+
+    private void requireOpenAndRevision(SessionRow row, long expectedRevision) {
+        requireOpen(row);
         if (row.revision() != expectedRevision) {
             throw new StaleRevisionException("Session changed; reload before continuing", row.revision());
         }
@@ -424,8 +1028,9 @@ public class VocabularyStudyService {
 
     private SessionView toView(SessionRow row) {
         SessionSnapshot snapshot = readSnapshot(row);
+        Map<UUID, QuestionState> states = readQuestionStates(row);
         List<QuestionView> questionViews = snapshot.questions().stream()
-            .map(QuestionView::from)
+            .map(q -> QuestionView.from(q, states.get(q.id())))
             .toList();
         return new SessionView(
             row.id(),
@@ -453,6 +1058,13 @@ public class VocabularyStudyService {
             return Map.of();
         }
         return json.readValue(row.answersJson(), new TypeReference<>() {});
+    }
+
+    private Map<UUID, QuestionState> readQuestionStates(SessionRow row) {
+        if (row.questionStateJson() == null || row.questionStateJson().isBlank()) {
+            return Map.of();
+        }
+        return json.readValue(row.questionStateJson(), new TypeReference<>() {});
     }
 
     private SessionResult readResult(SessionRow row) {

@@ -7,8 +7,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Generates deterministic, §6-compliant vocabulary practice questions across all 6 modes
- * and computes per-mode availability counts for a unit's entries.
+ * Generates deterministic vocabulary practice questions across all supported modes
+ * (6 standard practice modes, GUESS_WORD, and MIXED multi-mode) and computes per-mode availability.
  */
 public final class VocabularyExerciseGenerator {
 
@@ -16,14 +16,34 @@ public final class VocabularyExerciseGenerator {
     private static final Map<String, List<String>> IRREGULAR_INFLECTIONS = buildIrregularMap();
     private final VocabularyAnswerGrader grader = new VocabularyAnswerGrader();
 
-    /** Computes eligible question counts for each of the 6 practice modes in a unit. */
+    /** Computes eligible question counts for each practice mode in a unit or pack. */
     public Map<PracticeMode, Integer> modeAvailability(List<StudyEntrySource> entries) {
         Map<PracticeMode, Integer> counts = new EnumMap<>(PracticeMode.class);
         long seed = 1L;
         for (PracticeMode mode : PracticeMode.values()) {
-            counts.put(mode, generateQuestions(entries, mode, entries.size(), seed).size());
+            if (mode == PracticeMode.MIXED) {
+                counts.put(mode, countAnyStandardEligible(entries, seed));
+            } else {
+                counts.put(mode, generateQuestions(entries, mode, entries.size(), seed).size());
+            }
         }
         return counts;
+    }
+
+    private int countAnyStandardEligible(List<StudyEntrySource> entries, long seed) {
+        if (entries == null || entries.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        for (StudyEntrySource entry : entries) {
+            for (PracticeMode mode : PracticeMode.STANDARD_PRACTICE_MODES) {
+                if (buildQuestion(entry, entries, mode, seed).isPresent()) {
+                    count++;
+                    break;
+                }
+            }
+        }
+        return count;
     }
 
     /** Generates up to {@code limit} eligible questions for the requested mode. */
@@ -33,8 +53,11 @@ public final class VocabularyExerciseGenerator {
         int limit,
         long seed
     ) {
-        if (entries == null || entries.isEmpty() || limit <= 0) {
+        if (entries == null || entries.isEmpty() || limit <= 0 || mode == null) {
             return List.of();
+        }
+        if (mode == PracticeMode.MIXED) {
+            return generateMixedQuestions(entries, PracticeMode.STANDARD_PRACTICE_MODES, limit, seed);
         }
         List<SnapshotQuestion> generated = new ArrayList<>();
         for (StudyEntrySource entry : entries) {
@@ -44,6 +67,84 @@ public final class VocabularyExerciseGenerator {
             buildQuestion(entry, entries, mode, seed).ifPresent(generated::add);
         }
         return List.copyOf(generated);
+    }
+
+    /**
+     * Generates up to {@code limit} questions distributed across {@code requestedModes},
+     * shuffling entries deterministically with {@code seed} and ensuring each entry appears at most once.
+     */
+    public List<SnapshotQuestion> generateMixedQuestions(
+        List<StudyEntrySource> entries,
+        List<PracticeMode> requestedModes,
+        int limit,
+        long seed
+    ) {
+        if (entries == null || entries.isEmpty() || requestedModes == null || requestedModes.isEmpty() || limit <= 0) {
+            return List.of();
+        }
+        List<PracticeMode> concreteModes = requestedModes.stream()
+            .filter(Objects::nonNull)
+            .filter(m -> m != PracticeMode.MIXED)
+            .distinct()
+            .toList();
+        if (concreteModes.isEmpty()) {
+            return List.of();
+        }
+
+        List<StudyEntrySource> shuffled = new ArrayList<>(entries);
+        Collections.shuffle(shuffled, new Random(seed));
+
+        List<SnapshotQuestion> generated = new ArrayList<>();
+        int modeCursor = 0;
+        for (StudyEntrySource entry : shuffled) {
+            if (generated.size() >= limit) {
+                break;
+            }
+            for (int offset = 0; offset < concreteModes.size(); offset++) {
+                PracticeMode candidate = concreteModes.get((modeCursor + offset) % concreteModes.size());
+                Optional<SnapshotQuestion> q = buildQuestion(entry, entries, candidate, seed);
+                if (q.isPresent()) {
+                    generated.add(q.get());
+                    modeCursor = (modeCursor + offset + 1) % concreteModes.size();
+                    break;
+                }
+            }
+        }
+        return List.copyOf(generated);
+    }
+
+    /** Computes masked term with previously revealed character positions shown. */
+    public static String maskWithRevealed(String term, List<Integer> revealedPositions) {
+        if (term == null) {
+            return null;
+        }
+        String normalized = term.strip().replaceAll("\\s+", " ");
+        Set<Integer> revealed = revealedPositions == null ? Set.of() : new HashSet<>(revealedPositions);
+        StringBuilder sb = new StringBuilder(normalized.length());
+        for (int i = 0; i < normalized.length(); i++) {
+            char ch = normalized.charAt(i);
+            if (Character.isLetterOrDigit(ch)) {
+                sb.append(revealed.contains(i) ? ch : '*');
+            } else {
+                sb.append(ch);
+            }
+        }
+        return sb.toString();
+    }
+
+    /** Finds the next unrevealed letter-or-digit position (left to right) for a hint. */
+    public static OptionalInt nextRevealPosition(String term, List<Integer> alreadyRevealed) {
+        if (term == null) {
+            return OptionalInt.empty();
+        }
+        String normalized = term.strip().replaceAll("\\s+", " ");
+        Set<Integer> revealed = alreadyRevealed == null ? Set.of() : new HashSet<>(alreadyRevealed);
+        for (int i = 0; i < normalized.length(); i++) {
+            if (Character.isLetterOrDigit(normalized.charAt(i)) && !revealed.contains(i)) {
+                return OptionalInt.of(i);
+            }
+        }
+        return OptionalInt.empty();
     }
 
     private Optional<SnapshotQuestion> buildQuestion(
@@ -59,6 +160,8 @@ public final class VocabularyExerciseGenerator {
             case MISSING_LETTERS -> buildMissingLetters(entry, seed);
             case LISTEN_WRITE -> buildListenWrite(entry);
             case CONTEXT_CLOZE -> buildContextCloze(entry);
+            case GUESS_WORD -> buildGuessWord(entry);
+            case MIXED -> Optional.empty();
         };
     }
 
@@ -97,7 +200,6 @@ public final class VocabularyExerciseGenerator {
             if (norm.isEmpty() || usedMeanings.contains(norm)) {
                 continue;
             }
-            // Also skip if candidate has any sense overlapping with target's primary meaning
             if (sharesAnyMeaning(candidate, targetMeanings)) {
                 continue;
             }
@@ -150,7 +252,9 @@ public final class VocabularyExerciseGenerator {
             null,
             null,
             correctKey,
-            target.term().strip()
+            target.term().strip(),
+            target.unitId(),
+            null
         ));
     }
 
@@ -242,7 +346,9 @@ public final class VocabularyExerciseGenerator {
             null,
             null,
             correctKey,
-            targetTerm
+            targetTerm,
+            target.unitId(),
+            null
         ));
     }
 
@@ -306,7 +412,9 @@ public final class VocabularyExerciseGenerator {
             null,
             null,
             term,
-            term
+            term,
+            target.unitId(),
+            null
         ));
     }
 
@@ -315,12 +423,7 @@ public final class VocabularyExerciseGenerator {
             return Optional.empty();
         }
         String term = target.term().strip().replaceAll("\\s+", " ");
-        List<Integer> letterIndices = new ArrayList<>();
-        for (int i = 0; i < term.length(); i++) {
-            if (Character.isLetterOrDigit(term.charAt(i))) {
-                letterIndices.add(i);
-            }
-        }
+        List<Integer> letterIndices = letterIndicesOf(term);
         if (letterIndices.size() < 2) {
             return Optional.empty();
         }
@@ -362,7 +465,9 @@ public final class VocabularyExerciseGenerator {
             null,
             null,
             term,
-            term
+            term,
+            target.unitId(),
+            null
         ));
     }
 
@@ -398,7 +503,9 @@ public final class VocabularyExerciseGenerator {
             null,
             null,
             term,
-            term
+            term,
+            target.unitId(),
+            null
         ));
     }
 
@@ -407,11 +514,98 @@ public final class VocabularyExerciseGenerator {
             return Optional.empty();
         }
         String baseTerm = target.term().strip().replaceAll("\\s+", " ");
-        Pattern pattern = buildInflectionPattern(baseTerm);
-        if (pattern == null) {
+        ClozeMatch match = findExampleCloze(target, baseTerm, false);
+        if (match == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new SnapshotQuestion(
+            questionId(1L, target.id(), PracticeMode.CONTEXT_CLOZE),
+            target.id(),
+            PracticeMode.CONTEXT_CLOZE,
+            match.cloze(),
+            primaryMeaning(target),
+            primaryPos(target),
+            null,
+            null,
+            null,
+            null,
+            null,
+            target.imageId(),
+            null,
+            null,
+            null,
+            null,
+            null,
+            match.cloze(),
+            match.start(),
+            match.end(),
+            match.exampleVi(),
+            match.matched(),
+            baseTerm,
+            target.unitId(),
+            null
+        ));
+    }
+
+    private Optional<SnapshotQuestion> buildGuessWord(StudyEntrySource target) {
+        if (target.term() == null || target.term().isBlank()) {
+            return Optional.empty();
+        }
+        String meaning = primaryMeaning(target);
+        if (meaning == null) {
+            return Optional.empty();
+        }
+        String term = target.term().strip().replaceAll("\\s+", " ");
+        List<Integer> letterIndices = letterIndicesOf(term);
+        if (letterIndices.size() < 2) {
             return Optional.empty();
         }
 
+        List<Integer> wordLengths = Arrays.stream(term.split(" "))
+            .map(String::length)
+            .toList();
+        ClozeMatch exampleMatch = findExampleCloze(target, term, true);
+        int maxHints = letterIndices.size() - 1;
+
+        return Optional.of(new SnapshotQuestion(
+            questionId(1L, target.id(), PracticeMode.GUESS_WORD),
+            target.id(),
+            PracticeMode.GUESS_WORD,
+            meaning,
+            secondaryDefinition(target, meaning),
+            primaryPos(target),
+            null,
+            null,
+            null,
+            null,
+            null,
+            target.imageId(),
+            null,
+            null,
+            wordLengths,
+            maskWithRevealed(term, List.of()),
+            null,
+            exampleMatch != null ? exampleMatch.cloze() : null,
+            exampleMatch != null ? exampleMatch.start() : null,
+            exampleMatch != null ? exampleMatch.end() : null,
+            exampleMatch != null ? exampleMatch.exampleVi() : null,
+            term,
+            term,
+            target.unitId(),
+            maxHints
+        ));
+    }
+
+    private record ClozeMatch(String cloze, int start, int end, String matched, String exampleVi) {}
+
+    private ClozeMatch findExampleCloze(StudyEntrySource target, String baseTerm, boolean asteriskMask) {
+        if (target.examples() == null || target.examples().isEmpty()) {
+            return null;
+        }
+        Pattern pattern = buildInflectionPattern(baseTerm);
+        if (pattern == null) {
+            return null;
+        }
         for (int idx = 0; idx < target.examples().size(); idx++) {
             String sentence = target.examples().get(idx);
             if (sentence == null || sentence.isBlank()) {
@@ -422,41 +616,28 @@ public final class VocabularyExerciseGenerator {
                 int start = matcher.start();
                 int end = matcher.end();
                 String matched = sentence.substring(start, end);
-                String cloze = sentence.substring(0, start) + "_____" + sentence.substring(end);
+                String mask = asteriskMask ? "*".repeat(matched.length()) : "_____";
+                String cloze = sentence.substring(0, start) + mask + sentence.substring(end);
                 String exampleVi = (target.examplesVi() != null && idx < target.examplesVi().size())
                     ? target.examplesVi().get(idx)
                     : null;
                 if (exampleVi != null && exampleVi.isBlank()) {
                     exampleVi = null;
                 }
-                return Optional.of(new SnapshotQuestion(
-                    questionId(1L, target.id(), PracticeMode.CONTEXT_CLOZE),
-                    target.id(),
-                    PracticeMode.CONTEXT_CLOZE,
-                    cloze,
-                    primaryMeaning(target),
-                    primaryPos(target),
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    target.imageId(),
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    cloze,
-                    start,
-                    end,
-                    exampleVi,
-                    matched,
-                    baseTerm
-                ));
+                return new ClozeMatch(cloze, start, end, matched, exampleVi);
             }
         }
-        return Optional.empty();
+        return null;
+    }
+
+    private static List<Integer> letterIndicesOf(String term) {
+        List<Integer> letterIndices = new ArrayList<>();
+        for (int i = 0; i < term.length(); i++) {
+            if (Character.isLetterOrDigit(term.charAt(i))) {
+                letterIndices.add(i);
+            }
+        }
+        return letterIndices;
     }
 
     private Pattern buildInflectionPattern(String baseTerm) {

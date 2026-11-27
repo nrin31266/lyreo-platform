@@ -28,7 +28,7 @@ public final class VocabularyAnswerGrader {
         }
         return switch (question.mode()) {
             case CHOOSE_MEANING, CHOOSE_WORD -> normalize(rawAnswer).equals(normalize(question.correctAnswer()));
-            case LETTER_SCRAMBLE, MISSING_LETTERS, LISTEN_WRITE, CONTEXT_CLOZE ->
+            case LETTER_SCRAMBLE, MISSING_LETTERS, LISTEN_WRITE, CONTEXT_CLOZE, GUESS_WORD, MIXED ->
                 normalize(rawAnswer).equals(normalize(question.correctAnswer()));
         };
     }

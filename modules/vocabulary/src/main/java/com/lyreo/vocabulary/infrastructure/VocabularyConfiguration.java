@@ -75,9 +75,10 @@ public class VocabularyConfiguration {
         AssetStore assets,
         OperationIdempotencyService idempotency,
         ApplicationEventPublisher events,
-        ObjectMapper json
+        ObjectMapper json,
+        SpacedRepetitionScheduler scheduler
     ) {
-        return new VocabularyStudyService(repository, entitlements, assets, idempotency, events, json);
+        return new VocabularyStudyService(repository, entitlements, assets, idempotency, events, json, scheduler);
     }
 
     @Bean

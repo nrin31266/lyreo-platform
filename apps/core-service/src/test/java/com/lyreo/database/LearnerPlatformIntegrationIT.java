@@ -566,6 +566,81 @@ class LearnerPlatformIntegrationIT {
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.code").value("IDEMPOTENCY_CONFLICT"));
 
+        // 3b. Flashcard deck & review + GUESS_WORD hint/check + pack-wide multi-mode session
+        String vocabUnitId = "50000000-0000-0000-0000-000000000221";
+        MvcResult flashDeckRes = mvc.perform(get("/api/v1/vocabulary/flashcards")
+                .param("unitId", vocabUnitId)
+                .with(PLUS_LEARNER))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].term").isNotEmpty())
+            .andExpect(jsonPath("$.items[0].srsState").value("NEW"))
+            .andReturn();
+        String firstFlashEntryId = json.readTree(flashDeckRes.getResponse().getContentAsString())
+            .path("items").get(0).path("entryId").asText();
+
+        mvc.perform(post("/api/v1/vocabulary/entries/" + firstFlashEntryId + "/flashcard-review")
+                .with(PLUS_LEARNER)
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"rating\":\"GOOD\",\"expectedReviewCount\":0}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.reviewCount").value(1))
+            .andExpect(jsonPath("$.srsState").value("LEARNING"));
+
+        MvcResult guessRes = mvc.perform(post("/api/v1/vocabulary/units/" + vocabUnitId + "/sessions")
+                .with(PLUS_LEARNER)
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mode\":\"GUESS_WORD\",\"limit\":2}"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.questions[0].maskedTerm").isNotEmpty())
+            .andReturn();
+        JsonNode guessNode = json.readTree(guessRes.getResponse().getContentAsString());
+        String guessSessionId = guessNode.path("id").asText();
+        String guessQid = guessNode.path("questions").get(0).path("id").asText();
+        long guessRev = guessNode.path("revision").asLong();
+
+        mvc.perform(post("/api/v1/vocabulary/sessions/" + guessSessionId + "/questions/" + guessQid + "/hint")
+                .with(PLUS_LEARNER))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.hintsUsed").value(1));
+
+        MvcResult checkRes = mvc.perform(post("/api/v1/vocabulary/sessions/" + guessSessionId + "/questions/" + guessQid + "/check")
+                .with(PLUS_LEARNER)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("revision", guessRev, "giveUp", true))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.correct").value(false))
+            .andExpect(jsonPath("$.gaveUp").value(true))
+            .andReturn();
+        long afterCheckRev = json.readTree(checkRes.getResponse().getContentAsString()).path("revision").asLong();
+
+        mvc.perform(post("/api/v1/vocabulary/sessions/" + guessSessionId + "/submit")
+                .with(PLUS_LEARNER)
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("revision", afterCheckRev))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("SUBMITTED"));
+
+        // Pack-wide MIXED session (ensures CurriculumCompletionListener handles unitId == null)
+        MvcResult packSessRes = mvc.perform(post("/api/v1/vocabulary/packs/" + plusPackId + "/sessions")
+                .with(PLUS_LEARNER)
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mode\":\"MIXED\",\"modes\":[\"CHOOSE_MEANING\",\"GUESS_WORD\"],\"limit\":5}"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.unitId").value(nullValue()))
+            .andReturn();
+        JsonNode packSessNode = json.readTree(packSessRes.getResponse().getContentAsString());
+        mvc.perform(post("/api/v1/vocabulary/sessions/" + packSessNode.path("id").asText() + "/submit")
+                .with(PLUS_LEARNER)
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("revision", packSessNode.path("revision").asLong()))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("SUBMITTED"));
+
         // 4. Lesson published catalog + dictation masking + completion + shadowing constraints & silent submission
         mvc.perform(get("/api/v1/lessons").with(FREE_LEARNER))
             .andExpect(status().isOk())

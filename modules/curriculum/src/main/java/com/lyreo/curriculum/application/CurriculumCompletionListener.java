@@ -69,6 +69,9 @@ public class CurriculumCompletionListener {
 
     @ApplicationModuleListener
     public void onVocabularyUnitCompleted(VocabularyUnitCompletedEvent event) {
+        if (event.unitId() == null) {
+            return;
+        }
         UUID factId = event.sessionId() != null
             ? event.sessionId()
             : deterministicFactId("vocab-unit:" + event.learnerId() + ":" + event.unitId());

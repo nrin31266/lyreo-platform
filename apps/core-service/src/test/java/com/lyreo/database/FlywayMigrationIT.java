@@ -109,7 +109,7 @@ class FlywayMigrationIT {
     void verifiesConsolidatedBaselineMigrationsSucceeded() {
         MigrationInfo[] applied = flyway.info().applied();
 
-        assertThat(applied).hasSize(18).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
+        assertThat(applied).hasSize(19).allSatisfy(migration -> assertThat(migration.getState()).isEqualTo(MigrationState.SUCCESS));
 
         assertThat(applied[0].getVersion().getVersion()).isEqualTo("001");
         assertThat(applied[0].getDescription()).isEqualTo("baseline schema");
@@ -133,7 +133,8 @@ class FlywayMigrationIT {
         assertThat(applied[15].getDescription()).isEqualTo("notification recipient directory");
         assertThat(applied[16].getDescription()).isEqualTo("notification publication safety");
         assertThat(applied[17].getDescription()).isEqualTo("learner notification read and policy audit");
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("018");
+        assertThat(applied[18].getDescription()).isEqualTo("vocabulary flashcards and guess mode");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("019");
     }
 
     @Test
@@ -243,6 +244,7 @@ class FlywayMigrationIT {
             "entitlement_audit_log",
             "vocabulary_release_lineage",
             "vocabulary_entry_progress",
+            "vocabulary_entry_review",
             "vocabulary_study_session",
             "vocabulary_collection",
             "vocabulary_collection_item",

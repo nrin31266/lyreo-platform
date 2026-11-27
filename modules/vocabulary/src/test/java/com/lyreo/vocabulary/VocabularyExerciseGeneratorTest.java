@@ -48,6 +48,8 @@ class VocabularyExerciseGeneratorTest {
         assertThat(availability.get(PracticeMode.MISSING_LETTERS)).isEqualTo(5);
         assertThat(availability.get(PracticeMode.CHOOSE_MEANING)).isEqualTo(5);
         assertThat(availability.get(PracticeMode.CHOOSE_WORD)).isEqualTo(5);
+        assertThat(availability.get(PracticeMode.GUESS_WORD)).isEqualTo(5);
+        assertThat(availability.get(PracticeMode.MIXED)).isEqualTo(5);
 
         // CHOOSE_MEANING: no duplicate-meaning distractors ("đạt được" appears at most once)
         List<SnapshotQuestion> meaningQs = generator.generateQuestions(entries, PracticeMode.CHOOSE_MEANING, 10, 42L);
@@ -109,6 +111,39 @@ class VocabularyExerciseGeneratorTest {
         // NFKC + trimmed + collapsed whitespace + case-insensitive grading
         assertThat(grader.isCorrect(achieveCloze, "  \uFF21\uFF23\uFF28\uFF29\uFF25\uFF36\uFF25\uFF24  ")).isTrue();
         assertThat(grader.isCorrect(achieveCloze, "achieve")).isFalse();
+
+        // GUESS_WORD: all letters masked, maxHints = letterCount - 1, left-to-right hint reveal, eligible without example match
+        List<SnapshotQuestion> guessQs = generator.generateQuestions(entries, PracticeMode.GUESS_WORD, 10, 42L);
+        assertThat(guessQs).hasSize(5);
+        SnapshotQuestion pepperGuess = guessQs.stream()
+            .filter(q -> q.baseTerm().equals("pepper"))
+            .findFirst()
+            .orElseThrow();
+        assertThat(pepperGuess.prompt()).isEqualTo("hạt tiêu");
+        assertThat(pepperGuess.maskedTerm()).isEqualTo("******");
+        assertThat(pepperGuess.maxHints()).isEqualTo(5);
+        assertThat(pepperGuess.clozeSentence()).contains("******");
+        assertThat(VocabularyExerciseGenerator.nextRevealPosition("pepper", List.of())).hasValue(0);
+        assertThat(VocabularyExerciseGenerator.nextRevealPosition("pepper", List.of(0))).hasValue(1);
+        assertThat(VocabularyExerciseGenerator.maskWithRevealed("pepper", List.of(0, 1))).isEqualTo("pe****");
+
+        SnapshotQuestion resilientGuess = guessQs.stream()
+            .filter(q -> q.baseTerm().equals("resilient"))
+            .findFirst()
+            .orElseThrow();
+        assertThat(resilientGuess.clozeSentence()).isNull();
+        assertThat(resilientGuess.maxHints()).isEqualTo(8);
+
+        // MIXED: distinct entries distributed across requested concrete modes
+        List<SnapshotQuestion> mixedQs = generator.generateMixedQuestions(
+            entries,
+            List.of(PracticeMode.CHOOSE_MEANING, PracticeMode.LISTEN_WRITE, PracticeMode.CONTEXT_CLOZE),
+            5,
+            99L
+        );
+        assertThat(mixedQs).hasSize(5);
+        assertThat(mixedQs.stream().map(SnapshotQuestion::entryId)).doesNotHaveDuplicates();
+        assertThat(mixedQs.stream().map(SnapshotQuestion::mode).distinct().count()).isGreaterThanOrEqualTo(2);
     }
 
     private static StudyEntrySource entry(

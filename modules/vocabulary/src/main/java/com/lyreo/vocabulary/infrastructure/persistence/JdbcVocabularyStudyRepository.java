@@ -1,9 +1,13 @@
 package com.lyreo.vocabulary.infrastructure.persistence;
 
+import com.lyreo.vocabulary.application.port.SpacedRepetitionScheduler;
 import com.lyreo.vocabulary.application.port.VocabularyCatalog;
 import com.lyreo.vocabulary.application.port.VocabularyStudyRepository;
 import com.lyreo.vocabulary.domain.PracticeMode;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -152,7 +156,26 @@ public class JdbcVocabularyStudyRepository implements VocabularyStudyRepository 
             LEFT JOIN vocabulary_entry_progress ep ON ep.entry_id = e.id AND ep.learner_id = :learnerId
             WHERE e.unit_id = :unitId AND NOT e.hidden AND NOT u.hidden AND NOT p.hidden
             ORDER BY e.position
-            """, Map.of("unitId", unitId, "learnerId", learnerId), (rs, n) -> new EntryWithProgressRow(
+            """, Map.of("unitId", unitId, "learnerId", learnerId), (rs, n) -> mapEntryRow(rs));
+    }
+
+    @Override
+    public List<EntryWithProgressRow> findVisibleEntriesByPack(UUID packId, UUID learnerId) {
+        return jdbc.query("""
+            SELECT e.id, e.unit_id, e.position, e.term, e.revision, e.content::text AS content_json,
+                   e.image_id, e.uk_audio_id, e.us_audio_id, e.example_audio_id, e.second_example_audio_id,
+                   COALESCE(ep.status, 'NOT_STARTED') AS progress_status
+            FROM vocabulary_unit_entry e
+            JOIN vocabulary_unit u ON u.id = e.unit_id
+            JOIN vocabulary_pack p ON p.id = u.pack_id
+            LEFT JOIN vocabulary_entry_progress ep ON ep.entry_id = e.id AND ep.learner_id = :learnerId
+            WHERE u.pack_id = :packId AND NOT e.hidden AND NOT u.hidden AND NOT p.hidden
+            ORDER BY u.position, e.position
+            """, Map.of("packId", packId, "learnerId", learnerId), (rs, n) -> mapEntryRow(rs));
+    }
+
+    private EntryWithProgressRow mapEntryRow(ResultSet rs) throws SQLException {
+        return new EntryWithProgressRow(
             rs.getObject("id", UUID.class),
             rs.getObject("unit_id", UUID.class),
             rs.getInt("position"),
@@ -165,7 +188,178 @@ public class JdbcVocabularyStudyRepository implements VocabularyStudyRepository 
             rs.getObject("example_audio_id", UUID.class),
             rs.getObject("second_example_audio_id", UUID.class),
             rs.getString("progress_status")
-        ));
+        );
+    }
+
+    @Override
+    public Optional<FlashcardEntryRow> findVisibleEntryForFlashcard(UUID entryId, UUID learnerId) {
+        return jdbc.query("""
+            SELECT e.id AS entry_id, e.unit_id, u.position AS unit_position, u.level AS unit_level,
+                   u.pack_id, e.position, e.term, e.revision, e.content::text AS content_json,
+                   e.image_id, e.uk_audio_id, e.us_audio_id, e.example_audio_id, e.second_example_audio_id,
+                   p.access_mode, p.required_feature_key,
+                   ep.srs_next_review_at,
+                   COALESCE(ep.srs_stability, 1)::double precision AS srs_stability,
+                   COALESCE(ep.srs_difficulty, 5)::double precision AS srs_difficulty,
+                   COALESCE(ep.srs_review_count, 0)::int AS srs_review_count,
+                   COALESCE(ep.srs_lapse_count, 0)::int AS srs_lapse_count
+            FROM vocabulary_unit_entry e
+            JOIN vocabulary_unit u ON u.id = e.unit_id
+            JOIN vocabulary_pack p ON p.id = u.pack_id
+            LEFT JOIN vocabulary_entry_progress ep ON ep.entry_id = e.id AND ep.learner_id = :learnerId
+            WHERE e.id = :entryId AND NOT e.hidden AND NOT u.hidden AND NOT p.hidden
+            """, Map.of("entryId", entryId, "learnerId", learnerId), (rs, n) -> mapFlashcardRow(rs))
+            .stream().findFirst();
+    }
+
+    @Override
+    public List<FlashcardEntryRow> findFlashcardEntriesByPack(UUID packId, UUID learnerId) {
+        return jdbc.query("""
+            SELECT e.id AS entry_id, e.unit_id, u.position AS unit_position, u.level AS unit_level,
+                   u.pack_id, e.position, e.term, e.revision, e.content::text AS content_json,
+                   e.image_id, e.uk_audio_id, e.us_audio_id, e.example_audio_id, e.second_example_audio_id,
+                   p.access_mode, p.required_feature_key,
+                   ep.srs_next_review_at,
+                   COALESCE(ep.srs_stability, 1)::double precision AS srs_stability,
+                   COALESCE(ep.srs_difficulty, 5)::double precision AS srs_difficulty,
+                   COALESCE(ep.srs_review_count, 0)::int AS srs_review_count,
+                   COALESCE(ep.srs_lapse_count, 0)::int AS srs_lapse_count
+            FROM vocabulary_unit_entry e
+            JOIN vocabulary_unit u ON u.id = e.unit_id
+            JOIN vocabulary_pack p ON p.id = u.pack_id
+            LEFT JOIN vocabulary_entry_progress ep ON ep.entry_id = e.id AND ep.learner_id = :learnerId
+            WHERE u.pack_id = :packId AND NOT e.hidden AND NOT u.hidden AND NOT p.hidden
+            ORDER BY u.position, e.position
+            """, Map.of("packId", packId, "learnerId", learnerId), (rs, n) -> mapFlashcardRow(rs));
+    }
+
+    private FlashcardEntryRow mapFlashcardRow(ResultSet rs) throws SQLException {
+        Timestamp nextReview = rs.getTimestamp("srs_next_review_at");
+        return new FlashcardEntryRow(
+            rs.getObject("entry_id", UUID.class),
+            rs.getObject("unit_id", UUID.class),
+            rs.getInt("unit_position"),
+            rs.getString("unit_level"),
+            rs.getObject("pack_id", UUID.class),
+            rs.getInt("position"),
+            rs.getString("term"),
+            rs.getLong("revision"),
+            json.readValue(rs.getString("content_json"), VocabularyCatalog.LearningContent.class),
+            rs.getObject("image_id", UUID.class),
+            rs.getObject("uk_audio_id", UUID.class),
+            rs.getObject("us_audio_id", UUID.class),
+            rs.getObject("example_audio_id", UUID.class),
+            rs.getObject("second_example_audio_id", UUID.class),
+            rs.getString("access_mode"),
+            rs.getString("required_feature_key"),
+            nextReview != null ? nextReview.toInstant() : null,
+            rs.getDouble("srs_stability"),
+            rs.getDouble("srs_difficulty"),
+            rs.getInt("srs_review_count"),
+            rs.getInt("srs_lapse_count")
+        );
+    }
+
+    @Override
+    public EntrySrsState lockOrCreateEntryProgressForSrs(
+        UUID learnerId,
+        UUID entryId,
+        UUID unitId,
+        UUID packId,
+        Instant now
+    ) {
+        jdbc.update("""
+            INSERT INTO vocabulary_entry_progress (
+                learner_id, entry_id, unit_id, pack_id, status, correct_count, attempt_count, last_practiced_at
+            ) VALUES (
+                :learnerId, :entryId, :unitId, :packId, 'IN_PROGRESS', 0, 0, :now
+            )
+            ON CONFLICT (learner_id, entry_id) DO NOTHING
+            """, new MapSqlParameterSource()
+            .addValue("learnerId", learnerId)
+            .addValue("entryId", entryId)
+            .addValue("unitId", unitId)
+            .addValue("packId", packId)
+            .addValue("now", Timestamp.from(now)));
+        return jdbc.queryForObject("""
+            SELECT srs_review_count, srs_lapse_count,
+                   srs_stability::double precision AS srs_stability,
+                   srs_difficulty::double precision AS srs_difficulty,
+                   srs_next_review_at
+            FROM vocabulary_entry_progress
+            WHERE learner_id = :learnerId AND entry_id = :entryId
+            FOR UPDATE
+            """, Map.of("learnerId", learnerId, "entryId", entryId), (rs, n) -> {
+            Timestamp nextDue = rs.getTimestamp("srs_next_review_at");
+            return new EntrySrsState(
+                rs.getInt("srs_review_count"),
+                rs.getInt("srs_lapse_count"),
+                rs.getDouble("srs_stability"),
+                rs.getDouble("srs_difficulty"),
+                nextDue != null ? nextDue.toInstant() : null
+            );
+        });
+    }
+
+    @Override
+    public UUID applyEntryFlashcardReview(
+        UUID learnerId,
+        UUID entryId,
+        UUID unitId,
+        UUID packId,
+        SpacedRepetitionScheduler.Rating rating,
+        SpacedRepetitionScheduler.ScheduleResult result,
+        Instant reviewedAt
+    ) {
+        UUID reviewId = UUID.randomUUID();
+        Timestamp previousDueAt = jdbc.queryForObject(
+            "SELECT srs_next_review_at FROM vocabulary_entry_progress WHERE learner_id = :learnerId AND entry_id = :entryId",
+            Map.of("learnerId", learnerId, "entryId", entryId),
+            Timestamp.class
+        );
+        jdbc.update("""
+            INSERT INTO vocabulary_entry_review (
+                id, learner_id, entry_id, unit_id, pack_id, rating,
+                previous_due_at, next_due_at, stability, difficulty, reviewed_at
+            ) VALUES (
+                :id, :learnerId, :entryId, :unitId, :packId, :rating,
+                :previousDue, :nextDue, :stability, :difficulty, :reviewedAt
+            )
+            """, new MapSqlParameterSource()
+            .addValue("id", reviewId)
+            .addValue("learnerId", learnerId)
+            .addValue("entryId", entryId)
+            .addValue("unitId", unitId)
+            .addValue("packId", packId)
+            .addValue("rating", rating.name())
+            .addValue("previousDue", previousDueAt, Types.TIMESTAMP_WITH_TIMEZONE)
+            .addValue("nextDue", Timestamp.from(result.nextReviewAt()))
+            .addValue("stability", result.stability())
+            .addValue("difficulty", result.difficulty())
+            .addValue("reviewedAt", Timestamp.from(reviewedAt)));
+        jdbc.update("""
+            UPDATE vocabulary_entry_progress
+            SET srs_next_review_at = :nextDue,
+                srs_stability = :stability,
+                srs_difficulty = :difficulty,
+                srs_review_count = srs_review_count + 1,
+                srs_lapse_count = srs_lapse_count + CASE WHEN :rating = 'AGAIN' THEN 1 ELSE 0 END,
+                srs_last_reviewed_at = :reviewedAt,
+                status = CASE
+                    WHEN status = 'COMPLETED' OR :rating <> 'AGAIN' THEN 'COMPLETED'
+                    ELSE 'IN_PROGRESS'
+                END,
+                last_practiced_at = :reviewedAt
+            WHERE learner_id = :learnerId AND entry_id = :entryId
+            """, new MapSqlParameterSource()
+            .addValue("learnerId", learnerId)
+            .addValue("entryId", entryId)
+            .addValue("nextDue", Timestamp.from(result.nextReviewAt()))
+            .addValue("stability", result.stability())
+            .addValue("difficulty", result.difficulty())
+            .addValue("rating", rating.name())
+            .addValue("reviewedAt", Timestamp.from(reviewedAt)));
+        return reviewId;
     }
 
     @Override
@@ -231,15 +425,15 @@ public class JdbcVocabularyStudyRepository implements VocabularyStudyRepository 
     ) {
         jdbc.update("""
             INSERT INTO vocabulary_study_session (
-                id, learner_id, pack_id, unit_id, mode, snapshot, answers, revision, created_at, expires_at
+                id, learner_id, pack_id, unit_id, mode, snapshot, answers, question_state, revision, created_at, expires_at
             ) VALUES (
-                :id, :learnerId, :packId, :unitId, :mode, CAST(:snapshot AS jsonb), '{}'::jsonb, 1, :createdAt, :expiresAt
+                :id, :learnerId, :packId, :unitId, :mode, CAST(:snapshot AS jsonb), '{}'::jsonb, '{}'::jsonb, 1, :createdAt, :expiresAt
             )
             """, new MapSqlParameterSource()
             .addValue("id", id)
             .addValue("learnerId", learnerId)
             .addValue("packId", packId)
-            .addValue("unitId", unitId)
+            .addValue("unitId", unitId, Types.OTHER)
             .addValue("mode", mode.name())
             .addValue("snapshot", snapshotJson)
             .addValue("createdAt", Timestamp.from(createdAt))
@@ -250,7 +444,8 @@ public class JdbcVocabularyStudyRepository implements VocabularyStudyRepository 
     public Optional<SessionRow> findSession(UUID id, UUID learnerId, boolean forUpdate) {
         String sql = """
             SELECT id, learner_id, pack_id, unit_id, mode,
-                   snapshot::text AS snapshot_json, answers::text AS answers_json, result::text AS result_json,
+                   snapshot::text AS snapshot_json, answers::text AS answers_json,
+                   question_state::text AS question_state_json, result::text AS result_json,
                    revision, created_at, expires_at, submitted_at
             FROM vocabulary_study_session
             WHERE id = :id AND learner_id = :learnerId
@@ -260,23 +455,33 @@ public class JdbcVocabularyStudyRepository implements VocabularyStudyRepository 
 
     @Override
     public List<SessionRow> findSessions(UUID learnerId, UUID unitId, String status) {
-        return findSessionsPage(learnerId, unitId, status, 0, 100);
+        return findSessionsPage(learnerId, null, unitId, status, 0, 100);
     }
 
     @Override
-    public List<SessionRow> findSessionsPage(UUID learnerId, UUID unitId, String status, int offset, int limit) {
+    public List<SessionRow> findSessionsPage(
+        UUID learnerId,
+        UUID packId,
+        UUID unitId,
+        String status,
+        int offset,
+        int limit
+    ) {
         var params = new MapSqlParameterSource()
             .addValue("learnerId", learnerId)
-            .addValue("unitId", unitId)
-            .addValue("status", status)
+            .addValue("packId", packId, Types.OTHER)
+            .addValue("unitId", unitId, Types.OTHER)
+            .addValue("status", status, Types.VARCHAR)
             .addValue("offset", offset)
             .addValue("limit", limit);
         return jdbc.query("""
             SELECT id, learner_id, pack_id, unit_id, mode,
-                   snapshot::text AS snapshot_json, answers::text AS answers_json, result::text AS result_json,
+                   snapshot::text AS snapshot_json, answers::text AS answers_json,
+                   question_state::text AS question_state_json, result::text AS result_json,
                    revision, created_at, expires_at, submitted_at
             FROM vocabulary_study_session
             WHERE learner_id = :learnerId
+              AND (CAST(:packId AS uuid) IS NULL OR pack_id = :packId)
               AND (CAST(:unitId AS uuid) IS NULL OR unit_id = :unitId)
               AND (CAST(:status AS text) IS NULL
                    OR (:status = 'SUBMITTED' AND submitted_at IS NOT NULL)
@@ -288,15 +493,17 @@ public class JdbcVocabularyStudyRepository implements VocabularyStudyRepository 
     }
 
     @Override
-    public long countSessions(UUID learnerId, UUID unitId, String status) {
+    public long countSessions(UUID learnerId, UUID packId, UUID unitId, String status) {
         var params = new MapSqlParameterSource()
             .addValue("learnerId", learnerId)
-            .addValue("unitId", unitId)
-            .addValue("status", status);
+            .addValue("packId", packId, Types.OTHER)
+            .addValue("unitId", unitId, Types.OTHER)
+            .addValue("status", status, Types.VARCHAR);
         Long total = jdbc.queryForObject("""
             SELECT count(*)
             FROM vocabulary_study_session
             WHERE learner_id = :learnerId
+              AND (CAST(:packId AS uuid) IS NULL OR pack_id = :packId)
               AND (CAST(:unitId AS uuid) IS NULL OR unit_id = :unitId)
               AND (CAST(:status AS text) IS NULL
                    OR (:status = 'SUBMITTED' AND submitted_at IS NOT NULL)
@@ -316,6 +523,35 @@ public class JdbcVocabularyStudyRepository implements VocabularyStudyRepository 
     }
 
     @Override
+    public int updateQuestionState(UUID id, String questionStateJson) {
+        return jdbc.update("""
+            UPDATE vocabulary_study_session
+            SET question_state = CAST(:questionState AS jsonb)
+            WHERE id = :id AND submitted_at IS NULL
+            """, Map.of("id", id, "questionState", questionStateJson));
+    }
+
+    @Override
+    public int updateAnswersAndQuestionState(
+        UUID id,
+        long expectedRevision,
+        String answersJson,
+        String questionStateJson
+    ) {
+        return jdbc.update("""
+            UPDATE vocabulary_study_session
+            SET answers = CAST(:answers AS jsonb),
+                question_state = CAST(:questionState AS jsonb),
+                revision = revision + 1
+            WHERE id = :id AND revision = :revision AND submitted_at IS NULL
+            """, new MapSqlParameterSource()
+            .addValue("id", id)
+            .addValue("revision", expectedRevision)
+            .addValue("answers", answersJson)
+            .addValue("questionState", questionStateJson));
+    }
+
+    @Override
     public int markSubmitted(UUID id, long expectedRevision, String resultJson, Instant submittedAt) {
         return jdbc.update("""
             UPDATE vocabulary_study_session
@@ -328,7 +564,7 @@ public class JdbcVocabularyStudyRepository implements VocabularyStudyRepository 
             .addValue("submittedAt", Timestamp.from(submittedAt)));
     }
 
-    private static SessionRow mapSession(java.sql.ResultSet rs) throws java.sql.SQLException {
+    private static SessionRow mapSession(ResultSet rs) throws SQLException {
         Timestamp submitted = rs.getTimestamp("submitted_at");
         return new SessionRow(
             rs.getObject("id", UUID.class),
@@ -338,6 +574,7 @@ public class JdbcVocabularyStudyRepository implements VocabularyStudyRepository 
             PracticeMode.valueOf(rs.getString("mode")),
             rs.getString("snapshot_json"),
             rs.getString("answers_json"),
+            rs.getString("question_state_json"),
             rs.getString("result_json"),
             rs.getLong("revision"),
             rs.getTimestamp("created_at").toInstant(),
