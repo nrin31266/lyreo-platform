@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import { useApiClient } from '@/api/api-provider';
 import { useCoreResource } from '@/api/use-core-resource';
 import { NotificationsScreen } from '@/features/notifications/notifications-screen';
@@ -52,11 +52,10 @@ it('shows the learner announcements returned by Core and loads subsequent pages 
   expect(view.getByText('New practice path')).toBeTruthy();
   expect(view.getByText('Open the new listening unit.')).toBeTruthy();
 
-  fireEvent.press(view.getByRole('button', { name: 'notifications.loadMore' }));
-  await waitFor(() => {
-    expect(request).toHaveBeenCalledWith('/api/v1/notifications?page=1&size=1');
-    expect(view.getByText('Older reminder')).toBeTruthy();
-  });
+  await fireEvent.press(view.getByRole('button', { name: 'notifications.loadMore' }));
+  expect(await view.findByText('Older reminder')).toBeTruthy();
+  expect(request).toHaveBeenCalledWith('/api/v1/notifications?page=1&size=1');
+  await view.unmount();
 });
 
 it('uses the authenticated analytics result instead of showing a sample weakness', async () => {
@@ -68,4 +67,5 @@ it('uses the authenticated analytics result instead of showing a sample weakness
   expect(coreResource).toHaveBeenCalledWith('/api/v1/analytics/overview');
   expect(view.getByText('common:weakness.empty')).toBeTruthy();
   expect(view.queryByText('Past perfect')).toBeNull();
+  await view.unmount();
 });

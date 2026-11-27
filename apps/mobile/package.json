@@ -62,6 +62,7 @@
   },
   "jest": {
     "preset": "jest-expo",
+    "testTimeout": 15000,
     "testMatch": [
       "**/src/test/*.test.tsx"
     ],

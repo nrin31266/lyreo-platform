@@ -49,11 +49,13 @@ export function NotificationsScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState(false);
 
-  const firstPage = resource.status === 'ready'
-    ? (Array.isArray(resource.data)
-      ? { items: resource.data, size: 20, hasMore: false }
-      : { items: resource.data.items ?? [], size: resource.data.size ?? 20, hasMore: Boolean(resource.data.hasMore) })
-    : { items: [] as Announcement[], size: 20, hasMore: false };
+  const firstPage = useMemo(() => (
+    resource.status === 'ready'
+      ? (Array.isArray(resource.data)
+        ? { items: resource.data, size: 20, hasMore: false }
+        : { items: resource.data.items ?? [], size: resource.data.size ?? 20, hasMore: Boolean(resource.data.hasMore) })
+      : { items: [] as Announcement[], size: 20, hasMore: false }
+  ), [resource]);
 
   useEffect(() => {
     setExtraItems([]);
